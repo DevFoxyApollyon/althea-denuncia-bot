@@ -2,6 +2,8 @@
 
 Este documento descreve **TODO o fluxo do bot**, desde a configuração inicial até o encerramento da denúncia.
 
+> **📝 Última atualização:** v1.0.1 - Consolidação de handlers e remoção de utilitários não utilizados
+
 ---
 
 ## 0️⃣ Configuração Inicial (`!painel`)

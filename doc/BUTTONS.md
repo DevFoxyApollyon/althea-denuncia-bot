@@ -2,12 +2,14 @@
 
 Este documento descreve **TODOS os botões e modais** utilizados pelo bot, seus `customId`, permissões e handlers responsáveis.
 
+> **📝 Nota v1.0.1:** Os handlers de botões foram consolidados para melhor organização. `buttons/denunciaButtons.js` foi integrado em `commands/denuncia.js`. Arquivo `buttons/statusButtons.js` foi removido (redundante).
+
 ---
 
 ## 📌 Botões do Painel `!denuncia`
 
 Local: mensagem enviada pelo comando `!denuncia`  
-Handler: `commands/denuncia.js`
+Handler: `commands/denuncia.js` (consolidado em v1.0.1)
 
 ---
 
