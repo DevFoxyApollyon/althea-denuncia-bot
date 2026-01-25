@@ -28,7 +28,17 @@ const {
   handleEditarAceiteModal,
   handleConfirmarCorrecaoAceite,
   handleSalvarCorrecaoAceite
-// Funções auxiliares (necessárias para o funcionamento do painel - Recriada aqui)
+} = require('../commands/correcao');
+
+const {
+  createChannelsModal1,
+  createChannelsModal2,
+  createRolesModal1,
+  createRolesModal2,
+  showConfig
+} = require('../commands/painel');
+
+const { handleStatusButtons } = require('../commands/status');
 async function handlePanelModalSubmit(interaction) {
   try {
     await interaction.deferReply({ flags: 64 });

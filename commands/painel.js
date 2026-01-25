@@ -92,7 +92,7 @@ async function saveChannels1(interaction) {
   const logsId = fields.getTextInputValue('logs_channel');
 
   if (!guild.channels.cache.has(pcId) || !guild.channels.cache.has(mobileId) || !guild.channels.cache.has(logsId)) {
-    return interaction.reply({ content: '❌ Um ou mais IDs de canal não existem neste servidor.', ephemeral: true });
+    return interaction.reply({ content: '❌ Um ou mais IDs de canal não existem neste servidor.', flags: [64] });
   }
 
   await Config.findOneAndUpdate(
@@ -104,7 +104,7 @@ async function saveChannels1(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: '✅ Canais Principais atualizados!', ephemeral: true });
+  return interaction.reply({ content: '✅ Canais Principais atualizados!', flags: [64] });
 }
 
 async function saveChannels2(interaction) {
@@ -122,7 +122,7 @@ async function saveChannels2(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: '✅ Canais Administrativos atualizados!', ephemeral: true });
+  return interaction.reply({ content: '✅ Canais Administrativos atualizados!', flags: [64] });
 }
 
 async function saveRoles1(interaction) {
@@ -131,7 +131,7 @@ async function saveRoles1(interaction) {
   const pcId = fields.getTextInputValue('pc_role');
 
   if (!guild.roles.cache.has(permitidoId) || !guild.roles.cache.has(pcId)) {
-    return interaction.reply({ content: '❌ Um ou mais IDs de cargo não existem.', ephemeral: true });
+    return interaction.reply({ content: '❌ Um ou mais IDs de cargo não existem.', flags: [64] });
   }
 
   await Config.findOneAndUpdate(
@@ -143,7 +143,7 @@ async function saveRoles1(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: '✅ Cargos Principais atualizados!', ephemeral: true });
+  return interaction.reply({ content: '✅ Cargos Principais atualizados!', flags: [64] });
 }
 
 async function saveRoles2(interaction) {
@@ -160,7 +160,7 @@ async function saveRoles2(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: '✅ Cargos Administrativos atualizados!', ephemeral: true });
+  return interaction.reply({ content: '✅ Cargos Administrativos atualizados!', flags: [64] });
 }
 
 
@@ -179,7 +179,7 @@ async function createPanelSelectMenu(interaction) {
 }
 
 async function handlePainelCommand(message) {
-  if (!await hasPermission(message)) return message.reply({ content: '🚫 Sem permissão.', ephemeral: true });
+  if (!await hasPermission(message)) return message.reply({ content: '🚫 Sem permissão.', flags: [64] });
 
   const config = await Config.findOne({ guildId: message.guild.id });
   const menu = await createPanelSelectMenu(message);
@@ -202,13 +202,13 @@ async function handlePainelCommand(message) {
     .setTimestamp()
     .setFooter({ text: 'Esta mensagem expira em 5 minutos.' });
 
-  const reply = await message.reply({ embeds: [embed], components: [menu], ephemeral: true });
+  const reply = await message.reply({ embeds: [embed], components: [menu], flags: [64] });
   setTimeout(() => reply.delete().catch(() => {}), MESSAGE_TIMEOUT);
 }
 
 async function showConfig(interaction) {
   const config = await Config.findOne({ guildId: interaction.guild.id });
-  if (!config) return interaction.reply({ content: '⚠️ Configure o servidor primeiro.', ephemeral: true });
+  if (!config) return interaction.reply({ content: '⚠️ Configure o servidor primeiro.', flags: [64] });
 
   const embed = new EmbedBuilder()
     .setColor('#5865F2')
@@ -230,7 +230,7 @@ async function showConfig(interaction) {
       ].join('\n') }
     );
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.reply({ embeds: [embed], flags: [64] });
 }
 
 module.exports = {
