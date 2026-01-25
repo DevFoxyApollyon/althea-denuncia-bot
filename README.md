@@ -158,7 +158,6 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 ```bash
 .
 ├── buttons/
-│   ├── denunciaButtons.js
 │   └── statusButtons.js
 │
 ├── commands/
@@ -192,16 +191,13 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 │   └── ModerationAction.js
 │
 ├── services/
-│   ├── rankService.js
-│   └── notificationService.js
+│   └── rankService.js
 │
 ├── utils/
 │   ├── logger.js
 │   ├── dateUtils.js
-│   ├── monitoring.js
-│   ├── performance.js
-│   ├── smartCache.js
-│   └── templateProcessor.js
+│   ├── advancedMonitoring.js
+│   └── smartCache.js
 │
 ├── index.js
 ├── package.json
