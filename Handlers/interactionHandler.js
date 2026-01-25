@@ -22,11 +22,12 @@ const {
   handleInputIdDenuncia,
   handleModalIdParaCorrecaoDenuncia,
   handleEditarDenunciaIdButton,
-  handleCorrecaoModalIdSubmit
-} = require('../commands/correcao');
-
-const { handleStatusButtons } = require('../commands/status');
-
+  handleCorrecaoModalIdSubmit,
+  handleInputIdLogAceite,
+  handleModalLogMessageIdCorrecaoAceite,
+  handleEditarAceiteModal,
+  handleConfirmarCorrecaoAceite,
+  handleSalvarCorrecaoAceite
 // Funções auxiliares (necessárias para o funcionamento do painel - Recriada aqui)
 async function handlePanelModalSubmit(interaction) {
   try {
@@ -210,12 +211,7 @@ async function interactionHandler(interaction) {
         case 'analiser':
           await handleStatusButton(interaction, interaction.customId);
           break;
-        case 'atualizar':
-          await handleAtualizarButton(interaction);
-          break;
-        case 'detalhe':
-          await handleDetalheButton(interaction);
-          break;
+        
         case 'refresh_status':
         case 'detailed_status':
           await handleStatusButtons(interaction);

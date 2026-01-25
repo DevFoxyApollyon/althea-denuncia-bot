@@ -18,7 +18,7 @@ async function safeDefer(interaction, ephemeral = true) {
   try {
     if (!interaction?.isRepliable?.()) return false;
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ ephemeral });
+      await interaction.deferReply({ flags: ephemeral ? [MessageFlags.Ephemeral] : [] });
     }
     return true;
   } catch (e) {
