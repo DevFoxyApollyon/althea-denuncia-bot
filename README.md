@@ -145,6 +145,10 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 
 ```bash
 .
+├── buttons/
+│   ├── denunciaButtons.js
+│   └── statusButtons.js
+│
 ├── commands/
 │   ├── denuncia.js
 │   ├── painel.js
@@ -153,16 +157,19 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 │   ├── rank.js
 │   └── semana.js
 │
-├── buttons/
-│   ├── denunciaButtons.js
-│   └── statusButtons.js
+├── doc/
+│   ├── BUTTONS.md
+│   ├── DB_MODELS.md
+│   └── FLOW.md
 │
 ├── Handlers/
-│   ├── handlerStatusButton.js
 │   ├── exportDenuncia.js
+│   ├── handlerStatusButton.js
 │   ├── interactionHandler.js
+│   ├── leiaAvisoHandler.js
 │   ├── LogManager.js
-│   └── outros handlers
+│   ├── messageDeleteHandler.js
+│   └── messageReactionHandler.js
 │
 ├── jobs/
 │   └── rankJobs.js
@@ -182,9 +189,10 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 │   ├── monitoring.js
 │   ├── performance.js
 │   ├── smartCache.js
-│  
+│   └── templateProcessor.js
 │
 ├── index.js
 ├── package.json
 ├── squarecloud.app
-└── .env (NÃO versionar)
+├── .env.example
+└── README.md
