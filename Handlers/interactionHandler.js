@@ -8,32 +8,17 @@ const {
   handleModalSubmit, 
   handleMyDenunciasButton,    
   handleConsultaModalSubmit   
-} = require('../buttons/denunciaButtons');
-
-const { handleExportButton } = require('../Handlers/exportDenuncia'); 
+} = require('../commands/denuncia');
 
 const {
-  handleStatusButton,
-  handlePunishmentModal,
-  handleAtualizarButton,
-  handleDetalheButton,
-  handleClaimButton
+  handleStatusButton,
+  handlePunishmentModal,
+  handleClaimButton
 } = require('../Handlers/handlerStatusButton');
 
-const {
-  createChannelsModal1,
-  createChannelsModal2,
-  createRolesModal1,
-  createRolesModal2,
-  showConfig
-} = require('../commands/painel');
+const { handleExportButton } = require('../Handlers/exportDenuncia');
 
 const {
-  handleInputIdLogAceite,
-  handleModalLogMessageIdCorrecaoAceite,
-  handleEditarAceiteModal,
-  handleConfirmarCorrecaoAceite,
-  handleSalvarCorrecaoAceite,
   handleInputIdDenuncia,
   handleModalIdParaCorrecaoDenuncia,
   handleEditarDenunciaIdButton,
