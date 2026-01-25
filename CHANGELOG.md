@@ -1,12 +1,8 @@
-
----
-
-# 📜 `CHANGELOG.md` (VERSÃO INICIAL)
-
-```md
 # 📦 Changelog
 
-Todas as mudanças relevantes do projeto serão documentadas neste arquivo.
+Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
+
+Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
@@ -14,20 +10,20 @@ Todas as mudanças relevantes do projeto serão documentadas neste arquivo.
 ### 🎉 Lançamento Inicial
 
 #### ✨ Adicionado
-- Sistema completo de denúncias com threads
+- Sistema completo de denúncias com organização automática em threads
 - Botões interativos (PC, Mobile, Minhas Denúncias, Correção)
 - Modal de criação de denúncia
-- Modal de punição
-- Sistema de reivindicação
+- Modal de aplicação de punição
+- Sistema de reivindicação de denúncias
 - Sistema de análise
 - Aceitar / Recusar denúncia
-- Exportação de denúncia (HTML + ZIP)
-- Botão Finalizar (fecha tópico)
+- Exportação de denúncias (HTML + ZIP)
+- Botão **Finalizar** (exporta, tranca e arquiva o tópico)
 - Sistema de correção (`!correcao` + botão)
-- Painel de configuração (`!painel`)
+- Painel de configuração do servidor (`!painel`)
 - Ranking mensal (`!rank`)
 - Ranking semanal (`!semana`)
-- Logs centralizados
+- Logs centralizados e auditáveis
 - Integração com MongoDB
 - Deploy preparado para SquareCloud
 
@@ -36,6 +32,7 @@ Todas as mudanças relevantes do projeto serão documentadas neste arquivo.
 - Tratamento de `InteractionNotReplied`
 - Tratamento de DM bloqueada (`50007`)
 - Proteção contra cliques duplicados
+- Validação de permissões por cargo
 
 ---
 
