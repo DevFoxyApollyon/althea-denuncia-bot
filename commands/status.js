@@ -3,7 +3,8 @@ const {
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle, 
-    PermissionFlagsBits, 
+    PermissionFlagsBits,
+    MessageFlags,
     version: djsVersion,
     WebhookClient 
 } = require('discord.js');
@@ -103,7 +104,7 @@ async function handleStatusButtons(interaction) {
     if (!interaction.isButton() || interaction.customId !== 'refresh_status') return;
 
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ content: 'Acesso negado.', ephemeral: true });
+        return interaction.reply({ content: 'Acesso negado.', flags: [MessageFlags.Ephemeral] });
     }
 
     // Feedback visual imediato

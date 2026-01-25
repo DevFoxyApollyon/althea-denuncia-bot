@@ -5,7 +5,8 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  MessageFlags
 } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
@@ -68,7 +69,7 @@ async function handleModalLogMessageIdCorrecaoAceite(interaction) {
           .setDescription("❌ Não foi encontrada nenhuma cadeia staff para essa ID.")
           .setColor("#e74c3c"),
       ],
-      ephemeral: true,
+      flags: [MessageFlags.Ephemeral],
     });
     return;
   }
@@ -95,7 +96,7 @@ async function handleModalLogMessageIdCorrecaoAceite(interaction) {
         .setFooter({ text: 'Sistema de Correção', iconURL: interaction.client.user.displayAvatarURL() })
     ],
     components: [row],
-    ephemeral: true
+    flags: [MessageFlags.Ephemeral]
   });
   
   setTimeout(() => {
@@ -116,12 +117,12 @@ async function handleEditarAceiteModal(interaction) {
     await interaction.reply({
       content: '⚠️ Tem certeza que deseja editar a denúncia? Isso atualizará a mensagem de log.',
       components: [row],
-      ephemeral: true
+      flags: [MessageFlags.Ephemeral]
     });
   } catch (err) {
     console.error(err);
     if (!interaction.replied) {
-        await interaction.reply({ content: '❌ Erro ao abrir confirmação.', ephemeral: true });
+        await interaction.reply({ content: '❌ Erro ao abrir confirmação.', flags: [MessageFlags.Ephemeral] });
     }
   }
 }
@@ -132,7 +133,7 @@ async function handleConfirmarCorrecaoAceite(interaction) {
     const denuncia = await getCachedDenuncia({ messageId }, Denuncia);
 
     if (!denuncia) {
-      return await interaction.reply({ content: '❌ Denúncia não encontrada.', ephemeral: true });
+      return await interaction.reply({ content: '❌ Denúncia não encontrada.', flags: [MessageFlags.Ephemeral] });
     }
 
     const modal = new ModalBuilder()
@@ -181,7 +182,7 @@ async function handleSalvarCorrecaoAceite(interaction) {
   if (!dateRegex.test(dataPunicao)) {
     return await interaction.reply({
       content: '❌ Formato de data inválido. Use DD/MM/YYYY',
-      ephemeral: true
+      flags: [MessageFlags.Ephemeral]
     });
   }
 
@@ -190,7 +191,7 @@ async function handleSalvarCorrecaoAceite(interaction) {
   if (!denuncia || !denuncia.logMessageId) {
     return interaction.reply({
       embeds: [new EmbedBuilder().setDescription('❌ Mensagem da cadeia staff não encontrada.').setColor('#e74c3c')],
-      ephemeral: true
+      flags: [MessageFlags.Ephemeral]
     });
   }
 
@@ -261,7 +262,7 @@ async function handleSalvarCorrecaoAceite(interaction) {
           : `Dados atualizados no banco, mas log falhou.\n\nDetalhe: ${errorMsg}`)
         .setColor(editSuccess ? '#27ae60' : '#e67e22')
     ],
-    ephemeral: true
+    flags: [MessageFlags.Ephemeral]
   });
 }
 

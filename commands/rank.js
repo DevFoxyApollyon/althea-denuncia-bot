@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, MessageFlags } = require('discord.js');
 const RankService = require('../services/rankService');
 const Config = require('../models/Config');
 const Denuncia = require('../models/Denuncia');
@@ -156,7 +156,7 @@ async function handleRankCommand(message) {
         const collector = loadingMsg.createMessageComponentCollector({ idle: 120000 });
 
         collector.on('collect', async i => {
-            if (i.user.id !== message.author.id) return i.reply({ content: '❌ Apenas quem usou o comando pode navegar.', ephemeral: true });
+            if (i.user.id !== message.author.id) return i.reply({ content: '❌ Apenas quem usou o comando pode navegar.', flags: [MessageFlags.Ephemeral] });
 
             if (i.customId === 'prev') page--;
             if (i.customId === 'next') page++;

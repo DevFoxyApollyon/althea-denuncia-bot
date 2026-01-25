@@ -203,4 +203,5 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 ├── package.json
 ├── squarecloud.app
 ├── .env.example
+├── CHANGELOG.md
 └── README.md
