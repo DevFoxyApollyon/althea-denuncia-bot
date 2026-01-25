@@ -7,31 +7,31 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 ---
 
 ## [1.0.1] - 2026-01-25
-### 🔧 Refatoração e Correções
+### 🔧 Manutenção, Refatoração e Correções
 
 #### ♻️ Refatoração
-- Consolidação de `denunciaButtons.js`: funções movidas para `commands/denuncia.js`
-- Remoção de arquivos não utilizados:
+- Consolidação de `denunciaButtons.js`: funcionalidades movidas para `commands/denuncia.js`
+- Remoção de arquivos não utilizados ou redundantes:
   - `utils/performance.js`
   - `utils/monitoring.js`
   - `utils/commands.js`
   - `utils/templateProcessor.js`
   - `services/notificationService.js`
-  - `buttons/denunciaButtons.js` (redundante)
+  - `buttons/denunciaButtons.js`
 
 #### 🐛 Correções
-- Corrigido aviso deprecated do Discord.js: `ephemeral` → `flags: [MessageFlags.Ephemeral]`
-  - `Handlers/handlerStatusButton.js`
+- Correção do aviso deprecated do Discord.js:  
+  `ephemeral` → `flags: [MessageFlags.Ephemeral]`
+  - `Handlers/handlerStatusButton.js` (inclui `safeDefer`)
   - `jobs/rankJobs.js`
   - `commands/painel.js`
-  - `Handlers/handlerStatusButton.js` (função `safeDefer`)
-- Adicionadas importações faltantes em `Handlers/interactionHandler.js`
-- Removidos handlers não implementados (`atualizar`, `detalhe`)
+- Correção de imports ausentes em `Handlers/interactionHandler.js`
+- Remoção de handlers não implementados (`atualizar`, `detalhe`)
 
 #### ✨ Melhorias
-- Código mais limpo e sem redundâncias
-- Melhor organização de funcionalidades
+- Código mais limpo e organizado
 - Redução de avisos de deprecação
+- Melhor separação de responsabilidades
 
 ---
 
