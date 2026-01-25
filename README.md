@@ -5,6 +5,12 @@ Desenvolvido em **Node.js + discord.js v14.25**, com **MongoDB**, **painéis int
 
 Projeto criado para **uso real em produção**, com foco em **estabilidade**, **organização**, **segurança** e **transparência**.
 
+
+![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![discord.js](https://img.shields.io/badge/discord.js-v14-blue)
+![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose-green)
+![Release](https://img.shields.io/github/v/release/DevFoxyApollyon/althea-denuncia-bot)
+
 ---
 
 ## 🧠 Identidade do Projeto
@@ -138,6 +144,12 @@ Algumas dependências indiretas (como undici) reportam vulnerabilidades moderada
 
 Aplicar npm audit fix --force causaria downgrade do discord.js e quebraria o projeto.
 Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto prático no uso real do bot.
+
+## 🗺️ Roadmap
+- [ ] Internacionalização (EN)
+- [ ] Melhorias visuais no painel
+- [ ] Métricas avançadas
+- [ ] Cache inteligente de queries
 
 ---
 

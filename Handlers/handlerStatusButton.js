@@ -1,6 +1,6 @@
 // /Handlers/handlerStatusButton.js
 
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
 const { LogManager } = require('./LogManager');
@@ -459,7 +459,7 @@ async function handleStatusButton(interaction, status) {
     if (!denuncia) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Não foi possível encontrar uma denúncia neste canal.',
-        ephemeral: true,
+        flags: [MessageFlags.Ephemeral],
       });
       return;
     }
@@ -484,14 +484,14 @@ async function handleStatusButton(interaction, status) {
         if (!isClaimer && !isResponsavelAdmin) {
           await safeReplyOrEdit(interaction, {
             content: '❌ Apenas quem reivindicou ou responsáveis admin podem colocar em análise.',
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
           return;
         }
       } else {
         await safeReplyOrEdit(interaction, {
           content: `❌ Esta denúncia já está ${statusConfig[status]?.message.toLowerCase() || normalizedStatus}.`,
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
         return;
       }
@@ -511,7 +511,7 @@ async function handleStatusButton(interaction, status) {
       if (previousAction) {
         await safeReplyOrEdit(interaction, {
           content: '❌ Administradores só podem interagir uma vez com os botões após reivindicar esta denúncia.',
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
         return;
       }
@@ -521,7 +521,7 @@ async function handleStatusButton(interaction, status) {
     if (!canModify) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Apenas quem reivindicou a denúncia ou responsáveis admin podem modificá-la.',
-        ephemeral: true,
+        flags: [MessageFlags.Ephemeral],
       });
       return;
     }
@@ -529,7 +529,7 @@ async function handleStatusButton(interaction, status) {
     if ((status === 'aceitar' || status === 'recusar') && denuncia.claimedBy !== interaction.user.id && !isResponsavelAdmin) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Apenas quem reivindicou ou responsáveis admin podem aceitar/recusar denúncias.',
-        ephemeral: true,
+        flags: [MessageFlags.Ephemeral],
       });
       return;
     }
@@ -537,7 +537,7 @@ async function handleStatusButton(interaction, status) {
     if (status === 'analiser' && denuncia.claimedBy !== interaction.user.id && !isResponsavelAdmin) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Apenas quem reivindicou a denúncia ou responsáveis admin podem colocá-la em análise.',
-        ephemeral: true,
+        flags: [MessageFlags.Ephemeral],
       });
       return;
     }
@@ -556,7 +556,7 @@ async function handleStatusButton(interaction, status) {
     log.error('Erro ao processar status', error);
     await safeReplyOrEdit(interaction, {
       content: '❌ Ocorreu um erro ao processar o status.',
-      ephemeral: true,
+      flags: [MessageFlags.Ephemeral],
     });
   }
 }
@@ -601,7 +601,7 @@ async function handleAnalise(interaction, denuncia, config, messageUrl, logsChan
     log.error('Erro ao manejar análise', error);
     await safeReplyOrEdit(interaction, {
       content: '❌ Ocorreu um erro ao marcar a denúncia como em análise.',
-      ephemeral: true,
+      flags: [MessageFlags.Ephemeral],
     });
   }
 }
@@ -665,7 +665,7 @@ async function handleAceitar(interaction, denuncia, messageUrl) {
     log.error('Erro ao manejar aceitação', error);
     await safeReplyOrEdit(interaction, {
       content: '❌ Ocorreu um erro ao aceitar a denúncia.',
-      ephemeral: true,
+      flags: [MessageFlags.Ephemeral],
     });
   }
 }
@@ -757,7 +757,7 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
     await sendReanaliseNotice(interaction.channel);
   } catch (error) {
     log.error('Erro ao manejar recusa', error);
-    await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao recusar a denúncia.', ephemeral: true });
+    await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao recusar a denúncia.', flags: [MessageFlags.Ephemeral] });
   }
 }
 
@@ -773,7 +773,7 @@ async function handlePunishmentModal(interaction) {
     if (!denunciaData) {
       return await safeReplyOrEdit(interaction, {
         content: '❌ Dados da denúncia não encontrados. Tente novamente.',
-        ephemeral: true,
+        flags: [MessageFlags.Ephemeral],
       });
     }
 
@@ -786,7 +786,7 @@ async function handlePunishmentModal(interaction) {
     if (!dateRegex.test(dataPunicao)) {
       return await safeReplyOrEdit(interaction, {
         content: '❌ Formato de data inválido. Use o formato: DD/MM/YYYY',
-        ephemeral: true,
+        flags: [MessageFlags.Ephemeral],
       });
     }
 
@@ -859,7 +859,7 @@ async function handlePunishmentModal(interaction) {
     denunciasMap.delete(interaction.user.id);
   } catch (error) {
     log.error(`[${formatTimeBR(getBrasiliaDate())}] Erro ao processar punição`, error);
-    await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao processar a punição.', ephemeral: true });
+    await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao processar a punição.', flags: [MessageFlags.Ephemeral] });
     denunciasMap.delete(interaction.user.id);
   }
 }
@@ -870,7 +870,7 @@ async function checkModPermission(interaction, isDeferred = false) {
     if (!config) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Configurações do servidor não encontradas.',
-        ...(isDeferred ? {} : { ephemeral: true }),
+        ...(isDeferred ? {} : { flags: [MessageFlags.Ephemeral] }),
       });
       return false;
     }
@@ -878,7 +878,7 @@ async function checkModPermission(interaction, isDeferred = false) {
     if (!config.roles?.administrador && !config.roles?.responsavel_admin) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Cargos de administração não configurados.',
-        ...(isDeferred ? {} : { ephemeral: true }),
+        ...(isDeferred ? {} : { flags: [MessageFlags.Ephemeral] }),
       });
       return false;
     }
@@ -892,7 +892,7 @@ async function checkModPermission(interaction, isDeferred = false) {
     if (!hasAdminRole && !hasResponsavelRole) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Você precisa ter o cargo de administrador ou responsável admin para realizar esta ação.',
-        ...(isDeferred ? {} : { ephemeral: true }),
+        ...(isDeferred ? {} : { flags: [MessageFlags.Ephemeral] }),
       });
       return false;
     }
@@ -902,7 +902,7 @@ async function checkModPermission(interaction, isDeferred = false) {
     log.error('Erro ao verificar permissão', error);
     await safeReplyOrEdit(interaction, {
       content: '❌ Erro ao verificar permissões.',
-      ...(isDeferred ? {} : { ephemeral: true }),
+      ...(isDeferred ? {} : { flags: [MessageFlags.Ephemeral] }),
     });
     return false;
   }
@@ -995,7 +995,7 @@ async function handleClaimButton(interaction) {
     await safeReplyOrEdit(interaction, { content: '✅ Você reivindicou esta denúncia com sucesso!' });
   } catch (error) {
     log.error('Erro ao reivindicar denúncia', error);
-    await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao reivindicar a denúncia.', ephemeral: true });
+    await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao reivindicar a denúncia.', flags: [MessageFlags.Ephemeral] });
   }
 }
 

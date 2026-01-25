@@ -212,12 +212,12 @@ async function sendRankMessage(channel, embed, rankText, guild, config) {
             if (i.customId === 'download_rank') {
                 await i.reply({
                     files: [{ attachment: Buffer.from(rankText), name: `ranking_mensal.txt` }],
-                    ephemeral: true
+                    flags: [MessageFlags.Ephemeral]
                 });
             } else if (i.customId === 'copy_rank') {
                 await i.reply({
                     content: '```' + rankText.slice(0, 1900) + '```',
-                    ephemeral: true
+                    flags: [MessageFlags.Ephemeral]
                 });
             }
         });
