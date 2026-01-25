@@ -1,0 +1,27 @@
+{
+  "name": "althea-denuncia-bot",
+  "version": "1.0.0",
+  "description": "ALTHEA — Bot Discord para gestão de denúncias, moderação e arquivamento de logs.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node --max-old-space-size=4096 index.js",
+    "dev": "nodemon --max-old-space-size=4096 index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "chalk": "^4.1.2",
+    "discord.js": "^14.25.1",
+    "dotenv": "^16.4.5",
+    "googleapis": "^118.0.0",
+    "limiter": "^3.0.0",
+    "mongoose": "^7.6.3",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^2.6.7",
+    "nodemon": "^3.1.0"
+  },
+  "author": "Foxyapollyon",
+  "license": "MIT"
+}
