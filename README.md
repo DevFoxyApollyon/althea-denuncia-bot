@@ -157,9 +157,6 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 
 ```bash
 .
-├── buttons/
-│   └── statusButtons.js
-│
 ├── commands/
 │   ├── denuncia.js
 │   ├── painel.js
