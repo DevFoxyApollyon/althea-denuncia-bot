@@ -6,6 +6,20 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [1.0.2] - 2026-01-26
+### 🐛 Correções
+
+#### 🔧 Correção de Timeout na Consulta de Denúncias
+- **Problema:** `DiscordAPIError[10062]: Unknown interaction` ao consultar denúncias
+  - Token da interação expirava antes da resposta ser enviada
+- **Solução em `commands/denuncia.js` (função `handleConsultaModalSubmit`):**
+  - Adicionado timeout de 10 segundos na consulta ao banco de dados com `Promise.race()`
+  - Implementado rastreamento de estado defer para melhor tratamento de erros
+  - Resposta condicional: usa `reply()` se defer falhou, caso contrário `editReply()`
+  - Melhor logging de erros e tratamento de casos onde o token expirou
+
+---
+
 ## [1.0.1] - 2026-01-25
 ### 🔧 Manutenção, Refatoração e Correções
 

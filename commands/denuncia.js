@@ -327,8 +327,11 @@ async function handleMyDenunciasButton(interaction) {
  * Processa a consulta de denúncias por ID
  */
 async function handleConsultaModalSubmit(interaction) {
+    let deferred = false;
     try {
+        // Defer a resposta imediatamente
         await interaction.deferReply({ flags: 64 });
+        deferred = true;
 
         const rawIds = interaction.fields.getTextInputValue('id_consulta_input').trim();
         const idsToSearch = rawIds.replace(/\s*[+,|]\s*/g, ' ').split(/\s+/).filter(id => id.length > 0);
@@ -346,10 +349,14 @@ async function handleConsultaModalSubmit(interaction) {
             orQuery.push({ acusadoId: { $regex: new RegExp(`(^|\\s)${id}(\\s|$)`) } });
         });
 
-        const allDenuncias = await Denuncia.find({
-            guildId: interaction.guild.id,
-            $or: orQuery
-        }).sort({ dataCriacao: -1 });
+        // Adiciona timeout de 10 segundos à consulta
+        const allDenuncias = await Promise.race([
+            Denuncia.find({
+                guildId: interaction.guild.id,
+                $or: orQuery
+            }).sort({ dataCriacao: -1 }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Consulta expirou (timeout)')), 10000))
+        ]);
 
         if (allDenuncias.length === 0) {
             return await interaction.editReply({
@@ -395,7 +402,21 @@ async function handleConsultaModalSubmit(interaction) {
 
     } catch (error) {
         console.error(`❌ Erro no modal de consulta:`, error);
-        await interaction.editReply({ content: '❌ Erro ao consultar o banco de dados.' });
+        
+        // Só tenta responder se não foi respondida ainda
+        if (!deferred) {
+            try {
+                await interaction.reply({ content: '❌ Erro ao consultar o banco de dados.', flags: 64 });
+            } catch (replyError) {
+                console.error('❌ Não foi possível responder à interação:', replyError.code);
+            }
+        } else {
+            try {
+                await interaction.editReply({ content: '❌ Erro ao consultar o banco de dados.' });
+            } catch (editError) {
+                console.error('❌ Não foi possível editar a resposta:', editError.code);
+            }
+        }
     }
 }
 
