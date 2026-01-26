@@ -146,10 +146,6 @@ SUPPORT_ID=seu_id_discord
 
 # MongoDB
 MONGODB_URI=mongodb+srv://usuario:senha@cluster.mongodb.net/althea-bot
-
-# Google Sheets API (opcional)
-GOOGLE_SERVICE_ACCOUNT_EMAIL=seu-email@seu-projeto.iam.gserviceaccount.com
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
 
 ### 4️⃣ Iniciar o Bot
