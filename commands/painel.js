@@ -37,7 +37,7 @@ function getRoleName(interaction, roleId) {
 
 
 function createChannelsModal1(currentConfig = null) {
-  const modal = new ModalBuilder().setCustomId('save_channels_1').setTitle('Configurar Canais (Parte 1)');
+  const modal = new ModalBuilder().setCustomId('channels_modal_1').setTitle('Configurar Canais (Parte 1)');
   const pc = new TextInputBuilder().setCustomId('pc_channel').setLabel('Canal PC').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.channels?.pc || '');
   const mobile = new TextInputBuilder().setCustomId('mobile_channel').setLabel('Canal Mobile').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.channels?.mobile || '');
   const logs = new TextInputBuilder().setCustomId('logs_channel').setLabel('Canal Cadeia Staff').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.channels?.logs || '');
@@ -50,7 +50,7 @@ function createChannelsModal1(currentConfig = null) {
 }
 
 function createChannelsModal2(currentConfig = null) {
-  const modal = new ModalBuilder().setCustomId('save_channels_2').setTitle('Configurar Canais (Parte 2)');
+  const modal = new ModalBuilder().setCustomId('channels_modal_2').setTitle('Configurar Canais (Parte 2)');
   const logAdmin = new TextInputBuilder().setCustomId('log_admin_channel').setLabel('Canal de Log Administração').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.log || '');
   const analysis = new TextInputBuilder().setCustomId('analysis_channel').setLabel('Canal de Análise').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.analysis || '');
   const topDaily = new TextInputBuilder().setCustomId('top_daily_channel').setLabel('Canal do Top Diário').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.topDaily || '');
@@ -63,7 +63,7 @@ function createChannelsModal2(currentConfig = null) {
 }
 
 function createRolesModal1(currentConfig = null) {
-  const modal = new ModalBuilder().setCustomId('save_roles_1').setTitle('Configurar Cargos (Parte 1)');
+  const modal = new ModalBuilder().setCustomId('roles_modal_1').setTitle('Configurar Cargos (Parte 1)');
   const permitido = new TextInputBuilder().setCustomId('permitido_role').setLabel('Cargo Mobile').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.roles?.permitido || '');
   const pc = new TextInputBuilder().setCustomId('pc_role').setLabel('Cargo PC').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.roles?.pc || '');
 
@@ -74,7 +74,7 @@ function createRolesModal1(currentConfig = null) {
 }
 
 function createRolesModal2(currentConfig = null) {
-  const modal = new ModalBuilder().setCustomId('save_roles_2').setTitle('Configurar Cargos (Parte 2)');
+  const modal = new ModalBuilder().setCustomId('roles_modal_2').setTitle('Configurar Cargos (Parte 2)');
   const admin = new TextInputBuilder().setCustomId('admin_role').setLabel('Cargo Administrador').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.roles?.administrador || '');
   const resp = new TextInputBuilder().setCustomId('resp_admin_role').setLabel('Cargo Responsável Admin').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.roles?.responsavel_admin || '');
 
