@@ -10,10 +10,11 @@ Um bot Discord avançado para gerenciamento completo de denúncias, moderação 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ### ✨ Versão
-- **Versão Atual**: 1.0.1 ✅ Estável
-- **Data de Release**: 25 de Janeiro de 2026
+- **Versão Atual**: 1.0.2 ✅ Estável
+- **Data de Release**: 26 de Janeiro de 2026
 - **Status**: Pronto para Produção
 - **Uptime Estimado**: 99.8%
+- **Última Correção**: Timeout na consulta de denúncias (erro 10062)
 
 ### Desenvolvido por
 - 🦊 **Foxy Apollyon**
@@ -447,8 +448,8 @@ Obrigado a todos que contribuem com feedback, sugestões e relatórios de bugs!
 
 ---
 
-**Última atualização**: Janeiro de 2026  
-**Versão**: 1.0.1  
+**Última atualização**: 26 de Janeiro de 2026  
+**Versão**: 1.0.2  
 **Status**: ✅ Estável em Produção  
 **Suporte**: Ativo
 
