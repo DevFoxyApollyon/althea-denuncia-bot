@@ -1,96 +1,116 @@
+// services/rankService.js
 const ModerationAction = require('../models/ModerationAction');
 const Config = require('../models/Config');
 
 class RankService {
-    static rankCache = new Map();
-    static cacheTimeout = 5 * 60 * 1000; // 5 minutos
+  static rankCache = new Map();
+  static cacheTimeout = 5 * 60 * 1000; // 5 minutos
 
-    static async getRankData(guild, forceRefresh = false) {
-        try {
-            const cacheKey = guild.id;
-            const cached = this.rankCache.get(cacheKey);
+  /**
+   * type:
+   *  - 'month' (padrão recomendado)
+   *  - 'week'
+   *  - 'day'
+   */
+  static async getRankData(guild, type = 'month', forceRefresh = false) {
+    try {
+      const safeType = (type === 'week' || type === 'day' || type === 'month') ? type : 'month';
 
-            if (!forceRefresh && cached && Date.now() - cached.timestamp < this.cacheTimeout) {
-                return cached.data;
-            }
+      // Cache separado por guild + tipo
+      const cacheKey = `${guild.id}:${safeType}`;
+      const cached = this.rankCache.get(cacheKey);
 
-            const config = await Config.findOne({ guildId: guild.id }).lean();
-            
-            // Busca o cargo de administrador para tentar pegar as TAGS amigáveis
-            const adminRoleId = config?.roles?.administrador || config?.administrador;
-            let activeModeratorMembers = new Map();
+      if (!forceRefresh && cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+        return cached.data;
+      }
 
-            if (adminRoleId) {
-                const adminRole = await guild.roles.fetch(adminRoleId).catch(() => null);
-                if (adminRole) {
-                    activeModeratorMembers = new Map(adminRole.members.entries());
-                }
-            }
-            
-            // 🛑 Busca as ações no banco (usando a lógica de data corrigida no Model)
-            const allActions = await ModerationAction.getActionsForCurrentWeek(guild.id); 
+      const config = await Config.findOne({ guildId: guild.id }).lean();
 
-            const finalActions = [];
-            
-            for (const action of allActions) {
-                const moderatorId = action._id; 
-                if (!moderatorId) continue;
-                
-                // Tenta pegar o membro pela lista do cargo, se não conseguir, tenta pelo cache geral da guild
-                const member = activeModeratorMembers.get(moderatorId) || guild.members.cache.get(moderatorId);
-                
-                // Define a tag. Se o membro não for encontrado, exibe o ID mas NÃO remove do rank.
-                const tag = member?.user?.username || member?.user?.tag || `Staff Antigo (${moderatorId})`;
+      // Busca o cargo (administrador) pra tags amigáveis
+      const adminRoleId = config?.roles?.administrador || config?.administrador;
+      let activeModeratorMembers = new Map();
 
-                finalActions.push({
-                    _id: moderatorId, 
-                    userId: moderatorId, 
-                    tag: tag,
-                    aceitas: action.aceitas || 0,
-                    recusadas: action.recusadas || 0,
-                    analises: action.analises || 0,
-                    reivindicacoes: action.reivindicacoes || 0,
-                    total: action.total || 0,
-                });
-            }
-
-            // Ordena por total de ações (Maior para o menor)
-            finalActions.sort((a, b) => b.total - a.total);
-
-            // Re-calcula o total geral e as estatísticas do servidor
-            const result = {
-                actions: finalActions,
-                total: finalActions.reduce((sum, action) => sum + action.total, 0),
-                stats: {
-                    aceitas: finalActions.reduce((sum, action) => sum + action.aceitas, 0),
-                    recusadas: finalActions.reduce((sum, action) => sum + action.recusadas, 0),
-                    analises: finalActions.reduce((sum, action) => sum + action.analises, 0),
-                    reivindicacoes: finalActions.reduce((sum, action) => sum + action.reivindicacoes, 0),
-                    participantes: finalActions.length
-                }
-            };
-
-            // Salva no cache
-            this.rankCache.set(cacheKey, {
-                data: result,
-                timestamp: Date.now()
-            });
-
-            return result;
-
-        } catch (error) {
-            console.error('Erro ao buscar dados do ranking:', error);
-            return { 
-                actions: [], 
-                total: 0, 
-                stats: { aceitas: 0, recusadas: 0, analises: 0, reivindicacoes: 0, participantes: 0 } 
-            };
+      if (adminRoleId) {
+        const adminRole = await guild.roles.fetch(adminRoleId).catch(() => null);
+        if (adminRole) {
+          activeModeratorMembers = new Map(adminRole.members.entries());
         }
-    }
+      }
 
-    static clearCache() {
-        this.rankCache.clear();
+      // ✅ Busca ações conforme o tipo
+      let allActions = [];
+      if (safeType === 'day') {
+        allActions = await ModerationAction.getActionsForToday(guild.id);
+      } else if (safeType === 'week') {
+        allActions = await ModerationAction.getActionsForCurrentWeek(guild.id);
+      } else {
+        allActions = await ModerationAction.getActionsForCurrentMonth(guild.id);
+      }
+
+      const finalActions = [];
+
+      for (const action of allActions) {
+        const moderatorId = action._id;
+        if (!moderatorId) continue;
+
+        // tenta pegar pela lista do cargo, senão cache geral
+        const member = activeModeratorMembers.get(moderatorId) || guild.members.cache.get(moderatorId);
+
+        // tag amigável (sem remover do rank se não existir)
+        const tag = member?.user?.username || member?.user?.tag || `Staff Antigo (${moderatorId})`;
+
+        finalActions.push({
+          _id: moderatorId,
+          userId: moderatorId,
+          tag,
+
+          aceitas: action.aceitas || 0,
+          recusadas: action.recusadas || 0,
+          analises: action.analises || 0,
+          reivindicacoes: action.reivindicacoes || 0,
+
+          total: action.total || 0,
+          ultimaAcao: action.ultimaAcao || null,
+        });
+      }
+
+      // Ordena por total
+      finalActions.sort((a, b) => b.total - a.total);
+
+      const result = {
+        type: safeType,
+        actions: finalActions,
+        total: finalActions.reduce((sum, a) => sum + a.total, 0),
+        stats: {
+          aceitas: finalActions.reduce((sum, a) => sum + a.aceitas, 0),
+          recusadas: finalActions.reduce((sum, a) => sum + a.recusadas, 0),
+          analises: finalActions.reduce((sum, a) => sum + a.analises, 0),
+          reivindicacoes: finalActions.reduce((sum, a) => sum + a.reivindicacoes, 0),
+          participantes: finalActions.length,
+        },
+      };
+
+      // Salva cache
+      this.rankCache.set(cacheKey, {
+        data: result,
+        timestamp: Date.now(),
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Erro ao buscar dados do ranking:', error);
+      return {
+        type: (type === 'week' || type === 'day' || type === 'month') ? type : 'month',
+        actions: [],
+        total: 0,
+        stats: { aceitas: 0, recusadas: 0, analises: 0, reivindicacoes: 0, participantes: 0 },
+      };
     }
+  }
+
+  static clearCache() {
+    this.rankCache.clear();
+  }
 }
 
 module.exports = RankService;

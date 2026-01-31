@@ -1,173 +1,308 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, MessageFlags } = require('discord.js');
+// commands/rank.js  ✅ ATUALIZADO (sem opcode 8 / sem fetch geral de membros)
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  AttachmentBuilder,
+  MessageFlags
+} = require('discord.js');
+
 const RankService = require('../services/rankService');
-const Config = require('../models/Config');
 const Denuncia = require('../models/Denuncia');
-const ModerationAction = require('../models/ModerationAction');
-const { getBrasiliaDate, formatDateBR } = require('../utils/dateUtils'); 
+const { getBrasiliaDate, formatDateBR } = require('../utils/dateUtils');
 
 const ITEMS_PER_PAGE = 8;
 
+// -------------------------
+// Helpers (anti rate-limit)
+// -------------------------
+function chunkArray(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Busca somente os membros necessários (por IDs), evitando o Request Guild Members (opcode 8).
+ * Isso usa REST e é bem mais seguro do que guild.members.fetch() sem parâmetros.
+ */
+async function fetchMembersByIdsSafe(guild, ids) {
+  const uniqueIds = [...new Set(ids)].filter(Boolean);
+
+  if (uniqueIds.length === 0) return;
+
+  // 50~80 é um tamanho seguro (evita bursts grandes)
+  const chunks = chunkArray(uniqueIds, 80);
+
+  for (const part of chunks) {
+    try {
+      // ✅ NÃO dispara opcode 8
+      await guild.members.fetch({ user: part, force: false });
+    } catch (e) {
+      // Não quebra o comando por falha em 1 lote
+      console.warn('[RANK] Falha ao buscar lote de membros:', e?.message || e);
+    }
+    // delay curto pra aliviar REST se tiver muitos IDs
+    await sleep(800);
+  }
+}
+
+// -------------------------
+// Datas auxiliares
+// -------------------------
 function getMonthDates() {
-    const now = getBrasiliaDate();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    const monthEnd = new Date(now); 
-    return { monthStart, monthEnd };
+  const now = getBrasiliaDate();
+  return {
+    start: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0),
+    end: now
+  };
 }
 
+function getWeekDatesLocal() {
+  const now = getBrasiliaDate();
+  const day = now.getDay(); // 0 dom, 1 seg...
+  const diffToMonday = (day + 6) % 7;
+
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - diffToMonday);
+
+  return { start, end: now };
+}
+
+function getTodayDatesLocal() {
+  const now = getBrasiliaDate();
+  return {
+    start: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0),
+    end: now
+  };
+}
+
+// -------------------------
+// Stats do dia (denúncias)
+// -------------------------
 async function getDailyStats(guildId) {
-    try {
-        const today = getBrasiliaDate();
-        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-        const tomorrow = new Date(startOfDay);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+  try {
+    const today = getBrasiliaDate();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+    const tomorrow = new Date(startOfDay);
+    tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const totalDenuncias = await Denuncia.countDocuments({
-            guildId: guildId,
-            createdAt: { $gte: startOfDay, $lt: tomorrow }
-        });
+    const totalDenuncias = await Denuncia.countDocuments({
+      guildId,
+      createdAt: { $gte: startOfDay, $lt: tomorrow }
+    });
 
-        const totalReivindicadas = await Denuncia.countDocuments({
-            guildId: guildId,
-            createdAt: { $gte: startOfDay, $lt: tomorrow },
-            claimedBy: { $ne: null }
-        });
+    const totalReivindicadas = await Denuncia.countDocuments({
+      guildId,
+      createdAt: { $gte: startOfDay, $lt: tomorrow },
+      claimedBy: { $ne: null }
+    });
 
-        return {
-            total: totalDenuncias,
-            reivindicadas: totalReivindicadas,
-            pendentes: Math.max(0, totalDenuncias - totalReivindicadas)
-        };
-    } catch (error) {
-        return { total: 0, reivindicadas: 0, pendentes: 0 };
-    }
+    return {
+      total: totalDenuncias,
+      reivindicadas: totalReivindicadas,
+      pendentes: Math.max(0, totalDenuncias - totalReivindicadas)
+    };
+  } catch {
+    return { total: 0, reivindicadas: 0, pendentes: 0 };
+  }
 }
 
+// -------------------------
+// Tabela do Embed
+// -------------------------
 function buildRankTable(actions) {
-    const rows = actions.map((mod, index) => {
-        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '▫️';
-        return `${medal} ${(index + 1).toString().padStart(2)}º ${mod.tag}
-📊 Total: ${mod.total} | ✅ Aceitas: ${mod.aceitas} | ❌ Recusadas: ${mod.recusadas}
-📝 Reivindicadas: ${mod.reivindicadas}
+  if (!actions.length) return 'Nenhuma ação registrada.';
+
+  return actions
+    .map((mod, index) => {
+      const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '▫️';
+      return `${medal} ${(index + 1).toString().padStart(2)}º ${mod.tag}
+📊 Total: ${mod.total} | ✅ ${mod.aceitas} | ❌ ${mod.recusadas} | 🔎 ${mod.analises}
+📝 Reivindicadas: ${mod.reivindicacoes}
 ─────────────────────────`;
-    });
-    return rows.length > 0 ? rows.join('\n') : "Nenhuma ação registrada.";
+    })
+    .join('\n');
 }
 
-// FUNÇÃO PARA GERAR O CONTEÚDO DO TXT
-function generateRankTxtContent(actions, guildName, guildId, start, end, daily) {
-    const content = [
-        `🏆 RANKING MENSAL DE MODERAÇÃO - ${guildName.toUpperCase()}`,
-        `Período: ${formatDateBR(start)} até ${formatDateBR(end)}`,
-        `Gerado em: ${formatDateBR(getBrasiliaDate())}`,
-        `\n--- ESTATÍSTICAS DO SERVIDOR HOJE ---`,
-        `📫 Denúncias hoje: ${daily.total}`,
-        `📝 Reivindicadas: ${daily.reivindicadas}`,
-        `📊 Pendentes: ${daily.pendentes}`,
-        `\n--- RANKING INDIVIDUAL COMPLETO ---`,
-        `====================================================`
-    ];
+// -------------------------
+// TXT Completo
+// -------------------------
+function generateRankTxt(actions, guildName, label, period, daily) {
+  const lines = [
+    `🏆 RANKING ${label.toUpperCase()} - ${guildName.toUpperCase()}`,
+    `Período: ${formatDateBR(period.start)} até ${formatDateBR(period.end)}`,
+    `Gerado em: ${formatDateBR(getBrasiliaDate())}`,
+    ``,
+    `--- ESTATÍSTICAS DE HOJE (DENÚNCIAS) ---`,
+    `📫 Denúncias: ${daily.total}`,
+    `📝 Reivindicadas: ${daily.reivindicadas}`,
+    `📊 Pendentes: ${daily.pendentes}`,
+    ``,
+    `--- RANKING INDIVIDUAL ---`,
+    `====================================================`
+  ];
 
-    actions.forEach((mod, index) => {
-        content.push(
-            `${(index + 1)}º LUGAR: ${mod.plainTag || mod.userId}`,
-            `ID: ${mod.userId}`,
-            `Total de Ações: ${mod.total}`,
-            `✅ Aceitas: ${mod.aceitas}`,
-            `❌ Recusadas: ${mod.recusadas}`,
-            `📝 Reivindicadas: ${mod.reivindicadas}`,
-            `----------------------------------------------------`
-        );
-    });
+  actions.forEach((a, i) => {
+    lines.push(
+      `${i + 1}º LUGAR: ${a.plainTag || a.userId}`,
+      `ID: ${a.userId}`,
+      `Total: ${a.total}`,
+      `✅ Aceitas: ${a.aceitas}`,
+      `❌ Recusadas: ${a.recusadas}`,
+      `🔎 Análises: ${a.analises}`,
+      `📝 Reivindicações: ${a.reivindicacoes}`,
+      `----------------------------------------------------`
+    );
+  });
 
-    return content.join('\n');
+  return lines.join('\n');
 }
 
+// -------------------------
+// Comando !rank
+// -------------------------
+// Padrão: MENSAL
+// !rank
+// !rank mensal | mes
+// !rank semanal | semana
+// !rank hoje | dia
 async function handleRankCommand(message) {
-    let loadingMsg = null;
-    let page = 0;
-    
-    try {
-        if (!message || !message.guild) return;
-        loadingMsg = await message.reply("🔄 Calculando ranking mensal e gerando relatório...");
+  let loadingMsg = null;
+  let page = 0;
 
-        const { monthStart, monthEnd } = getMonthDates();
-        const { actions: rawActions } = await RankService.getRankData(message.guild, monthStart, monthEnd);
-        
-        if (!rawActions || rawActions.length === 0) {
-            return loadingMsg.edit(`⚠️ Nenhuma ação registrada de ${formatDateBR(monthStart)} até hoje.`);
-        }
+  try {
+    if (!message?.guild) return;
 
-        await message.guild.members.fetch();
-        const dailyStats = await getDailyStats(message.guild.id);
+    const args = message.content.trim().split(/\s+/).slice(1);
+    const arg = (args[0] || '').toLowerCase();
 
-        // Normalização de dados para Embed e TXT
-        const formattedActions = rawActions.map(a => {
-            const userId = a.userId || a.id;
-            const member = message.guild.members.cache.get(userId);
-            return {
-                ...a,
-                userId,
-                plainTag: member ? member.user.username : `Desconhecido (${userId})`,
-                tag: member ? `<@${userId}> (${member.user.username})` : `<@${userId}>`,
-                aceitas: a.aceita || a.aceitas || 0,
-                recusadas: a.recusada || a.recusadas || 0,
-                reivindicadas: a.reivindicacao || a.reivindicacoes || 0
-            };
-        });
+    let type = 'month';
+    let label = 'Mensal';
+    let period = getMonthDates();
 
-        // --- GERAÇÃO DO ARQUIVO TXT ---
-        const txtString = generateRankTxtContent(formattedActions, message.guild.name, message.guild.id, monthStart, monthEnd, dailyStats);
-        const attachment = new AttachmentBuilder(Buffer.from(txtString, 'utf-8'), { name: `ranking_mensal_${message.guild.id}.txt` });
-
-        const totalPages = Math.ceil(formattedActions.length / ITEMS_PER_PAGE);
-
-        const createEmbed = (pageNum) => {
-            const start = pageNum * ITEMS_PER_PAGE;
-            const pageActions = formattedActions.slice(start, start + ITEMS_PER_PAGE);
-
-            return new EmbedBuilder()
-                .setColor('#2F3136')
-                .setTitle('🏆 Ranking Mensal (Acumulado)')
-                .setDescription(
-                    `*Período: ${formatDateBR(monthStart)} até hoje*\n\n` +
-                    `📫 **Hoje:** ${dailyStats.total} | 📝 **Reiv:** ${dailyStats.reivindicadas}\n` +
-                    `📊 **Pendentes:** ${dailyStats.pendentes}\n\n` +
-                    buildRankTable(pageActions)
-                )
-                .setFooter({ text: `Página ${pageNum + 1} de ${totalPages} | Horário de Brasília` })
-                .setTimestamp();
-        };
-
-        const getButtons = (pageNum) => {
-            return new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('prev').setLabel('Anterior').setStyle(ButtonStyle.Secondary).setDisabled(pageNum === 0),
-                new ButtonBuilder().setCustomId('next').setLabel('Próximo').setStyle(ButtonStyle.Secondary).setDisabled(pageNum === totalPages - 1)
-            );
-        };
-
-        // ENVIANDO EMBED + ARQUIVO TXT JUNTOS
-        await loadingMsg.edit({ 
-            content: "✅ Ranking carregado com sucesso!", 
-            embeds: [createEmbed(0)], 
-            components: [getButtons(0)],
-            files: [attachment] 
-        });
-
-        const collector = loadingMsg.createMessageComponentCollector({ idle: 120000 });
-
-        collector.on('collect', async i => {
-            if (i.user.id !== message.author.id) return i.reply({ content: '❌ Apenas quem usou o comando pode navegar.', flags: [MessageFlags.Ephemeral] });
-
-            if (i.customId === 'prev') page--;
-            if (i.customId === 'next') page++;
-
-            await i.update({ embeds: [createEmbed(page)], components: [getButtons(page)] });
-        });
-
-    } catch (error) {
-        console.error(error);
-        if (loadingMsg) loadingMsg.edit("❌ Erro ao processar ranking.");
+    if (arg === 'semanal' || arg === 'semana') {
+      type = 'week';
+      label = 'Semanal';
+      period = getWeekDatesLocal();
+    } else if (arg === 'hoje' || arg === 'dia') {
+      type = 'day';
+      label = 'Hoje';
+      period = getTodayDatesLocal();
     }
+
+    loadingMsg = await message.reply(`🔄 Gerando ranking **${label.toLowerCase()}**...`);
+
+    const { actions: rawActions } = await RankService.getRankData(message.guild, type);
+
+    if (!rawActions || rawActions.length === 0) {
+      return loadingMsg.edit(`⚠️ Nenhuma ação registrada (${label}).`);
+    }
+
+    // ✅ Anti-opcode-8: busca SOMENTE os membros do ranking (por IDs)
+    const idsToFetch = rawActions.map((a) => a.userId || a._id).filter(Boolean);
+    await fetchMembersByIdsSafe(message.guild, idsToFetch);
+
+    const dailyStats = await getDailyStats(message.guild.id);
+
+    // Normaliza e monta tags (agora o cache tem bem mais chances de ter os membros)
+    const actions = rawActions.map((a) => {
+      const userId = a.userId || a._id;
+      const member = message.guild.members.cache.get(userId);
+
+      return {
+        ...a,
+        userId,
+        plainTag: member ? member.user.username : `Desconhecido (${userId})`,
+        tag: member ? `<@${userId}> (${member.user.username})` : `<@${userId}>`,
+        aceitas: a.aceitas || 0,
+        recusadas: a.recusadas || 0,
+        analises: a.analises || 0,
+        reivindicacoes: a.reivindicacoes || 0
+      };
+    });
+
+    const totalPages = Math.max(1, Math.ceil(actions.length / ITEMS_PER_PAGE));
+
+    const txt = generateRankTxt(actions, message.guild.name, label, period, dailyStats);
+    const file = new AttachmentBuilder(Buffer.from(txt, 'utf8'), {
+      name: `ranking_${type}_${message.guild.id}.txt`
+    });
+
+    const createEmbed = (pageNum) => {
+      const start = pageNum * ITEMS_PER_PAGE;
+      const slice = actions.slice(start, start + ITEMS_PER_PAGE);
+
+      return new EmbedBuilder()
+        .setColor('#2F3136')
+        .setTitle(`🏆 Ranking ${label}`)
+        .setDescription(
+          `*Período: ${formatDateBR(period.start)} até ${formatDateBR(period.end)}*\n\n` +
+            `📫 **Denúncias Hoje:** ${dailyStats.total} | 📝 **Reiv:** ${dailyStats.reivindicadas} | 📊 **Pend:** ${dailyStats.pendentes}\n\n` +
+            buildRankTable(slice)
+        )
+        .setFooter({ text: `Página ${pageNum + 1} de ${totalPages}` })
+        .setTimestamp();
+    };
+
+    const buttons = (pageNum) =>
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('prev')
+          .setLabel('Anterior')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(pageNum === 0),
+        new ButtonBuilder()
+          .setCustomId('next')
+          .setLabel('Próximo')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(pageNum >= totalPages - 1)
+      );
+
+    await loadingMsg.edit({
+      content: `✅ Ranking **${label.toLowerCase()}** pronto!`,
+      embeds: [createEmbed(0)],
+      components: totalPages > 1 ? [buttons(0)] : [],
+      files: [file]
+    });
+
+    if (totalPages <= 1) return;
+
+    const collector = loadingMsg.createMessageComponentCollector({ idle: 120000 });
+
+    collector.on('collect', async (i) => {
+      if (i.user.id !== message.author.id) {
+        return i.reply({ content: '❌ Apenas quem usou o comando.', flags: [MessageFlags.Ephemeral] });
+      }
+
+      if (i.customId === 'prev') page--;
+      if (i.customId === 'next') page++;
+
+      page = Math.max(0, Math.min(page, totalPages - 1));
+      await i.update({ embeds: [createEmbed(page)], components: [buttons(page)] });
+    });
+
+    collector.on('end', async () => {
+      // opcional: desabilitar botões quando expirar
+      if (!loadingMsg) return;
+      try {
+        const disabledRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('prev').setLabel('Anterior').setStyle(ButtonStyle.Secondary).setDisabled(true),
+          new ButtonBuilder().setCustomId('next').setLabel('Próximo').setStyle(ButtonStyle.Secondary).setDisabled(true)
+        );
+        await loadingMsg.edit({ components: [disabledRow] }).catch(() => null);
+      } catch {}
+    });
+  } catch (err) {
+    console.error(err);
+    if (loadingMsg) loadingMsg.edit('❌ Erro ao gerar ranking.');
+  }
 }
 
 module.exports = { handleRankCommand };
