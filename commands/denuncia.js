@@ -126,19 +126,25 @@ async function handleDenunciaSubmit(interaction, platform) {
         const motivo = interaction.fields.getTextInputValue('motivo_input');
         let provas = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
 
-        // Validação: se provas contém link, só pode ser do YouTube
         if (provas && provas !== 'Tópico') {
-            // Regex para encontrar links
             const urlRegex = /(https?:\/\/[^\s]+)/g;
             const links = provas.match(urlRegex);
             if (links) {
-                // Só permite links do YouTube
-                const allYoutube = links.every(link =>
-                    link.includes('youtube.com/') || link.includes('youtu.be/')
+                const allowedDomains = [
+                    'youtube.com/',
+                    'youtu.be/',
+                    'discord.com/',
+                    'discord.gg/',
+                    'discordapp.com/',
+                    'cdn.discordapp.com/',
+                    'media.discordapp.net/'
+                ];
+                const allAllowed = links.every(link =>
+                    allowedDomains.some(domain => link.includes(domain))
                 );
-                if (!allYoutube) {
+                if (!allAllowed) {
                     return await interaction.editReply({
-                        content: '❌ Apenas links do YouTube são permitidos no campo Provas. Tente upar seu vídeo no YouTube.',
+                        content: '❌ Só são permitidos links do YouTube ou dos domínios oficiais do Discord no campo Provas.',
                         flags: [MessageFlags.Ephemeral]
                     });
                 }
