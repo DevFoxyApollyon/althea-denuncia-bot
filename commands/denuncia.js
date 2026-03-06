@@ -120,10 +120,30 @@ async function handleDenunciaSubmit(interaction, platform) {
         }
 
         const config = await getCachedConfig(interaction.guild.id, Config);
+
         const denunciante = interaction.fields.getTextInputValue('denunciante_input');
         const acusado = interaction.fields.getTextInputValue('acusado_input');
         const motivo = interaction.fields.getTextInputValue('motivo_input');
-        const provas = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
+        let provas = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
+
+        // Validação: se provas contém link, só pode ser do YouTube
+        if (provas && provas !== 'Tópico') {
+            // Regex para encontrar links
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const links = provas.match(urlRegex);
+            if (links) {
+                // Só permite links do YouTube
+                const allYoutube = links.every(link =>
+                    link.includes('youtube.com/') || link.includes('youtu.be/')
+                );
+                if (!allYoutube) {
+                    return await interaction.editReply({
+                        content: '❌ Apenas links do YouTube são permitidos no campo Provas. Tente upar seu vídeo no YouTube.',
+                        flags: [MessageFlags.Ephemeral]
+                    });
+                }
+            }
+        }
 
         const channelId = platform === 'PC' ? config.channels.pc : config.channels.mobile;
         const channel = interaction.client.channels.cache.get(channelId);
@@ -434,4 +454,4 @@ module.exports = {
         if (customId === 'modal_logmessageid_para_correcao_aceite') return await handleModalLogMessageIdCorrecaoAceite(interaction);
         if (customId.startsWith('salvar_correcao_aceite_')) return await handleSalvarCorrecaoAceite(interaction);
     }
-};
+}; 
