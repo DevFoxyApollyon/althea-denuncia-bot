@@ -115,9 +115,24 @@ client.once('clientReady', (readyClient) => {
 // --- EXECUÇÃO DE COMANDOS ---
 
 const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('./utils/youtubeUtils');
+const Strike = require('./models/Strike');
+const { contemPalavraProibida, contemMarcacaoAdmin, processaStrike } = require('./utils/strikeWords');
+const Config = require('./models/Config');
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
+
+    // --- SISTEMA DE STRIKES AUTOMÁTICO ---
+    const config = await Config.findOne({ guildId: message.guild.id });
+    if (contemPalavraProibida(message.content) || await contemMarcacaoAdmin(message, config)) {
+        await processaStrike(message, Strike, config);
+        return;
+    }
+// Limpeza automática de strikes antigos (opcional, pode ser agendada)
+setInterval(async () => {
+    const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await Strike.updateMany({}, { $pull: { strikes: { timestamp: { $lt: limite } } } });
+}, 60 * 60 * 1000); // a cada 1h
 
     // --- FILTRO: Deletar mensagem com link do YouTube cujo título contenha 'hl' em tópicos de denúncia ---
     const isDenuncia = message.channel?.name?.toLowerCase().includes('denúncia');
