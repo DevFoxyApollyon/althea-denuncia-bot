@@ -79,6 +79,12 @@ async function handleHLDivulgacao(message, videoTitle) {
         `🚫 Sua mensagem foi removida por divulgação indevida de vídeo do YouTube: ${videoTitle || 'vídeo'}.`
     ).catch(() => {});
 
+    // Envia aviso temporário no canal (simulando ephemeral)
+    await message.channel.send({
+        content: `🚫 <@${message.author.id}> sua mensagem foi removida por divulgação indevida de vídeo do YouTube com 'hl' no título.`,
+        allowedMentions: { users: [message.author.id] }
+    }).then(msg => setTimeout(() => msg.delete().catch(() => {}), 10000));
+
     // Log de auditoria (embed)
     const config = message.client.config || (message.guild && message.guild.config);
     const logChannelId = config?.channels?.log;
