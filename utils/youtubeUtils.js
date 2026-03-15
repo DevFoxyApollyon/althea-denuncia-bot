@@ -54,7 +54,7 @@ async function handleHLDivulgacao(message, videoTitle) {
     ).catch(() => {});
     // Envia mensagem temporária no canal (simulando ephemeral)
     await message.channel.send({
-        content: `🚫 <@${message.author.id}> sua mensagem foi removida por divulgação indevida de vídeo do YouTube com.`,
+        content: `🚫 <@${message.author.id}> sua mensagem foi removida por divulgação indevida de vídeo do YouTube.`,
         allowedMentions: { users: [message.author.id] }
     }).then(msg => setTimeout(() => msg.delete().catch(() => {}), 10000));
 }
