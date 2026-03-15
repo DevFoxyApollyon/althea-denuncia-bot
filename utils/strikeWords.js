@@ -157,9 +157,14 @@ const dateUtils = require('./dateUtils');
 
 async function processaStrike(message, Strike, config) {
   try {
-    // Verifica se o canal da mensagem está registrado em config.channels
+    // Verifica se o canal da mensagem está registrado em config.channels ou se é um tópico (thread) de um canal registrado
     const canaisRegistrados = Object.values(config?.channels || {}).filter(Boolean);
-    if (!canaisRegistrados.includes(message.channel.id)) {
+    let canalPrincipalId = message.channel.id;
+    // Se for um tópico (thread), pega o canal pai
+    if (message.channel.isThread && message.channel.parentId) {
+      canalPrincipalId = message.channel.parentId;
+    }
+    if (!canaisRegistrados.includes(canalPrincipalId)) {
       // Se não estiver, não processa o strike
       return;
     }
