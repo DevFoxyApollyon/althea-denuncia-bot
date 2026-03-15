@@ -401,7 +401,7 @@ async function handleConsultaModalSubmit(interaction) {
             const chunk = allDenuncias.slice(i, i + DENUNCIAS_PER_EMBED);
             const embed = new EmbedBuilder()
                 .setColor(0x0099ff)
-                .setTitle(`🔍 Resultados da Consulta (${i + 1} de ${total})`)
+                .setTitle(`🔍 Resultados da Consulta de denuncias total de: ${total}`)
                 .setTimestamp();
 
             chunk.forEach((d) => {

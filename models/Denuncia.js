@@ -61,7 +61,7 @@ const denunciaSchema = new mongoose.Schema({
     type: Date,
     default: () => {
       const date = getBrasiliaDate();
-      date.setDate(date.getDate() + 15);
+      date.setDate(date.getDate() + 45);
       return date;
     },
     index: { expires: 0 }
