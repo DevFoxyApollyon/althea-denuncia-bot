@@ -122,7 +122,11 @@ const PALAVRAS_PROIBIDAS = [
   'jumento',
   'jegue',
   'burra',
-  'tapada'
+  'tapada',
+  'passa pano',
+  'puxa saco',
+  'lambe botas'
+
 ];
 
 
