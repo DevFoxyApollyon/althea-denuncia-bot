@@ -219,17 +219,26 @@ async function processaStrike(message, Strike, config) {
         const embed = new EmbedBuilder()
           .setColor('#ff9900')
           .setTitle('🚨 Log de Strike Aplicado')
-          .setTimestamp()
+          .setAuthor({
+            name: `${message.author.tag} (${message.author.id})`,
+            iconURL: message.author.displayAvatarURL?.() || undefined
+          })
+          .setThumbnail(message.author.displayAvatarURL?.() || null)
+          .setDescription(`Strike aplicado no canal <#${message.channel.id}> (${message.channel.id})\n[Ir para o canal](https://discord.com/channels/${message.guild.id}/${message.channel.id})`)
           .addFields(
-            { name: 'Usuário', value: `<@${message.author.id}> (${message.author.tag})`, inline: false },
-            { name: 'ID do Usuário', value: message.author.id, inline: true },
-            { name: 'Staff', value: `<@${message.client.user.id}> (${message.client.user.tag})`, inline: true },
-            { name: 'Canal', value: `<#${message.channel.id}>`, inline: true },
-            { name: 'Mensagem', value: message.content || 'Mensagem não disponível', inline: false },
+            { name: 'Usuário', value: `<@${message.author.id}>`, inline: true },
+            { name: 'Staff (Bot)', value: `<@${message.client.user.id}> (${message.client.user.tag})`, inline: true },
             { name: 'Motivo', value: motivo, inline: false },
+            { name: 'Mensagem Original', value: message.content?.slice(0, 1024) || 'Mensagem não disponível', inline: false },
             { name: 'Quantidade de Strikes', value: String(strikesCount), inline: true },
-            { name: 'Data/Hora', value: dateUtils.getBrasiliaDateTime(), inline: true }
-          );
+            { name: 'Data/Hora', value: dateUtils.getBrasiliaDateTime(), inline: true },
+            { name: 'Mensagem Deletada', value: message.id, inline: true },
+            { name: 'Canal', value: `<#${message.channel.id}>`, inline: true }
+          )
+          .setFooter({
+            text: `ID do Servidor: ${message.guild.id}`
+          })
+          .setTimestamp();
         await logChannel.send({ embeds: [embed] }).catch(() => {});
       }
     }

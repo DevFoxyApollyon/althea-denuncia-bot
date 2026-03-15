@@ -56,16 +56,25 @@ async function handleDivulgacaoIndevida(message, videoTitle) {
             const embed = new EmbedBuilder()
                 .setColor('#ff3333')
                 .setTitle('🚨 Log de Remoção de YouTube')
-                .setTimestamp()
+                .setAuthor({
+                    name: `${message.author.tag} (${message.author.id})`,
+                    iconURL: message.author.displayAvatarURL?.() || undefined
+                })
+                .setThumbnail(message.author.displayAvatarURL?.() || null)
+                .setDescription(`Mensagem removida no canal <#${message.channel.id}> (${message.channel.id})\n[Ir para o canal](https://discord.com/channels/${message.guild.id}/${message.channel.id})`)
                 .addFields(
-                    { name: 'Usuário', value: `<@${message.author.id}> (${message.author.tag})`, inline: false },
-                    { name: 'ID do Usuário', value: message.author.id, inline: true },
-                    { name: 'Staff', value: `<@${message.client.user.id}> (${message.client.user.tag})`, inline: true },
-                    { name: 'Canal', value: `<#${message.channel.id}>`, inline: true },
+                    { name: 'Usuário', value: `<@${message.author.id}>`, inline: true },
+                    { name: 'Staff (Bot)', value: `<@${message.client.user.id}> (${message.client.user.tag})`, inline: true },
                     { name: 'Motivo', value: `Divulgação indevida de conteúdo do YouTube (${videoTitle || 'vídeo'})`, inline: false },
-                    { name: 'Mensagem', value: message.content || 'Mensagem não disponível', inline: false },
-                    { name: 'Data/Hora', value: dateUtils.getBrasiliaDateTime(), inline: true }
-                );
+                    { name: 'Mensagem Original', value: message.content?.slice(0, 1024) || 'Mensagem não disponível', inline: false },
+                    { name: 'Data/Hora', value: dateUtils.getBrasiliaDateTime(), inline: true },
+                    { name: 'Mensagem Deletada', value: message.id, inline: true },
+                    { name: 'Canal', value: `<#${message.channel.id}>`, inline: true }
+                )
+                .setFooter({
+                    text: `ID do Servidor: ${message.guild.id}`
+                })
+                .setTimestamp();
             await logChannel.send({ embeds: [embed] }).catch(() => {});
         }
     }
@@ -81,7 +90,7 @@ async function handleHLDivulgacao(message, videoTitle) {
 
     // Envia aviso temporário no canal (simulando ephemeral)
     await message.channel.send({
-        content: `🚫 <@${message.author.id}> sua mensagem foi removida por divulgação indevida de vídeo do YouTube com 'hl' no título.`,
+        content: `🚫 <@${message.author.id}> sua mensagem foi removida por divulgação indevida de vídeo do YouTube.`,
         allowedMentions: { users: [message.author.id] }
     }).then(msg => setTimeout(() => msg.delete().catch(() => {}), 10000));
 
@@ -94,16 +103,25 @@ async function handleHLDivulgacao(message, videoTitle) {
             const embed = new EmbedBuilder()
                 .setColor('#ff3333')
                 .setTitle('🚨 Log de Remoção de YouTube (HL)')
-                .setTimestamp()
+                .setAuthor({
+                    name: `${message.author.tag} (${message.author.id})`,
+                    iconURL: message.author.displayAvatarURL?.() || undefined
+                })
+                .setThumbnail(message.author.displayAvatarURL?.() || null)
+                .setDescription(`Mensagem removida no canal <#${message.channel.id}> (${message.channel.id})\n[Ir para o canal](https://discord.com/channels/${message.guild.id}/${message.channel.id})`)
                 .addFields(
-                    { name: 'Usuário', value: `<@${message.author.id}> (${message.author.tag})`, inline: false },
-                    { name: 'ID do Usuário', value: message.author.id, inline: true },
-                    { name: 'Staff', value: `<@${message.client.user.id}> (${message.client.user.tag})`, inline: true },
-                    { name: 'Canal', value: `<#${message.channel.id}>`, inline: true },
+                    { name: 'Usuário', value: `<@${message.author.id}>`, inline: true },
+                    { name: 'Staff (Bot)', value: `<@${message.client.user.id}> (${message.client.user.tag})`, inline: true },
                     { name: 'Motivo', value: `Remoção de vídeo do YouTube com 'hl' no título (${videoTitle || 'vídeo'})`, inline: false },
-                    { name: 'Mensagem', value: message.content || 'Mensagem não disponível', inline: false },
-                    { name: 'Data/Hora', value: dateUtils.getBrasiliaDateTime(), inline: true }
-                );
+                    { name: 'Mensagem Original', value: message.content?.slice(0, 1024) || 'Mensagem não disponível', inline: false },
+                    { name: 'Data/Hora', value: dateUtils.getBrasiliaDateTime(), inline: true },
+                    { name: 'Mensagem Deletada', value: message.id, inline: true },
+                    { name: 'Canal', value: `<#${message.channel.id}>`, inline: true }
+                )
+                .setFooter({
+                    text: `ID do Servidor: ${message.guild.id}`
+                })
+                .setTimestamp();
             await logChannel.send({ embeds: [embed] }).catch(() => {});
         }
     }
