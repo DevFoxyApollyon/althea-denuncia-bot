@@ -152,6 +152,9 @@ async function contemMarcacaoAdmin(message, config) {
   return mentionedRoles.has(adminRoleId) || mentionedRoles.has(respAdminRoleId);
 }
 
+const { EmbedBuilder } = require('discord.js');
+const dateUtils = require('./dateUtils');
+
 async function processaStrike(message, Strike, config) {
   try {
     let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
@@ -206,6 +209,28 @@ async function processaStrike(message, Strike, config) {
         // Reseta strikes
         strike.strikes = [];
         await strike.save();
+      }
+    }
+
+    // Envia log detalhado para o canal de auditoria (embed)
+    if (config?.channels?.log) {
+      const logChannel = message.guild.channels.cache.get(config.channels.log);
+      if (logChannel) {
+        const embed = new EmbedBuilder()
+          .setColor('#ff9900')
+          .setTitle('🚨 Log de Strike Aplicado')
+          .setTimestamp()
+          .addFields(
+            { name: 'Usuário', value: `<@${message.author.id}> (${message.author.tag})`, inline: false },
+            { name: 'ID do Usuário', value: message.author.id, inline: true },
+            { name: 'Staff', value: `<@${message.client.user.id}> (${message.client.user.tag})`, inline: true },
+            { name: 'Canal', value: `<#${message.channel.id}>`, inline: true },
+            { name: 'Mensagem', value: message.content || 'Mensagem não disponível', inline: false },
+            { name: 'Motivo', value: motivo, inline: false },
+            { name: 'Quantidade de Strikes', value: String(strikesCount), inline: true },
+            { name: 'Data/Hora', value: dateUtils.getBrasiliaDateTime(), inline: true }
+          );
+        await logChannel.send({ embeds: [embed] }).catch(() => {});
       }
     }
     return;
