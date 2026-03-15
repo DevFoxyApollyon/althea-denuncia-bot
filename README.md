@@ -157,20 +157,17 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 
 ```bash
 .
-├── commands/
+althea-denuncia-bot
+│
+├── commands
+│   ├── correcao.js
 │   ├── denuncia.js
 │   ├── painel.js
-│   ├── correcao.js
-│   ├── status.js
 │   ├── rank.js
-│   └── semana.js
+│   ├── semana.js
+│   └── status.js
 │
-├── doc/
-│   ├── BUTTONS.md
-│   ├── DB_MODELS.md
-│   └── FLOW.md
-│
-├── Handlers/
+├── handlers
 │   ├── exportDenuncia.js
 │   ├── handlerStatusButton.js
 │   ├── interactionHandler.js
@@ -179,26 +176,46 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 │   ├── messageDeleteHandler.js
 │   └── messageReactionHandler.js
 │
-├── jobs/
+├── jobs
 │   └── rankJobs.js
 │
-├── models/
+├── models
 │   ├── Config.js
 │   ├── Denuncia.js
-│   └── ModerationAction.js
+│   ├── ModerationAction.js
+│   ├── Strike.js
+│   └── Usuario.js
 │
-├── services/
-│   └── rankService.js
+├── services
+│   ├── rankService.js
+│   └── usuarioService.js
 │
-├── utils/
-│   ├── logger.js
-│   ├── dateUtils.js
+├── utils
 │   ├── advancedMonitoring.js
-│   └── smartCache.js
+│   ├── commands.js
+│   ├── dateUtils.js
+│   ├── logger.js
+│   ├── monitoring.js
+│   ├── notificarPorNumero.js
+│   ├── performance.js
+│   ├── secondaryDb.js
+│   ├── smartCache.js
+│   ├── strikeWords.js
+│   ├── syncUsuarioNick.js
+│   ├── templateProcessor.js
+│   ├── userSyncAndNotify.js
+│   └── youtubeUtils.js
 │
-├── index.js
-├── package.json
-├── squarecloud.app
+├── docs
+│   ├── BUTTONS.md
+│   ├── DB_MODELS.md
+│   └── FLOW.md
+│
+├── .env
 ├── .env.example
+├── .gitignore
 ├── CHANGELOG.md
-└── README.md
+├── README.md
+├── package.json
+├── package-lock.json
+└── index.js
