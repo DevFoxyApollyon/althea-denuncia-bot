@@ -1,5 +1,10 @@
+
+// =========================
+// VARIÁVEIS DE AMBIENTE E IMPORTS
+// =========================
 process.env.TZ = 'America/Sao_Paulo';
 process.env.FORCE_COLOR = '3';
+require('dotenv').config();
 
 const { 
     Client, 
@@ -12,24 +17,26 @@ const {
 const mongoose = require('mongoose');
 const chalk = require('chalk'); 
 const packageJson = require('./package.json');
-require('dotenv').config();
 
-// --- IMPORTAÇÕES DE HANDLERS ---
+// =========================
+// HANDLERS, UTILS E SERVIÇOS
+// =========================
 const interactionHandler = require('./Handlers/interactionHandler');
 const { handleDeletedMessage } = require('./Handlers/messageDeleteHandler');
-const { 
-    handleReactionAdd, 
-    handleReactionRemove, 
-    handleReactionRemoveAll 
-} = require('./Handlers/messageReactionHandler');
-
-// --- CARREGAMENTO DE COMANDOS (Via Utils) ---
+const { handleReactionAdd, handleReactionRemove, handleReactionRemoveAll } = require('./Handlers/messageReactionHandler');
 const commands = require('./utils/commands');
-
-// --- SERVIÇOS ---
+const Config = require('./models/Config');
+const { contemPalavraProibida, contemMarcacaoAdmin, processaStrike } = require('./utils/strikeWords');
+const Strike = require('./models/Strike');
+const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks, handleHLDivulgacao } = require('./utils/youtubeUtils');
 const { advancedMonitor } = require('./utils/advancedMonitoring');
 const { setupRankJobs } = require('./jobs/rankJobs');
+const secondaryConnection = require('./utils/secondaryDb');
+const { syncUserOnNicknameChange } = require('./utils/userSyncAndNotify');
 
+// =========================
+// INSTÂNCIA DO CLIENT
+// =========================
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -43,6 +50,9 @@ const client = new Client({
     }
 });
 
+// =========================
+// LOGGING PADRÃO
+// =========================
 const log = {
     info: (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
     success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
@@ -50,13 +60,33 @@ const log = {
     error: (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
     system: (msg) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} ${msg}`)
 };
+// =========================
+// SINCRONIZAÇÃO DE NICKNAME
+// =========================
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+    try {
+        await syncUserOnNicknameChange(oldMember, newMember);
+    } catch (e) {
+        console.warn('Erro ao sincronizar nickname:', e.message);
+    }
+});
 
 // --- INICIALIZAÇÃO DA DATABASE ---
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
-        log.success('Database conectada.');
+        log.success('Database principal conectada.');
+        // Verifica conexão do banco secundário
+        secondaryConnection.on('connected', () => {
+            log.success('Database secundária conectada.');
+        });
+        secondaryConnection.on('error', (err) => {
+            log.error('Erro ao conectar na database secundária: ' + err.message);
+        });
+        // Se já estiver conectada
+        if (secondaryConnection.readyState === 1) {
+            log.success('Database secundária conectada.');
+        }
         client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
-        setupRankJobs(client);
     })
     .catch((err) => {
         log.error('Erro Database: ' + err.message);
@@ -114,10 +144,6 @@ client.once('clientReady', (readyClient) => {
 
 // --- EXECUÇÃO DE COMANDOS ---
 
-const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks, handleHLDivulgacao } = require('./utils/youtubeUtils');
-const Strike = require('./models/Strike');
-const { contemPalavraProibida, contemMarcacaoAdmin, processaStrike } = require('./utils/strikeWords');
-const Config = require('./models/Config');
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;

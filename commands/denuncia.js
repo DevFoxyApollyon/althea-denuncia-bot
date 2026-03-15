@@ -114,6 +114,34 @@ async function handleDenunciaCommand(message) {
 // --- SUBMIT DA DENÚNCIA ---
 
 async function handleDenunciaSubmit(interaction, platform) {
+    // Atualiza apenas o nick do usuário denunciante no banco secundário se mudou
+    try {
+        const Usuario = require('../models/Usuario');
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+        const username = interaction.user.username;
+        const nickname = interaction.member?.nickname || null;
+        // Pega o valor digitado no input do denunciante
+        const denuncianteInput = interaction.fields.getTextInputValue('denunciante_input');
+        let conta = null;
+        if (nickname) {
+            const match = nickname.match(/(\d{3,})$/);
+            if (match) conta = match[1];
+        }
+        // Se não achou no nickname, usa o input do formulário
+        if (!conta && denuncianteInput) conta = denuncianteInput;
+        // Busca registro existente
+        const existing = await Usuario.findOne({ guildId, userId });
+        if (!existing || existing.username !== username || existing.nickname !== nickname || existing.conta !== conta) {
+            await Usuario.findOneAndUpdate(
+                { guildId, userId },
+                { $set: { username, nickname, conta, updatedAt: new Date() } },
+                { upsert: true, new: true }
+            );
+        }
+    } catch (e) {
+        console.warn('Não foi possível registrar/atualizar nick do denunciante:', e.message);
+    }
     try {
         if (!interaction.replied && !interaction.deferred) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
@@ -186,6 +214,19 @@ async function handleDenunciaSubmit(interaction, platform) {
         // 4. Envia os botões de status/ação dentro do tópico
         await thread.send({ components: [createStatusButtons()] });
 
+        // Atualiza o usuário com o último threadId criado
+        try {
+            const Usuario = require('../models/Usuario');
+            await Usuario.findOneAndUpdate(
+                { guildId: interaction.guild.id, userId: interaction.user.id },
+                { $set: { ultimoThreadId: thread.id, updatedAt: new Date() } },
+                { upsert: true }
+            );
+        } catch (e) {
+            console.warn('Não foi possível atualizar o último threadId do usuário:', e.message);
+        }
+
+
         // Salva no Banco de Dados
         await new Denuncia({
             guildId: interaction.guild.id,
@@ -197,6 +238,31 @@ async function handleDenunciaSubmit(interaction, platform) {
             status: 'pendente',
             dataCriacao: dateUtils.getBrasiliaDate() 
         }).save();
+
+        // Envia mensagem privada ao acusado, se encontrado no banco de usuários
+        try {
+            const { notificarAcusadoPv } = require('../utils/userSyncAndNotify');
+            const denunciaLink = `https://discord.com/channels/${interaction.guild.id}/${channel.id}/${mainMessage.id}`;
+            const mensagemDetalhada = [
+                `⚠️ **Você foi denunciado no servidor ${interaction.guild.name}!**`,
+                '',
+                `**Denunciante:** ${denunciante}`,
+                `**Motivo:** ${motivo}`,
+                `**Provas:** ${provas}`,
+                '',
+                `${denunciaLink}`,
+                '',
+                'Se você acredita que esta denúncia é injusta, responda no tópico da denúncia com as contras provas ou aguarde a análise da equipe.'
+            ].join('\n');
+            await notificarAcusadoPv(
+                interaction.client,
+                interaction.guild.id,
+                acusado,
+                mensagemDetalhada
+            );
+        } catch (e) {
+            console.warn('Não foi possível notificar acusado no PV:', e.message);
+        }
 
         // Envia o aviso e limpa os antigos em background
         await garantirAvisoNoTopo(channel, interaction.channelId);
@@ -262,6 +328,12 @@ async function handleDenunciaButtons(interaction, client) {
  * Abre o modal para denúncia no PC
  */
 async function handleDenunciaPC(interaction) {
+    // Verifica permissão antes de abrir o modal
+    const config = await getCachedConfig(interaction.guild.id, Config);
+    const roleRequired = config.roles.pc;
+    if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
+        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia PC. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
+    }
     await openDenunciaModal(interaction, 'PC');
 }
 
@@ -269,6 +341,12 @@ async function handleDenunciaPC(interaction) {
  * Abre o modal para denúncia no Mobile
  */
 async function handleDenunciaMobile(interaction) {
+    // Verifica permissão antes de abrir o modal
+    const config = await getCachedConfig(interaction.guild.id, Config);
+    const roleRequired = config.roles.permitido;
+    if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
+        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia Mobile. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
+    }
     await openDenunciaModal(interaction, 'Mobile');
 }
 
@@ -303,12 +381,6 @@ async function openDenunciaModal(interaction, platform) {
         );
 
         await interaction.showModal(modal);
-
-        const config = await getCachedConfig(interaction.guild.id, Config);
-        const roleRequired = platform === 'PC' ? config.roles.pc : config.roles.permitido;
-        if (!config || !interaction.member.roles.cache.has(roleRequired)) {
-            console.warn(`⚠️ Usuário ${interaction.user.tag} iniciou denúncia ${platform} sem permissão.`);
-        }
     } catch (error) {
         console.error(`❌ Erro ao abrir modal ${platform}:`, error.message);
     }
@@ -463,4 +535,4 @@ module.exports = {
         if (customId === 'modal_logmessageid_para_correcao_aceite') return await handleModalLogMessageIdCorrecaoAceite(interaction);
         if (customId.startsWith('salvar_correcao_aceite_')) return await handleSalvarCorrecaoAceite(interaction);
     }
-}; 
+};
