@@ -157,6 +157,13 @@ const dateUtils = require('./dateUtils');
 
 async function processaStrike(message, Strike, config) {
   try {
+    // Verifica se o canal da mensagem está registrado em config.channels
+    const canaisRegistrados = Object.values(config?.channels || {}).filter(Boolean);
+    if (!canaisRegistrados.includes(message.channel.id)) {
+      // Se não estiver, não processa o strike
+      return;
+    }
+
     let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
     if (!strike) {
       strike = new Strike({ userId: message.author.id, guildId: message.guild.id, strikes: [] });
