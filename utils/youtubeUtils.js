@@ -45,9 +45,24 @@ async function handleDivulgacaoIndevida(message, videoTitle) {
     }).then(msg => setTimeout(() => msg.delete().catch(() => {}), 10000));
 }
 
+async function handleHLDivulgacao(message, videoTitle) {
+    // Deleta a mensagem
+    await message.delete().catch(() => {});
+    // Envia DM para o usuário
+    await message.author.send(
+        `🚫 Sua mensagem foi removida por divulgação indevida de vídeo do YouTube: ${videoTitle || 'vídeo'}.`
+    ).catch(() => {});
+    // Envia mensagem temporária no canal (simulando ephemeral)
+    await message.channel.send({
+        content: `🚫 <@${message.author.id}> sua mensagem foi removida por divulgação indevida de vídeo do YouTube com.`,
+        allowedMentions: { users: [message.author.id] }
+    }).then(msg => setTimeout(() => msg.delete().catch(() => {}), 10000));
+}
+
 module.exports = {
     extractYouTubeVideoId,
     fetchYouTubeTitle,
     findYouTubeLinks,
-    handleDivulgacaoIndevida
+    handleDivulgacaoIndevida,
+    handleHLDivulgacao
 };

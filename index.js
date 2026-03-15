@@ -114,7 +114,7 @@ client.once('clientReady', (readyClient) => {
 
 // --- EXECUÇÃO DE COMANDOS ---
 
-const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('./utils/youtubeUtils');
+const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks, handleHLDivulgacao } = require('./utils/youtubeUtils');
 const Strike = require('./models/Strike');
 const { contemPalavraProibida, contemMarcacaoAdmin, processaStrike } = require('./utils/strikeWords');
 const Config = require('./models/Config');
@@ -144,7 +144,7 @@ setInterval(async () => {
                 if (videoId) {
                     const title = await fetchYouTubeTitle(videoId);
                     if (title && title.toLowerCase().includes('hl')) {
-                        await message.delete().catch(() => {});
+                        await handleHLDivulgacao(message, title);
                         return;
                     }
                 }
