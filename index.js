@@ -113,8 +113,34 @@ client.once('clientReady', (readyClient) => {
 });
 
 // --- EXECUÇÃO DE COMANDOS ---
+
+const { extractYouTubeVideoId, fetchYouTubeTitle } = require('./utils/youtubeUtils');
+
 client.on('messageCreate', async (message) => {
-    if (message.author.bot || !message.guild || !message.content.startsWith('!')) return;
+    if (message.author.bot || !message.guild) return;
+
+    // --- FILTRO: Deletar mensagem com link do YouTube cujo título contenha 'hl' em tópicos de denúncia ---
+    const isDenuncia = message.channel?.name?.toLowerCase().includes('denúncia');
+    if (isDenuncia && message.content) {
+        // Regex para encontrar links do YouTube
+        const ytRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/[\w\-?&=;%#@/\.]+)/gi;
+        const links = message.content.match(ytRegex);
+        if (links && links.length > 0) {
+            for (const link of links) {
+                const videoId = extractYouTubeVideoId(link);
+                if (videoId) {
+                    const title = await fetchYouTubeTitle(videoId);
+                    if (title && title.toLowerCase().includes('hl')) {
+                        await message.delete().catch(() => {});
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Comandos normais ---
+    if (!message.content.startsWith('!')) return;
 
     const args = message.content.slice(1).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();

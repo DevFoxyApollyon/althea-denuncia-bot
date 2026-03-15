@@ -137,6 +137,9 @@ async function handleDenunciaSubmit(interaction, platform) {
                     'discord.gg/',
                     'discordapp.com/',
                     'cdn.discordapp.com/',
+                    'ptb.discord.com/',
+                    'canary.discord.com/',
+                    'discord.media/',
                     'media.discordapp.net/'
                 ];
                 const allAllowed = links.every(link =>
