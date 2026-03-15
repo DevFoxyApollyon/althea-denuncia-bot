@@ -125,10 +125,18 @@ const PALAVRAS_PROIBIDAS = [
   'tapada'
 ];
 
+
 function contemPalavraProibida(texto) {
   if (!texto) return false;
   const lower = texto.toLowerCase();
   return PALAVRAS_PROIBIDAS.some(p => lower.includes(p));
+}
+
+// Retorna a palavra proibida encontrada, ou null
+function palavraProibidaUsada(texto) {
+  if (!texto) return null;
+  const lower = texto.toLowerCase();
+  return PALAVRAS_PROIBIDAS.find(p => lower.includes(p)) || null;
 }
 
 async function contemMarcacaoAdmin(message, config) {
@@ -152,14 +160,19 @@ async function processaStrike(message, Strike, config) {
     const strikesCount = strike.strikes.length;
     await strike.save();
 
-    // Mensagem de aviso personalizada
+    // Descobre palavra proibida usada (se houver)
+    const palavraUsada = palavraProibidaUsada(message.content);
+    let motivo = '';
     let aviso = '';
     if (strikesCount === 1) {
-      aviso = '⚠️ Primeiro aviso! (1/3)\nEvite usar palavras proibidas. Você foi silenciado por 5 segundos.';
+      aviso = `⚠️ Primeiro aviso! (1/3)\nEvite usar palavras proibidas ou marcar cargos de administração. Você foi silenciado por 1 minuto.`;
+      motivo = `1/3 - Palavra/cargo: ${palavraUsada || 'marcação de cargo admin'}`;
     } else if (strikesCount === 2) {
-      aviso = '⚠️ Segundo aviso! (2/3)\nVocê foi silenciado por 5 segundos.';
+      aviso = `⚠️ Segundo aviso! (2/3)\nVocê foi silenciado por 5 minutos.`;
+      motivo = `2/3 - Palavra/cargo: ${palavraUsada || 'marcação de cargo admin'}`;
     } else if (strikesCount >= 3) {
-      aviso = '⛔ Terceiro aviso! (3/3)\nVocê foi silenciado por 1 hora.';
+      aviso = `⛔ Terceiro aviso! (3/3)\nVocê foi silenciado por 1 hora.`;
+      motivo = `3/3 - Palavra/cargo: ${palavraUsada || 'marcação de cargo admin'}`;
     }
 
     // Tenta deletar a mensagem ofensiva
@@ -177,12 +190,15 @@ async function processaStrike(message, Strike, config) {
     // Aplica punição
     const member = await message.guild.members.fetch(message.author.id).catch(() => null);
     if (member) {
-      if (strikesCount === 1 || strikesCount === 2) {
-        // Mute por 5 segundos
-        await member.timeout?.(5000, 'Aviso de palavras proibidas').catch(() => {});
+      if (strikesCount === 1) {
+        // Mute por 1 minuto
+        await member.timeout?.(60 * 1000, motivo).catch(() => {});
+      } else if (strikesCount === 2) {
+        // Mute por 5 minutos
+        await member.timeout?.(5 * 60 * 1000, motivo).catch(() => {});
       } else if (strikesCount >= 3) {
         // Mute por 1 hora
-        await member.timeout?.(60 * 60 * 1000, 'Terceiro aviso de palavras proibidas').catch(() => {});
+        await member.timeout?.(60 * 60 * 1000, motivo).catch(() => {});
         // Reseta strikes
         strike.strikes = [];
         await strike.save();
@@ -198,5 +214,6 @@ module.exports = {
   PALAVRAS_PROIBIDAS,
   contemPalavraProibida,
   contemMarcacaoAdmin,
-  processaStrike
+  processaStrike,
+  palavraProibidaUsada
 };

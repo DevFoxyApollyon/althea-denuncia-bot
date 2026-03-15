@@ -35,8 +35,19 @@ function findYouTubeLinks(text) {
     return text.match(ytRegex) || [];
 }
 
+async function handleDivulgacaoIndevida(message, videoTitle) {
+    // Deleta a mensagem
+    await message.delete().catch(() => {});
+    // Envia aviso no canal
+    await message.channel.send({
+        content: `🚫 <@${message.author.id}> sua mensagem foi removida: divulgação indevida de conteúdo do YouTube (${videoTitle || 'vídeo'}).`,
+        allowedMentions: { users: [message.author.id] }
+    }).then(msg => setTimeout(() => msg.delete().catch(() => {}), 10000));
+}
+
 module.exports = {
     extractYouTubeVideoId,
     fetchYouTubeTitle,
-    findYouTubeLinks
+    findYouTubeLinks,
+    handleDivulgacaoIndevida
 };
