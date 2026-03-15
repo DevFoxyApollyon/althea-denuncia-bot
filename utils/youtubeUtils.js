@@ -25,7 +25,18 @@ async function fetchYouTubeTitle(videoId) {
     }
 }
 
+/**
+ * Encontra todos os links do YouTube em um texto.
+ * Retorna um array de links encontrados ou []
+ */
+function findYouTubeLinks(text) {
+    if (!text) return [];
+    const ytRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/[\w\-?&=;%#@/\.]+)/gi;
+    return text.match(ytRegex) || [];
+}
+
 module.exports = {
     extractYouTubeVideoId,
-    fetchYouTubeTitle
+    fetchYouTubeTitle,
+    findYouTubeLinks
 };

@@ -114,7 +114,7 @@ client.once('clientReady', (readyClient) => {
 
 // --- EXECUÇÃO DE COMANDOS ---
 
-const { extractYouTubeVideoId, fetchYouTubeTitle } = require('./utils/youtubeUtils');
+const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('./utils/youtubeUtils');
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
@@ -122,10 +122,8 @@ client.on('messageCreate', async (message) => {
     // --- FILTRO: Deletar mensagem com link do YouTube cujo título contenha 'hl' em tópicos de denúncia ---
     const isDenuncia = message.channel?.name?.toLowerCase().includes('denúncia');
     if (isDenuncia && message.content) {
-        // Regex para encontrar links do YouTube
-        const ytRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/[\w\-?&=;%#@/\.]+)/gi;
-        const links = message.content.match(ytRegex);
-        if (links && links.length > 0) {
+        const links = findYouTubeLinks(message.content);
+        if (links.length > 0) {
             for (const link of links) {
                 const videoId = extractYouTubeVideoId(link);
                 if (videoId) {
