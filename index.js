@@ -1,4 +1,3 @@
-
 // =========================
 // VARIÁVEIS DE AMBIENTE E IMPORTS
 // =========================
@@ -60,6 +59,20 @@ const log = {
     error: (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
     system: (msg) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} ${msg}`)
 };
+
+// =========================
+// LIMPEZA DE STRIKES ANTIGOS
+// ✅ CORREÇÃO: fora do messageCreate — roda uma única vez, não uma por mensagem
+// =========================
+setInterval(async () => {
+    try {
+        const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        await Strike.updateMany({}, { $pull: { strikes: { timestamp: { $lt: limite } } } });
+    } catch (e) {
+        log.warn('Erro na limpeza de strikes: ' + e.message);
+    }
+}, 60 * 60 * 1000);
+
 // =========================
 // SINCRONIZAÇÃO DE NICKNAME
 // =========================
@@ -71,29 +84,45 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     }
 });
 
-// --- INICIALIZAÇÃO DA DATABASE ---
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => {
-        log.success('Database principal conectada.');
-        // Verifica conexão do banco secundário
-        secondaryConnection.on('connected', () => {
-            log.success('Database secundária conectada.');
-        });
-        secondaryConnection.on('error', (err) => {
-            log.error('Erro ao conectar na database secundária: ' + err.message);
-        });
-        // Se já estiver conectada
-        if (secondaryConnection.readyState === 1) {
-            log.success('Database secundária conectada.');
-        }
-        client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
-    })
-    .catch((err) => {
-        log.error('Erro Database: ' + err.message);
-        process.exit(1);
-    });
+// =========================
+// INICIALIZAÇÃO DA DATABASE
+// ✅ CORREÇÃO: eventos do secundário registrados antes do connect, conexões independentes
+// =========================
 
-// --- EVENTO READY ---
+// Banco secundário — eventos registrados antes de qualquer connect
+secondaryConnection.on('connected', () => {
+    log.success('Database secundária conectada.');
+});
+secondaryConnection.on('disconnected', () => {
+    log.warn('Database secundária desconectada. Tentando reconectar...');
+});
+secondaryConnection.on('reconnected', () => {
+    log.success('Database secundária reconectada.');
+});
+secondaryConnection.on('error', (err) => {
+    log.error('Erro na database secundária: ' + err.message);
+});
+
+// Banco principal — com opções de timeout e pool
+// ✅ CORREÇÃO: opções de reconexão e timeout adicionadas
+mongoose.connect(process.env.MONGODB_URI, {
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    maxPoolSize: 10,
+    heartbeatFrequencyMS: 10000,
+})
+.then(() => {
+    log.success('Database principal conectada.');
+    client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
+})
+.catch((err) => {
+    log.error('Erro Database: ' + err.message);
+    process.exit(1);
+});
+
+// =========================
+// EVENTO READY
+// =========================
 client.once('clientReady', (readyClient) => {
     console.log(chalk.cyan.bold('\n' + '═'.repeat(60)));
     log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.tag)}`);
@@ -109,7 +138,7 @@ client.once('clientReady', (readyClient) => {
     log.info(`${chalk.bold('Memória utilizada:')} ${chalk.green(memoryUsage)} MB`);
     log.info(`${chalk.bold('Uptime:')} ${chalk.green(uptime > 0 ? uptime + 'min' : '< 1min')}`);
     
-    // 3. Latência (com validação)
+    // 3. Latência
     const ping = readyClient.ws.ping > 0 ? readyClient.ws.ping : 'calculando...';
     log.info(`${chalk.bold('Latência:')} ${chalk.white.bold(ping)}${typeof ping === 'number' ? 'ms' : ''}`);
     
@@ -142,9 +171,9 @@ client.once('clientReady', (readyClient) => {
     });
 });
 
-// --- EXECUÇÃO DE COMANDOS ---
-
-
+// =========================
+// EXECUÇÃO DE COMANDOS
+// =========================
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
@@ -154,11 +183,6 @@ client.on('messageCreate', async (message) => {
         await processaStrike(message, Strike, config);
         return;
     }
-// Limpeza automática de strikes antigos (opcional, pode ser agendada)
-setInterval(async () => {
-    const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    await Strike.updateMany({}, { $pull: { strikes: { timestamp: { $lt: limite } } } });
-}, 60 * 60 * 1000); // a cada 1h
 
     // --- FILTRO: Deletar mensagem com link do YouTube cujo título contenha 'hl' em tópicos de denúncia ---
     const isDenuncia = message.channel?.name?.toLowerCase().includes('denúncia');
@@ -192,7 +216,6 @@ setInterval(async () => {
         await commandFn(message, args);
 
         const duration = Date.now() - startTime;
-        //log.info(`Exec: !${commandName} | Guild: ${message.guild.name} | ${duration}ms`);
         
         if (advancedMonitor?.recordCommand) {
             advancedMonitor.recordCommand(commandName, duration, true, message.author.id);
@@ -202,7 +225,9 @@ setInterval(async () => {
     }
 });
 
-// --- INTERAÇÕES (BOTÕES/MODAIS) ---
+// =========================
+// INTERAÇÕES (BOTÕES/MODAIS)
+// =========================
 client.on('interactionCreate', async (interaction) => {
     try {
         const startTime = Date.now();
@@ -221,7 +246,9 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// --- OUTROS EVENTOS ---
+// =========================
+// OUTROS EVENTOS
+// =========================
 client.on('messageDelete', async (msg) => {
     try { await handleDeletedMessage(msg); } catch (e) { }
 });
@@ -230,7 +257,9 @@ client.on('messageReactionAdd', handleReactionAdd);
 client.on('messageReactionRemove', handleReactionRemove);
 client.on('messageReactionRemoveAll', handleReactionRemoveAll);
 
-// --- GESTÃO DE ERROS ---
+// =========================
+// GESTÃO DE ERROS GLOBAIS
+// =========================
 client.on('error', err => log.error('Discord API Error: ' + err.message));
 process.on('unhandledRejection', (reason) => log.error('Rejeição: ' + reason));
 process.on('uncaughtException', (error) => log.error('ERRO CRÍTICO: ' + error.stack));

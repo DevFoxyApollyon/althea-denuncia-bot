@@ -12,16 +12,16 @@ const {
 const { garantirAvisoNoTopo } = require('../Handlers/leiaAvisoHandler');
 const Denuncia = require('../models/Denuncia'); 
 const Config = require('../models/Config'); 
+const Usuario = require('../models/Usuario');
 const { getCachedConfig } = require('../utils/performance');
 const { handleExportButton } = require('../Handlers/exportDenuncia'); 
 const { handleClaimButton } = require('../Handlers/handlerStatusButton'); 
+const { notificarAcusadoPv } = require('../utils/userSyncAndNotify');
 const dateUtils = require('../utils/dateUtils'); 
 
 const { 
     handleInputIdLogAceite, 
-    handleModalLogMessageIdCorrecaoAceite, 
-    handleEditarAceiteModal, 
-    handleConfirmarCorrecaoAceite, 
+    handleModalLogMessageIdCorrecaoAceite,
     handleSalvarCorrecaoAceite 
 } = require('./correcao'); 
 
@@ -107,30 +107,49 @@ async function handleDenunciaCommand(message) {
             components: [createDenunciaButtons()]
         });
 
-        setTimeout(() => refreshButtons(sentMessage, [denunciaEmbed]), BUTTON_REFRESH_INTERVAL);
+        // ✅ CORREÇÃO: refreshButtons com controle para parar se mensagem foi deletada
+        const startRefresh = (msg, embeds) => {
+            const timer = setTimeout(async () => {
+                try {
+                    await msg.edit({ embeds, components: [createDenunciaButtons()] });
+                    startRefresh(msg, embeds);
+                } catch {
+                    // Mensagem deletada ou inacessível, encerra o ciclo silenciosamente
+                }
+            }, BUTTON_REFRESH_INTERVAL);
+            timer.unref?.();
+        };
+        startRefresh(sentMessage, [denunciaEmbed]);
+
     } catch (error) { console.error(error); }
 }
 
 // --- SUBMIT DA DENÚNCIA ---
 
 async function handleDenunciaSubmit(interaction, platform) {
-    // Atualiza apenas o nick do usuário denunciante no banco secundário se mudou
+    // ✅ CORREÇÃO: deferReply PRIMEIRO, antes de qualquer operação lenta
     try {
-        const Usuario = require('../models/Usuario');
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+        }
+    } catch (e) {
+        console.error('❌ Falha ao deferir interação (pode ter expirado):', e.message);
+        return;
+    }
+
+    // Atualiza o nick do usuário denunciante no banco
+    try {
         const guildId = interaction.guild.id;
         const userId = interaction.user.id;
         const username = interaction.user.username;
         const nickname = interaction.member?.nickname || null;
-        // Pega o valor digitado no input do denunciante
         const denuncianteInput = interaction.fields.getTextInputValue('denunciante_input');
         let conta = null;
         if (nickname) {
             const match = nickname.match(/(\d{3,})$/);
             if (match) conta = match[1];
         }
-        // Se não achou no nickname, usa o input do formulário
         if (!conta && denuncianteInput) conta = denuncianteInput;
-        // Busca registro existente
         const existing = await Usuario.findOne({ guildId, userId });
         if (!existing || existing.username !== username || existing.nickname !== nickname || existing.conta !== conta) {
             await Usuario.findOneAndUpdate(
@@ -142,17 +161,37 @@ async function handleDenunciaSubmit(interaction, platform) {
     } catch (e) {
         console.warn('Não foi possível registrar/atualizar nick do denunciante:', e.message);
     }
-    try {
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-        }
 
+    try {
         const config = await getCachedConfig(interaction.guild.id, Config);
 
         const denunciante = interaction.fields.getTextInputValue('denunciante_input');
         const acusado = interaction.fields.getTextInputValue('acusado_input');
         const motivo = interaction.fields.getTextInputValue('motivo_input');
         let provas = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
+
+        // ✅ NOVO: Suporte a múltiplos acusados separados por +
+        // Exemplo: "39+7171" → busca os dois e menciona cada um ao lado do ID
+        const acusadoIds = acusado.split('+').map(id => id.trim()).filter(id => id.length > 0);
+
+        let acusadoTexto = '';
+        try {
+            const partes = await Promise.all(acusadoIds.map(async (id) => {
+                try {
+                    const found = await Usuario.findOne({
+                        guildId: interaction.guild.id,
+                        conta: id
+                    });
+                    return found ? `\`${id}\` (<@${found.userId}>)` : `\`${id}\``;
+                } catch {
+                    return `\`${id}\``;
+                }
+            }));
+            acusadoTexto = partes.join(' ');
+        } catch (e) {
+            console.warn('Não foi possível buscar acusados no banco:', e.message);
+            acusadoTexto = acusadoIds.map(id => `\`${id}\``).join(' ');
+        }
 
         if (provas && provas !== 'Tópico') {
             const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -175,8 +214,7 @@ async function handleDenunciaSubmit(interaction, platform) {
                 );
                 if (!allAllowed) {
                     return await interaction.editReply({
-                        content: '❌ Só são permitidos links do YouTube ou dos domínios oficiais do Discord no campo Provas.',
-                        flags: [MessageFlags.Ephemeral]
+                        content: '❌ Só são permitidos links do YouTube ou dos domínios oficiais do Discord no campo Provas.'
                     });
                 }
             }
@@ -185,14 +223,14 @@ async function handleDenunciaSubmit(interaction, platform) {
         const channelId = platform === 'PC' ? config.channels.pc : config.channels.mobile;
         const channel = interaction.client.channels.cache.get(channelId);
 
-        // Texto que será enviado em ambos os lugares
         const textoDenuncia = [
             `|| ${interaction.user} ||`,
             `➱ **Denunciante**: \`${denunciante}\``,
-            `➱ **Acusado**: \`${acusado}\``,
+            `➱ **Acusado**: ${acusadoTexto}`,
             `➱ **Motivo**: \`${motivo}\``,
             `➱ **Prova(s)**: ${provas}`
         ].join('\n');
+
 
         // 1. Envia no canal principal
         const mainMessage = await channel.send({
@@ -200,23 +238,29 @@ async function handleDenunciaSubmit(interaction, platform) {
             allowedMentions: { parse: ['users'] }
         });
 
-        // 2. Abre o tópico na mensagem acima
-        const thread = await mainMessage.startThread({
-            name: `Denúncia: ${denunciante}`,
-            autoArchiveDuration: 1440
-        });
+        // 2. Tenta abrir o tópico na mensagem acima
+        let thread;
+        try {
+            thread = await mainMessage.startThread({
+                name: `Denúncia: ${denunciante}`,
+                autoArchiveDuration: 1440
+            });
+        } catch (e) {
+            console.error('❌ Erro ao criar o tópico da denúncia:', e.message);
+            await interaction.editReply({
+                content: '❌ Erro ao criar o tópico da denúncia. Isso pode ocorrer por falta de permissão, limite de tópicos ou configuração do canal. Por favor, tente novamente ou contate um administrador.'
+            });
+            return;
+        }
 
         // 3. Envia os mesmos dados dentro do tópico
-        await thread.send({
-            content: textoDenuncia
-        });
+        await thread.send({ content: textoDenuncia });
 
         // 4. Envia os botões de status/ação dentro do tópico
         await thread.send({ components: [createStatusButtons()] });
 
         // Atualiza o usuário com o último threadId criado
         try {
-            const Usuario = require('../models/Usuario');
             await Usuario.findOneAndUpdate(
                 { guildId: interaction.guild.id, userId: interaction.user.id },
                 { $set: { ultimoThreadId: thread.id, updatedAt: new Date() } },
@@ -225,7 +269,6 @@ async function handleDenunciaSubmit(interaction, platform) {
         } catch (e) {
             console.warn('Não foi possível atualizar o último threadId do usuário:', e.message);
         }
-
 
         // Salva no Banco de Dados
         await new Denuncia({
@@ -239,9 +282,8 @@ async function handleDenunciaSubmit(interaction, platform) {
             dataCriacao: dateUtils.getBrasiliaDate() 
         }).save();
 
-        // Envia mensagem privada ao acusado, se encontrado no banco de usuários
+        // ✅ NOVO: Notifica todos os acusados individualmente no PV
         try {
-            const { notificarAcusadoPv } = require('../utils/userSyncAndNotify');
             const denunciaLink = `https://discord.com/channels/${interaction.guild.id}/${channel.id}/${mainMessage.id}`;
             const mensagemDetalhada = [
                 `⚠️ **Você foi denunciado no servidor ${interaction.guild.name}!**`,
@@ -254,14 +296,17 @@ async function handleDenunciaSubmit(interaction, platform) {
                 '',
                 'Se você acredita que esta denúncia é injusta, responda no tópico da denúncia com as contras provas ou aguarde a análise da equipe.'
             ].join('\n');
-            await notificarAcusadoPv(
-                interaction.client,
-                interaction.guild.id,
-                acusado,
-                mensagemDetalhada
-            );
+
+            for (const id of acusadoIds) {
+                await notificarAcusadoPv(
+                    interaction.client,
+                    interaction.guild.id,
+                    id,
+                    mensagemDetalhada
+                ).catch(e => console.warn(`Não foi possível notificar acusado ${id} no PV:`, e.message));
+            }
         } catch (e) {
-            console.warn('Não foi possível notificar acusado no PV:', e.message);
+            console.warn('Não foi possível notificar acusado(s) no PV:', e.message);
         }
 
         // Envia o aviso e limpa os antigos em background
@@ -271,17 +316,17 @@ async function handleDenunciaSubmit(interaction, platform) {
             content: `✅ Denúncia criada em ${thread} às ${dateUtils.getBrasiliaTime()}` 
         });
 
-    } catch (error) { console.error(error); }
+    } catch (error) {
+        console.error(error);
+        try {
+            await interaction.editReply({ content: '❌ Erro ao processar sua denúncia.' });
+        } catch (e) {
+            console.error('❌ Não foi possível editar a resposta de erro:', e.message);
+        }
+    }
 }
 
-// --- REFRESH E EVENTOS DE BOTÃO ---
-
-async function refreshButtons(message, embeds) {
-    try {
-        await message.edit({ embeds: embeds, components: [createDenunciaButtons()] });
-        setTimeout(() => refreshButtons(message, embeds), BUTTON_REFRESH_INTERVAL);
-    } catch (error) {}
-}
+// --- EVENTOS DE BOTÃO ---
 
 async function handleDenunciaButtons(interaction, client) {
     try {
@@ -300,7 +345,14 @@ async function handleDenunciaButtons(interaction, client) {
         if (customId === 'abrir_input_id_log_aceite') return await handleInputIdLogAceite(interaction);
 
         const denuncia = await Denuncia.findOne({ threadId: interaction.channel.id });
-        if (!denuncia) return;
+
+        // ✅ CORREÇÃO: feedback ao usuário quando denúncia não é encontrada
+        if (!denuncia) {
+            return await interaction.reply({ 
+                content: '❌ Nenhuma denúncia associada a este tópico foi encontrada.', 
+                flags: [MessageFlags.Ephemeral] 
+            });
+        }
 
         const time = dateUtils.getBrasiliaTime();
         if (customId === 'analiser') {
@@ -322,13 +374,9 @@ async function handleDenunciaButtons(interaction, client) {
     } catch (error) { console.error(error); }
 }
 
-// --- HANDLERS DO MODAL DE DENÚNCIA (MOVIDO DE denunciaButtons.js) ---
+// --- HANDLERS DO MODAL DE DENÚNCIA ---
 
-/**
- * Abre o modal para denúncia no PC
- */
 async function handleDenunciaPC(interaction) {
-    // Verifica permissão antes de abrir o modal
     const config = await getCachedConfig(interaction.guild.id, Config);
     const roleRequired = config.roles.pc;
     if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
@@ -337,11 +385,7 @@ async function handleDenunciaPC(interaction) {
     await openDenunciaModal(interaction, 'PC');
 }
 
-/**
- * Abre o modal para denúncia no Mobile
- */
 async function handleDenunciaMobile(interaction) {
-    // Verifica permissão antes de abrir o modal
     const config = await getCachedConfig(interaction.guild.id, Config);
     const roleRequired = config.roles.permitido;
     if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
@@ -350,9 +394,6 @@ async function handleDenunciaMobile(interaction) {
     await openDenunciaModal(interaction, 'Mobile');
 }
 
-/**
- * Função unificada para abrir modais de denúncia
- */
 async function openDenunciaModal(interaction, platform) {
     try {
         const modal = new ModalBuilder()
@@ -365,7 +406,7 @@ async function openDenunciaModal(interaction, platform) {
             .setCustomId('denunciante_input').setLabel('ID do Denunciante').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(20);
 
         const acusadoInput = new TextInputBuilder()
-            .setCustomId('acusado_input').setLabel('ID do Acusado').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(limits.acusado);
+            .setCustomId('acusado_input').setLabel('ID do Acusado (use + para múltiplos)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(limits.acusado);
 
         const motivoInput = new TextInputBuilder()
             .setCustomId('motivo_input').setLabel('Motivo da Denúncia').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(limits.motivo);
@@ -386,9 +427,6 @@ async function openDenunciaModal(interaction, platform) {
     }
 }
 
-/**
- * Processa o submit do modal de denúncia
- */
 async function handleModalSubmit(interaction, platform) {
     try {
         await handleDenunciaSubmit(interaction, platform);
@@ -400,9 +438,6 @@ async function handleModalSubmit(interaction, platform) {
     }
 }
 
-/**
- * Abre o modal de consulta de denúncias
- */
 async function handleMyDenunciasButton(interaction) {
     try {
         const modal = new ModalBuilder()
@@ -424,13 +459,9 @@ async function handleMyDenunciasButton(interaction) {
     }
 }
 
-/**
- * Processa a consulta de denúncias por ID
- */
 async function handleConsultaModalSubmit(interaction) {
     let deferred = false;
     try {
-        // Defer a resposta imediatamente
         await interaction.deferReply({ flags: 64 });
         deferred = true;
 
@@ -441,16 +472,18 @@ async function handleConsultaModalSubmit(interaction) {
             return await interaction.editReply({ content: '❌ Forneça pelo menos um ID válido.' });
         }
 
+        // ✅ CORREÇÃO: escapa caracteres especiais de regex
+        const escapedIds = idsToSearch.map(id => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
         const orQuery = [
             { criadoPor: { $in: idsToSearch } },
             { acusado: { $in: idsToSearch } },
         ];
 
-        idsToSearch.forEach(id => {
+        escapedIds.forEach(id => {
             orQuery.push({ acusadoId: { $regex: new RegExp(`(^|\\s)${id}(\\s|$)`) } });
         });
 
-        // Adiciona timeout de 10 segundos à consulta
         const allDenuncias = await Promise.race([
             Denuncia.find({
                 guildId: interaction.guild.id,
@@ -504,7 +537,6 @@ async function handleConsultaModalSubmit(interaction) {
     } catch (error) {
         console.error(`❌ Erro no modal de consulta:`, error);
         
-        // Só tenta responder se não foi respondida ainda
         if (!deferred) {
             try {
                 await interaction.reply({ content: '❌ Erro ao consultar o banco de dados.', flags: 64 });
