@@ -107,7 +107,6 @@ async function handleDenunciaCommand(message) {
             components: [createDenunciaButtons()]
         });
 
-        // ✅ CORREÇÃO: refreshButtons com controle para parar se mensagem foi deletada
         const startRefresh = (msg, embeds) => {
             const timer = setTimeout(async () => {
                 try {
@@ -127,7 +126,6 @@ async function handleDenunciaCommand(message) {
 // --- SUBMIT DA DENÚNCIA ---
 
 async function handleDenunciaSubmit(interaction, platform) {
-    // ✅ CORREÇÃO: deferReply PRIMEIRO, antes de qualquer operação lenta
     try {
         if (!interaction.replied && !interaction.deferred) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
@@ -137,19 +135,28 @@ async function handleDenunciaSubmit(interaction, platform) {
         return;
     }
 
-    // Atualiza o nick do usuário denunciante no banco
+    // Atualiza o nick e conta do usuário denunciante no banco
     try {
         const guildId = interaction.guild.id;
         const userId = interaction.user.id;
         const username = interaction.user.username;
         const nickname = interaction.member?.nickname || null;
         const denuncianteInput = interaction.fields.getTextInputValue('denunciante_input');
+
         let conta = null;
+
+        // Primeiro tenta extrair do nickname
         if (nickname) {
             const match = nickname.match(/(\d{3,})$/);
             if (match) conta = match[1];
         }
-        if (!conta && denuncianteInput) conta = denuncianteInput;
+
+        // Se não achou no nickname, usa o que foi digitado no campo denunciante
+        // pois esse campo é justamente o ID do jogo
+        if (!conta && denuncianteInput) {
+            conta = denuncianteInput.trim();
+        }
+
         const existing = await Usuario.findOne({ guildId, userId });
         if (!existing || existing.username !== username || existing.nickname !== nickname || existing.conta !== conta) {
             await Usuario.findOneAndUpdate(
@@ -170,8 +177,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         const motivo = interaction.fields.getTextInputValue('motivo_input');
         let provas = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
 
-        // ✅ NOVO: Suporte a múltiplos acusados separados por +
-        // Exemplo: "39+7171" → busca os dois e menciona cada um ao lado do ID
+        // Suporte a múltiplos acusados separados por +
         const acusadoIds = acusado.split('+').map(id => id.trim()).filter(id => id.length > 0);
 
         let acusadoTexto = '';
@@ -231,14 +237,13 @@ async function handleDenunciaSubmit(interaction, platform) {
             `➱ **Prova(s)**: ${provas}`
         ].join('\n');
 
-
         // 1. Envia no canal principal
         const mainMessage = await channel.send({
             content: textoDenuncia,
             allowedMentions: { parse: ['users'] }
         });
 
-        // 2. Tenta abrir o tópico na mensagem acima
+        // 2. Abre o tópico na mensagem
         let thread;
         try {
             thread = await mainMessage.startThread({
@@ -256,7 +261,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         // 3. Envia os mesmos dados dentro do tópico
         await thread.send({ content: textoDenuncia });
 
-        // 4. Envia os botões de status/ação dentro do tópico
+        // 4. Envia os botões de status dentro do tópico
         await thread.send({ components: [createStatusButtons()] });
 
         // Atualiza o usuário com o último threadId criado
@@ -282,7 +287,7 @@ async function handleDenunciaSubmit(interaction, platform) {
             dataCriacao: dateUtils.getBrasiliaDate() 
         }).save();
 
-        // ✅ NOVO: Notifica todos os acusados individualmente no PV
+        // Notifica todos os acusados individualmente no PV
         try {
             const denunciaLink = `https://discord.com/channels/${interaction.guild.id}/${channel.id}/${mainMessage.id}`;
             const mensagemDetalhada = [
@@ -309,7 +314,6 @@ async function handleDenunciaSubmit(interaction, platform) {
             console.warn('Não foi possível notificar acusado(s) no PV:', e.message);
         }
 
-        // Envia o aviso e limpa os antigos em background
         await garantirAvisoNoTopo(channel, interaction.channelId);
         
         await interaction.editReply({ 
@@ -346,7 +350,6 @@ async function handleDenunciaButtons(interaction, client) {
 
         const denuncia = await Denuncia.findOne({ threadId: interaction.channel.id });
 
-        // ✅ CORREÇÃO: feedback ao usuário quando denúncia não é encontrada
         if (!denuncia) {
             return await interaction.reply({ 
                 content: '❌ Nenhuma denúncia associada a este tópico foi encontrada.', 
@@ -472,7 +475,6 @@ async function handleConsultaModalSubmit(interaction) {
             return await interaction.editReply({ content: '❌ Forneça pelo menos um ID válido.' });
         }
 
-        // ✅ CORREÇÃO: escapa caracteres especiais de regex
         const escapedIds = idsToSearch.map(id => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 
         const orQuery = [

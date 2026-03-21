@@ -61,17 +61,17 @@ const log = {
 };
 
 // =========================
-// LIMPEZA DE STRIKES ANTIGOS
-// ✅ CORREÇÃO: fora do messageCreate — roda uma única vez, não uma por mensagem
+// CACHE DE CONFIG (evita query no banco a cada mensagem)
 // =========================
-setInterval(async () => {
-    try {
-        const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        await Strike.updateMany({}, { $pull: { strikes: { timestamp: { $lt: limite } } } });
-    } catch (e) {
-        log.warn('Erro na limpeza de strikes: ' + e.message);
-    }
-}, 60 * 60 * 1000);
+const configCache = new Map();
+
+async function getConfig(guildId) {
+    if (configCache.has(guildId)) return configCache.get(guildId);
+    const config = await Config.findOne({ guildId });
+    configCache.set(guildId, config);
+    setTimeout(() => configCache.delete(guildId), 5 * 60 * 1000); // expira em 5min
+    return config;
+}
 
 // =========================
 // SINCRONIZAÇÃO DE NICKNAME
@@ -80,86 +80,81 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     try {
         await syncUserOnNicknameChange(oldMember, newMember);
     } catch (e) {
-        console.warn('Erro ao sincronizar nickname:', e.message);
+        log.warn('Erro ao sincronizar nickname: ' + e.message);
     }
 });
 
 // =========================
 // INICIALIZAÇÃO DA DATABASE
-// ✅ CORREÇÃO: eventos do secundário registrados antes do connect, conexões independentes
 // =========================
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => {
+        log.success('Database principal conectada.');
 
-// Banco secundário — eventos registrados antes de qualquer connect
-secondaryConnection.on('connected', () => {
-    log.success('Database secundária conectada.');
-});
-secondaryConnection.on('disconnected', () => {
-    log.warn('Database secundária desconectada. Tentando reconectar...');
-});
-secondaryConnection.on('reconnected', () => {
-    log.success('Database secundária reconectada.');
-});
-secondaryConnection.on('error', (err) => {
-    log.error('Erro na database secundária: ' + err.message);
-});
+        secondaryConnection.on('connected', () => {
+            log.success('Database secundária conectada.');
+        });
+        secondaryConnection.on('error', (err) => {
+            log.error('Erro ao conectar na database secundária: ' + err.message);
+        });
+        if (secondaryConnection.readyState === 1) {
+            log.success('Database secundária já conectada.');
+        }
 
-// Banco principal — com opções de timeout e pool
-// ✅ CORREÇÃO: opções de reconexão e timeout adicionadas
-mongoose.connect(process.env.MONGODB_URI, {
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
-    maxPoolSize: 10,
-    heartbeatFrequencyMS: 10000,
-})
-.then(() => {
-    log.success('Database principal conectada.');
-    client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
-})
-.catch((err) => {
-    log.error('Erro Database: ' + err.message);
-    process.exit(1);
-});
+        // Limpeza automática de strikes antigos a cada 1h
+        setInterval(async () => {
+            try {
+                const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                await Strike.updateMany({}, { $pull: { strikes: { timestamp: { $lt: limite } } } });
+            } catch (e) {
+                log.error('Erro na limpeza de strikes: ' + e.message);
+            }
+        }, 60 * 60 * 1000);
+
+        client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
+    })
+    .catch((err) => {
+        log.error('Erro Database: ' + err.message);
+        process.exit(1);
+    });
 
 // =========================
 // EVENTO READY
 // =========================
 client.once('clientReady', (readyClient) => {
     console.log(chalk.cyan.bold('\n' + '═'.repeat(60)));
-    log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.tag)}`);
-    
-    // 1. Informações do Sistema
+    log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.username)}`);
+
     log.info(`${chalk.bold('Versão do Bot:')} ${chalk.green(packageJson.version)}`);
     log.info(`${chalk.bold('Node.js:')} ${chalk.green(process.version)}`);
     log.info(`${chalk.bold('Discord.js:')} ${chalk.green(`v${discordVersion}`)}`);
-    
-    // 2. Informações de Performance
+
     const memoryUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
     const uptime = Math.floor(process.uptime() / 60);
     log.info(`${chalk.bold('Memória utilizada:')} ${chalk.green(memoryUsage)} MB`);
     log.info(`${chalk.bold('Uptime:')} ${chalk.green(uptime > 0 ? uptime + 'min' : '< 1min')}`);
-    
-    // 3. Latência
+
     const ping = readyClient.ws.ping > 0 ? readyClient.ws.ping : 'calculando...';
     log.info(`${chalk.bold('Latência:')} ${chalk.white.bold(ping)}${typeof ping === 'number' ? 'ms' : ''}`);
-    
-    // 4. Listagem de Comandos Carregados
+
     const cmdList = Object.keys(commands).join(', ');
     log.info(`${chalk.bold('Comandos carregados:')} ${chalk.green(cmdList)}`);
 
-    // 5. Informações dos Servidores
     let totalMembers = 0;
     readyClient.guilds.cache.forEach(guild => {
         totalMembers += guild.memberCount || 0;
     });
-    
+
     log.info(`${chalk.bold('Servidores ativos (' + readyClient.guilds.cache.size + '):')}`);
     readyClient.guilds.cache.forEach(guild => {
         console.log(`${chalk.gray('  > ')}${chalk.white(guild.name)} ${chalk.gray('ID: ' + guild.id)} ${chalk.gray('| ' + (guild.memberCount || 0) + ' membros')}`);
     });
-    
+
     log.info(`${chalk.bold('Total de membros:')} ${chalk.green(totalMembers)}`);
-    
     console.log(chalk.cyan.bold('═'.repeat(60) + '\n'));
+
+    // Inicia os jobs de rank
+    setupRankJobs(client);
 
     readyClient.user.setPresence({
         activities: [{
@@ -172,13 +167,13 @@ client.once('clientReady', (readyClient) => {
 });
 
 // =========================
-// EXECUÇÃO DE COMANDOS
+// MENSAGENS
 // =========================
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
     // --- SISTEMA DE STRIKES AUTOMÁTICO ---
-    const config = await Config.findOne({ guildId: message.guild.id });
+    const config = await getConfig(message.guild.id);
     if (contemPalavraProibida(message.content) || await contemMarcacaoAdmin(message, config)) {
         await processaStrike(message, Strike, config);
         return;
@@ -202,7 +197,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // --- Comandos normais ---
+    // --- COMANDOS ---
     if (!message.content.startsWith('!')) return;
 
     const args = message.content.slice(1).trim().split(/ +/);
@@ -216,7 +211,6 @@ client.on('messageCreate', async (message) => {
         await commandFn(message, args);
 
         const duration = Date.now() - startTime;
-        
         if (advancedMonitor?.recordCommand) {
             advancedMonitor.recordCommand(commandName, duration, true, message.author.id);
         }
@@ -250,7 +244,7 @@ client.on('interactionCreate', async (interaction) => {
 // OUTROS EVENTOS
 // =========================
 client.on('messageDelete', async (msg) => {
-    try { await handleDeletedMessage(msg); } catch (e) { }
+    try { await handleDeletedMessage(msg); } catch (e) { log.error('messageDelete: ' + e.message); }
 });
 
 client.on('messageReactionAdd', handleReactionAdd);
@@ -258,7 +252,7 @@ client.on('messageReactionRemove', handleReactionRemove);
 client.on('messageReactionRemoveAll', handleReactionRemoveAll);
 
 // =========================
-// GESTÃO DE ERROS GLOBAIS
+// GESTÃO DE ERROS GLOBAL
 // =========================
 client.on('error', err => log.error('Discord API Error: ' + err.message));
 process.on('unhandledRejection', (reason) => log.error('Rejeição: ' + reason));
