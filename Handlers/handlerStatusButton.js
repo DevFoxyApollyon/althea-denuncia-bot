@@ -11,6 +11,12 @@ const { getBrasiliaDate, formatTimeBR } = require('../utils/dateUtils');
 const { Logger } = require('../utils/logger');
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 
+// Códigos de erro de DM que devem ser ignorados silenciosamente
+const DM_IGNORED_CODES = [
+  50007, // Cannot send messages to this user (DMs desativadas)
+  50278, // Cannot send messages to this user due to having no mutual guilds (saiu do servidor)
+];
+
 /** =========================
  *  SAFE INTERACTION HELPERS
  *  ========================= */
@@ -276,7 +282,7 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
       discordLogMessage = await fetchLogMessage(logsChannel, logMessageId);
     }
 
-    // Decide canal alvo pra mensagem “em análise”
+    // Decide canal alvo pra mensagem "em análise"
     let statusChannel = channel;
     if (data.analysisChannelId && channel.guild) {
       const analysisChannel = await channel.guild.channels.fetch(data.analysisChannelId).catch(() => null);
@@ -746,7 +752,10 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
         log.warn('Não foi possível enviar DM: criadoPor da denúncia é inválido', { userId });
       }
     } catch (dmError) {
-      if (dmError?.code !== 50007) log.error('Erro ao enviar DM para o denunciante', dmError);
+      // ✅ CORRIGIDO: ignora silenciosamente DMs bloqueadas ou sem servidor mútuo
+      if (!DM_IGNORED_CODES.includes(dmError?.code)) {
+        log.error('Erro ao enviar DM para o denunciante', dmError);
+      }
     }
 
     await safeReplyOrEdit(interaction, {
@@ -845,7 +854,10 @@ async function handlePunishmentModal(interaction) {
         log.warn('Não foi possível enviar DM: criadoPor da denúncia é inválido', { userId });
       }
     } catch (dmError) {
-      if (dmError?.code !== 50007) log.error('Erro ao enviar DM para o denunciante', dmError);
+      // ✅ CORRIGIDO: ignora silenciosamente DMs bloqueadas ou sem servidor mútuo
+      if (!DM_IGNORED_CODES.includes(dmError?.code)) {
+        log.error('Erro ao enviar DM para o denunciante', dmError);
+      }
     }
 
     // Atualiza resposta

@@ -1,10 +1,9 @@
 // utils/strikeWords.js
 
-
 const GIFS_STRIKE = {
-  1: 'https://media.giphy.com/media/l1J9EdzfOSgfyueLm/giphy.gif',  // 1º aviso — troque pelo seu link
-  2: 'https://media.giphy.com/media/3o7TKTDn976rzVgky4/giphy.gif', // 2º aviso — troque pelo seu link
-  3: 'https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy.gif',  // 3º aviso — troque pelo seu link
+  1: 'https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExaDdqbzhjczU2aGZ2MXFhd3N0b3BsNHhqdTBsYzdwdnR5MGVmZWdpZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/geslvCFM31sFW/giphy.gif',
+  2: 'https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWUxaXN0cm5ldmc0cHZoZzllam5ucnVyZGQ2dTBvNjB4OXg2bjFqeiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/eSwGh3YK54JKU/giphy.gif',
+  3: 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExOG0yZTY1bmRoN3huMXFwY3V6c3ZvNTZ3eHh0Z3Flc2lvNnZpY2lvYiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/0u7x2NpbMwtToOoSsY/giphy.gif',
 };
 
 // Tempo (em ms) que o aviso fica visível no canal antes de ser deletado
@@ -52,6 +51,9 @@ function palavraProibidaUsada(texto) {
 }
 
 async function contemMarcacaoAdmin(message, config) {
+  // ✅ @everyone e @here sempre bloqueados, independente do config
+  if (message.mentions.everyone) return true;
+
   if (!config?.roles) return false;
   const adminRoleId     = config.roles.administrador;
   const respAdminRoleId = config.roles.responsavel_admin;
@@ -91,7 +93,9 @@ async function processaStrike(message, Strike, config) {
     await strike.save();
 
     // Monta textos e configurações conforme nível do strike
-    const motivoBase = palavraProibidaUsada(message.content) || 'marcação de cargo admin';
+    const motivoBase = palavraProibidaUsada(message.content)
+      || (message.mentions.everyone ? '@everyone/@here' : 'marcação de cargo admin');
+
     let titulo       = '';
     let descricao    = '';
     let motivo       = '';
@@ -100,7 +104,7 @@ async function processaStrike(message, Strike, config) {
 
     if (strikesCount === 1) {
       titulo       = '⚠️ Primeiro aviso! (1/3)';
-      descricao    = `<@${message.author.id}>, evite usar palavras proibidas ou marcar cargos de administração.\nVocê foi silenciado por **1 minuto**.`;
+      descricao    = `<@${message.author.id}>, evite usar palavras proibidas ou marcar @everyone, @here e cargos de administração.\nVocê foi silenciado por **1 minuto**.`;
       motivo       = `1/3 - Palavra/cargo: ${motivoBase}`;
       tempoTimeout = 60 * 1000;
       corEmbed     = '#ff9900';
@@ -124,13 +128,11 @@ async function processaStrike(message, Strike, config) {
     await message.delete().catch(() => {});
 
     // ── 1) Embed com GIF no canal — temporário (some em 5s) ───────────────
-    // O embed aparece no canal onde a palavra foi usada, mencionando o usuário.
-    // Após TEMPO_AVISO_CANAL milissegundos a mensagem é deletada automaticamente.
     const embedCanal = new EmbedBuilder()
       .setColor(corEmbed)
       .setTitle(titulo)
       .setDescription(`${descricao}\n\n*(Esta mensagem some em 5 segundos)*`)
-      .setImage(gifUrl)  // GIF aparece no canal
+      .setImage(gifUrl)
       .setTimestamp();
 
     await message.channel.send({
@@ -139,7 +141,7 @@ async function processaStrike(message, Strike, config) {
     }).then(msg => setTimeout(() => msg.delete().catch(() => {}), TEMPO_AVISO_CANAL))
       .catch(() => {});
 
-    // ── 2) Mesma embed via DM (privado, fica salvo para o usuário ver) ────
+    // ── 2) Mesma embed via DM ─────────────────────────────────────────────
     const embedDM = new EmbedBuilder()
       .setColor(corEmbed)
       .setTitle(titulo)

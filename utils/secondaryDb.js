@@ -1,26 +1,44 @@
 const mongoose = require('mongoose');
+const chalk = require('chalk');
+
+const log = {
+    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
+    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
+    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
+    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
+};
 
 const secondaryDbUri = process.env.SECONDARY_DB_URI;
 
 const secondaryConnection = mongoose.createConnection(secondaryDbUri, {
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
-    maxPoolSize: 10,
-    minPoolSize: 2,
-    heartbeatFrequencyMS: 10000,
+    serverSelectionTimeoutMS: 10000,
+    socketTimeoutMS:          60000,
+    connectTimeoutMS:         15000,
+    maxPoolSize:              10,
+    minPoolSize:              2,
+    heartbeatFrequencyMS:     30000,
+    retryWrites:              true,
+    retryReads:               true,
 });
 
 secondaryConnection.on('connected', () => {
-    console.log('✅ [DB Secundário] Conectado com sucesso.');
+    log.success('Database secundária conectada.');
 });
+
 secondaryConnection.on('disconnected', () => {
-    console.warn('⚠️ [DB Secundário] Desconectado. Tentando reconectar...');
+    log.warn('Database secundária desconectada. Tentando reconectar...');
 });
+
 secondaryConnection.on('reconnected', () => {
-    console.log('🔄 [DB Secundário] Reconectado com sucesso.');
+    log.success('Database secundária reconectada.');
 });
+
 secondaryConnection.on('error', (err) => {
-    console.error('❌ [DB Secundário] Erro na conexão:', err.message);
+    log.error('Erro na database secundária: ' + err.message);
+});
+
+secondaryConnection.on('close', () => {
+    log.warn('Conexão com database secundária encerrada.');
 });
 
 module.exports = secondaryConnection;

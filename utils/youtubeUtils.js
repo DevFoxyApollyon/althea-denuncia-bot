@@ -9,8 +9,8 @@ const dateUtils = require('./dateUtils');
 // NÃO use links do tipo media1.tenor.com/m/... (não funciona no Discord)
 // ─────────────────────────────────────────────────────────────────────────────
 const GIFS_YOUTUBE = {
-  divulgacao: 'https://media.giphy.com/media/l1J9EdzfOSgfyueLm/giphy.gif', // aviso divulgação normal
-  hl:         'https://media.giphy.com/media/3o7TKTDn976rzVgky4/giphy.gif', // aviso divulgação HL
+  divulgacao: 'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzF2b3lld3FiM2h2dTBmYnk0NXlqYmZmcHZwNHhpY3BiNHE3YTAzZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/GpyS1lJXJYupG/giphy.gif', // aviso divulgação normal
+  hl:'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzF2b3lld3FiM2h2dTBmYnk0NXlqYmZmcHZwNHhpY3BiNHE3YTAzZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/GpyS1lJXJYupG/giphy.gif', // aviso divulgação HL
 };
 
 // Tempo que o aviso fica no canal antes de ser deletado

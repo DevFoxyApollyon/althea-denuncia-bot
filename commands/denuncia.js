@@ -17,7 +17,9 @@ const { getCachedConfig } = require('../utils/performance');
 const { handleExportButton } = require('../Handlers/exportDenuncia'); 
 const { handleClaimButton } = require('../Handlers/handlerStatusButton'); 
 const { notificarAcusadoPv } = require('../utils/userSyncAndNotify');
-const dateUtils = require('../utils/dateUtils'); 
+const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('../utils/youtubeUtils');
+const dateUtils = require('../utils/dateUtils');
+const { extrairContaDoNickname } = require('../utils/nickUtils');
 
 const { 
     handleInputIdLogAceite, 
@@ -29,6 +31,25 @@ require('dotenv').config();
 
 const BUTTON_REFRESH_INTERVAL = 1800000;
 const SUPORTE_BOT_ID = process.env.SUPORTE_BOT_ID;
+
+// Regex para detectar qualquer link válido
+const URL_REGEX = /https?:\/\/[^\s]+/gi;
+// Regex para detectar links quebrados — qualquer protocolo que não seja http:// ou https://
+const BROKEN_LINK_REGEX = /\b(?!https?:\/\/)[a-zA-Z]{1,5}:\/\/[^\s]+/gi;
+
+// Palavras/frases proibidas (spam, golpes, etc.)
+const PALAVRAS_BLOQUEADAS = [
+    'mtfe7',
+    'virada de saldo',
+    'equipe mtfe',
+    'entra no grupo',
+    'vem aprender',
+    'trampo do',
+    'trampo ',
+    'saldo equipe',
+    't.me/',
+    'telegram.me/',
+];
 
 // --- COMPONENTES ---
 
@@ -49,6 +70,97 @@ function createDenunciaButtons() {
         new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas Denúncias').setEmoji('📋').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('abrir_input_id_log_aceite').setLabel('Correção').setEmoji('🛠️').setStyle(ButtonStyle.Danger)
     );
+}
+
+// --- VALIDAÇÕES ---
+
+/**
+ * Valida palavras/frases proibidas em qualquer campo
+ */
+function validarPalavrasProibidas(texto) {
+    const lower = texto.toLowerCase();
+    const encontrada = PALAVRAS_BLOQUEADAS.find(p => lower.includes(p));
+    if (encontrada) {
+        return '❌ Sua denúncia não pôde ser enviada. Verifique os campos e tente novamente.';
+    }
+    return null;
+}
+
+/**
+ * Valida o campo motivo:
+ * 1. Não permite links quebrados (qualquer variação de protocolo inválido)
+ * 2. Não permite links válidos
+ */
+function validarMotivo(motivo) {
+    BROKEN_LINK_REGEX.lastIndex = 0;
+    if (BROKEN_LINK_REGEX.test(motivo)) {
+        return '❌ O campo **Motivo** contém um link inválido. Não é permitido incluir links no motivo.';
+    }
+    URL_REGEX.lastIndex = 0;
+    if (URL_REGEX.test(motivo)) {
+        return '❌ O campo **Motivo** não pode conter links. Descreva o motivo em texto.';
+    }
+    return null;
+}
+
+/**
+ * Valida o campo provas:
+ * 1. Não permite links quebrados (qualquer variação de protocolo inválido)
+ * 2. Só permite domínios autorizados
+ */
+function validarProvasLinks(provas) {
+    BROKEN_LINK_REGEX.lastIndex = 0;
+    if (BROKEN_LINK_REGEX.test(provas)) {
+        return '❌ O campo **Provas** contém um link inválido (ex: `htts://...`, `ttps://...`). Certifique-se de copiar o link completo começando com `https://`.';
+    }
+
+    URL_REGEX.lastIndex = 0;
+    const links = provas.match(URL_REGEX);
+    if (links) {
+        const allowedDomains = [
+            'youtube.com/',
+            'youtu.be/',
+            'discord.com/',
+            'discord.gg/',
+            'discordapp.com/',
+            'cdn.discordapp.com/',
+            'ptb.discord.com/',
+            'canary.discord.com/',
+            'discord.media/',
+            'media.discordapp.net/'
+        ];
+        const bloqueado = links.find(link => !allowedDomains.some(domain => link.includes(domain)));
+        if (bloqueado) {
+            return '❌ O campo **Provas** contém um link não permitido. Apenas links do YouTube ou domínios oficiais do Discord são aceitos.';
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Verifica se algum link do YouTube no campo provas tem "hl" no título.
+ * Retorna mensagem genérica sem revelar o motivo real.
+ */
+async function validarVideosHL(provas) {
+    const links = findYouTubeLinks(provas);
+    if (!links || links.length === 0) return null;
+
+    for (const link of links) {
+        const videoId = extractYouTubeVideoId(link);
+        if (!videoId) continue;
+
+        try {
+            const title = await fetchYouTubeTitle(videoId);
+            if (title && title.toLowerCase().includes('hl')) {
+                return '❌ Um dos vídeos enviados no campo **Provas** não é permitido. Verifique os links e tente novamente.';
+            }
+        } catch {
+            // Se não conseguir buscar o título, ignora e deixa passar
+        }
+    }
+
+    return null;
 }
 
 // --- COMANDO PRINCIPAL (!denuncia) ---
@@ -79,6 +191,7 @@ async function handleDenunciaCommand(message) {
             '• O vídeo deve mostrar claramente a infração',
             '• Você pode deixar o vídeo como "não listado"',
             '• Links de outros sites podem não funcionar',
+            '• Vídeos com "hl" no título (Highlights) não são aceitos como prova',
             '',
             '### Como enviar provas:',
             '**Opção 1 - No formulário:**',
@@ -126,6 +239,7 @@ async function handleDenunciaCommand(message) {
 // --- SUBMIT DA DENÚNCIA ---
 
 async function handleDenunciaSubmit(interaction, platform) {
+    // deferReply PRIMEIRO, antes de qualquer operação lenta
     try {
         if (!interaction.replied && !interaction.deferred) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
@@ -143,25 +257,21 @@ async function handleDenunciaSubmit(interaction, platform) {
         const nickname = interaction.member?.nickname || null;
         const denuncianteInput = interaction.fields.getTextInputValue('denunciante_input');
 
-        let conta = null;
-
-        // Primeiro tenta extrair do nickname
-        if (nickname) {
-            const match = nickname.match(/(\d{3,})$/);
-            if (match) conta = match[1];
-        }
-
-        // Se não achou no nickname, usa o que foi digitado no campo denunciante
-        // pois esse campo é justamente o ID do jogo
-        if (!conta && denuncianteInput) {
-            conta = denuncianteInput.trim();
-        }
+        // Extrai a conta usando as regras validadas do nickname
+        // Só usa o input digitado se o nickname não tiver número válido
+        let conta = extrairContaDoNickname(nickname);
+        if (!conta && denuncianteInput) conta = denuncianteInput.trim();
 
         const existing = await Usuario.findOne({ guildId, userId });
-        if (!existing || existing.username !== username || existing.nickname !== nickname || existing.conta !== conta) {
+
+        // Só atualiza a conta no banco se encontrou um valor válido
+        const updateFields = { username, nickname, updatedAt: new Date() };
+        if (conta) updateFields.conta = conta;
+
+        if (!existing || existing.username !== username || existing.nickname !== nickname) {
             await Usuario.findOneAndUpdate(
                 { guildId, userId },
-                { $set: { username, nickname, conta, updatedAt: new Date() } },
+                { $set: updateFields },
                 { upsert: true, new: true }
             );
         }
@@ -173,9 +283,38 @@ async function handleDenunciaSubmit(interaction, platform) {
         const config = await getCachedConfig(interaction.guild.id, Config);
 
         const denunciante = interaction.fields.getTextInputValue('denunciante_input');
-        const acusado = interaction.fields.getTextInputValue('acusado_input');
-        const motivo = interaction.fields.getTextInputValue('motivo_input');
-        let provas = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
+        const acusado     = interaction.fields.getTextInputValue('acusado_input');
+        const motivo      = interaction.fields.getTextInputValue('motivo_input');
+        let provas        = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
+
+        // ── VALIDAÇÃO 0: Palavras proibidas em todos os campos ────────────────
+        const camposParaVerificar = [denunciante, acusado, motivo, provas];
+        for (const campo of camposParaVerificar) {
+            const erroSpam = validarPalavrasProibidas(campo);
+            if (erroSpam) {
+                return await interaction.editReply({ content: erroSpam });
+            }
+        }
+
+        // ── VALIDAÇÃO 1: Motivo não pode ter links quebrados ou links ─────────
+        const erroMotivo = validarMotivo(motivo);
+        if (erroMotivo) {
+            return await interaction.editReply({ content: erroMotivo });
+        }
+
+        // ── VALIDAÇÃO 2: Provas — links quebrados e domínios ─────────────────
+        if (provas !== 'Tópico') {
+            const erroProvas = validarProvasLinks(provas);
+            if (erroProvas) {
+                return await interaction.editReply({ content: erroProvas });
+            }
+
+            // ── VALIDAÇÃO 3: YouTube com "hl" no título (motivo oculto) ───────
+            const erroHL = await validarVideosHL(provas);
+            if (erroHL) {
+                return await interaction.editReply({ content: erroHL });
+            }
+        }
 
         // Suporte a múltiplos acusados separados por +
         const acusadoIds = acusado.split('+').map(id => id.trim()).filter(id => id.length > 0);
@@ -197,33 +336,6 @@ async function handleDenunciaSubmit(interaction, platform) {
         } catch (e) {
             console.warn('Não foi possível buscar acusados no banco:', e.message);
             acusadoTexto = acusadoIds.map(id => `\`${id}\``).join(' ');
-        }
-
-        if (provas && provas !== 'Tópico') {
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            const links = provas.match(urlRegex);
-            if (links) {
-                const allowedDomains = [
-                    'youtube.com/',
-                    'youtu.be/',
-                    'discord.com/',
-                    'discord.gg/',
-                    'discordapp.com/',
-                    'cdn.discordapp.com/',
-                    'ptb.discord.com/',
-                    'canary.discord.com/',
-                    'discord.media/',
-                    'media.discordapp.net/'
-                ];
-                const allAllowed = links.every(link =>
-                    allowedDomains.some(domain => link.includes(domain))
-                );
-                if (!allAllowed) {
-                    return await interaction.editReply({
-                        content: '❌ Só são permitidos links do YouTube ou dos domínios oficiais do Discord no campo Provas.'
-                    });
-                }
-            }
         }
 
         const channelId = platform === 'PC' ? config.channels.pc : config.channels.mobile;
@@ -412,10 +524,10 @@ async function openDenunciaModal(interaction, platform) {
             .setCustomId('acusado_input').setLabel('ID do Acusado (use + para múltiplos)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(limits.acusado);
 
         const motivoInput = new TextInputBuilder()
-            .setCustomId('motivo_input').setLabel('Motivo da Denúncia').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(limits.motivo);
+            .setCustomId('motivo_input').setLabel('Motivo da Denúncia ').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(limits.motivo);
 
         const provasInput = new TextInputBuilder()
-            .setCustomId('provas_input').setLabel('Provas (Links)').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(limits.provas);
+            .setCustomId('provas_input').setLabel('Provas ').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(limits.provas);
 
         modal.addComponents(
             new ActionRowBuilder().addComponents(denuncianteInput),

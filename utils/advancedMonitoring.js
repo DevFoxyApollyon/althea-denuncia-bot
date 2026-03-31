@@ -1,7 +1,20 @@
 const { globalCache } = require('./smartCache');
+const chalk = require('chalk');
+
+const log = {
+    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
+    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
+    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
+    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
+};
 
 class AdvancedMonitor {
   constructor() {
+    // Evita criar múltiplas instâncias caso o módulo seja recarregado
+    if (AdvancedMonitor._instance) {
+      return AdvancedMonitor._instance;
+    }
+
     this.metrics = {
       startTime: Date.now(),
       commands: new Map(),
@@ -25,8 +38,9 @@ class AdvancedMonitor {
         }
       }
     };
-    
+
     this.startCollection();
+    AdvancedMonitor._instance = this;
   }
 
   startCollection() {
@@ -44,6 +58,11 @@ class AdvancedMonitor {
     this.uptimeInterval = setInterval(() => {
       this.updateUptime();
     }, 60000);
+
+    // Permite que o processo encerre sem esperar esses timers
+    this.metricsInterval.unref?.();
+    this.cleanupInterval.unref?.();
+    this.uptimeInterval.unref?.();
   }
 
   recordCommand(commandName, responseTime, success = true, userId = null) {
@@ -157,16 +176,16 @@ class AdvancedMonitor {
 
   cleanupOldData() {
     const oneHourAgo = Date.now() - (60 * 60 * 1000);
-    
+
     // Limpa erros antigos
     this.metrics.errors = this.metrics.errors.filter(error => error.timestamp > oneHourAgo);
-    
+
     // Limpa métricas de performance antigas
     this.metrics.performance.memoryUsage = this.metrics.performance.memoryUsage.filter(
       m => m.timestamp > oneHourAgo
     );
 
-    console.log('🧹 Dados antigos de monitoramento limpos');
+    log.info('Dados antigos de monitoramento limpos.');
   }
 
   generateDetailedReport() {
@@ -227,7 +246,7 @@ class AdvancedMonitor {
   getPerformanceStats() {
     const memory = this.metrics.performance.memoryUsage;
     const responseTimes = this.metrics.performance.responseTimes;
-    
+
     return {
       memory: {
         current: this.metrics.system.memory.current,
@@ -235,7 +254,7 @@ class AdvancedMonitor {
         average: this.metrics.system.memory.average
       },
       responseTime: {
-        average: responseTimes.length > 0 ? 
+        average: responseTimes.length > 0 ?
           Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length) : 0,
         min: responseTimes.length > 0 ? Math.min(...responseTimes) : 0,
         max: responseTimes.length > 0 ? Math.max(...responseTimes) : 0
@@ -245,13 +264,13 @@ class AdvancedMonitor {
 
   calculateHealthScore() {
     let score = 100;
-    
+
     // Penaliza por erros
     const totalCommands = Array.from(this.metrics.commands.values())
       .reduce((sum, cmd) => sum + cmd.total, 0);
     const totalErrors = Array.from(this.metrics.commands.values())
       .reduce((sum, cmd) => sum + cmd.errors, 0);
-    
+
     if (totalCommands > 0) {
       const errorRate = (totalErrors / totalCommands) * 100;
       score -= errorRate * 2; // -2 pontos por % de erro
@@ -259,13 +278,13 @@ class AdvancedMonitor {
 
     // Penaliza por uso de memória alto
     const memory = this.metrics.system.memory;
-    if (memory.current > 500) score -= 20;
+    if (memory.current > 500)  score -= 20;
     if (memory.current > 1000) score -= 30;
     if (memory.current > 1500) score -= 40;
 
     // Penaliza por tempo de resposta alto
     const avgResponseTime = this.getPerformanceStats().responseTime.average;
-    if (avgResponseTime > 5000) score -= 15;
+    if (avgResponseTime > 5000)  score -= 15;
     if (avgResponseTime > 10000) score -= 25;
 
     // Bonus por cache hit rate alto
@@ -284,7 +303,6 @@ class AdvancedMonitor {
     return '🔴 Crítico';
   }
 
-  // Método para obter top comandos
   getTopCommands(limit = 5) {
     const commands = Array.from(this.metrics.commands.entries())
       .map(([name, data]) => ({
@@ -299,11 +317,10 @@ class AdvancedMonitor {
     return commands;
   }
 
-  // Método para obter estatísticas de erro
   getErrorStats() {
     const errors = this.metrics.errors;
     const errorTypes = {};
-    
+
     errors.forEach(error => {
       const type = error.context || 'unknown';
       errorTypes[type] = (errorTypes[type] || 0) + 1;
@@ -316,15 +333,17 @@ class AdvancedMonitor {
     };
   }
 
-  // Destruir o monitor e limpar intervalos
+  // Limpa os intervalos ao encerrar o bot
   destroy() {
     if (this.metricsInterval) clearInterval(this.metricsInterval);
-    if (this.cleanupInterval) clearInterval(this.cleanupInterval);
-    if (this.uptimeInterval) clearInterval(this.uptimeInterval);
+    if (this.cleanupInterval)  clearInterval(this.cleanupInterval);
+    if (this.uptimeInterval)   clearInterval(this.uptimeInterval);
+    AdvancedMonitor._instance = null;
+    log.warn('Monitor encerrado.');
   }
 }
 
-// Instância global do monitor
+// Instância global do monitor (singleton)
 const advancedMonitor = new AdvancedMonitor();
 
 module.exports = { AdvancedMonitor, advancedMonitor };

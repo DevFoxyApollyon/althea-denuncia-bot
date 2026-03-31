@@ -53,23 +53,32 @@ const client = new Client({
 // LOGGING PADRÃO
 // =========================
 const log = {
-    info: (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
+    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
     success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
-    warn: (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
-    error: (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
-    system: (msg) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} ${msg}`)
+    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
+    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
+    system:  (msg) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} ${msg}`)
 };
 
 // =========================
 // CACHE DE CONFIG (evita query no banco a cada mensagem)
+// Limite de 100 entradas para evitar crescimento ilimitado
 // =========================
 const configCache = new Map();
+const CONFIG_CACHE_LIMIT = 100;
 
 async function getConfig(guildId) {
     if (configCache.has(guildId)) return configCache.get(guildId);
+
     const config = await Config.findOne({ guildId });
+
+    if (configCache.size >= CONFIG_CACHE_LIMIT) {
+        const firstKey = configCache.keys().next().value;
+        configCache.delete(firstKey);
+    }
+
     configCache.set(guildId, config);
-    setTimeout(() => configCache.delete(guildId), 5 * 60 * 1000); // expira em 5min
+    setTimeout(() => configCache.delete(guildId), 5 * 60 * 1000); 
     return config;
 }
 
@@ -80,6 +89,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     try {
         await syncUserOnNicknameChange(oldMember, newMember);
     } catch (e) {
+        if (e.code === 50278) return; 
         log.warn('Erro ao sincronizar nickname: ' + e.message);
     }
 });
@@ -91,12 +101,6 @@ mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
         log.success('Database principal conectada.');
 
-        secondaryConnection.on('connected', () => {
-            log.success('Database secundária conectada.');
-        });
-        secondaryConnection.on('error', (err) => {
-            log.error('Erro ao conectar na database secundária: ' + err.message);
-        });
         if (secondaryConnection.readyState === 1) {
             log.success('Database secundária já conectada.');
         }
@@ -129,13 +133,16 @@ client.once('clientReady', (readyClient) => {
     log.info(`${chalk.bold('Node.js:')} ${chalk.green(process.version)}`);
     log.info(`${chalk.bold('Discord.js:')} ${chalk.green(`v${discordVersion}`)}`);
 
+    const env = process.env.NODE_ENV ?? 'development';
+    log.info(`${chalk.bold('Ambiente:')} ${chalk.green(env)}`);
+    if (env !== 'production') log.warn('Bot rodando em modo DESENVOLVIMENTO.');
+
+    log.info(`${chalk.bold('Iniciado em:')} ${chalk.green(new Date().toLocaleString('pt-BR'))}`);
+
     const memoryUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
     const uptime = Math.floor(process.uptime() / 60);
     log.info(`${chalk.bold('Memória utilizada:')} ${chalk.green(memoryUsage)} MB`);
     log.info(`${chalk.bold('Uptime:')} ${chalk.green(uptime > 0 ? uptime + 'min' : '< 1min')}`);
-
-    const ping = readyClient.ws.ping > 0 ? readyClient.ws.ping : 'calculando...';
-    log.info(`${chalk.bold('Latência:')} ${chalk.white.bold(ping)}${typeof ping === 'number' ? 'ms' : ''}`);
 
     const cmdList = Object.keys(commands).join(', ');
     log.info(`${chalk.bold('Comandos carregados:')} ${chalk.green(cmdList)}`);
@@ -151,9 +158,13 @@ client.once('clientReady', (readyClient) => {
     });
 
     log.info(`${chalk.bold('Total de membros:')} ${chalk.green(totalMembers)}`);
-    console.log(chalk.cyan.bold('═'.repeat(60) + '\n'));
 
-    // Inicia os jobs de rank
+    setTimeout(() => {
+        const ping = readyClient.ws.ping;
+        log.info(`${chalk.bold('Latência WebSocket:')} ${chalk.white.bold(ping)}ms`);
+        console.log(chalk.cyan.bold('═'.repeat(60) + '\n'));
+    }, 5000);
+
     setupRankJobs(client);
 
     readyClient.user.setPresence({
@@ -173,7 +184,7 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
     // --- SISTEMA DE STRIKES AUTOMÁTICO ---
-    const config = await getConfig(message.guild.id);
+    const config = await getConfig(message.guild.id) ?? {};
     if (contemPalavraProibida(message.content) || await contemMarcacaoAdmin(message, config)) {
         await processaStrike(message, Strike, config);
         return;
@@ -182,16 +193,18 @@ client.on('messageCreate', async (message) => {
     // --- FILTRO: Deletar mensagem com link do YouTube cujo título contenha 'hl' em tópicos de denúncia ---
     const isDenuncia = message.channel?.name?.toLowerCase().includes('denúncia');
     if (isDenuncia && message.content) {
-        const links = findYouTubeLinks(message.content);
+        const ytRegex = /(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/[\w\-?&=;%#@/\.]+/gi;
+        const links = message.content.match(ytRegex) || [];
         if (links.length > 0) {
             for (const link of links) {
                 const videoId = extractYouTubeVideoId(link);
+                let title = null;
                 if (videoId) {
-                    const title = await fetchYouTubeTitle(videoId);
-                    if (title && title.toLowerCase().includes('hl')) {
-                        await handleHLDivulgacao(message, title);
-                        return;
-                    }
+                    title = await fetchYouTubeTitle(videoId);
+                }
+                if ((title && title.toLowerCase().includes('hl')) || !title) {
+                    await handleHLDivulgacao(message, title || 'Link inválido ou indevido');
+                    return;
                 }
             }
         }
@@ -233,10 +246,16 @@ client.on('interactionCreate', async (interaction) => {
             advancedMonitor.recordInteraction(type, duration, true);
         }
     } catch (error) {
-        log.error(`Erro na interação (${interaction.customId}): ${error.message}`);
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ Erro interno.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
-        }
+        if (error.code === 50278) return;
+        if (error.code === 10062) return; 
+
+        log.error(`Erro na interação (${interaction?.customId ?? 'desconhecido'}): ${error.message}`);
+
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: '❌ Erro interno.', flags: [MessageFlags.Ephemeral] });
+            }
+        } catch (_) {}
     }
 });
 
@@ -255,7 +274,36 @@ client.on('messageReactionRemoveAll', handleReactionRemoveAll);
 // GESTÃO DE ERROS GLOBAL
 // =========================
 client.on('error', err => log.error('Discord API Error: ' + err.message));
-process.on('unhandledRejection', (reason) => log.error('Rejeição: ' + reason));
-process.on('uncaughtException', (error) => log.error('ERRO CRÍTICO: ' + error.stack));
+
+process.on('unhandledRejection', (reason) => {
+    log.error('Rejeição não tratada: ' + (reason?.stack || reason));
+});
+
+process.on('uncaughtException', (error) => {
+    log.error('ERRO CRÍTICO: ' + error.stack);
+});
+
+// =========================
+// ENCERRAMENTO GRACIOSO (SIGTERM / SIGINT)
+// =========================
+async function gracefulShutdown(signal) {
+    log.warn(`Sinal ${signal} recebido. Encerrando bot com segurança...`);
+    try {
+        advancedMonitor.destroy();
+        client.destroy();
+        await mongoose.connection.close();
+        if (secondaryConnection.readyState === 1) {
+            await secondaryConnection.close();
+        }
+        log.success('Bot encerrado com sucesso.');
+    } catch (e) {
+        log.error('Erro ao encerrar: ' + e.message);
+    } finally {
+        process.exit(0);
+    }
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 
 module.exports = client;
