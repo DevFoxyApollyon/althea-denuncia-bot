@@ -2,7 +2,7 @@ const chalk = require('chalk');
 const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
-const { getBrasiliaDate } = require('../utils/dateUtils');
+const { getBrasiliaDate, toBrasiliaDate } = require('../utils/dateUtils');
 const archiver = require('archiver');
 const fetch = require('node-fetch');
 const { PassThrough } = require('stream');
@@ -297,9 +297,10 @@ async function sleep(ms) {
 }
 
 function calcularDataLimite() {
-    const data = getBrasiliaDate();
-    data.setDate(data.getDate() - DIAS_PARA_FINALIZAR);
-    return data;
+    // Usa a função toBrasiliaDate para garantir timezone correta de São Paulo
+    const agora = toBrasiliaDate();
+    agora.setDate(agora.getDate() - DIAS_PARA_FINALIZAR);
+    return agora;
 }
 
 async function finalizarDenuncia(client, denuncia) {
@@ -324,16 +325,20 @@ async function finalizarDenuncia(client, denuncia) {
 
         if (thread?.isThread?.()) {
             // Se status for 'reivindicada' ou 'analise', recusa automaticamente
-            if (['reivindicada', 'analise'].includes(String(denuncia.status).toLowerCase())) {
+            if (["reivindicada", "analise"].includes(String(denuncia.status).toLowerCase())) {
                 try {
                     await Denuncia.findByIdAndUpdate(denuncia._id, {
-                        status: 'recusada',
+                        status: "recusada",
                         dataAtualizacao: new Date(),
                         'ultimaEdicao.motivoEdicao': `Recusada automaticamente após ${DIAS_PARA_FINALIZAR} dias sem resolução`,
                         'ultimaEdicao.data': new Date(),
                     });
-                    // Mensagem no tópico
-                    await thread.send('❌ Denúncia recusada automaticamente após tempo limite sem resolução.');
+                    // Evita mensagem duplicada: só envia se não houver mensagem igual recente
+                    const recentMessages = await thread.messages.fetch({ limit: 10 }).catch(() => []);
+                    const jaEnviada = Array.from(recentMessages.values()).some(m => m.content && m.content.includes('❌ Denúncia recusada automaticamente após tempo limite sem resolução.'));
+                    if (!jaEnviada) {
+                        await thread.send('❌ Denúncia recusada automaticamente após o tempo limite sem resolução. Caso deseje recorrer, abra um ticket no suporte.');
+                    }
                     await thread.setLocked(true).catch(() => {});
                     await thread.setArchived(true).catch(() => {});
                     log.success(`Denúncia ${denuncia._id} recusada automaticamente por tempo limite.`, { guildName });
@@ -498,8 +503,13 @@ async function finalizarDenuncia(client, denuncia) {
                 }
             }
 
+            // Evita mensagem duplicada de finalização
             try {
-                await thread.send(`🚨 Denúncia Finalizada e Arquivada.\n\nCaso precise de reanálise ou queira recorrer da decisão, por favor, abra um TICKET no canal de suporte. Este tópico será trancado.`);
+                const recentMessages = await thread.messages.fetch({ limit: 10 }).catch(() => []);
+                const jaEnviada = Array.from(recentMessages.values()).some(m => m.content && m.content.includes('🚨 Denúncia Finalizada e Arquivada.'));
+                if (!jaEnviada) {
+                    await thread.send(`🚨 Denúncia Finalizada e Arquivada.\n\nCaso precise de reanálise ou queira recorrer da decisão, por favor, abra um TICKET no canal de suporte. Este tópico será trancado.`);
+                }
             } catch (err) { log.warn(`Falha ao enviar mensagem no tópico: ${err.message}`, { guildName }); }
             try { await thread.setLocked(true); } catch (err) { log.warn(`Falha ao trancar tópico: ${err.message}`, { guildName }); }
             try { await thread.setArchived(true); } catch (err) { log.warn(`Falha ao arquivar tópico: ${err.message}`, { guildName }); }
@@ -563,16 +573,16 @@ async function verificarEFinalizarDenuncias(client) {
     try {
         const dataLimite = calcularDataLimite();
 
+
+        // Remove filtro de status: pega todas denúncias com mais de 15 dias
         const denuncias = await Denuncia.find({
-            status: { $in: STATUS_FINALIZAVEIS },
             dataCriacao: { $lte: dataLimite },
         })
         .sort({ dataCriacao: 1 })
-        .limit(LOTE_MAXIMO)
         .lean();
 
+
         if (!denuncias || denuncias.length === 0) {
-            log.info(`AutoFinalizador: Nenhuma denuncia para finalizar.`);
             return;
         }
 
