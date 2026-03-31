@@ -141,29 +141,7 @@ async function validarVideosHL(provas) {
 }
 
 
-async function atualizarStatusNaMensagem(client, denuncia, novoStatus) {
-    try {
-        const channel = await client.channels.fetch(denuncia.channelId);
-        const msg = await channel.messages.fetch(denuncia.messageId);
-
-        const statusMap = {
-            'pendente':      'Pendente',
-            'analise':       'Em Análise',
-            'reivindicado':  'Reivindicado',
-            'aceita':        'Aceita ✅',
-            'recusada':      'Recusada ❌',
-        };
-
-        const novoTexto = msg.content.replace(
-            /➱ \*\*Status\*\*: `[^`]*`/,
-            `➱ **Status**: \`${statusMap[novoStatus] || novoStatus}\``
-        );
-
-        await msg.edit({ content: novoTexto });
-    } catch (e) {
-        console.warn('Não foi possível atualizar o status na mensagem principal:', e.message);
-    }
-}
+const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 
 
 async function handleDenunciaCommand(message) {
@@ -331,7 +309,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         const channel = interaction.client.channels.cache.get(channelId);
 
 
-        // Monta o texto da denúncia com status sempre visível
+        // Monta o texto da denúncia para a mensagem principal (com status)
         const textoDenuncia = [
             `|| ${interaction.user} ||`,
             `➱ **Denunciante**: \`${denunciante}\``,
@@ -339,6 +317,14 @@ async function handleDenunciaSubmit(interaction, platform) {
             `➱ **Motivo**: \`${motivo}\``,
             `➱ **Prova(s)**: ${provas}`,
             `➱ **Status**: \`Pendente\``
+        ].join('\n');
+
+        const textoDenunciaTopico = [
+            `|| ${interaction.user} ||`,
+            `➱ **Denunciante**: \`${denunciante}\``,
+            `➱ **Acusado**: ${acusadoTexto}`,
+            `➱ **Motivo**: \`${motivo}\``,
+            `➱ **Prova(s)**: ${provas}`
         ].join('\n');
 
         // Envia a mensagem principal
@@ -361,9 +347,7 @@ async function handleDenunciaSubmit(interaction, platform) {
             return;
         }
 
-        // Sempre envia o status no tópico, mesmo se não houver mensagem anterior
-        await thread.send({ content: `➱ **Status**: \`Pendente\`` });
-        await thread.send({ content: textoDenuncia });
+        await thread.send({ content: textoDenunciaTopico });
         await thread.send({ components: [createStatusButtons()] });
 
         try {

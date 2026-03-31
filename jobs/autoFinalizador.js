@@ -585,6 +585,7 @@ async function verificarEFinalizarDenuncias(client) {
             guildId: { $exists: true, $ne: undefined, $ne: null, $ne: '' },
         })
         .sort({ dataCriacao: 1 })
+        .limit(LOTE_MAXIMO)
         .lean();
 
         if (!denuncias || denuncias.length === 0) {
@@ -600,6 +601,8 @@ async function verificarEFinalizarDenuncias(client) {
             const sucesso = await finalizarDenuncia(client, denuncia);
             if (sucesso) finalizadas++;
             else erros++;
+            // Explicitly clean up any large buffers/arrays to help GC
+            global.gc?.();
             await sleep(DELAY_ENTRE_ITENS_MS);
         }
 

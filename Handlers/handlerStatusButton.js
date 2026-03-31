@@ -585,6 +585,12 @@ async function handleAnalise(interaction, denuncia, config, messageUrl, logsChan
 
     // Atualiza a resposta anterior
     await safeReplyOrEdit(interaction, { content: '🔎 Denúncia marcada como em análise!' });
+      // Atualiza status na mensagem principal
+      try {
+        await atualizarStatusNaMensagem(interaction.client, denuncia, 'analise');
+      } catch (e) {
+        log.warn('Falha ao atualizar status na mensagem principal (analise)', e?.message);
+      }
   } catch (error) {
     log.error('Erro ao manejar análise', error);
     await safeReplyOrEdit(interaction, {
@@ -708,7 +714,7 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
     const logManager = new LogManager(interaction.client, config);
     const logEmbed = await logManager.createLogEmbed('recusada', interaction.user, interaction.channel.id);
 
-    if (config.channels.log) {
+    if (config?.channels?.log) {
       const logChannel = interaction.client.channels.cache.get(config.channels.log);
       if (logChannel) await logChannel.send({ embeds: [logEmbed] });
     }
@@ -741,6 +747,12 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
     });
 
     await sendReanaliseNotice(interaction.channel);
+      // Atualiza status na mensagem principal
+      try {
+        await atualizarStatusNaMensagem(interaction.client, denuncia, 'recusada');
+      } catch (e) {
+        log.warn('Falha ao atualizar status na mensagem principal (recusada)', e?.message);
+      }
   } catch (error) {
     log.error('Erro ao manejar recusa', error);
     await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao recusar a denúncia.', flags: [MessageFlags.Ephemeral] });
@@ -839,6 +851,13 @@ async function handlePunishmentModal(interaction) {
     });
 
     await sendReanaliseNotice(interaction.channel);
+
+      // Atualiza status na mensagem principal
+      try {
+        await atualizarStatusNaMensagem(interaction.client, denuncia, 'aceita');
+      } catch (e) {
+        log.warn('Falha ao atualizar status na mensagem principal (aceita)', e?.message);
+      }
 
     denunciasMap.delete(interaction.user.id);
   } catch (error) {
@@ -963,6 +982,7 @@ async function handleClaimButton(interaction) {
     await Denuncia.findByIdAndUpdate(denuncia._id, {
       claimedBy: interaction.user.id,
       claimedAt: new Date(),
+      status: 'reivindicacao', // Atualiza status ao reivindicar
     });
 
     await registrarAcaoModerador(interaction.user.id, 'reivindicar', denuncia._id, interaction.guild.id);
@@ -977,11 +997,20 @@ async function handleClaimButton(interaction) {
     }
 
     await safeReplyOrEdit(interaction, { content: '✅ Você reivindicou esta denúncia com sucesso!' });
+
+      // Atualiza status na mensagem principal
+      try {
+        await atualizarStatusNaMensagem(interaction.client, denuncia, 'reivindicacao');
+      } catch (e) {
+        log.warn('Falha ao atualizar status na mensagem principal (reivindicacao)', e?.message);
+      }
   } catch (error) {
     log.error('Erro ao reivindicar denúncia', error);
     await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao reivindicar a denúncia.', flags: [MessageFlags.Ephemeral] });
   }
 }
+
+const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 
 module.exports = {
   handleStatusButton,
