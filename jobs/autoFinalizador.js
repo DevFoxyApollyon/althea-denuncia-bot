@@ -307,11 +307,16 @@ async function finalizarDenuncia(client, denuncia) {
     let guild = null;
     let guildName = '';
     try {
+        // Ignora denúncias sem guildId
+        if (!denuncia.guildId) {
+            log.warn(`Denúncia ignorada: guildId ausente ou inválido`, { guildName: 'Desconhecido' });
+            return false;
+        }
         const config = await Config.findOne({ guildId: denuncia.guildId });
         guild = client.guilds.cache.get(denuncia.guildId);
         guildName = guild ? guild.name : 'Servidor desconhecido';
         if (!config?.channels?.log) {
-            log.warn(`Configuração de log ausente para guildId ${denuncia.guildId}`, { guildName });
+            log.warn(`Denúncia ignorada: configuração de log ausente para guildId ${denuncia.guildId}`, { guildName });
             return false;
         }
 
@@ -573,14 +578,14 @@ async function verificarEFinalizarDenuncias(client) {
     try {
         const dataLimite = calcularDataLimite();
 
-
         // Remove filtro de status: pega todas denúncias com mais de 15 dias
+        // Agora ignora denúncias sem guildId definido
         const denuncias = await Denuncia.find({
             dataCriacao: { $lte: dataLimite },
+            guildId: { $exists: true, $ne: undefined, $ne: null, $ne: '' },
         })
         .sort({ dataCriacao: 1 })
         .lean();
-
 
         if (!denuncias || denuncias.length === 0) {
             return;
