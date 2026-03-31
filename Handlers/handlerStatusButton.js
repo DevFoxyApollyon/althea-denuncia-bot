@@ -6,16 +6,9 @@ const Config = require('../models/Config');
 const { LogManager } = require('./LogManager');
 const ModerationAction = require('../models/ModerationAction');
 const { getBrasiliaDate, formatTimeBR } = require('../utils/dateUtils');
-
-// ✅ LOG CENTRALIZADO
 const { Logger } = require('../utils/logger');
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
-
-// Códigos de erro de DM que devem ser ignorados silenciosamente
-const DM_IGNORED_CODES = [
-  50007, // Cannot send messages to this user (DMs desativadas)
-  50278, // Cannot send messages to this user due to having no mutual guilds (saiu do servidor)
-];
+const DM_IGNORED_CODES = [ 50007, 50278,];
 
 /** =========================
  *  SAFE INTERACTION HELPERS
@@ -57,7 +50,6 @@ async function safeReplyOrEdit(interaction, payload) {
  *  DUPLICATE / CLEANUP HELPERS
  *  ========================= */
 
-// Padrões de mensagens do bot que precisam ser únicas (e apagar antigas)
 const STATUS_PATTERNS = [
   '🔎 Esta denúncia está em análise por',
   '✅ Denúncia aceita por',
@@ -101,7 +93,6 @@ function isOurBotReanaliseMessage(msg) {
   return REANALISE_PATTERNS.some((p) => content.includes(p));
 }
 
-// Evita enviar o mesmo conteúdo duas vezes (caso o handler dispare duplicado)
 async function sendOnce(channel, content) {
   if (!channel?.isTextBased?.()) return null;
 
@@ -128,14 +119,12 @@ async function sendOnce(channel, content) {
   }
 }
 
-// Apaga mensagens antigas (status + reanálise) no(s) canal(is) alvo(s)
 async function cleanupStatusMessages(targetChannel, cleanupType = 'all') {
   if (!targetChannel?.isTextBased?.()) return;
 
   try {
     let lastId = null;
 
-    // varre um histórico razoável (até ~200 msgs) pra limpar duplicadas
     for (let i = 0; i < 2; i++) {
       const options = { limit: 100 };
       if (lastId) options.before = lastId;
@@ -159,7 +148,6 @@ async function cleanupStatusMessages(targetChannel, cleanupType = 'all') {
 
       for (const msg of toDelete.values()) {
         try {
-          // Verifica se a mensagem ainda existe antes de deletar
           const fetched = await msg.fetch().catch(() => null);
           if (fetched) {
             await fetched.delete().catch((e) => {
@@ -282,7 +270,6 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
       discordLogMessage = await fetchLogMessage(logsChannel, logMessageId);
     }
 
-    // Decide canal alvo pra mensagem "em análise"
     let statusChannel = channel;
     if (data.analysisChannelId && channel.guild) {
       const analysisChannel = await channel.guild.channels.fetch(data.analysisChannelId).catch(() => null);
@@ -316,7 +303,6 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         `Motivo: (${data.denuncia?.motivo || 'Não informado'}) ` +
         `Link: ${data.messageUrl}`;
 
-      // envia só uma vez no canal de análise (ou no próprio thread se não tiver canal de análise)
       await sendOnce(statusChannel, analysisMessageContent);
 
       const statusMsgContent = createStatusMessage(newStatus, user, {
@@ -328,7 +314,6 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         denuncia: data.denuncia,
       });
 
-      // se o canal de análise for diferente, manda também no thread (uma vez)
       if (channel.id !== statusChannel.id) {
         await sendOnce(channel, statusMsgContent);
       }
@@ -452,7 +437,6 @@ async function handleStatusButton(interaction, status) {
       return;
     }
 
-    // ✅ Não defer antes de showModal (aceitar abre modal)
     const willOpenModal = status === 'aceitar';
     if (!willOpenModal) {
       await safeDefer(interaction, true);
@@ -571,10 +555,8 @@ async function handleAnalise(interaction, denuncia, config, messageUrl, logsChan
   try {
     await safeDefer(interaction, true);
 
-    // Responde imediatamente para evitar timeout
     await safeReplyOrEdit(interaction, { content: '⏳ Processando...' });
 
-    // Executa tudo em paralelo (sem bloquear a resposta)
     const discordLogMessage = await manageStatusMessages(interaction.channel, 'analise', interaction.user, {
       messageUrl,
       logChannelId: config.channels.logs,
@@ -680,16 +662,13 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
   try {
     await safeDefer(interaction, true);
 
-    // Responde imediatamente para evitar timeout
     await safeReplyOrEdit(interaction, { content: '⏳ Processando...' });
 
-    // Se tiver log antigo, apaga (pra não sobrar no canal de logs)
     if (denuncia.logMessageId && logsChannel) {
       try {
         const existingLogMessage = await logsChannel.messages.fetch(denuncia.logMessageId).catch(() => null);
         if (existingLogMessage) {
           await existingLogMessage.delete().catch((e) => {
-            // 10008 = Unknown Message, 50001 = Missing Access, 500 = Internal Server Error
             if (e?.code === 10008 || e?.code === 50001) {
               log.debug('Mensagem de log já deletada ou sem acesso');
             } else if (e?.status === 500) {
@@ -752,7 +731,6 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
         log.warn('Não foi possível enviar DM: criadoPor da denúncia é inválido', { userId });
       }
     } catch (dmError) {
-      // ✅ CORRIGIDO: ignora silenciosamente DMs bloqueadas ou sem servidor mútuo
       if (!DM_IGNORED_CODES.includes(dmError?.code)) {
         log.error('Erro ao enviar DM para o denunciante', dmError);
       }
@@ -762,7 +740,6 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
       content: `${statusConfig.recusar.emoji} Denúncia recusada com sucesso!`,
     });
 
-    // ✅ aviso único (e mensagens antigas de reanálise/status já serão limpas no manageStatusMessages)
     await sendReanaliseNotice(interaction.channel);
   } catch (error) {
     log.error('Erro ao manejar recusa', error);
@@ -775,7 +752,6 @@ async function handlePunishmentModal(interaction) {
     if (!interaction.isModalSubmit()) return;
     await safeDefer(interaction, true);
 
-    // Responde imediatamente para evitar timeout
     await safeReplyOrEdit(interaction, { content: '⏳ Processando aceitação...' });
 
     const denunciaData = denunciasMap.get(interaction.user.id);
@@ -833,7 +809,6 @@ async function handlePunishmentModal(interaction) {
       if (logChannel) await logChannel.send({ embeds: [logEmbed] });
     }
 
-    // DM denunciante
     try {
       const userId = denuncia.criadoPor;
       if (userId && typeof userId === 'string' && userId !== 'null' && userId !== 'undefined') {
@@ -854,18 +829,15 @@ async function handlePunishmentModal(interaction) {
         log.warn('Não foi possível enviar DM: criadoPor da denúncia é inválido', { userId });
       }
     } catch (dmError) {
-      // ✅ CORRIGIDO: ignora silenciosamente DMs bloqueadas ou sem servidor mútuo
       if (!DM_IGNORED_CODES.includes(dmError?.code)) {
         log.error('Erro ao enviar DM para o denunciante', dmError);
       }
     }
 
-    // Atualiza resposta
     await safeReplyOrEdit(interaction, {
       content: `${statusConfig.aceitar.emoji} Denúncia aceita com sucesso!`,
     });
 
-    // ✅ aviso único (e mensagens antigas de reanálise/status já serão limpas no manageStatusMessages)
     await sendReanaliseNotice(interaction.channel);
 
     denunciasMap.delete(interaction.user.id);

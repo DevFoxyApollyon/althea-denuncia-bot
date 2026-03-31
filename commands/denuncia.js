@@ -32,12 +32,9 @@ require('dotenv').config();
 const BUTTON_REFRESH_INTERVAL = 1800000;
 const SUPORTE_BOT_ID = process.env.SUPORTE_BOT_ID;
 
-// Regex para detectar qualquer link válido
 const URL_REGEX = /https?:\/\/[^\s]+/gi;
-// Regex para detectar links quebrados — qualquer protocolo que não seja http:// ou https://
 const BROKEN_LINK_REGEX = /\b(?!https?:\/\/)[a-zA-Z]{1,5}:\/\/[^\s]+/gi;
 
-// Palavras/frases proibidas (spam, golpes, etc.)
 const PALAVRAS_BLOQUEADAS = [
     'mtfe7',
     'virada de saldo',
@@ -51,7 +48,6 @@ const PALAVRAS_BLOQUEADAS = [
     'telegram.me/',
 ];
 
-// --- COMPONENTES ---
 
 function createStatusButtons() {
     return new ActionRowBuilder().addComponents(
@@ -72,11 +68,7 @@ function createDenunciaButtons() {
     );
 }
 
-// --- VALIDAÇÕES ---
 
-/**
- * Valida palavras/frases proibidas em qualquer campo
- */
 function validarPalavrasProibidas(texto) {
     const lower = texto.toLowerCase();
     const encontrada = PALAVRAS_BLOQUEADAS.find(p => lower.includes(p));
@@ -86,11 +78,6 @@ function validarPalavrasProibidas(texto) {
     return null;
 }
 
-/**
- * Valida o campo motivo:
- * 1. Não permite links quebrados (qualquer variação de protocolo inválido)
- * 2. Não permite links válidos
- */
 function validarMotivo(motivo) {
     BROKEN_LINK_REGEX.lastIndex = 0;
     if (BROKEN_LINK_REGEX.test(motivo)) {
@@ -103,11 +90,6 @@ function validarMotivo(motivo) {
     return null;
 }
 
-/**
- * Valida o campo provas:
- * 1. Não permite links quebrados (qualquer variação de protocolo inválido)
- * 2. Só permite domínios autorizados
- */
 function validarProvasLinks(provas) {
     BROKEN_LINK_REGEX.lastIndex = 0;
     if (BROKEN_LINK_REGEX.test(provas)) {
@@ -138,10 +120,6 @@ function validarProvasLinks(provas) {
     return null;
 }
 
-/**
- * Verifica se algum link do YouTube no campo provas tem "hl" no título.
- * Retorna mensagem genérica sem revelar o motivo real.
- */
 async function validarVideosHL(provas) {
     const links = findYouTubeLinks(provas);
     if (!links || links.length === 0) return null;
@@ -156,14 +134,37 @@ async function validarVideosHL(provas) {
                 return '❌ Um dos vídeos enviados no campo **Provas** não é permitido. Verifique os links e tente novamente.';
             }
         } catch {
-            // Se não conseguir buscar o título, ignora e deixa passar
         }
     }
 
     return null;
 }
 
-// --- COMANDO PRINCIPAL (!denuncia) ---
+
+async function atualizarStatusNaMensagem(client, denuncia, novoStatus) {
+    try {
+        const channel = await client.channels.fetch(denuncia.channelId);
+        const msg = await channel.messages.fetch(denuncia.messageId);
+
+        const statusMap = {
+            'pendente':      'Pendente',
+            'analise':       'Em Análise',
+            'reivindicado':  'Reivindicado',
+            'aceita':        'Aceita ✅',
+            'recusada':      'Recusada ❌',
+        };
+
+        const novoTexto = msg.content.replace(
+            /➱ \*\*Status\*\*: `[^`]*`/,
+            `➱ **Status**: \`${statusMap[novoStatus] || novoStatus}\``
+        );
+
+        await msg.edit({ content: novoTexto });
+    } catch (e) {
+        console.warn('Não foi possível atualizar o status na mensagem principal:', e.message);
+    }
+}
+
 
 async function handleDenunciaCommand(message) {
     try {
@@ -226,7 +227,6 @@ async function handleDenunciaCommand(message) {
                     await msg.edit({ embeds, components: [createDenunciaButtons()] });
                     startRefresh(msg, embeds);
                 } catch {
-                    // Mensagem deletada ou inacessível, encerra o ciclo silenciosamente
                 }
             }, BUTTON_REFRESH_INTERVAL);
             timer.unref?.();
@@ -236,10 +236,8 @@ async function handleDenunciaCommand(message) {
     } catch (error) { console.error(error); }
 }
 
-// --- SUBMIT DA DENÚNCIA ---
 
 async function handleDenunciaSubmit(interaction, platform) {
-    // deferReply PRIMEIRO, antes de qualquer operação lenta
     try {
         if (!interaction.replied && !interaction.deferred) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
@@ -249,7 +247,6 @@ async function handleDenunciaSubmit(interaction, platform) {
         return;
     }
 
-    // Atualiza o nick e conta do usuário denunciante no banco
     try {
         const guildId = interaction.guild.id;
         const userId = interaction.user.id;
@@ -257,14 +254,11 @@ async function handleDenunciaSubmit(interaction, platform) {
         const nickname = interaction.member?.nickname || null;
         const denuncianteInput = interaction.fields.getTextInputValue('denunciante_input');
 
-        // Extrai a conta usando as regras validadas do nickname
-        // Só usa o input digitado se o nickname não tiver número válido
         let conta = extrairContaDoNickname(nickname);
         if (!conta && denuncianteInput) conta = denuncianteInput.trim();
 
         const existing = await Usuario.findOne({ guildId, userId });
 
-        // Só atualiza a conta no banco se encontrou um valor válido
         const updateFields = { username, nickname, updatedAt: new Date() };
         if (conta) updateFields.conta = conta;
 
@@ -287,7 +281,6 @@ async function handleDenunciaSubmit(interaction, platform) {
         const motivo      = interaction.fields.getTextInputValue('motivo_input');
         let provas        = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
 
-        // ── VALIDAÇÃO 0: Palavras proibidas em todos os campos ────────────────
         const camposParaVerificar = [denunciante, acusado, motivo, provas];
         for (const campo of camposParaVerificar) {
             const erroSpam = validarPalavrasProibidas(campo);
@@ -296,27 +289,23 @@ async function handleDenunciaSubmit(interaction, platform) {
             }
         }
 
-        // ── VALIDAÇÃO 1: Motivo não pode ter links quebrados ou links ─────────
         const erroMotivo = validarMotivo(motivo);
         if (erroMotivo) {
             return await interaction.editReply({ content: erroMotivo });
         }
 
-        // ── VALIDAÇÃO 2: Provas — links quebrados e domínios ─────────────────
         if (provas !== 'Tópico') {
             const erroProvas = validarProvasLinks(provas);
             if (erroProvas) {
                 return await interaction.editReply({ content: erroProvas });
             }
 
-            // ── VALIDAÇÃO 3: YouTube com "hl" no título (motivo oculto) ───────
             const erroHL = await validarVideosHL(provas);
             if (erroHL) {
                 return await interaction.editReply({ content: erroHL });
             }
         }
 
-        // Suporte a múltiplos acusados separados por +
         const acusadoIds = acusado.split('+').map(id => id.trim()).filter(id => id.length > 0);
 
         let acusadoTexto = '';
@@ -341,21 +330,23 @@ async function handleDenunciaSubmit(interaction, platform) {
         const channelId = platform === 'PC' ? config.channels.pc : config.channels.mobile;
         const channel = interaction.client.channels.cache.get(channelId);
 
+
+        // Monta o texto da denúncia com status sempre visível
         const textoDenuncia = [
             `|| ${interaction.user} ||`,
             `➱ **Denunciante**: \`${denunciante}\``,
             `➱ **Acusado**: ${acusadoTexto}`,
             `➱ **Motivo**: \`${motivo}\``,
-            `➱ **Prova(s)**: ${provas}`
+            `➱ **Prova(s)**: ${provas}`,
+            `➱ **Status**: \`Pendente\``
         ].join('\n');
 
-        // 1. Envia no canal principal
+        // Envia a mensagem principal
         const mainMessage = await channel.send({
             content: textoDenuncia,
             allowedMentions: { parse: ['users'] }
         });
 
-        // 2. Abre o tópico na mensagem
         let thread;
         try {
             thread = await mainMessage.startThread({
@@ -370,13 +361,11 @@ async function handleDenunciaSubmit(interaction, platform) {
             return;
         }
 
-        // 3. Envia os mesmos dados dentro do tópico
+        // Sempre envia o status no tópico, mesmo se não houver mensagem anterior
+        await thread.send({ content: `➱ **Status**: \`Pendente\`` });
         await thread.send({ content: textoDenuncia });
-
-        // 4. Envia os botões de status dentro do tópico
         await thread.send({ components: [createStatusButtons()] });
 
-        // Atualiza o usuário com o último threadId criado
         try {
             await Usuario.findOneAndUpdate(
                 { guildId: interaction.guild.id, userId: interaction.user.id },
@@ -387,7 +376,6 @@ async function handleDenunciaSubmit(interaction, platform) {
             console.warn('Não foi possível atualizar o último threadId do usuário:', e.message);
         }
 
-        // Salva no Banco de Dados
         await new Denuncia({
             guildId: interaction.guild.id,
             messageId: mainMessage.id,
@@ -399,7 +387,6 @@ async function handleDenunciaSubmit(interaction, platform) {
             dataCriacao: dateUtils.getBrasiliaDate() 
         }).save();
 
-        // Notifica todos os acusados individualmente no PV
         try {
             const denunciaLink = `https://discord.com/channels/${interaction.guild.id}/${channel.id}/${mainMessage.id}`;
             const mensagemDetalhada = [
@@ -442,7 +429,6 @@ async function handleDenunciaSubmit(interaction, platform) {
     }
 }
 
-// --- EVENTOS DE BOTÃO ---
 
 async function handleDenunciaButtons(interaction, client) {
     try {
@@ -482,6 +468,8 @@ async function handleDenunciaButtons(interaction, client) {
         }
         
         await denuncia.save();
+        await atualizarStatusNaMensagem(client, denuncia, denuncia.status);
+
         if (['analiser', 'aceitar', 'recusar'].includes(customId)) {
             await interaction.reply({ content: 'Status atualizado.', flags: [MessageFlags.Ephemeral] });
         }
@@ -489,7 +477,6 @@ async function handleDenunciaButtons(interaction, client) {
     } catch (error) { console.error(error); }
 }
 
-// --- HANDLERS DO MODAL DE DENÚNCIA ---
 
 async function handleDenunciaPC(interaction) {
     const config = await getCachedConfig(interaction.guild.id, Config);
@@ -676,6 +663,7 @@ module.exports = {
     handleModalSubmit,
     handleMyDenunciasButton,
     handleConsultaModalSubmit,
+    atualizarStatusNaMensagem,
     handleDenunciaModals: async (interaction) => {
         const { customId } = interaction;
         if (customId === 'modal_logmessageid_para_correcao_aceite') return await handleModalLogMessageIdCorrecaoAceite(interaction);

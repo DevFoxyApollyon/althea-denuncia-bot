@@ -32,6 +32,7 @@ const { advancedMonitor } = require('./utils/advancedMonitoring');
 const { setupRankJobs } = require('./jobs/rankJobs');
 const secondaryConnection = require('./utils/secondaryDb');
 const { syncUserOnNicknameChange } = require('./utils/userSyncAndNotify');
+const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 
 // =========================
 // INSTÂNCIA DO CLIENT
@@ -60,9 +61,6 @@ const log = {
     system:  (msg) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} ${msg}`)
 };
 
-// =========================
-// CACHE DE CONFIG (evita query no banco a cada mensagem)
-// Limite de 100 entradas para evitar crescimento ilimitado
 // =========================
 const configCache = new Map();
 const CONFIG_CACHE_LIMIT = 100;
@@ -105,7 +103,6 @@ mongoose.connect(process.env.MONGODB_URI)
             log.success('Database secundária já conectada.');
         }
 
-        // Limpeza automática de strikes antigos a cada 1h
         setInterval(async () => {
             try {
                 const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -166,6 +163,7 @@ client.once('clientReady', (readyClient) => {
     }, 5000);
 
     setupRankJobs(client);
+    iniciarAutoFinalizador(client);
 
     readyClient.user.setPresence({
         activities: [{
@@ -183,14 +181,12 @@ client.once('clientReady', (readyClient) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
-    // --- SISTEMA DE STRIKES AUTOMÁTICO ---
     const config = await getConfig(message.guild.id) ?? {};
     if (contemPalavraProibida(message.content) || await contemMarcacaoAdmin(message, config)) {
         await processaStrike(message, Strike, config);
         return;
     }
 
-    // --- FILTRO: Deletar mensagem com link do YouTube cujo título contenha 'hl' em tópicos de denúncia ---
     const isDenuncia = message.channel?.name?.toLowerCase().includes('denúncia');
     if (isDenuncia && message.content) {
         const ytRegex = /(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/[\w\-?&=;%#@/\.]+/gi;
@@ -210,7 +206,6 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // --- COMANDOS ---
     if (!message.content.startsWith('!')) return;
 
     const args = message.content.slice(1).trim().split(/ +/);
