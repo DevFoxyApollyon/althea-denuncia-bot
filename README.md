@@ -1,5 +1,6 @@
 # 🤖 ALTHEA — Bot de Denúncias para Discord
 
+
 **ALTHEA** é um bot completo de **gerenciamento de denúncias, moderação e controle de staff** para servidores Discord.  
 Desenvolvido em **Node.js + discord.js v14.25**, com **MongoDB**, **painéis interativos**, **botões**, **modais**, **logs centralizados**, **ranking de staff**, **exportação de denúncias** e **configuração dinâmica por servidor**.
 
@@ -126,6 +127,11 @@ Tratamento completo de erros comuns do Discord:
 - Logs centralizados
 
 ---
+
+### 🔄 Sincronização Automática de Nicknames
+O bot agora sincroniza automaticamente os nicknames dos usuários, restaurando-os ao entrarem no servidor e atualizando o banco de dados sempre que o bot alvo altera um nickname.
+
+> **Importante:** Defina a variável `BOT_ALVO_ID` no `.env` com o ID do bot que realiza as trocas de nickname para garantir a sincronização correta.
 
 ## 🧠 Tecnologias Utilizadas
 

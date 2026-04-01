@@ -1,5 +1,26 @@
 # 📦 Changelog
 
+## [1.2.0] - 2026-04-01
+### 🚀 Novidades e Melhorias
+
+#### 🔄 Sincronização Automática de Nicknames
+- Novo job `nicknamePoller` que varre os logs de auditoria e atualiza nicknames no banco de dados.
+- Sincronização e restauração automática de nicknames ao entrar no servidor.
+
+#### 🛠️ AutoFinalizador Aprimorado
+- Processa apenas uma denúncia por ciclo para evitar sobrecarga.
+- Novos status finalizáveis: aceita, recusada, além dos já existentes.
+- Melhoria nos logs, controle de execução e tratamento de tópicos arquivados.
+
+#### 📝 Experiência de Denúncia Melhorada
+- Preenchimento automático do campo denunciante se o usuário já tiver conta salva.
+- Ajustes de validação, simplificação de código e melhorias de UX.
+
+#### 🧹 Refatoração e Organização
+- Código mais limpo, logs mais detalhados e melhor separação de responsabilidades.
+
+---
+
 Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 Este projeto segue o padrão de versionamento semântico (SemVer).
