@@ -1,6 +1,3 @@
-// =========================
-// VARIÁVEIS DE AMBIENTE E IMPORTS
-// =========================
 process.env.TZ = 'America/Sao_Paulo';
 process.env.FORCE_COLOR = '3';
 require('dotenv').config();
@@ -17,9 +14,6 @@ const mongoose = require('mongoose');
 const chalk = require('chalk'); 
 const packageJson = require('./package.json');
 
-// =========================
-// HANDLERS, UTILS E SERVIÇOS
-// =========================
 const interactionHandler = require('./Handlers/interactionHandler');
 const { handleDeletedMessage } = require('./Handlers/messageDeleteHandler');
 const { handleReactionAdd, handleReactionRemove, handleReactionRemoveAll } = require('./Handlers/messageReactionHandler');
@@ -33,10 +27,9 @@ const { setupRankJobs } = require('./jobs/rankJobs');
 const secondaryConnection = require('./utils/secondaryDb');
 const { syncUserOnNicknameChange } = require('./utils/userSyncAndNotify');
 const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
+const { iniciarPoller } = require('./jobs/nicknamePoller');
+const Usuarios = require('./models/Usuario');
 
-// =========================
-// INSTÂNCIA DO CLIENT
-// =========================
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -50,9 +43,6 @@ const client = new Client({
     }
 });
 
-// =========================
-// LOGGING PADRÃO
-// =========================
 const log = {
     info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
     success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
@@ -61,7 +51,6 @@ const log = {
     system:  (msg) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} ${msg}`)
 };
 
-// =========================
 const configCache = new Map();
 const CONFIG_CACHE_LIMIT = 100;
 
@@ -80,21 +69,67 @@ async function getConfig(guildId) {
     return config;
 }
 
-// =========================
-// SINCRONIZAÇÃO DE NICKNAME
-// =========================
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
     try {
         await syncUserOnNicknameChange(oldMember, newMember);
+
+        if (oldMember.nickname !== newMember.nickname) {
+            const auditLogs = await newMember.guild.fetchAuditLogs({ limit: 1, type: 24 });
+            const entry = auditLogs.entries.first();
+
+            if (!entry) return;
+            if (Date.now() - entry.createdTimestamp > 3000) return;
+            if (entry.executor?.id !== process.env.BOT_ALVO_ID) return;
+
+            await Usuarios.findOneAndUpdate(
+                {
+                    guildId: newMember.guild.id,
+                    userId:  newMember.user.id,
+                },
+                {
+                    $set: {
+                        username:  newMember.user.username,
+                        nickname:  newMember.nickname,
+                        updatedAt: new Date(),
+                    },
+                },
+                { upsert: true, new: true }
+            );
+
+            log.success(
+                `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} — nickname registrado em tempo real: ` +
+                `${chalk.red(oldMember.nickname ?? 'nenhum')} ${chalk.gray('→')} ${chalk.green(newMember.nickname ?? 'nenhum')} ${chalk.gray(`| ${newMember.guild.name}`)}`
+            );
+        }
     } catch (e) {
         if (e.code === 50278) return; 
         log.warn('Erro ao sincronizar nickname: ' + e.message);
     }
 });
 
-// =========================
-// INICIALIZAÇÃO DA DATABASE
-// =========================
+client.on('guildMemberAdd', async (member) => {
+    try {
+        const usuario = await Usuarios.findOne({
+            guildId: member.guild.id,
+            userId:  member.user.id,
+        });
+
+        if (!usuario?.nickname) return;
+
+        await member.setNickname(usuario.nickname, 'Nickname restaurado automaticamente');
+
+        log.success(
+            `${chalk.white(member.user.username)} ${chalk.gray(`(${member.user.id})`)} — nickname restaurado: ${chalk.green(usuario.nickname)} ${chalk.gray(`| ${member.guild.name}`)}`
+        );
+    } catch (e) {
+        if (e.code === 50013) {
+            log.warn(`Sem permissão para restaurar nickname de ${member.user.username} em ${member.guild.name}`);
+            return;
+        }
+        log.error(`Erro ao restaurar nickname: ${e.message}`);
+    }
+});
+
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
         log.success('Database principal conectada.');
@@ -119,9 +154,6 @@ mongoose.connect(process.env.MONGODB_URI)
         process.exit(1);
     });
 
-// =========================
-// EVENTO READY
-// =========================
 client.once('clientReady', (readyClient) => {
     console.log(chalk.cyan.bold('\n' + '═'.repeat(60)));
     log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.username)}`);
@@ -164,6 +196,7 @@ client.once('clientReady', (readyClient) => {
 
     setupRankJobs(client);
     iniciarAutoFinalizador(client);
+    iniciarPoller(client);
 
     readyClient.user.setPresence({
         activities: [{
@@ -175,9 +208,6 @@ client.once('clientReady', (readyClient) => {
     });
 });
 
-// =========================
-// MENSAGENS
-// =========================
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
@@ -227,9 +257,6 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// =========================
-// INTERAÇÕES (BOTÕES/MODAIS)
-// =========================
 client.on('interactionCreate', async (interaction) => {
     try {
         const startTime = Date.now();
@@ -254,9 +281,6 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// =========================
-// OUTROS EVENTOS
-// =========================
 client.on('messageDelete', async (msg) => {
     try { await handleDeletedMessage(msg); } catch (e) { log.error('messageDelete: ' + e.message); }
 });
@@ -265,9 +289,6 @@ client.on('messageReactionAdd', handleReactionAdd);
 client.on('messageReactionRemove', handleReactionRemove);
 client.on('messageReactionRemoveAll', handleReactionRemoveAll);
 
-// =========================
-// GESTÃO DE ERROS GLOBAL
-// =========================
 client.on('error', err => log.error('Discord API Error: ' + err.message));
 
 process.on('unhandledRejection', (reason) => {
@@ -278,9 +299,6 @@ process.on('uncaughtException', (error) => {
     log.error('ERRO CRÍTICO: ' + error.stack);
 });
 
-// =========================
-// ENCERRAMENTO GRACIOSO (SIGTERM / SIGINT)
-// =========================
 async function gracefulShutdown(signal) {
     log.warn(`Sinal ${signal} recebido. Encerrando bot com segurança...`);
     try {

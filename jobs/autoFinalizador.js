@@ -17,9 +17,9 @@ const log = {
 
 const DIAS_PARA_FINALIZAR = 15;
 const INTERVALO_VERIFICACAO_MS = 1 * 60 * 1000;
-const LOTE_MAXIMO = 10;
-const DELAY_ENTRE_ITENS_MS = 30000;
-const STATUS_FINALIZAVEIS = ['pendente', 'analise', 'reivindicacao'];
+const LOTE_MAXIMO = 1; // Processa apenas uma denúncia por ciclo
+const DELAY_ENTRE_ITENS_MS = 60000;
+const STATUS_FINALIZAVEIS = ['pendente', 'analise', 'reivindicacao', 'aceita', 'recusada'];
 
 const EXPORT = {
     MAX_UPLOAD_BYTES: 45 * 1024 * 1024,
@@ -329,6 +329,18 @@ async function finalizarDenuncia(client, denuncia) {
             : null;
 
         if (thread?.isThread?.()) {
+            // Se o tópico está arquivado, desarquiva para permitir trancar e enviar logs
+            if (thread.archived) {
+                try {
+                    await thread.setArchived(false);
+                    log.info(`Tópico desarquivado para finalização: ${denuncia._id}`, { guildName });
+                } catch (err) {
+                    log.warn(`Falha ao desarquivar tópico: ${err.message}`, { guildName });
+                    // Se não conseguir desarquivar, não prossegue
+                    return 'IGNORADA';
+                }
+            }
+            // Agora, segue o fluxo normal: tranca, gera logs, arquiva ao final
             // Se status for 'reivindicada' ou 'analise', recusa automaticamente
             if (["reivindicada", "analise"].includes(String(denuncia.status).toLowerCase())) {
                 try {
@@ -448,7 +460,7 @@ async function finalizarDenuncia(client, denuncia) {
                             `👤 **Denunciante:** ${denuncia.denunciante || 'N/A'} (ID: ${denuncia.criadoPor || 'N/A'})\n` +
                             `🎯 **Acusado:** ${denuncia.acusado || 'N/A'}\n` +
                             (denuncia.provas ? `📎 **Provas:**\n${String(denuncia.provas).split('\n').map(p => `- ${p}`).join('\n')}` : '') +
-                            (denuncia.motivoAceite ? `\n🟢 **Motivo do Aceite (Staff):** ${denuncia.motivoAceite}` : '') +
+                            (denuncia.motivoAceite ? `\n🟢 **Motivo Por esta aceita:** ${denuncia.motivoAceite}` : '') +
                             `\n\n[🔗 Abrir Mensagem Original](${denunciaMsgLink})`
                         )
                         .addFields(
@@ -562,6 +574,7 @@ async function finalizarDenuncia(client, denuncia) {
                 'ultimaEdicao.motivoEdicao': `Finalizado automaticamente apos ${DIAS_PARA_FINALIZAR} dias`,
                 'ultimaEdicao.data': new Date(),
             });
+            log.success(`Status atualizado para 'finalizada' para denúncia: ${denuncia._id}`, { guildName });
         } catch (err) {
             log.warn(`Falha ao atualizar status no banco: ${err.message}`, { guildName });
         }
@@ -578,11 +591,12 @@ async function verificarEFinalizarDenuncias(client) {
     try {
         const dataLimite = calcularDataLimite();
 
-        // Remove filtro de status: pega todas denúncias com mais de 15 dias
-        // Agora ignora denúncias sem guildId definido
+        // Agora só pega denúncias com status finalizáveis e mais de 15 dias
+        // Ignora denúncias sem guildId definido
         const denuncias = await Denuncia.find({
             dataCriacao: { $lte: dataLimite },
             guildId: { $exists: true, $ne: undefined, $ne: null, $ne: '' },
+            status: { $in: STATUS_FINALIZAVEIS },
         })
         .sort({ dataCriacao: 1 })
         .limit(LOTE_MAXIMO)
@@ -598,11 +612,22 @@ async function verificarEFinalizarDenuncias(client) {
         let erros = 0;
 
         for (const denuncia of denuncias) {
-            const sucesso = await finalizarDenuncia(client, denuncia);
-            if (sucesso) finalizadas++;
-            else erros++;
-            // Explicitly clean up any large buffers/arrays to help GC
+            log.info(`Iniciando finalização da denúncia: ${chalk.cyan(denuncia._id)} | Acusado: ${chalk.white(denuncia.acusado)} | Denunciante: ${chalk.white(denuncia.denunciante)} | Mensagem: ${chalk.yellow(denuncia.messageId)}`);
+            try {
+                const sucesso = await finalizarDenuncia(client, denuncia);
+                if (sucesso) {
+                    finalizadas++;
+                    log.success(`Denúncia finalizada: ${chalk.cyan(denuncia._id)} | Acusado: ${chalk.white(denuncia.acusado)} | Denunciante: ${chalk.white(denuncia.denunciante)} | Mensagem: ${chalk.yellow(denuncia.messageId)}`);
+                } else {
+                    erros++;
+                    log.error(`Falha ao finalizar denúncia: ${chalk.cyan(denuncia._id)} | Acusado: ${chalk.white(denuncia.acusado)} | Denunciante: ${chalk.white(denuncia.denunciante)} | Mensagem: ${chalk.yellow(denuncia.messageId)}`);
+                }
+            } catch (err) {
+                erros++;
+                log.error(`Erro inesperado ao finalizar denúncia: ${chalk.cyan(denuncia._id)} | Erro: ${err.message}`);
+            }
             global.gc?.();
+            // Delay explícito entre denúncias, mesmo se só houver uma
             await sleep(DELAY_ENTRE_ITENS_MS);
         }
 
@@ -614,12 +639,17 @@ async function verificarEFinalizarDenuncias(client) {
 
 let consecutiveErrors = 0;
 const MAX_CONSECUTIVE_ERRORS = 5;
+let autoFinalizadorLock = false;
 function iniciarAutoFinalizador(client) {
-    const jitter = Math.random() * 30000; // 0-30s
-    const intervalo = INTERVALO_VERIFICACAO_MS + jitter;
+    const intervalo = DELAY_ENTRE_ITENS_MS; // 60 segundos entre execuções
     log.system(`AutoFinalizador iniciado. Verificacao a cada ${Math.round(intervalo/1000)}s. Prazo: ${chalk.white.bold(DIAS_PARA_FINALIZAR + ' dias')}.`);
 
     const executar = async () => {
+        if (autoFinalizadorLock) {
+            log.warn('AutoFinalizador: Execução anterior ainda em andamento, pulando este ciclo.');
+            return;
+        }
+        autoFinalizadorLock = true;
         try {
             await verificarEFinalizarDenuncias(client);
             consecutiveErrors = 0;
@@ -629,9 +659,11 @@ function iniciarAutoFinalizador(client) {
             if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
                 log.error('AutoFinalizador: Muitas falhas consecutivas, pausando por 5 minutos.', {});
                 setTimeout(() => { consecutiveErrors = 0; }, 5 * 60 * 1000);
+                autoFinalizadorLock = false;
                 return;
             }
         }
+        autoFinalizadorLock = false;
     };
 
     const timer = setInterval(executar, intervalo);

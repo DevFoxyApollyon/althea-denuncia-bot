@@ -48,6 +48,7 @@ const PALAVRAS_BLOQUEADAS = [
     'telegram.me/',
 ];
 
+const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 
 function createStatusButtons() {
     return new ActionRowBuilder().addComponents(
@@ -67,7 +68,6 @@ function createDenunciaButtons() {
         new ButtonBuilder().setCustomId('abrir_input_id_log_aceite').setLabel('Correção').setEmoji('🛠️').setStyle(ButtonStyle.Danger)
     );
 }
-
 
 function validarPalavrasProibidas(texto) {
     const lower = texto.toLowerCase();
@@ -133,16 +133,11 @@ async function validarVideosHL(provas) {
             if (title && title.toLowerCase().includes('hl')) {
                 return '❌ Um dos vídeos enviados no campo **Provas** não é permitido. Verifique os links e tente novamente.';
             }
-        } catch {
-        }
+        } catch {}
     }
 
     return null;
 }
-
-
-const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
-
 
 async function handleDenunciaCommand(message) {
     try {
@@ -204,8 +199,7 @@ async function handleDenunciaCommand(message) {
                 try {
                     await msg.edit({ embeds, components: [createDenunciaButtons()] });
                     startRefresh(msg, embeds);
-                } catch {
-                }
+                } catch {}
             }, BUTTON_REFRESH_INTERVAL);
             timer.unref?.();
         };
@@ -213,7 +207,6 @@ async function handleDenunciaCommand(message) {
 
     } catch (error) { console.error(error); }
 }
-
 
 async function handleDenunciaSubmit(interaction, platform) {
     try {
@@ -226,8 +219,8 @@ async function handleDenunciaSubmit(interaction, platform) {
     }
 
     try {
-        const guildId = interaction.guild.id;
-        const userId = interaction.user.id;
+        const guildId  = interaction.guild.id;
+        const userId   = interaction.user.id;
         const username = interaction.user.username;
         const nickname = interaction.member?.nickname || null;
         const denuncianteInput = interaction.fields.getTextInputValue('denunciante_input');
@@ -262,26 +255,18 @@ async function handleDenunciaSubmit(interaction, platform) {
         const camposParaVerificar = [denunciante, acusado, motivo, provas];
         for (const campo of camposParaVerificar) {
             const erroSpam = validarPalavrasProibidas(campo);
-            if (erroSpam) {
-                return await interaction.editReply({ content: erroSpam });
-            }
+            if (erroSpam) return await interaction.editReply({ content: erroSpam });
         }
 
         const erroMotivo = validarMotivo(motivo);
-        if (erroMotivo) {
-            return await interaction.editReply({ content: erroMotivo });
-        }
+        if (erroMotivo) return await interaction.editReply({ content: erroMotivo });
 
         if (provas !== 'Tópico') {
             const erroProvas = validarProvasLinks(provas);
-            if (erroProvas) {
-                return await interaction.editReply({ content: erroProvas });
-            }
+            if (erroProvas) return await interaction.editReply({ content: erroProvas });
 
             const erroHL = await validarVideosHL(provas);
-            if (erroHL) {
-                return await interaction.editReply({ content: erroHL });
-            }
+            if (erroHL) return await interaction.editReply({ content: erroHL });
         }
 
         const acusadoIds = acusado.split('+').map(id => id.trim()).filter(id => id.length > 0);
@@ -290,10 +275,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         try {
             const partes = await Promise.all(acusadoIds.map(async (id) => {
                 try {
-                    const found = await Usuario.findOne({
-                        guildId: interaction.guild.id,
-                        conta: id
-                    });
+                    const found = await Usuario.findOne({ guildId: interaction.guild.id, conta: id });
                     return found ? `\`${id}\` (<@${found.userId}>)` : `\`${id}\``;
                 } catch {
                     return `\`${id}\``;
@@ -306,10 +288,8 @@ async function handleDenunciaSubmit(interaction, platform) {
         }
 
         const channelId = platform === 'PC' ? config.channels.pc : config.channels.mobile;
-        const channel = interaction.client.channels.cache.get(channelId);
+        const channel   = interaction.client.channels.cache.get(channelId);
 
-
-        // Monta o texto da denúncia para a mensagem principal (com status)
         const textoDenuncia = [
             `|| ${interaction.user} ||`,
             `➱ **Denunciante**: \`${denunciante}\``,
@@ -327,7 +307,6 @@ async function handleDenunciaSubmit(interaction, platform) {
             `➱ **Prova(s)**: ${provas}`
         ].join('\n');
 
-        // Envia a mensagem principal
         const mainMessage = await channel.send({
             content: textoDenuncia,
             allowedMentions: { parse: ['users'] }
@@ -368,7 +347,7 @@ async function handleDenunciaSubmit(interaction, platform) {
             denunciante, acusado, motivo, provas, platform,
             criadoPor: interaction.user.id,
             status: 'pendente',
-            dataCriacao: dateUtils.getBrasiliaDate() 
+            dataCriacao: dateUtils.getBrasiliaDate()
         }).save();
 
         try {
@@ -398,7 +377,6 @@ async function handleDenunciaSubmit(interaction, platform) {
         }
 
         await garantirAvisoNoTopo(channel, interaction.channelId);
-        
         await interaction.editReply({ 
             content: `✅ Denúncia criada em ${thread} às ${dateUtils.getBrasiliaTime()}` 
         });
@@ -412,7 +390,6 @@ async function handleDenunciaSubmit(interaction, platform) {
         }
     }
 }
-
 
 async function handleDenunciaButtons(interaction, client) {
     try {
@@ -461,7 +438,6 @@ async function handleDenunciaButtons(interaction, client) {
     } catch (error) { console.error(error); }
 }
 
-
 async function handleDenunciaPC(interaction) {
     const config = await getCachedConfig(interaction.guild.id, Config);
     const roleRequired = config.roles.pc;
@@ -488,17 +464,32 @@ async function openDenunciaModal(interaction, platform) {
 
         const limits = platform === 'PC' ? { acusado: 70, motivo: 150, provas: 500 } : { acusado: 120, motivo: 200, provas: 1000 };
 
+        let contaSalva = '';
+        try {
+            const usuario = await Usuario.findOne({
+                guildId: interaction.guild.id,
+                userId:  interaction.user.id,
+            });
+            if (usuario?.conta) contaSalva = usuario.conta;
+        } catch {}
+
         const denuncianteInput = new TextInputBuilder()
-            .setCustomId('denunciante_input').setLabel('ID do Denunciante').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(20);
+            .setCustomId('denunciante_input')
+            .setLabel('ID do Denunciante')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setMaxLength(20);
+
+        if (contaSalva) denuncianteInput.setValue(contaSalva);
 
         const acusadoInput = new TextInputBuilder()
             .setCustomId('acusado_input').setLabel('ID do Acusado (use + para múltiplos)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(limits.acusado);
 
         const motivoInput = new TextInputBuilder()
-            .setCustomId('motivo_input').setLabel('Motivo da Denúncia ').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(limits.motivo);
+            .setCustomId('motivo_input').setLabel('Motivo da Denúncia').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(limits.motivo);
 
         const provasInput = new TextInputBuilder()
-            .setCustomId('provas_input').setLabel('Provas ').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(limits.provas);
+            .setCustomId('provas_input').setLabel('Provas').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(limits.provas);
 
         modal.addComponents(
             new ActionRowBuilder().addComponents(denuncianteInput),
@@ -596,14 +587,14 @@ async function handleConsultaModalSubmit(interaction) {
 
             chunk.forEach((d) => {
                 let statusEmoji = '🔍';
-                let statusNome = 'PENDENTE / EM ANÁLISE';
+                let statusNome  = 'PENDENTE / EM ANÁLISE';
 
-                if (d.status === 'aceita') { statusEmoji = '✅'; statusNome = 'ACEITA'; }
+                if (d.status === 'aceita')   { statusEmoji = '✅'; statusNome = 'ACEITA'; }
                 if (d.status === 'recusada') { statusEmoji = '❌'; statusNome = 'RECUSADA'; }
 
                 const motivoOriginal = (d.status === 'aceita' && d.motivoAceite) ? d.motivoAceite : (d.motivo || 'N/A');
-                const motivoFinal = motivoOriginal.length > 150 ? motivoOriginal.substring(0, 150) + '...' : motivoOriginal;
-                const linkOriginal = `https://discord.com/channels/${d.guildId}/${d.channelId}/${d.messageId}`;
+                const motivoFinal    = motivoOriginal.length > 150 ? motivoOriginal.substring(0, 150) + '...' : motivoOriginal;
+                const linkOriginal   = `https://discord.com/channels/${d.guildId}/${d.channelId}/${d.messageId}`;
 
                 embed.addFields({
                     name: `${statusEmoji} Denúncia #${d._id.toString().substring(0, 8)} [${statusNome}]`,
