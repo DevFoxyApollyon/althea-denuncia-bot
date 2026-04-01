@@ -11,7 +11,8 @@ const log = {
 };
 
 async function verificarNicknames(client) {
-    const BOT_ALVO_ID = process.env.BOT_ALVO_ID;
+
+    const BOT_ALVO_IDS = (process.env.BOT_ALVO_ID || '').split(',').map(id => id.trim()).filter(Boolean);
 
     let totalNovos       = 0;
     let totalAtualizados = 0;
@@ -25,7 +26,7 @@ async function verificarNicknames(client) {
 
             const entradasBot = auditLogs.entries
                 .filter(entry => {
-                    const ehOBot    = entry.executor?.id === BOT_ALVO_ID;
+                    const ehOBot    = BOT_ALVO_IDS.includes(entry.executor?.id);
                     const mudouNick = entry.changes?.some(c => c.key === 'nick');
                     return ehOBot && mudouNick;
                 })
