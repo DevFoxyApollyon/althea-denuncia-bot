@@ -21,7 +21,7 @@ const commands = require('./utils/commands');
 const Config = require('./models/Config');
 const { contemPalavraProibida, contemMarcacaoAdmin, processaStrike } = require('./utils/strikeWords');
 const Strike = require('./models/Strike');
-const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks, handleHLDivulgacao } = require('./utils/youtubeUtils');
+const { handleYoutubeDenuncia } = require('./utils/youtubeUtils');
 const { advancedMonitor } = require('./utils/advancedMonitoring');
 const { setupRankJobs } = require('./jobs/rankJobs');
 const secondaryConnection = require('./utils/secondaryDb');
@@ -217,24 +217,7 @@ client.on('messageCreate', async (message) => {
         return;
     }
 
-    const isDenuncia = message.channel?.name?.toLowerCase().includes('denúncia');
-    if (isDenuncia && message.content) {
-        const ytRegex = /(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/[\w\-?&=;%#@/\.]+/gi;
-        const links = message.content.match(ytRegex) || [];
-        if (links.length > 0) {
-            for (const link of links) {
-                const videoId = extractYouTubeVideoId(link);
-                let title = null;
-                if (videoId) {
-                    title = await fetchYouTubeTitle(videoId);
-                }
-                if ((title && title.toLowerCase().includes('hl')) || !title) {
-                    await handleHLDivulgacao(message, title || 'Link inválido ou indevido');
-                    return;
-                }
-            }
-        }
-    }
+    if (await handleYoutubeDenuncia(message)) return;
 
     if (!message.content.startsWith('!')) return;
 

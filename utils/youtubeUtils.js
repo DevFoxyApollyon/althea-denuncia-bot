@@ -1,37 +1,20 @@
-// utils/youtubeUtils.js
-
 const fetch = require('node-fetch');
 const { EmbedBuilder } = require('discord.js');
 const dateUtils = require('./dateUtils');
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GIFs de aviso — troque pelos seus links do Giphy (terminando em giphy.gif)
-// NÃO use links do tipo media1.tenor.com/m/... (não funciona no Discord)
-// ─────────────────────────────────────────────────────────────────────────────
 const GIFS_YOUTUBE = {
-  divulgacao: 'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzF2b3lld3FiM2h2dTBmYnk0NXlqYmZmcHZwNHhpY3BiNHE3YTAzZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/GpyS1lJXJYupG/giphy.gif', // aviso divulgação normal
-  hl:'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzF2b3lld3FiM2h2dTBmYnk0NXlqYmZmcHZwNHhpY3BiNHE3YTAzZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/GpyS1lJXJYupG/giphy.gif', // aviso divulgação HL
+  divulgacao: 'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzF2b3lld3FiM2h2dTBmYnk0NXlqYmZmcHZwNHhpY3BiNHE3YTAzZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/GpyS1lJXJYupG/giphy.gif',
+  hl: 'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzF2b3lld3FiM2h2dTBmYnk0NXlqYmZmcHZwNHhpY3BiNHE3YTAzZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/GpyS1lJXJYupG/giphy.gif',
 };
 
-// Tempo que o aviso fica no canal antes de ser deletado
-const TEMPO_AVISO_CANAL = 10_000; // 10 segundos
+const TEMPO_AVISO_CANAL = 10_000;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers de YouTube
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Extrai o ID do vídeo do YouTube de uma URL
- */
 function extractYouTubeVideoId(url) {
   const regex = /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([\w-]{11})/;
   const match = url.match(regex);
   return match ? match[1] : null;
 }
 
-/**
- * Busca o título do vídeo via oEmbed (sem precisar de API key)
- */
 async function fetchYouTubeTitle(videoId) {
   try {
     const oEmbedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
@@ -45,30 +28,18 @@ async function fetchYouTubeTitle(videoId) {
   }
 }
 
-/**
- * Encontra todos os links do YouTube em um texto
- */
 function findYouTubeLinks(text) {
   if (!text) return [];
   const ytRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/[\w\-?&=;%#@/\.]+)/gi;
-  return text.match(ytRegex) || [];
+  const links = text.match(ytRegex) || [];
+  return links.filter(link => !link.includes('youtube.com/clip/'));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Log de auditoria
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Envia log detalhado no canal de auditoria configurado
- */
 async function sendLog(message, motivo, videoTitle) {
   try {
-    // CORREÇÃO: o require do Config estava duplicado (importado no topo e dentro da função).
-    // Agora está apenas no topo do arquivo, evitando require desnecessário a cada chamada.
     const Config = require('../models/Config');
     const configDoc = await Config.findOne({ guildId: message.guild.id });
 
-    // Suporta tanto config.channels.log quanto config.channels.logs
     const logChannelId = configDoc?.channels?.log || configDoc?.channels?.logs || null;
 
     if (!logChannelId) {
@@ -96,14 +67,14 @@ async function sendLog(message, motivo, videoTitle) {
         `**Motivo:** ${motivo}${videoTitle ? ` — *${videoTitle}*` : ''}`
       )
       .addFields(
-        { name: 'Usuário',            value: `<@${message.author.id}>`,                        inline: true  },
-        { name: 'ID do Usuário',      value: message.author.id,                                inline: true  },
-        { name: 'Staff (Bot)',         value: `<@${message.client.user.id}>`,                   inline: true  },
-        { name: 'Mensagem Original',  value: message.content?.slice(0, 1024) || 'N/A',         inline: false },
-        { name: 'Data/Hora',          value: dateUtils.getBrasiliaDateTime(),                   inline: true  },
-        { name: 'ID da Mensagem',     value: message.id,                                       inline: true  },
-        { name: 'Canal',              value: `<#${message.channel.id}>`,                       inline: true  },
-        { name: 'Servidor',           value: `${message.guild.name} (${message.guild.id})`,    inline: false },
+        { name: 'Usuário',           value: `<@${message.author.id}>`,                        inline: true  },
+        { name: 'ID do Usuário',     value: message.author.id,                                inline: true  },
+        { name: 'Staff (Bot)',        value: `<@${message.client.user.id}>`,                   inline: true  },
+        { name: 'Mensagem Original', value: message.content?.slice(0, 1024) || 'N/A',         inline: false },
+        { name: 'Data/Hora',         value: dateUtils.getBrasiliaDateTime(),                   inline: true  },
+        { name: 'ID da Mensagem',    value: message.id,                                       inline: true  },
+        { name: 'Canal',             value: `<#${message.channel.id}>`,                       inline: true  },
+        { name: 'Servidor',          value: `${message.guild.name} (${message.guild.id})`,    inline: false },
       )
       .setFooter({
         text: 'Log de auditoria • Sistema Althea',
@@ -117,17 +88,9 @@ async function sendLog(message, motivo, videoTitle) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Handlers de divulgação
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Divulgação indevida normal — aviso no canal (temporário) + log
- */
 async function handleDivulgacaoIndevida(message, videoTitle) {
   await message.delete().catch(() => {});
 
-  // Embed com GIF no canal (some após TEMPO_AVISO_CANAL)
   const embedCanal = new EmbedBuilder()
     .setColor('#d7263d')
     .setTitle('🚫 Divulgação Indevida de Conteúdo do YouTube')
@@ -152,13 +115,9 @@ async function handleDivulgacaoIndevida(message, videoTitle) {
   await sendLog(message, 'Divulgação indevida de conteúdo do YouTube', videoTitle);
 }
 
-/**
- * Divulgação indevida HL — aviso no canal (temporário) + DM com GIF + log
- */
 async function handleHLDivulgacao(message, videoTitle) {
   await message.delete().catch(() => {});
 
-  // Embed com GIF no canal (some após TEMPO_AVISO_CANAL)
   const embedCanal = new EmbedBuilder()
     .setColor('#d7263d')
     .setTitle('🚫 Divulgação Indevida de Conteúdo do YouTube')
@@ -180,7 +139,6 @@ async function handleHLDivulgacao(message, videoTitle) {
   }).then(msg => setTimeout(() => msg.delete().catch(() => {}), TEMPO_AVISO_CANAL))
     .catch(() => {});
 
-  // DM com GIF (privado, fica salvo para o usuário)
   const embedDM = new EmbedBuilder()
     .setColor('#d7263d')
     .setTitle('🚫 Divulgação Indevida de Conteúdo do YouTube')
@@ -199,9 +157,26 @@ async function handleHLDivulgacao(message, videoTitle) {
   await sendLog(message, 'Remoção de vídeo do YouTube (HL)', videoTitle);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Exports
-// ─────────────────────────────────────────────────────────────────────────────
+async function handleYoutubeDenuncia(message) {
+  const isDenuncia = message.channel?.name?.toLowerCase().includes('denúncia');
+  if (!isDenuncia || !message.content) return false;
+
+  const links = findYouTubeLinks(message.content);
+  if (links.length === 0) return false;
+
+  for (const link of links) {
+    const videoId = extractYouTubeVideoId(link);
+    let title = null;
+    if (videoId) title = await fetchYouTubeTitle(videoId);
+
+    if ((title && title.toLowerCase().includes('hl')) || !title) {
+      await handleHLDivulgacao(message, title || 'Link inválido ou indevido');
+      return true;
+    }
+  }
+
+  return false;
+}
 
 module.exports = {
   extractYouTubeVideoId,
@@ -209,4 +184,5 @@ module.exports = {
   findYouTubeLinks,
   handleDivulgacaoIndevida,
   handleHLDivulgacao,
+  handleYoutubeDenuncia,
 };

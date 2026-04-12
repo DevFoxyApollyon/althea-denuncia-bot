@@ -24,31 +24,46 @@ async function verificarNicknames(client) {
                 type:  24,
             });
 
+
             const entradasBot = auditLogs.entries
                 .filter(entry => {
                     const ehOBot    = BOT_ALVO_IDS.includes(entry.executor?.id);
                     const mudouNick = entry.changes?.some(c => c.key === 'nick');
                     return ehOBot && mudouNick;
                 })
-                .first(30);
+                .map(entry => entry);
 
-            if (!entradasBot.length) continue;
-
+            const ultimasEntradas = new Map();
             for (const entry of entradasBot) {
+                const userId = entry.target?.id;
+                if (!userId) continue;
+                if (!ultimasEntradas.has(userId)) {
+                    ultimasEntradas.set(userId, entry);
+                }
+            }
+
+            if (!ultimasEntradas.size) continue;
+
+            for (const entry of ultimasEntradas.values()) {
                 const userId    = entry.target?.id;
                 const nickNovo  = entry.changes?.find(c => c.key === 'nick')?.new ?? null;
                 const nickVelho = entry.changes?.find(c => c.key === 'nick')?.old ?? null;
 
                 if (!userId) continue;
 
+
                 const existente = await Usuarios.findOne({ guildId: guild.id, userId });
 
-                if (existente && existente.nickname === nickNovo) continue;
+                if (existente && typeof existente.nickname === 'string' && typeof nickNovo === 'string') {
+                    if (existente.nickname.toLowerCase() === nickNovo.toLowerCase()) continue;
+                } else if (existente && existente.nickname === nickNovo) {
+                    continue;
+                }
 
                 const membro   = await guild.members.fetch(userId).catch(() => null);
                 const username = membro?.user?.username ?? 'Desconhecido';
 
-                await Usuarios.findOneAndUpdate(
+                const result = await Usuarios.findOneAndUpdate(
                     { guildId: guild.id, userId },
                     {
                         $set: {
@@ -57,7 +72,7 @@ async function verificarNicknames(client) {
                             updatedAt: new Date(),
                         },
                     },
-                    { upsert: true, new: true }
+                    { upsert: true, new: false }
                 );
 
                 if (!existente) {
@@ -65,7 +80,7 @@ async function verificarNicknames(client) {
                     log.success(
                         `${chalk.white(username)} ${chalk.gray(`(${userId})`)} — novo registro: ${chalk.green(nickNovo ?? 'nenhum')} ${chalk.gray(`| ${guild.name}`)}`
                     );
-                } else {
+                } else if (!result || result.nickname !== nickNovo) {
                     totalAtualizados++;
                     log.success(
                         `${chalk.white(username)} ${chalk.gray(`(${userId})`)} — atualizado: ` +
