@@ -553,6 +553,42 @@ async function finalizarDenuncia(client, denuncia) {
             try { await thread.setLocked(true); } catch (err) { log.warn(`Falha ao trancar tópico: ${err.message}`, { guildName }); }
             try { await thread.setArchived(true); } catch (err) { log.warn(`Falha ao arquivar tópico: ${err.message}`, { guildName }); }
 
+            // Remover permissão de visualização de @everyone, permitido e pc na thread
+            try {
+                let sucesso = false;
+                const denyRoles = [];
+                if (thread && thread.guild && thread.guild.roles) {
+                    if (thread.guild.roles.everyone) denyRoles.push(thread.guild.roles.everyone.id);
+                    if (config?.roles?.permitido && thread.guild.roles.cache.has(config.roles.permitido)) denyRoles.push(config.roles.permitido);
+                    if (config?.roles?.pc && thread.guild.roles.cache.has(config.roles.pc)) denyRoles.push(config.roles.pc);
+                }
+
+                // Tenta usar permissionOverwrites.edit se disponível
+                if (
+                    thread &&
+                    thread.permissionOverwrites &&
+                    typeof thread.permissionOverwrites.edit === 'function'
+                ) {
+                    for (const roleId of denyRoles) {
+                        await thread.permissionOverwrites.edit(roleId, { ViewChannel: false });
+                    }
+                    log.info(`Permissão de visualização removida de ${denyRoles.length} cargos na thread (permissionOverwrites.edit).`, { guildName });
+                    sucesso = true;
+                }
+                // Fallback para thread.edit se necessário
+                if (!sucesso && typeof thread.edit === 'function') {
+                    const overwrites = denyRoles.map(roleId => ({ id: roleId, deny: ['ViewChannel'] }));
+                    await thread.edit({ permissionOverwrites: overwrites });
+                    log.info(`Permissão de visualização removida de ${denyRoles.length} cargos na thread (thread.edit fallback).`, { guildName });
+                    sucesso = true;
+                }
+                if (!sucesso) {
+                    log.warn('Não foi possível remover permissão dos cargos: métodos não disponíveis ou thread privada.', { guildName });
+                }
+            } catch (err) {
+                log.warn(`Falha ao remover permissão dos cargos: ${err.message}`, { guildName });
+            }
+
             if (logMessage) {
                 try {
                     await Denuncia.findByIdAndUpdate(denuncia._id, {
@@ -601,7 +637,7 @@ async function finalizarDenuncia(client, denuncia) {
             log.warn(`Falha ao atualizar status no banco: ${err.message}`, { guildName });
         }
 
-        log.success(`AutoFinalizador: Denuncia ${chalk.white.bold(denuncia._id)} finalizada. Denunciante: ${chalk.white(denuncia.denunciante || 'N/A')} | Acusado: ${chalk.white(denuncia.acusado || 'N/A')} | ID: ${chalk.yellow(denuncia.messageId)} | Servidor: ${chalk.cyan(guildName)}`, { guildName });
+        log.success(`AutoFinalizador: Denuncia ${chalk.white.bold(denuncia._id)} finalizada. Denunciante: ${chalk.white(denuncia.denunciante || 'N/A')} | Acusado: ${chalk.white(denuncia.acusado || 'N/A')} | ID: ${chalk.yellow(denuncia.messageId)} | Servidor: ${chalk.cyan(guildName)} | messageId: ${chalk.magenta(denuncia.messageId)}`, { guildName });
         return true;
     } catch (error) {
         log.error(`AutoFinalizador: Erro ao finalizar ${denuncia._id}: ${error.message}`, { guildName });

@@ -8,26 +8,22 @@ const archiver = require('archiver');
 const fetch = require('node-fetch');
 const { PassThrough } = require('stream');
 
+
 const EXPORT_CONSTANTS = {
-  // Discord normalmente permite 50MB em alguns planos/servidores, mas margem evita erro.
   MAX_UPLOAD_BYTES: 45 * 1024 * 1024,
   COOLDOWN_SECONDS: 30,
   FILES_PER_MESSAGE: 10,
   TIMEZONE: 'America/Sao_Paulo',
-
-  // Segurança / estabilidade
   FETCH_TIMEOUT_MS: 15000,
-  MAX_TOTAL_DOWNLOAD_BYTES: 800 * 1024 * 1024, // 800MB por exportação (ajuste como quiser)
-  MAX_SINGLE_DOWNLOAD_BYTES: 300 * 1024 * 1024, // proteção extra caso content-length falhe (300MB)
+  MAX_TOTAL_DOWNLOAD_BYTES: 200 * 1024 * 1024,
+  MAX_SINGLE_DOWNLOAD_BYTES: 50 * 1024 * 1024,
   AVATAR_SIZE: 64,
   GUILD_ICON_SIZE: 64,
 };
 
 const urlRegex = /(https?:\/\/[^\s]+)/g;
-
-// cooldown real + anti-duplo clique
-const cooldowns = new Map();   // userId -> expiresAt
-const inProgress = new Map();  // userId -> true
+const cooldowns = new Map();
+const inProgress = new Map();
 
 function escapeHtml(str = '') {
   return String(str)
@@ -41,15 +37,11 @@ function escapeHtml(str = '') {
 function safeFileName(name = '') {
   return String(name)
     .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9._-]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 80);
-}
-
-function nowMs() {
-  return Date.now();
 }
 
 function getHighestRole(member) {
@@ -58,121 +50,85 @@ function getHighestRole(member) {
     .filter(role => role.name !== '@everyone')
     .sort((a, b) => b.position - a.position)
     .first();
-
   return {
     name: highestRole ? highestRole.name : '',
-    color:
-      highestRole && highestRole.color !== 0
-        ? '#' + highestRole.color.toString(16).padStart(6, '0')
-        : '#99aab5',
+    color: highestRole && highestRole.color !== 0
+      ? '#' + highestRole.color.toString(16).padStart(6, '0')
+      : '#99aab5',
   };
 }
 
-function fetchWithTimeout(url, timeout = EXPORT_CONSTANTS.FETCH_TIMEOUT_MS) {
-  return Promise.race([
-    fetch(url),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout)),
-  ]);
+async function fetchWithTimeout(url, timeout = EXPORT_CONSTANTS.FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    return res;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') throw new Error(`Timeout após ${timeout}ms`);
+    throw error;
+  }
 }
 
-/**
- * Busca TODAS as mensagens do tópico (paginação)
- */
 async function fetchAllThreadMessages(thread) {
   const all = [];
   let lastId = undefined;
-
   while (true) {
-    const batch = await thread.messages.fetch({
-      limit: 100,
-      ...(lastId ? { before: lastId } : {}),
-    });
-
+    const batch = await thread.messages.fetch({ limit: 100, ...(lastId ? { before: lastId } : {}) });
     if (!batch || batch.size === 0) break;
-
     const values = Array.from(batch.values());
     all.push(...values);
-
-    // id menor (mais antigo) para paginar
     lastId = values[values.length - 1].id;
-
-    // Se veio menos que 100, acabou
     if (batch.size < 100) break;
   }
-
-  // ordenar por timestamp crescente
   all.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
   return all;
 }
 
-/**
- * ZIP builder robusto via stream
- */
 async function buildZipBuffer(files) {
   return new Promise((resolve, reject) => {
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = archiver('zip', { zlib: { level: 6 } });
     const stream = new PassThrough();
     const chunks = [];
-
     stream.on('data', (c) => chunks.push(c));
     stream.on('end', () => resolve(Buffer.concat(chunks)));
     stream.on('error', reject);
-
-    archive.on('warning', (err) => {
-      // warnings não necessariamente quebram, mas loga
-      console.warn('[ZIP WARNING]', err?.message || err);
-    });
     archive.on('error', reject);
-
     archive.pipe(stream);
-
-    for (const f of files) {
-      archive.append(f.content, { name: f.name });
-    }
-
+    for (const f of files) archive.append(f.content, { name: f.name });
     archive.finalize();
   });
 }
 
-/**
- * Divide recursivamente uma lista de arquivos até que cada zip final fique <= MAX_UPLOAD_BYTES.
- * Isso resolve o problema "estimei pelo size bruto e o zip final passou".
- */
 async function splitFilesIntoZipParts(files, maxBytes) {
-  // Caso vazio
-  if (!files.length) return [];
-
-  // Tenta zipar tudo
-  const buffer = await buildZipBuffer(files);
-  if (buffer.length <= maxBytes) {
-    return [{ buffer, filesCount: files.length }];
+  const parts = [];
+  let currentBatch = [];
+  for (const file of files) {
+    currentBatch.push(file);
+    const buf = await buildZipBuffer(currentBatch);
+    if (buf.length > maxBytes) {
+      currentBatch.pop();
+      if (currentBatch.length > 0) {
+        const partBuf = await buildZipBuffer(currentBatch);
+        parts.push({ buffer: partBuf, filesCount: currentBatch.length });
+      }
+      currentBatch = [file];
+    }
   }
-
-  // Se for 1 arquivo e ainda assim estoura, não tem como mandar pelo Discord.
-  // Aqui a gente devolve como "oversize" para você decidir o que fazer (pular ou só link no HTML).
-  if (files.length === 1) {
-    return [{ buffer, filesCount: 1, oversize: true }];
+  if (currentBatch.length > 0) {
+    const partBuf = await buildZipBuffer(currentBatch);
+    parts.push({ buffer: partBuf, filesCount: currentBatch.length });
   }
-
-  // Divide ao meio e repete
-  const mid = Math.floor(files.length / 2);
-  const left = files.slice(0, mid);
-  const right = files.slice(mid);
-
-  const leftParts = await splitFilesIntoZipParts(left, maxBytes);
-  const rightParts = await splitFilesIntoZipParts(right, maxBytes);
-  return [...leftParts, ...rightParts];
+  return parts;
 }
 
 function makeStatusMeta(status) {
   const s = String(status || '').toLowerCase();
-  if (s === 'aceita') {
-    return { label: 'ACEITA', color: '#43B581', bg: 'rgba(67, 181, 129, 0.12)' };
-  }
-  if (s === 'recusada') {
-    return { label: 'RECUSADA', color: '#F04747', bg: 'rgba(240, 71, 71, 0.12)' };
-  }
-  return { label: (status || 'PENDENTE').toUpperCase(), color: '#99AAB5', bg: 'rgba(153, 170, 181, 0.12)' };
+  if (s === 'aceita') return { label: 'ACEITA', color: '#43B581', bg: 'rgba(67,181,129,0.12)' };
+  if (s === 'recusada') return { label: 'RECUSADA', color: '#F04747', bg: 'rgba(240,71,71,0.12)' };
+  return { label: (status || 'PENDENTE').toUpperCase(), color: '#99AAB5', bg: 'rgba(153,170,181,0.12)' };
 }
 
 /**

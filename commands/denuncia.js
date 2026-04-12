@@ -252,6 +252,11 @@ async function handleDenunciaSubmit(interaction, platform) {
         const motivo      = interaction.fields.getTextInputValue('motivo_input');
         let provas        = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
 
+        // Nova validação: só permite letras, números e '+' no campo acusado
+        if (!/^[a-zA-Z0-9+ ]+$/.test(acusado)) {
+            return await interaction.editReply({ content: '❌ O campo **Acusado** só pode conter letras, números e o símbolo "+" para múltiplos IDs.' });
+        }
+
         const camposParaVerificar = [denunciante, acusado, motivo, provas];
         for (const campo of camposParaVerificar) {
             const erroSpam = validarPalavrasProibidas(campo);
@@ -312,12 +317,24 @@ async function handleDenunciaSubmit(interaction, platform) {
             allowedMentions: { parse: ['users'] }
         });
 
+
         let thread;
         try {
             thread = await mainMessage.startThread({
                 name: `Denúncia: ${denunciante}`,
                 autoArchiveDuration: 1440
             });
+
+            const roleIds = Object.values(config.roles).filter(Boolean);
+            for (const roleId of roleIds) {
+                try {
+                    await thread.permissionOverwrites.edit(roleId, {
+                        ViewChannel: true
+                    });
+                } catch (err) {
+                    console.warn(`Não foi possível dar permissão para o cargo ${roleId} no tópico:`, err.message);
+                }
+            }
         } catch (e) {
             console.error('❌ Erro ao criar o tópico da denúncia:', e.message);
             await interaction.editReply({
