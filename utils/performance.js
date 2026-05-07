@@ -1,4 +1,5 @@
 const { RateLimiter } = require('limiter');
+const Config = require('../models/Config');
 
 // Configurações de rate limiting para diferentes tipos de operações
 const rateLimiters = {

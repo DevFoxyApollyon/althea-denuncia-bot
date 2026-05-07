@@ -31,6 +31,7 @@ require('dotenv').config();
 
 const BUTTON_REFRESH_INTERVAL = 1800000;
 const SUPORTE_BOT_ID = process.env.SUPORTE_BOT_ID;
+const COOLDOWN_MS = 3 * 60 * 1000;
 
 const URL_REGEX = /https?:\/\/[^\s]+/gi;
 const BROKEN_LINK_REGEX = /\b(?!https?:\/\/)[a-zA-Z]{1,5}:\/\/[^\s]+/gi;
@@ -47,6 +48,15 @@ const PALAVRAS_BLOQUEADAS = [
     't.me/',
     'telegram.me/',
 ];
+
+const MOTIVOS_INVALIDOS = [
+    'kk', 'kkk', 'kkkk',
+    'sub lider', 'sublider', 'sub líder', 'sublíder',
+    'lixo',
+    'princesa',
+];
+
+const denunciaCooldowns = new Map();
 
 const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 
@@ -72,21 +82,23 @@ function createDenunciaButtons() {
 function validarPalavrasProibidas(texto) {
     const lower = texto.toLowerCase();
     const encontrada = PALAVRAS_BLOQUEADAS.find(p => lower.includes(p));
-    if (encontrada) {
-        return '❌ Sua denúncia não pôde ser enviada. Verifique os campos e tente novamente.';
-    }
+    if (encontrada) return '❌ Sua denúncia não pôde ser enviada. Verifique os campos e tente novamente.';
     return null;
 }
 
 function validarMotivo(motivo) {
     BROKEN_LINK_REGEX.lastIndex = 0;
-    if (BROKEN_LINK_REGEX.test(motivo)) {
-        return '❌ O campo **Motivo** contém um link inválido. Não é permitido incluir links no motivo.';
-    }
+    if (BROKEN_LINK_REGEX.test(motivo)) return '❌ O campo **Motivo** contém um link inválido. Não é permitido incluir links no motivo.';
     URL_REGEX.lastIndex = 0;
-    if (URL_REGEX.test(motivo)) {
-        return '❌ O campo **Motivo** não pode conter links. Descreva o motivo em texto.';
-    }
+    if (URL_REGEX.test(motivo)) return '❌ O campo **Motivo** não pode conter links. Descreva o motivo em texto.';
+    return null;
+}
+
+function validarMotivoConteudo(motivo) {
+    const lower = motivo.trim().toLowerCase();
+    if (motivo.trim().length < 2) return '❌ O campo **Motivo** é muito curto. Digite pelo menos 2 caracteres.';
+    const invalido = MOTIVOS_INVALIDOS.find(p => lower.includes(p));
+    if (invalido) return '❌ O campo **Motivo** contém um texto inválido. Descreva claramente a infração cometida, sem textos desnecessários.';
     return null;
 }
 
@@ -112,9 +124,7 @@ function validarProvasLinks(provas) {
             'media.discordapp.net/'
         ];
         const bloqueado = links.find(link => !allowedDomains.some(domain => link.includes(domain)));
-        if (bloqueado) {
-            return '❌ O campo **Provas** contém um link não permitido. Apenas links do YouTube ou domínios oficiais do Discord são aceitos.';
-        }
+        if (bloqueado) return '❌ O campo **Provas** contém um link não permitido. Apenas links do YouTube ou domínios oficiais do Discord são aceitos.';
     }
 
     return null;
@@ -127,7 +137,6 @@ async function validarVideosHL(provas) {
     for (const link of links) {
         const videoId = extractYouTubeVideoId(link);
         if (!videoId) continue;
-
         try {
             const title = await fetchYouTubeTitle(videoId);
             if (title && title.toLowerCase().includes('hl')) {
@@ -214,45 +223,79 @@ async function handleDenunciaSubmit(interaction, platform) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
         }
     } catch (e) {
-        console.error('❌ Falha ao deferir interação (pode ter expirado):', e.message);
+        console.error('Falha ao deferir interação:', e.message);
         return;
     }
 
     try {
+        const userId = interaction.user.id;
+        const agora = Date.now();
+        const ultimaEnvio = denunciaCooldowns.get(userId);
+
+        if (ultimaEnvio && agora - ultimaEnvio < COOLDOWN_MS) {
+            const restante = Math.ceil((COOLDOWN_MS - (agora - ultimaEnvio)) / 1000);
+            const minutos = Math.floor(restante / 60);
+            const segundos = restante % 60;
+            const tempoFormatado = minutos > 0 ? `${minutos}m ${segundos}s` : `${segundos}s`;
+            return await interaction.editReply({
+                content: `⏳ Você precisa aguardar **${tempoFormatado}** antes de enviar outra denúncia.`,
+            });
+        }
+
         const guildId  = interaction.guild.id;
-        const userId   = interaction.user.id;
         const username = interaction.user.username;
         const nickname = interaction.member?.nickname || null;
-        const denuncianteInput = interaction.fields.getTextInputValue('denunciante_input');
 
-        let conta = extrairContaDoNickname(nickname);
-        if (!conta && denuncianteInput) conta = denuncianteInput.trim();
+        let contaSalva = null;
+        try {
+            const existing = await Usuario.findOne({ guildId, userId });
+            contaSalva = existing?.conta || null;
 
-        const existing = await Usuario.findOne({ guildId, userId });
+            if (!contaSalva) {
+                const contaNick = extrairContaDoNickname(nickname);
+                const denuncianteInput = interaction.fields.getTextInputValue('denunciante_input').trim();
+                contaSalva = contaNick || denuncianteInput || null;
+            }
 
-        const updateFields = { username, nickname, updatedAt: new Date() };
-        if (conta) updateFields.conta = conta;
+            const updateFields = { username, nickname, updatedAt: new Date() };
+            if (contaSalva) updateFields.conta = contaSalva;
 
-        if (!existing || existing.username !== username || existing.nickname !== nickname) {
             await Usuario.findOneAndUpdate(
                 { guildId, userId },
                 { $set: updateFields },
                 { upsert: true, new: true }
             );
+        } catch (e) {
+            console.warn('Não foi possível registrar/atualizar nick do denunciante:', e.message);
         }
-    } catch (e) {
-        console.warn('Não foi possível registrar/atualizar nick do denunciante:', e.message);
-    }
 
-    try {
         const config = await getCachedConfig(interaction.guild.id, Config);
 
-        const denunciante = interaction.fields.getTextInputValue('denunciante_input');
-        const acusado     = interaction.fields.getTextInputValue('acusado_input');
-        const motivo      = interaction.fields.getTextInputValue('motivo_input');
-        let provas        = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
+        // FIX: o que o usuário digitou no modal tem prioridade sobre o contaSalva do banco
+        const inputDigitado = interaction.fields.fields.has('denunciante_input')
+            ? interaction.fields.getTextInputValue('denunciante_input').trim()
+            : null;
 
-        // Nova validação: só permite letras, números e '+' no campo acusado
+        const denunciante = inputDigitado || contaSalva;
+
+        if (!denunciante) {
+            return await interaction.editReply({ content: '❌ Não foi possível identificar o denunciante. Tente novamente.' });
+        }
+
+        // Validacao: apenas numeros
+        if (!/^\d+$/.test(denunciante)) {
+            return await interaction.editReply({ content: '❌ O campo **Denunciante** deve conter apenas números.' });
+        }
+
+        // Validacao: maximo 15 digitos
+        if (denunciante.length > 15) {
+            return await interaction.editReply({ content: '❌ O campo **Denunciante** deve ter no máximo 15 dígitos.' });
+        }
+
+        const acusado = interaction.fields.getTextInputValue('acusado_input');
+        const motivo  = interaction.fields.getTextInputValue('motivo_input');
+        let provas    = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
+
         if (!/^[a-zA-Z0-9+ ]+$/.test(acusado)) {
             return await interaction.editReply({ content: '❌ O campo **Acusado** só pode conter letras, números e o símbolo "+" para múltiplos IDs.' });
         }
@@ -266,6 +309,9 @@ async function handleDenunciaSubmit(interaction, platform) {
         const erroMotivo = validarMotivo(motivo);
         if (erroMotivo) return await interaction.editReply({ content: erroMotivo });
 
+        const erroMotivoConteudo = validarMotivoConteudo(motivo);
+        if (erroMotivoConteudo) return await interaction.editReply({ content: erroMotivoConteudo });
+
         if (provas !== 'Tópico') {
             const erroProvas = validarProvasLinks(provas);
             if (erroProvas) return await interaction.editReply({ content: erroProvas });
@@ -275,6 +321,12 @@ async function handleDenunciaSubmit(interaction, platform) {
         }
 
         const acusadoIds = acusado.split('+').map(id => id.trim()).filter(id => id.length > 0);
+
+        const contaDenunciante = denunciante.toLowerCase();
+        const eAutodenunciando = acusadoIds.some(id => id.toLowerCase() === contaDenunciante);
+        if (eAutodenunciando) {
+            return await interaction.editReply({ content: '❌ Você não pode denunciar a si mesmo.' });
+        }
 
         let acusadoTexto = '';
         try {
@@ -317,26 +369,14 @@ async function handleDenunciaSubmit(interaction, platform) {
             allowedMentions: { parse: ['users'] }
         });
 
-
         let thread;
         try {
             thread = await mainMessage.startThread({
                 name: `Denúncia: ${denunciante}`,
                 autoArchiveDuration: 1440
             });
-
-            const roleIds = Object.values(config.roles).filter(Boolean);
-            for (const roleId of roleIds) {
-                try {
-                    await thread.permissionOverwrites.edit(roleId, {
-                        ViewChannel: true
-                    });
-                } catch (err) {
-                    console.warn(`Não foi possível dar permissão para o cargo ${roleId} no tópico:`, err.message);
-                }
-            }
         } catch (e) {
-            console.error('❌ Erro ao criar o tópico da denúncia:', e.message);
+            console.error('Erro ao criar o tópico da denúncia:', e.message);
             await interaction.editReply({
                 content: '❌ Erro ao criar o tópico da denúncia. Isso pode ocorrer por falta de permissão, limite de tópicos ou configuração do canal. Por favor, tente novamente ou contate um administrador.'
             });
@@ -366,6 +406,48 @@ async function handleDenunciaSubmit(interaction, platform) {
             status: 'pendente',
             dataCriacao: dateUtils.getBrasiliaDate()
         }).save();
+
+        denunciaCooldowns.set(interaction.user.id, Date.now());
+
+        try {
+            const TRES_HORAS_MS = 3 * 60 * 60 * 1000;
+            const agora = new Date();
+            const tresHorasAtras = new Date(agora.getTime() - TRES_HORAS_MS);
+            const denunciasRecentes = await Denuncia.find({
+                guildId: interaction.guild.id,
+                acusado: acusado,
+                dataCriacao: { $gte: tresHorasAtras }
+            }).sort({ dataCriacao: -1 });
+
+            if (denunciasRecentes.length >= 5) {
+                const logChannelId = config.channels.log;
+                const responsavelAdminId = config.roles.responsavel_admin;
+
+                if (logChannelId && responsavelAdminId) {
+                    const logChannel = interaction.guild.channels.cache.get(logChannelId);
+                    if (logChannel) {
+                        const links = denunciasRecentes.map((d, idx) => `**${idx + 1}.** [${dateUtils.getDiscordTimestamp(d.dataCriacao, 'R')}] https://discord.com/channels/${d.guildId}/${d.channelId}/${d.messageId}`).join('\n');
+                        const embed = new EmbedBuilder()
+                            .setColor('#d7263d')
+                            .setTitle('🚨 Tendência de denúncias em massa')
+                            .setDescription(`O acusado **${acusado}** recebeu **${denunciasRecentes.length} denúncias** nas últimas 3 horas.`)
+                            .addFields(
+                                { name: 'Acusado', value: `${acusado}`, inline: true },
+                                { name: 'Horário do alerta', value: dateUtils.getBrasiliaDateTime(), inline: true },
+                                { name: 'Links das denúncias', value: links.length > 1024 ? links.slice(0, 1020) + '...' : links }
+                            )
+                            .setFooter({ text: 'Brasil RolePlay - Sistema de Denúncias' })
+                            .setTimestamp();
+                        await logChannel.send({
+                            content: `<@&${responsavelAdminId}> **Alerta:** Muitas denúncias para o acusado **${acusado}**!`,
+                            embeds: [embed]
+                        });
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Erro ao enviar alerta de tendência:', err);
+        }
 
         try {
             const denunciaLink = `https://discord.com/channels/${interaction.guild.id}/${channel.id}/${mainMessage.id}`;
@@ -403,7 +485,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         try {
             await interaction.editReply({ content: '❌ Erro ao processar sua denúncia.' });
         } catch (e) {
-            console.error('❌ Não foi possível editar a resposta de erro:', e.message);
+            console.error('Não foi possível editar a resposta de erro:', e.message);
         }
     }
 }
@@ -424,34 +506,18 @@ async function handleDenunciaButtons(interaction, client) {
         if (customId === 'finalizar_denuncia') return await handleExportButton(interaction);
         if (customId === 'abrir_input_id_log_aceite') return await handleInputIdLogAceite(interaction);
 
-        const denuncia = await Denuncia.findOne({ threadId: interaction.channel.id });
-
-        if (!denuncia) {
-            return await interaction.reply({ 
-                content: '❌ Nenhuma denúncia associada a este tópico foi encontrada.', 
-                flags: [MessageFlags.Ephemeral] 
-            });
-        }
-
-        const time = dateUtils.getBrasiliaTime();
-        if (customId === 'analiser') {
-            await interaction.channel.send(`🔎 **Status:** Em análise por <@${user.id}> às ${time}`);
-            denuncia.status = 'analise';
-        } else if (customId === 'aceitar') {
-            await interaction.channel.send(`✅ **Status:** Denúncia Aceita por <@${user.id}> às ${time}`);
-            denuncia.status = 'aceita';
-        } else if (customId === 'recusar') {
-            await interaction.channel.send(`❌ **Status:** Denúncia Recusada por <@${user.id}> às ${time}`);
-            denuncia.status = 'recusada';
-        }
-        
-        await denuncia.save();
-        await atualizarStatusNaMensagem(client, denuncia, denuncia.status);
-
+        // Redireciona os botões de status para o handler centralizado
         if (['analiser', 'aceitar', 'recusar'].includes(customId)) {
-            await interaction.reply({ content: 'Status atualizado.', flags: [MessageFlags.Ephemeral] });
+            // Importação dinâmica para evitar require circular
+            const { handleStatusButton } = require('../Handlers/handlerStatusButton');
+            return await handleStatusButton(interaction, customId);
         }
 
+        // Caso algum botão novo seja adicionado sem tratamento
+        return await interaction.reply({
+            content: '❌ Ação não reconhecida ou não suportada para este botão.',
+            flags: [MessageFlags.Ephemeral]
+        });
     } catch (error) { console.error(error); }
 }
 
@@ -473,40 +539,69 @@ async function handleDenunciaMobile(interaction) {
     await openDenunciaModal(interaction, 'Mobile');
 }
 
+async function buscarContaComTimeout(guildId, userId, timeoutMs = 1500) {
+    try {
+        const resultado = await Promise.race([
+            Usuario.findOne({ guildId, userId }),
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('timeout')), timeoutMs)
+            )
+        ]);
+        return resultado?.conta || null;
+    } catch {
+        return null;
+    }
+}
+
 async function openDenunciaModal(interaction, platform) {
     try {
+        const contaSalva = await buscarContaComTimeout(
+            interaction.guild.id,
+            interaction.user.id
+        );
+
         const modal = new ModalBuilder()
             .setCustomId(platform === 'PC' ? 'denuncia_pc_modal' : 'denuncia_mobile_modal')
             .setTitle(`Formulário de Denúncia - ${platform}`);
 
-        const limits = platform === 'PC' ? { acusado: 70, motivo: 150, provas: 500 } : { acusado: 120, motivo: 200, provas: 1000 };
-
-        let contaSalva = '';
-        try {
-            const usuario = await Usuario.findOne({
-                guildId: interaction.guild.id,
-                userId:  interaction.user.id,
-            });
-            if (usuario?.conta) contaSalva = usuario.conta;
-        } catch {}
+        const limits = platform === 'PC'
+            ? { acusado: 70, provas: 500 }
+            : { acusado: 120, provas: 1000 };
 
         const denuncianteInput = new TextInputBuilder()
             .setCustomId('denunciante_input')
-            .setLabel('ID do Denunciante')
+            .setLabel('Denunciante (somente números)')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
-            .setMaxLength(20);
+            .setPlaceholder('Ex: 123456')
+            .setMaxLength(15);
 
-        if (contaSalva) denuncianteInput.setValue(contaSalva);
+        // FIX: só faz setValue se contaSalva for válido (apenas dígitos e até 15 chars)
+        // Evita erro do Discord.js ao tentar setar valor maior que maxLength
+        if (contaSalva && /^\d+$/.test(contaSalva) && contaSalva.length <= 15) {
+            denuncianteInput.setValue(contaSalva);
+        }
 
         const acusadoInput = new TextInputBuilder()
-            .setCustomId('acusado_input').setLabel('ID do Acusado (use + para múltiplos)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(limits.acusado);
+            .setCustomId('acusado_input')
+            .setLabel('ID do Acusado (use + para múltiplos)')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setMaxLength(limits.acusado);
 
         const motivoInput = new TextInputBuilder()
-            .setCustomId('motivo_input').setLabel('Motivo da Denúncia').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(limits.motivo);
+            .setCustomId('motivo_input')
+            .setLabel('Motivo da Denúncia')
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true)
+            .setMaxLength(100);
 
         const provasInput = new TextInputBuilder()
-            .setCustomId('provas_input').setLabel('Provas').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(limits.provas);
+            .setCustomId('provas_input')
+            .setLabel('Provas')
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(false)
+            .setMaxLength(limits.provas);
 
         modal.addComponents(
             new ActionRowBuilder().addComponents(denuncianteInput),
@@ -516,8 +611,9 @@ async function openDenunciaModal(interaction, platform) {
         );
 
         await interaction.showModal(modal);
+
     } catch (error) {
-        console.error(`❌ Erro ao abrir modal ${platform}:`, error.message);
+        console.error(`Erro ao abrir modal ${platform}:`, error.message);
     }
 }
 
@@ -525,7 +621,7 @@ async function handleModalSubmit(interaction, platform) {
     try {
         await handleDenunciaSubmit(interaction, platform);
     } catch (error) {
-        console.error(`❌ Erro ao processar submissão:`, error.message);
+        console.error('Erro ao processar submissão:', error.message);
         const msg = { content: '❌ Erro ao processar sua denúncia.', flags: 64 };
         if (!interaction.replied && !interaction.deferred) await interaction.reply(msg);
         else await interaction.editReply(msg);
@@ -544,12 +640,12 @@ async function handleMyDenunciasButton(interaction) {
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('Ex: 1921 ou ID Discord')
             .setRequired(true)
-            .setMaxLength(100);
+            .setMaxLength(20);
 
         modal.addComponents(new ActionRowBuilder().addComponents(idInput));
         await interaction.showModal(modal);
     } catch (error) {
-        console.error(`❌ Erro ao abrir modal de consulta:`, error);
+        console.error('Erro ao abrir modal de consulta:', error);
     }
 }
 
@@ -599,7 +695,7 @@ async function handleConsultaModalSubmit(interaction) {
             const chunk = allDenuncias.slice(i, i + DENUNCIAS_PER_EMBED);
             const embed = new EmbedBuilder()
                 .setColor(0x0099ff)
-                .setTitle(`🔍 Resultados da Consulta de denuncias total de: ${total}`)
+                .setTitle(`🔍 Resultados da Consulta — Total: ${total}`)
                 .setTimestamp();
 
             chunk.forEach((d) => {
@@ -628,19 +724,19 @@ async function handleConsultaModalSubmit(interaction) {
         await interaction.editReply({ embeds: responseEmbeds });
 
     } catch (error) {
-        console.error(`❌ Erro no modal de consulta:`, error);
+        console.error('Erro no modal de consulta:', error);
         
         if (!deferred) {
             try {
                 await interaction.reply({ content: '❌ Erro ao consultar o banco de dados.', flags: 64 });
             } catch (replyError) {
-                console.error('❌ Não foi possível responder à interação:', replyError.code);
+                console.error('Não foi possível responder à interação:', replyError.code);
             }
         } else {
             try {
                 await interaction.editReply({ content: '❌ Erro ao consultar o banco de dados.' });
             } catch (editError) {
-                console.error('❌ Não foi possível editar a resposta:', editError.code);
+                console.error('Não foi possível editar a resposta:', editError.code);
             }
         }
     }

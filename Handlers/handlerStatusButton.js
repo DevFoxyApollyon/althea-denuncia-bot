@@ -1,5 +1,3 @@
-// /Handlers/handlerStatusButton.js
-
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
@@ -7,12 +5,15 @@ const { LogManager } = require('./LogManager');
 const ModerationAction = require('../models/ModerationAction');
 const { getBrasiliaDate, formatTimeBR } = require('../utils/dateUtils');
 const { Logger } = require('../utils/logger');
+const { inserirFeedbackMenu } = require('../utils/feedback');
+const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
-const DM_IGNORED_CODES = [ 50007, 50278,];
+const DM_IGNORED_CODES = [50007, 50278];
 
-/** =========================
- *  SAFE INTERACTION HELPERS
- *  ========================= */
+const CLAIM_COOLDOWN_MS = 7 * 60 * 1000;
+const _claimCooldowns = new Map();
+const _sendOnceLocks = new Set();
+
 async function safeDefer(interaction, ephemeral = true) {
   try {
     if (!interaction?.isRepliable?.()) return false;
@@ -29,14 +30,12 @@ async function safeDefer(interaction, ephemeral = true) {
 async function safeReplyOrEdit(interaction, payload) {
   try {
     if (!interaction?.isRepliable?.()) return null;
-
     if (interaction.deferred || interaction.replied) {
       return await interaction.editReply(payload);
     }
     return await interaction.reply(payload);
   } catch (e) {
     if (e?.code === 10062) return null;
-
     try {
       if (interaction.deferred || interaction.replied) {
         return await interaction.editReply(payload);
@@ -45,10 +44,6 @@ async function safeReplyOrEdit(interaction, payload) {
     return null;
   }
 }
-
-/** =========================
- *  DUPLICATE / CLEANUP HELPERS
- *  ========================= */
 
 const STATUS_PATTERNS = [
   '🔎 Esta denúncia está em análise por',
@@ -60,7 +55,7 @@ const REANALISE_PATTERNS = [
   '📌 **Reanálise / Recurso**',
   '📌 Reanálise / Recurso',
   'Caso queira uma **reanálise**, abra um **ticket** no canal',
-  'Caso queira uma reanalise, abra um ticket', 
+  'Caso queira uma reanalise, abra um ticket',
 ];
 
 function isOurBotStatusMessage(msg) {
@@ -96,10 +91,19 @@ function isOurBotReanaliseMessage(msg) {
 async function sendOnce(channel, content) {
   if (!channel?.isTextBased?.()) return null;
 
+  const contentKey = `${channel.id}:${String(content || '').trim().slice(0, 100)}`;
+
+  if (_sendOnceLocks.has(contentKey)) {
+    log.debug(`sendOnce bloqueado por lock em memória: ${contentKey}`);
+    return null;
+  }
+
+  _sendOnceLocks.add(contentKey);
+
   try {
-    const last = await channel.messages.fetch({ limit: 50 }).catch(() => null);
-    if (last) {
-      const already = last.find(
+    const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+    if (messages) {
+      const already = messages.find(
         (m) => m?.author?.bot && String(m.content || '').trim() === String(content || '').trim()
       );
       if (already) {
@@ -107,33 +111,25 @@ async function sendOnce(channel, content) {
         return already;
       }
     }
-  } catch (e) {
-    log.debug('Erro ao buscar mensagens anteriores:', e?.message);
-  }
-
-  try {
     return await channel.send(content);
   } catch (e) {
     log.error('Erro ao enviar mensagem:', e?.message);
     return null;
+  } finally {
+    setTimeout(() => _sendOnceLocks.delete(contentKey), 3000);
   }
 }
 
 async function cleanupStatusMessages(targetChannel, cleanupType = 'all') {
   if (!targetChannel?.isTextBased?.()) return;
-
   try {
     let lastId = null;
-
     for (let i = 0; i < 2; i++) {
       const options = { limit: 100 };
       if (lastId) options.before = lastId;
-
       const messages = await targetChannel.messages.fetch(options).catch(() => null);
       if (!messages || messages.size === 0) break;
-
       let toDelete;
-
       if (cleanupType === 'analise') {
         toDelete = messages.filter((msg) => isOurBotAnaliseMessage(msg));
       } else if (cleanupType === 'aceita') {
@@ -145,7 +141,6 @@ async function cleanupStatusMessages(targetChannel, cleanupType = 'all') {
       } else {
         toDelete = messages.filter((msg) => isOurBotStatusMessage(msg) || isOurBotReanaliseMessage(msg));
       }
-
       for (const msg of toDelete.values()) {
         try {
           const fetched = await msg.fetch().catch(() => null);
@@ -168,7 +163,6 @@ async function cleanupStatusMessages(targetChannel, cleanupType = 'all') {
           }
         }
       }
-
       lastId = messages.last()?.id;
       if (!lastId) break;
     }
@@ -177,9 +171,6 @@ async function cleanupStatusMessages(targetChannel, cleanupType = 'all') {
   }
 }
 
-/** =========================
- *  STATUS CONFIG
- *  ========================= */
 const statusConfig = {
   aceitar: { emoji: '✅', message: 'Denúncia aceita', color: '#00FF00' },
   recusar: { emoji: '❌', message: 'Denúncia recusada', color: '#FF0000' },
@@ -191,10 +182,9 @@ function createStatusMessage(type, user, data = {}) {
   const denunciaData = data.denuncia || {};
   const logUrl = data.logMessage
     ? `https://discord.com/channels/${data.guildId}/${data.logChannelId}/${data.logMessage.id}`
-    : (data.logMessageId && data.guildId && data.logChannelId)
-      ? `https://discord.com/channels/${data.guildId}/${data.logChannelId}/${data.logMessageId}`
-      : '';
-
+    : data.logMessageId && data.guildId && data.logChannelId
+    ? `https://discord.com/channels/${data.guildId}/${data.logChannelId}/${data.logMessageId}`
+    : '';
   switch (type) {
     case 'analise':
       return `🔎 Esta denúncia está em análise por ${user} Acusado: (${denunciaData.acusado || 'Não informado'}) Motivo: (${denunciaData.motivo || 'Não informado'}) Link: ${logUrl}`;
@@ -230,24 +220,17 @@ async function fetchLogMessage(logsChannel, logMessageId) {
   }
 }
 
-// ✅ avisa reanálise e MARCA o canal pelo ID (<#id>)
-// (e limpa avisos antigos antes de enviar)
 async function sendReanaliseNotice(channel) {
   try {
     if (!channel?.guild) return;
-
-    // Limpa APENAS mensagens de reanálise antigas
     await cleanupStatusMessages(channel, 'reanalise');
-
     const ticketChannel = channel.guild.channels.cache.find(
       (c) =>
         c?.isTextBased?.() &&
         typeof c.name === 'string' &&
         c.name.toLowerCase().includes('abrir-ticket')
     );
-
     const ticketMention = ticketChannel ? `<#${ticketChannel.id}>` : '`abrir-ticket`';
-
     await sendOnce(
       channel,
       `📌 **Reanálise / Recurso**\n` +
@@ -260,33 +243,21 @@ async function sendReanaliseNotice(channel) {
 
 async function manageStatusMessages(channel, newStatus, user, data = {}) {
   let discordLogMessage = null;
-
   try {
     const logsChannel = data.logsChannel;
     const logMessageId = data.logMessageId;
-
-    // tenta recuperar mensagem de log existente
     if (logsChannel && logMessageId) {
       discordLogMessage = await fetchLogMessage(logsChannel, logMessageId);
     }
-
     let statusChannel = channel;
     if (data.analysisChannelId && channel.guild) {
       const analysisChannel = await channel.guild.channels.fetch(data.analysisChannelId).catch(() => null);
       if (analysisChannel?.isTextBased?.()) statusChannel = analysisChannel;
     }
-
-
-    /** =========================
-     *  ANALISE
-     *  ========================= */
     if (newStatus === 'analise') {
-      // Limpa mensagens de aceita e recusada anteriores
       await cleanupStatusMessages(channel, 'aceita');
       await cleanupStatusMessages(channel, 'recusada');
-
       let newLogMessageId = null;
-
       if (logsChannel) {
         if (discordLogMessage) {
           await discordLogMessage.edit(createLogsMessage(newStatus, user, { ...data, denuncia: data.denuncia }));
@@ -296,15 +267,12 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
           newLogMessageId = discordLogMessage.id;
         }
       }
-
       const analysisMessageContent =
         `🔎 Esta denúncia está em análise por ${user} ` +
         `Acusado: (${data.denuncia?.acusado || 'Não informado'}) ` +
         `Motivo: (${data.denuncia?.motivo || 'Não informado'}) ` +
         `Link: ${data.messageUrl}`;
-
       await sendOnce(statusChannel, analysisMessageContent);
-
       const statusMsgContent = createStatusMessage(newStatus, user, {
         ...data,
         logMessage: discordLogMessage,
@@ -313,25 +281,16 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         logChannelId: logsChannel ? logsChannel.id : null,
         denuncia: data.denuncia,
       });
-
       if (channel.id !== statusChannel.id) {
         await sendOnce(channel, statusMsgContent);
       }
-
       return discordLogMessage;
     }
-
-    /** =========================
-     *  ACEITA
-     *  ========================= */
     if (newStatus === 'aceita') {
-      // Limpa mensagens de recusa e análise anteriores
       await cleanupStatusMessages(channel, 'recusada');
       await cleanupStatusMessages(channel, 'analise');
-
       if (logsChannel) {
         const logsContent = createLogsMessage(newStatus, user, data);
-
         try {
           if (discordLogMessage) {
             await discordLogMessage.edit(logsContent);
@@ -342,7 +301,6 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
           log.error(`[${formatTimeBR(getBrasiliaDate())}] Erro ao enviar/editar mensagem de log`, logError);
         }
       }
-
       const statusMsgContent = createStatusMessage(newStatus, user, {
         ...data,
         logMessage: discordLogMessage,
@@ -351,19 +309,12 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         logChannelId: logsChannel ? logsChannel.id : null,
         denuncia: data.denuncia,
       });
-
       await sendOnce(channel, statusMsgContent);
       return discordLogMessage;
     }
-
-    /** =========================
-     *  RECUSADA
-     *  ========================= */
     if (newStatus === 'recusada') {
-      // Limpa mensagens de aceita e análise anteriores
       await cleanupStatusMessages(channel, 'aceita');
       await cleanupStatusMessages(channel, 'analise');
-
       const statusMsgContent = createStatusMessage(newStatus, user, {
         ...data,
         logMessage: discordLogMessage,
@@ -372,20 +323,16 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         logChannelId: logsChannel ? logsChannel.id : null,
         denuncia: data.denuncia,
       });
-
       await sendOnce(channel, statusMsgContent);
-
       if (discordLogMessage) {
         await discordLogMessage.delete().catch((e) => log.warn('Falha ao deletar mensagem de log', e));
         discordLogMessage = null;
       }
-
       return null;
     }
   } catch (error) {
     log.error('Erro ao gerenciar mensagens de status', error);
   }
-
   return discordLogMessage;
 }
 
@@ -410,11 +357,9 @@ async function updateDenunciaStatus(denunciaId, {
     'ultimaEdicao.motivoEdicao': motivoEdicao,
     dataAtualizacao: now,
   };
-
   if (logMessageId !== undefined) {
     updateFields.logMessageId = logMessageId;
   }
-
   return await Denuncia.findByIdAndUpdate(denunciaId, updateFields, { new: true });
 }
 
@@ -422,7 +367,6 @@ async function canModifyReport(interaction, denuncia, config) {
   const isResponsavelAdmin =
     config?.roles?.responsavel_admin &&
     interaction.member.roles.cache.has(config.roles.responsavel_admin);
-
   if (isResponsavelAdmin) return true;
   if (denuncia.claimedBy === interaction.user.id) return true;
   return false;
@@ -431,11 +375,7 @@ async function canModifyReport(interaction, denuncia, config) {
 async function handleStatusButton(interaction, status) {
   try {
     if (!interaction.isRepliable()) return;
-
-    // Verifica se não está em cooldown (duplo clique)
-    if (!interaction.deferrable && interaction.deferred) {
-      return;
-    }
+    if (!interaction.deferrable && interaction.deferred) return;
 
     const willOpenModal = status === 'aceitar';
     if (!willOpenModal) {
@@ -445,102 +385,134 @@ async function handleStatusButton(interaction, status) {
     const hasPermission = await checkModPermission(interaction, !willOpenModal);
     if (!hasPermission) return;
 
-    const denuncia = await Denuncia.findOne({ threadId: interaction.channel.id }).sort({ createdAt: -1 });
+    const denuncia = await Denuncia.findOneAndUpdate(
+      {
+        threadId: interaction.channel.id,
+        processingLock: { $ne: true },
+      },
+      { $set: { processingLock: true } },
+      { new: true, sort: { createdAt: -1 } }
+    );
+
     if (!denuncia) {
-      await safeReplyOrEdit(interaction, {
-        content: '❌ Não foi possível encontrar uma denúncia neste canal.',
-        flags: [MessageFlags.Ephemeral],
-      });
+      const exists = await Denuncia.findOne({ threadId: interaction.channel.id });
+      if (!exists) {
+        await safeReplyOrEdit(interaction, {
+          content: '❌ Não foi possível encontrar uma denúncia neste canal.',
+          flags: [MessageFlags.Ephemeral],
+        });
+      } else {
+        await safeReplyOrEdit(interaction, {
+          content: '⏳ Esta denúncia já está sendo processada. Aguarde um instante.',
+          flags: [MessageFlags.Ephemeral],
+        });
+      }
       return;
     }
 
-    const config = await Config.findOne({ guildId: interaction.guild.id });
+    try {
+      const config = await Config.findOne({ guildId: interaction.guild.id });
 
-    const statusMap = {
-      aceitar: 'aceita',
-      recusar: 'recusada',
-      analiser: 'analise',
-      reivindicar: 'reivindicacao',
-    };
-    const normalizedStatus = statusMap[status] || status;
+      const statusMap = {
+        aceitar: 'aceita',
+        recusar: 'recusada',
+        analiser: 'analise',
+        reivindicar: 'reivindicacao',
+      };
+      const normalizedStatus = statusMap[status] || status;
 
-    const isResponsavelAdmin =
-      config?.roles?.responsavel_admin &&
-      interaction.member.roles.cache.has(config.roles.responsavel_admin);
+      const isResponsavelAdmin =
+        config?.roles?.responsavel_admin &&
+        interaction.member.roles.cache.has(config.roles.responsavel_admin);
 
-    if (denuncia.status === normalizedStatus) {
-      if (normalizedStatus === 'analise') {
-        const isClaimer = denuncia.claimedBy === interaction.user.id;
-        if (!isClaimer && !isResponsavelAdmin) {
+      if (denuncia.status === normalizedStatus) {
+        if (normalizedStatus === 'analise') {
+          const isClaimer = denuncia.claimedBy === interaction.user.id;
+          if (!isClaimer && !isResponsavelAdmin) {
+            await safeReplyOrEdit(interaction, {
+              content: '❌ Apenas quem reivindicou ou responsáveis admin podem colocar em análise.',
+              flags: [MessageFlags.Ephemeral],
+            });
+            return;
+          }
+        } else {
           await safeReplyOrEdit(interaction, {
-            content: '❌ Apenas quem reivindicou ou responsáveis admin podem colocar em análise.',
+            content: `❌ Esta denúncia já está ${statusConfig[status]?.message.toLowerCase() || normalizedStatus}.`,
             flags: [MessageFlags.Ephemeral],
           });
           return;
         }
-      } else {
+      }
+
+      const hasAdminRole =
+        config?.roles?.administrador &&
+        interaction.member.roles.cache.has(config.roles.administrador);
+
+      if (hasAdminRole && !isResponsavelAdmin) {
+        const previousAction = await ModerationAction.findOne({
+          moderatorId: interaction.user.id,
+          denunciaId: denuncia._id,
+          action: { $ne: 'reivindicacao' },
+        }).lean();
+        if (previousAction) {
+          await safeReplyOrEdit(interaction, {
+            content: '❌ Administradores só podem interagir uma vez com os botões após reivindicar esta denúncia.',
+            flags: [MessageFlags.Ephemeral],
+          });
+          return;
+        }
+      }
+
+      const canModify = await canModifyReport(interaction, denuncia, config);
+      if (!canModify) {
         await safeReplyOrEdit(interaction, {
-          content: `❌ Esta denúncia já está ${statusConfig[status]?.message.toLowerCase() || normalizedStatus}.`,
+          content: '❌ Apenas quem reivindicou a denúncia ou responsáveis admin podem modificá-la.',
           flags: [MessageFlags.Ephemeral],
         });
         return;
       }
-    }
 
-    const hasAdminRole =
-      config?.roles?.administrador &&
-      interaction.member.roles.cache.has(config.roles.administrador);
-
-    if (hasAdminRole && !isResponsavelAdmin) {
-      const previousAction = await ModerationAction.findOne({
-        moderatorId: interaction.user.id,
-        denunciaId: denuncia._id,
-        action: { $ne: 'reivindicacao' },
-      }).lean();
-
-      if (previousAction) {
+      if (
+        (status === 'aceitar' || status === 'recusar') &&
+        denuncia.claimedBy !== interaction.user.id &&
+        !isResponsavelAdmin
+      ) {
         await safeReplyOrEdit(interaction, {
-          content: '❌ Administradores só podem interagir uma vez com os botões após reivindicar esta denúncia.',
+          content: '❌ Apenas quem reivindicou ou responsáveis admin podem aceitar/recusar denúncias.',
           flags: [MessageFlags.Ephemeral],
         });
         return;
       }
-    }
 
-    const canModify = await canModifyReport(interaction, denuncia, config);
-    if (!canModify) {
-      await safeReplyOrEdit(interaction, {
-        content: '❌ Apenas quem reivindicou a denúncia ou responsáveis admin podem modificá-la.',
-        flags: [MessageFlags.Ephemeral],
-      });
-      return;
-    }
+      if (
+        status === 'analiser' &&
+        denuncia.claimedBy !== interaction.user.id &&
+        !isResponsavelAdmin
+      ) {
+        await safeReplyOrEdit(interaction, {
+          content: '❌ Apenas quem reivindicou a denúncia ou responsáveis admin podem colocá-la em análise.',
+          flags: [MessageFlags.Ephemeral],
+        });
+        return;
+      }
 
-    if ((status === 'aceitar' || status === 'recusar') && denuncia.claimedBy !== interaction.user.id && !isResponsavelAdmin) {
-      await safeReplyOrEdit(interaction, {
-        content: '❌ Apenas quem reivindicou ou responsáveis admin podem aceitar/recusar denúncias.',
-        flags: [MessageFlags.Ephemeral],
-      });
-      return;
-    }
+      const messageUrl = interaction.message.url;
+      const logsChannel = config?.channels?.logs
+        ? interaction.client.channels.cache.get(config.channels.logs)
+        : null;
 
-    if (status === 'analiser' && denuncia.claimedBy !== interaction.user.id && !isResponsavelAdmin) {
-      await safeReplyOrEdit(interaction, {
-        content: '❌ Apenas quem reivindicou a denúncia ou responsáveis admin podem colocá-la em análise.',
-        flags: [MessageFlags.Ephemeral],
-      });
-      return;
-    }
-
-    const messageUrl = interaction.message.url;
-    const logsChannel = config?.channels?.logs ? interaction.client.channels.cache.get(config.channels.logs) : null;
-
-    if (status === 'analiser') {
-      await handleAnalise(interaction, denuncia, config, messageUrl, logsChannel);
-    } else if (status === 'aceitar') {
-      await handleAceitar(interaction, denuncia, messageUrl);
-    } else if (status === 'recusar') {
-      await handleRecusar(interaction, denuncia, config, messageUrl, logsChannel);
+      if (status === 'analiser') {
+        await handleAnalise(interaction, denuncia, config, messageUrl, logsChannel);
+      } else if (status === 'aceitar') {
+        await handleAceitar(interaction, denuncia, messageUrl);
+        return;
+      } else if (status === 'recusar') {
+        await handleRecusar(interaction, denuncia, config, messageUrl, logsChannel);
+      }
+    } finally {
+      await Denuncia.findByIdAndUpdate(denuncia._id, {
+        $set: { processingLock: false },
+      }).catch((e) => log.error('Erro ao liberar processingLock', e));
     }
   } catch (error) {
     log.error('Erro ao processar status', error);
@@ -554,7 +526,6 @@ async function handleStatusButton(interaction, status) {
 async function handleAnalise(interaction, denuncia, config, messageUrl, logsChannel) {
   try {
     await safeDefer(interaction, true);
-
     await safeReplyOrEdit(interaction, { content: '⏳ Processando...' });
 
     const discordLogMessage = await manageStatusMessages(interaction.channel, 'analise', interaction.user, {
@@ -583,14 +554,13 @@ async function handleAnalise(interaction, denuncia, config, messageUrl, logsChan
       if (logChannel) await logChannel.send({ embeds: [logEmbed] });
     }
 
-    // Atualiza a resposta anterior
     await safeReplyOrEdit(interaction, { content: '🔎 Denúncia marcada como em análise!' });
-      // Atualiza status na mensagem principal
-      try {
-        await atualizarStatusNaMensagem(interaction.client, denuncia, 'analise');
-      } catch (e) {
-        log.warn('Falha ao atualizar status na mensagem principal (analise)', e?.message);
-      }
+
+    try {
+      await atualizarStatusNaMensagem(interaction.client, denuncia, 'analise');
+    } catch (e) {
+      log.warn('Falha ao atualizar status na mensagem principal (analise)', e?.message);
+    }
   } catch (error) {
     log.error('Erro ao manejar análise', error);
     await safeReplyOrEdit(interaction, {
@@ -612,9 +582,7 @@ async function handleAceitar(interaction, denuncia, messageUrl) {
     const year = dataBrasilia.getFullYear();
     const dataAtual = `${day}/${month}/${year}`;
 
-    const modal = new ModalBuilder()
-      .setCustomId('punishment_modal')
-      .setTitle('Aplicar Punição');
+    const modal = new ModalBuilder().setCustomId('punishment_modal').setTitle('Aplicar Punição');
 
     const acusadoId = new TextInputBuilder()
       .setCustomId('acusadoId')
@@ -648,11 +616,11 @@ async function handleAceitar(interaction, denuncia, messageUrl) {
     try {
       await interaction.showModal(modal);
     } catch (error) {
-      if (error.code === 'InteractionAlreadyReplied') {
+      if (error.code === 'InteractionAlreadyReplied' || error?.code === 10062) {
         denunciasMap.delete(interaction.user.id);
-      }
-      if (error?.code === 10062) {
-        denunciasMap.delete(interaction.user.id);
+        await Denuncia.findByIdAndUpdate(denuncia._id, {
+          $set: { processingLock: false },
+        }).catch((e) => log.error('Erro ao liberar processingLock após falha no modal', e));
       }
     }
   } catch (error) {
@@ -661,13 +629,15 @@ async function handleAceitar(interaction, denuncia, messageUrl) {
       content: '❌ Ocorreu um erro ao aceitar a denúncia.',
       flags: [MessageFlags.Ephemeral],
     });
+    await Denuncia.findByIdAndUpdate(denuncia._id, {
+      $set: { processingLock: false },
+    }).catch((e) => log.error('Erro ao liberar processingLock (handleAceitar catch)', e));
   }
 }
 
 async function handleRecusar(interaction, denuncia, config, messageUrl, logsChannel) {
   try {
     await safeDefer(interaction, true);
-
     await safeReplyOrEdit(interaction, { content: '⏳ Processando...' });
 
     if (denuncia.logMessageId && logsChannel) {
@@ -719,13 +689,13 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
       if (logChannel) await logChannel.send({ embeds: [logEmbed] });
     }
 
-    // DM denunciante
     try {
       const userId = denuncia.criadoPor;
       if (userId && typeof userId === 'string' && userId !== 'null' && userId !== 'undefined') {
         const denunciante = await interaction.client.users.fetch(userId);
         if (denunciante) {
-          const denunciaLink = messageUrl || `https://discord.com/channels/${interaction.guild.id}/${interaction.channel.id}`;
+          const denunciaLink =
+            messageUrl || `https://discord.com/channels/${interaction.guild.id}/${interaction.channel.id}`;
           await denunciante.send(
             `Sua denúncia foi recusada pela equipe.\n` +
               `Link da denúncia: ${denunciaLink}\n\n` +
@@ -747,26 +717,29 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
     });
 
     await sendReanaliseNotice(interaction.channel);
-      // Atualiza status na mensagem principal
-      try {
-        await atualizarStatusNaMensagem(interaction.client, denuncia, 'recusada');
-      } catch (e) {
-        log.warn('Falha ao atualizar status na mensagem principal (recusada)', e?.message);
-      }
+
+    try {
+      await atualizarStatusNaMensagem(interaction.client, denuncia, 'recusada');
+    } catch (e) {
+      log.warn('Falha ao atualizar status na mensagem principal (recusada)', e?.message);
+    }
   } catch (error) {
     log.error('Erro ao manejar recusa', error);
-    await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao recusar a denúncia.', flags: [MessageFlags.Ephemeral] });
+    await safeReplyOrEdit(interaction, {
+      content: '❌ Ocorreu um erro ao recusar a denúncia.',
+      flags: [MessageFlags.Ephemeral],
+    });
   }
 }
 
 async function handlePunishmentModal(interaction) {
+  const denunciaData = denunciasMap.get(interaction.user.id);
+
   try {
     if (!interaction.isModalSubmit()) return;
     await safeDefer(interaction, true);
-
     await safeReplyOrEdit(interaction, { content: '⏳ Processando aceitação...' });
 
-    const denunciaData = denunciasMap.get(interaction.user.id);
     if (!denunciaData) {
       return await safeReplyOrEdit(interaction, {
         content: '❌ Dados da denúncia não encontrados. Tente novamente.',
@@ -788,7 +761,9 @@ async function handlePunishmentModal(interaction) {
     }
 
     const config = await Config.findOne({ guildId: interaction.guild.id });
-    const logsChannel = config?.channels?.logs ? interaction.client.channels.cache.get(config.channels.logs) : null;
+    const logsChannel = config?.channels?.logs
+      ? interaction.client.channels.cache.get(config.channels.logs)
+      : null;
 
     const logMessage = await manageStatusMessages(interaction.channel, 'aceita', interaction.user, {
       acusadoId,
@@ -826,7 +801,8 @@ async function handlePunishmentModal(interaction) {
       if (userId && typeof userId === 'string' && userId !== 'null' && userId !== 'undefined') {
         const denunciante = await interaction.client.users.fetch(userId);
         if (denunciante) {
-          const denunciaLink = messageUrl || `https://discord.com/channels/${interaction.guild.id}/${interaction.channel.id}`;
+          const denunciaLink =
+            messageUrl || `https://discord.com/channels/${interaction.guild.id}/${interaction.channel.id}`;
           await denunciante.send(
             `Sua denúncia foi aceita pela equipe!\n` +
               `Link da denúncia: ${denunciaLink}\n` +
@@ -852,17 +828,28 @@ async function handlePunishmentModal(interaction) {
 
     await sendReanaliseNotice(interaction.channel);
 
-      // Atualiza status na mensagem principal
-      try {
-        await atualizarStatusNaMensagem(interaction.client, denuncia, 'aceita');
-      } catch (e) {
-        log.warn('Falha ao atualizar status na mensagem principal (aceita)', e?.message);
-      }
+    const updatedDenuncia = await Denuncia.findById(denuncia._id);
+    if (updatedDenuncia) {
+      await inserirFeedbackMenu(interaction.client, updatedDenuncia, config);
+    }
 
-    denunciasMap.delete(interaction.user.id);
+    try {
+      await atualizarStatusNaMensagem(interaction.client, denuncia, 'aceita');
+    } catch (e) {
+      log.warn('Falha ao atualizar status na mensagem principal (aceita)', e?.message);
+    }
   } catch (error) {
     log.error(`[${formatTimeBR(getBrasiliaDate())}] Erro ao processar punição`, error);
-    await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao processar a punição.', flags: [MessageFlags.Ephemeral] });
+    await safeReplyOrEdit(interaction, {
+      content: '❌ Ocorreu um erro ao processar a punição.',
+      flags: [MessageFlags.Ephemeral],
+    });
+  } finally {
+    if (denunciaData?.denuncia?._id) {
+      await Denuncia.findByIdAndUpdate(denunciaData.denuncia._id, {
+        $set: { processingLock: false },
+      }).catch((e) => log.error('Erro ao liberar processingLock (modal finally)', e));
+    }
     denunciasMap.delete(interaction.user.id);
   }
 }
@@ -877,7 +864,6 @@ async function checkModPermission(interaction, isDeferred = false) {
       });
       return false;
     }
-
     if (!config.roles?.administrador && !config.roles?.responsavel_admin) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Cargos de administração não configurados.',
@@ -885,13 +871,11 @@ async function checkModPermission(interaction, isDeferred = false) {
       });
       return false;
     }
-
-    const hasAdminRole = config.roles.administrador &&
-      interaction.member.roles.cache.has(config.roles.administrador);
-
-    const hasResponsavelRole = config.roles.responsavel_admin &&
+    const hasAdminRole =
+      config.roles.administrador && interaction.member.roles.cache.has(config.roles.administrador);
+    const hasResponsavelRole =
+      config.roles.responsavel_admin &&
       interaction.member.roles.cache.has(config.roles.responsavel_admin);
-
     if (!hasAdminRole && !hasResponsavelRole) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Você precisa ter o cargo de administrador ou responsável admin para realizar esta ação.',
@@ -899,7 +883,6 @@ async function checkModPermission(interaction, isDeferred = false) {
       });
       return false;
     }
-
     return true;
   } catch (error) {
     log.error('Erro ao verificar permissão', error);
@@ -917,7 +900,6 @@ async function registrarAcaoModerador(moderadorId, acao, denunciaId, guildId) {
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - now.getDay());
     weekStart.setHours(0, 0, 0, 0);
-
     const actionMap = {
       reivindicar: 'reivindicacao',
       aceitar: 'aceita',
@@ -925,9 +907,7 @@ async function registrarAcaoModerador(moderadorId, acao, denunciaId, guildId) {
       analiser: 'analise',
       analise: 'analise',
     };
-
     const mappedAction = actionMap[acao] || acao;
-
     const novaAcao = new ModerationAction({
       moderatorId: moderadorId,
       action: mappedAction,
@@ -937,7 +917,6 @@ async function registrarAcaoModerador(moderadorId, acao, denunciaId, guildId) {
       weekNumber: ModerationAction.getCurrentWeekNumber(),
       timestamp: now,
     });
-
     return await novaAcao.save();
   } catch (error) {
     log.error('Erro ao registrar ação', error);
@@ -949,41 +928,121 @@ async function registrarAcaoModerador(moderadorId, acao, denunciaId, guildId) {
 async function handleClaimButton(interaction) {
   try {
     if (!interaction.isRepliable()) return;
-
     await safeDefer(interaction, true);
 
     const hasPermission = await checkModPermission(interaction, true);
     if (!hasPermission) return;
 
-    const denuncia = await Denuncia.findOne({ threadId: interaction.channel.id }).sort({ createdAt: -1 });
-    if (!denuncia) {
-      await safeReplyOrEdit(interaction, { content: '❌ Não foi possível encontrar uma denúncia neste canal.' });
-      return;
+    const config = await Config.findOne({ guildId: interaction.guild.id });
+
+    const isResponsavelAdmin =
+      config?.roles?.responsavel_admin &&
+      interaction.member.roles.cache.has(config.roles.responsavel_admin);
+
+    if (!isResponsavelAdmin) {
+      const lastClaim = _claimCooldowns.get(interaction.user.id);
+      if (lastClaim) {
+        const elapsed = Date.now() - lastClaim;
+        if (elapsed < CLAIM_COOLDOWN_MS) {
+          const remaining = Math.ceil((CLAIM_COOLDOWN_MS - elapsed) / 1000);
+          const minutes = Math.floor(remaining / 60);
+          const seconds = remaining % 60;
+          const tempoRestante = minutes > 0
+            ? `${minutes}m ${seconds}s`
+            : `${seconds}s`;
+          await safeReplyOrEdit(interaction, {
+            content: `⏳ Você precisa aguardar **${tempoRestante}** antes de reivindicar outra denúncia.`,
+            flags: [MessageFlags.Ephemeral],
+          });
+          return;
+        }
+      }
     }
 
-    if (denuncia.claimedBy) {
-      if (denuncia.claimedBy === interaction.user.id) {
+    const denuncia = await Denuncia.findOneAndUpdate(
+      {
+        threadId: interaction.channel.id,
+        $or: [{ claimedBy: null }, { claimedBy: { $exists: false } }],
+      },
+      {
+        $set: {
+          claimedBy: interaction.user.id,
+          claimedAt: new Date(),
+          status: 'reivindicacao',
+        },
+      },
+      { new: true, sort: { createdAt: -1 } }
+    );
+
+    if (!denuncia) {
+      const exists = await Denuncia.findOne({ threadId: interaction.channel.id });
+      if (!exists) {
+        await safeReplyOrEdit(interaction, {
+          content: '❌ Não foi possível encontrar uma denúncia neste canal.',
+        });
+        return;
+      }
+
+      const claimedDenuncia = await Denuncia.findOne({ threadId: interaction.channel.id }).sort({ createdAt: -1 });
+
+      if (claimedDenuncia?.claimedBy === interaction.user.id) {
         await safeReplyOrEdit(interaction, { content: '❌ Você já reivindicou esta denúncia.' });
         return;
       }
 
-      const config = await Config.findOne({ guildId: interaction.guild.id });
-      const hasResponsavelRole =
-        config?.roles?.responsavel_admin &&
-        interaction.member.roles.cache.has(config.roles.responsavel_admin);
-
-      if (!hasResponsavelRole) {
-        const claimer = await interaction.client.users.fetch(denuncia.claimedBy);
-        await safeReplyOrEdit(interaction, { content: `❌ Esta denúncia já foi reivindicada por ${claimer.tag}` });
+      if (!isResponsavelAdmin) {
+        const claimer = await interaction.client.users.fetch(claimedDenuncia.claimedBy).catch(() => null);
+        await safeReplyOrEdit(interaction, {
+          content: `❌ Esta denúncia já foi reivindicada por ${claimer ? claimer.tag : 'outro moderador'}.`,
+        });
         return;
       }
+
+      const forcedDenuncia = await Denuncia.findOneAndUpdate(
+        { threadId: interaction.channel.id },
+        {
+          $set: {
+            claimedBy: interaction.user.id,
+            claimedAt: new Date(),
+            status: 'reivindicacao',
+          },
+        },
+        { new: true, sort: { createdAt: -1 } }
+      );
+
+      if (!forcedDenuncia) {
+        await safeReplyOrEdit(interaction, {
+          content: '❌ Não foi possível reivindicar a denúncia. Tente novamente.',
+        });
+        return;
+      }
+
+      await registrarAcaoModerador(interaction.user.id, 'reivindicar', forcedDenuncia._id, interaction.guild.id);
+
+      const claimMessage = `📝 O administrador ${interaction.user} reivindicou esta denúncia e estará analisando.`;
+      await sendOnce(interaction.channel, claimMessage);
+
+      try {
+        await interaction.channel.setName(`📝│${interaction.channel.name.replace(/^(📝|❌|✅|🔎)│/, '')}`);
+      } catch (error) {
+        log.error('Erro ao atualizar nome do canal', error);
+      }
+
+      await safeReplyOrEdit(interaction, { content: '✅ Você reivindicou esta denúncia com sucesso!' });
+
+      try {
+        await atualizarStatusNaMensagem(interaction.client, forcedDenuncia, 'reivindicacao');
+      } catch (e) {
+        log.warn('Falha ao atualizar status na mensagem principal (reivindicacao forcada)', e?.message);
+      }
+
+      return;
     }
 
-    await Denuncia.findByIdAndUpdate(denuncia._id, {
-      claimedBy: interaction.user.id,
-      claimedAt: new Date(),
-      status: 'reivindicacao', // Atualiza status ao reivindicar
-    });
+    if (!isResponsavelAdmin) {
+      _claimCooldowns.set(interaction.user.id, Date.now());
+      setTimeout(() => _claimCooldowns.delete(interaction.user.id), CLAIM_COOLDOWN_MS);
+    }
 
     await registrarAcaoModerador(interaction.user.id, 'reivindicar', denuncia._id, interaction.guild.id);
 
@@ -998,19 +1057,19 @@ async function handleClaimButton(interaction) {
 
     await safeReplyOrEdit(interaction, { content: '✅ Você reivindicou esta denúncia com sucesso!' });
 
-      // Atualiza status na mensagem principal
-      try {
-        await atualizarStatusNaMensagem(interaction.client, denuncia, 'reivindicacao');
-      } catch (e) {
-        log.warn('Falha ao atualizar status na mensagem principal (reivindicacao)', e?.message);
-      }
+    try {
+      await atualizarStatusNaMensagem(interaction.client, denuncia, 'reivindicacao');
+    } catch (e) {
+      log.warn('Falha ao atualizar status na mensagem principal (reivindicacao)', e?.message);
+    }
   } catch (error) {
     log.error('Erro ao reivindicar denúncia', error);
-    await safeReplyOrEdit(interaction, { content: '❌ Ocorreu um erro ao reivindicar a denúncia.', flags: [MessageFlags.Ephemeral] });
+    await safeReplyOrEdit(interaction, {
+      content: '❌ Ocorreu um erro ao reivindicar a denúncia.',
+      flags: [MessageFlags.Ephemeral],
+    });
   }
 }
-
-const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 
 module.exports = {
   handleStatusButton,

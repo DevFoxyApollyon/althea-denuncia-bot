@@ -1,4 +1,5 @@
-// utils/strikeWords.js
+const { EmbedBuilder } = require('discord.js');
+const dateUtils = require('./dateUtils');
 
 const GIFS_STRIKE = {
   1: 'https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExaDdqbzhjczU2aGZ2MXFhd3N0b3BsNHhqdTBsYzdwdnR5MGVmZWdpZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/geslvCFM31sFW/giphy.gif',
@@ -6,12 +7,8 @@ const GIFS_STRIKE = {
   3: 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExOG0yZTY1bmRoN3huMXFwY3V6c3ZvNTZ3eHh0Z3Flc2lvNnZpY2lvYiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/0u7x2NpbMwtToOoSsY/giphy.gif',
 };
 
-// Tempo (em ms) que o aviso fica visível no canal antes de ser deletado
-const TEMPO_AVISO_CANAL = 5_000; // 5 segundos
+const TEMPO_AVISO_CANAL = 5_000;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Lista de palavras proibidas (sem duplicatas)
-// ─────────────────────────────────────────────────────────────────────────────
 const PALAVRAS_PROIBIDAS = [
   'animal', 'anta', 'arrombada', 'arrombado',
   'babaca', 'besta', 'bobalhão', 'bobalhona', 'bocó', 'bosta', 'burra', 'burrice', 'burro',
@@ -34,44 +31,51 @@ const PALAVRAS_PROIBIDAS = [
   'chorao',
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
+const PALAVRAS_INTEIRAS_PROIBIDAS = [
+  /\bk+\b/i,
+];
 
 function contemPalavraProibida(texto) {
   if (!texto) return false;
   const lower = texto.toLowerCase();
-  return PALAVRAS_PROIBIDAS.some(p => lower.includes(p));
+  if (PALAVRAS_PROIBIDAS.some(p => lower.includes(p))) return true;
+  if (PALAVRAS_INTEIRAS_PROIBIDAS.some(r => r.test(lower))) return true;
+  return false;
 }
 
 function palavraProibidaUsada(texto) {
   if (!texto) return null;
   const lower = texto.toLowerCase();
-  return PALAVRAS_PROIBIDAS.find(p => lower.includes(p)) || null;
+  const encontrada = PALAVRAS_PROIBIDAS.find(p => lower.includes(p));
+  if (encontrada) return encontrada;
+  for (const r of PALAVRAS_INTEIRAS_PROIBIDAS) {
+    const match = lower.match(r);
+    if (match) return match[0];
+  }
+  return null;
 }
 
 async function contemMarcacaoAdmin(message, config) {
-  // ✅ @everyone e @here sempre bloqueados, independente do config
   if (message.mentions.everyone) return true;
-
+  if (message.mentions.roles.size > 0) return true;
   if (!config?.roles) return false;
-  const adminRoleId     = config.roles.administrador;
+  const adminRoleId = config.roles.administrador;
   const respAdminRoleId = config.roles.responsavel_admin;
   if (!adminRoleId && !respAdminRoleId) return false;
-  const mentionedRoles = message.mentions.roles;
-  return mentionedRoles.has(adminRoleId) || mentionedRoles.has(respAdminRoleId);
+  return message.mentions.roles.has(adminRoleId) || message.mentions.roles.has(respAdminRoleId);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Processamento de Strike
-// ─────────────────────────────────────────────────────────────────────────────
-
-const { EmbedBuilder } = require('discord.js');
-const dateUtils = require('./dateUtils');
+function getMotivoMarcacao(message) {
+  if (message.mentions.everyone) return '@everyone/@here';
+  if (message.mentions.roles.size > 0) {
+    const nomes = message.mentions.roles.map(r => `@${r.name}`).join(', ');
+    return `marcação de cargo: ${nomes}`;
+  }
+  return 'marcação de cargo';
+}
 
 async function processaStrike(message, Strike, config) {
   try {
-    // Verifica se o canal (ou canal pai de thread) está registrado
     const canaisRegistrados = Object.values(config?.channels || {}).filter(Boolean);
     let canalPrincipalId = message.channel.id;
 
@@ -81,7 +85,6 @@ async function processaStrike(message, Strike, config) {
 
     if (!canaisRegistrados.includes(canalPrincipalId)) return;
 
-    // Busca ou cria registro de strikes do usuário
     let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
     if (!strike) {
       strike = new Strike({ userId: message.author.id, guildId: message.guild.id, strikes: [] });
@@ -92,9 +95,7 @@ async function processaStrike(message, Strike, config) {
     const strikesCount = strike.strikes.length;
     await strike.save();
 
-    // Monta textos e configurações conforme nível do strike
-    const motivoBase = palavraProibidaUsada(message.content)
-      || (message.mentions.everyone ? '@everyone/@here' : 'marcação de cargo admin');
+    const motivoBase = palavraProibidaUsada(message.content) || getMotivoMarcacao(message);
 
     let titulo       = '';
     let descricao    = '';
@@ -104,30 +105,28 @@ async function processaStrike(message, Strike, config) {
 
     if (strikesCount === 1) {
       titulo       = '⚠️ Primeiro aviso! (1/3)';
-      descricao    = `<@${message.author.id}>, evite usar palavras proibidas ou marcar @everyone, @here e cargos de administração.\nVocê foi silenciado por **1 minuto**.`;
+      descricao    = `<@${message.author.id}>, evite usar palavras proibidas ou marcar @everyone, @here e qualquer cargo do servidor.\nVocê foi silenciado por **10 minutos**.`;
       motivo       = `1/3 - Palavra/cargo: ${motivoBase}`;
-      tempoTimeout = 60 * 1000;
+      tempoTimeout = 10 * 60 * 1000;
       corEmbed     = '#ff9900';
     } else if (strikesCount === 2) {
       titulo       = '⚠️ Segundo aviso! (2/3)';
-      descricao    = `<@${message.author.id}>, esta é sua última chance antes de um silenciamento longo.\nVocê foi silenciado por **5 minutos**.`;
+      descricao    = `<@${message.author.id}>, esta é sua última chance antes de um silenciamento longo.\nVocê foi silenciado por **1 hora**.`;
       motivo       = `2/3 - Palavra/cargo: ${motivoBase}`;
-      tempoTimeout = 5 * 60 * 1000;
+      tempoTimeout = 60 * 60 * 1000;
       corEmbed     = '#ff6600';
     } else {
       titulo       = '⛔ Terceiro aviso! (3/3)';
-      descricao    = `<@${message.author.id}>, você atingiu o limite. Seus strikes foram zerados.\nVocê foi silenciado por **1 hora**.`;
+      descricao    = `<@${message.author.id}>, você atingiu o limite. Seus strikes foram zerados.\nVocê foi silenciado por **1 dia**.`;
       motivo       = `3/3 - Palavra/cargo: ${motivoBase}`;
-      tempoTimeout = 60 * 60 * 1000;
+      tempoTimeout = 24 * 60 * 60 * 1000;
       corEmbed     = '#ff0000';
     }
 
     const gifUrl = GIFS_STRIKE[Math.min(strikesCount, 3)];
 
-    // Deleta a mensagem ofensiva
     await message.delete().catch(() => {});
 
-    // ── 1) Embed com GIF no canal — temporário (some em 5s) ───────────────
     const embedCanal = new EmbedBuilder()
       .setColor(corEmbed)
       .setTitle(titulo)
@@ -141,7 +140,6 @@ async function processaStrike(message, Strike, config) {
     }).then(msg => setTimeout(() => msg.delete().catch(() => {}), TEMPO_AVISO_CANAL))
       .catch(() => {});
 
-    // ── 2) Mesma embed via DM ─────────────────────────────────────────────
     const embedDM = new EmbedBuilder()
       .setColor(corEmbed)
       .setTitle(titulo)
@@ -154,7 +152,6 @@ async function processaStrike(message, Strike, config) {
       .then(() => true)
       .catch(() => false);
 
-    // ── 3) Aplica timeout ─────────────────────────────────────────────────
     const member = await message.guild.members.fetch(message.author.id).catch(() => null);
     if (member) {
       await member.timeout?.(tempoTimeout, motivo).catch(() => {});
@@ -165,7 +162,6 @@ async function processaStrike(message, Strike, config) {
       }
     }
 
-    // ── 4) Log de auditoria ───────────────────────────────────────────────
     if (config?.channels?.log) {
       const logChannel = message.guild.channels.cache.get(config.channels.log);
       if (logChannel) {
@@ -203,10 +199,30 @@ async function processaStrike(message, Strike, config) {
   }
 }
 
+async function verificaEdicao(oldMessage, newMessage, Strike, config) {
+  try {
+    if (!newMessage.author || newMessage.author.bot) return;
+    if (oldMessage.content === newMessage.content) return;
+
+    const msg = newMessage.partial ? await newMessage.fetch().catch(() => null) : newMessage;
+    if (!msg) return;
+
+    const temPalavra = contemPalavraProibida(msg.content);
+    const temAdmin   = await contemMarcacaoAdmin(msg, config);
+
+    if (temPalavra || temAdmin) {
+      await processaStrike(msg, Strike, config);
+    }
+  } catch (e) {
+    console.error('Erro ao verificar edição de mensagem:', e);
+  }
+}
+
 module.exports = {
   PALAVRAS_PROIBIDAS,
   contemPalavraProibida,
   contemMarcacaoAdmin,
   processaStrike,
   palavraProibidaUsada,
+  verificaEdicao,
 };

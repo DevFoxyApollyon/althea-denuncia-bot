@@ -1,8 +1,13 @@
-# 🔁 Fluxo Completo do Sistema de Denúncias
 
-Este documento descreve **TODO o fluxo do bot**, desde a configuração inicial até o encerramento da denúncia.
+# 🔁 Fluxo Completo do Sistema de Denúncias (v3)
 
-> **📝 Última atualização:** v1.0.1 - Consolidação de handlers e remoção de utilitários não utilizados
+Este documento descreve **TODO o fluxo do bot**, desde a configuração inicial até o encerramento da denúncia, incluindo feedback e automações.
+
+> **📝 Atualização v3:**
+> - Toda lógica de mudança de status (permissão, cooldown, lock) foi centralizada em `Handlers/handlerStatusButton.js`.
+> - Novo sistema de feedback pós-denúncia.
+> - Melhorias em auto-finalização e sincronização de nicknames.
+> - Fluxo revisado para evitar bypasses e garantir rastreabilidade.
 
 ---
 
@@ -61,16 +66,14 @@ Permite configurar no MongoDB:
 - Bot:
   - solicita ID da denúncia
   - localiza registro
-  - permite correção administrativa
-
-📌 Nenhuma nova denúncia é criada.
+  - permite correção administrativa (sem criar nova denúncia)
 
 ---
 
 ## 5️⃣ Reivindicação
 
 - Staff clica em 📝 Reivindicar
-- Bot define responsável e registra ação
+- Bot define responsável (respeita cooldown) e registra ação
 - Renomeia tópico
 
 ---
@@ -112,8 +115,33 @@ Permite configurar no MongoDB:
 
 ---
 
-## 9️⃣ Rankings
+## 9️⃣ Feedback Pós-Denúncia
+
+- Após finalização, bot envia menu de feedback para o denunciante
+- Usuário avalia atendimento (menu + modal)
+- Feedback armazenado em `FeedbackTemp`
+- Staff pode consultar avaliações
+
+---
+
+## 🔄 Automação e Manutenção
+
+- **Auto-finalização:** denúncias paradas são finalizadas automaticamente (`jobs/autoFinalizador.js`)
+- **Sincronização de nicknames:** bot repara e sincroniza nicks periodicamente (`jobs/nicknamePoller.js`)
+- **Detecção de palavras proibidas:** monitoramento em tempo real, inclusive em edições (`utils/strikeWords.js`)
+
+---
+
+## 🔝 Rankings
 
 - Todas ações são registradas
 - `!rank` → mensal
 - `!semana` → semanal
+
+---
+
+## Observações v3
+
+- Toda lógica de status, permissões, locks e cooldowns está centralizada em `Handlers/handlerStatusButton.js`.
+- O fluxo de feedback é obrigatório após finalização.
+- Logs e exportações são automáticos e rastreáveis.

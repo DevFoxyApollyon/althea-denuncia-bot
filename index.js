@@ -19,7 +19,7 @@ const { handleDeletedMessage } = require('./Handlers/messageDeleteHandler');
 const { handleReactionAdd, handleReactionRemove, handleReactionRemoveAll } = require('./Handlers/messageReactionHandler');
 const commands = require('./utils/commands');
 const Config = require('./models/Config');
-const { contemPalavraProibida, contemMarcacaoAdmin, processaStrike } = require('./utils/strikeWords');
+const { contemPalavraProibida, contemMarcacaoAdmin, processaStrike, verificaEdicao } = require('./utils/strikeWords');
 const Strike = require('./models/Strike');
 const { handleYoutubeDenuncia } = require('./utils/youtubeUtils');
 const { advancedMonitor } = require('./utils/advancedMonitoring');
@@ -29,6 +29,8 @@ const { syncUserOnNicknameChange } = require('./utils/userSyncAndNotify');
 const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 const { iniciarPoller } = require('./jobs/nicknamePoller');
 const Usuarios = require('./models/Usuario');
+const { limparMenusOrfaos } = require('./utils/feedback');
+const { extrairContaDoNickname } = require('./utils/nickUtils');
 
 const client = new Client({
     intents: [
@@ -65,7 +67,7 @@ async function getConfig(guildId) {
     }
 
     configCache.set(guildId, config);
-    setTimeout(() => configCache.delete(guildId), 5 * 60 * 1000); 
+    setTimeout(() => configCache.delete(guildId), 5 * 60 * 1000);
     return config;
 }
 
@@ -73,36 +75,50 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     try {
         await syncUserOnNicknameChange(oldMember, newMember);
 
-        if (oldMember.nickname !== newMember.nickname) {
-            const auditLogs = await newMember.guild.fetchAuditLogs({ limit: 1, type: 24 });
-            const entry = auditLogs.entries.first();
+        if (oldMember.nickname === newMember.nickname) return;
 
-            if (!entry) return;
-            if (Date.now() - entry.createdTimestamp > 3000) return;
-            if (entry.executor?.id !== process.env.BOT_ALVO_ID) return;
+        let entry = null;
+        for (let tentativa = 0; tentativa < 3; tentativa++) {
+            await new Promise(r => setTimeout(r, 1000 * (tentativa + 1)));
 
-            await Usuarios.findOneAndUpdate(
-                {
-                    guildId: newMember.guild.id,
-                    userId:  newMember.user.id,
-                },
-                {
-                    $set: {
-                        username:  newMember.user.username,
-                        nickname:  newMember.nickname,
-                        updatedAt: new Date(),
-                    },
-                },
-                { upsert: true, new: true }
+            const auditLogs = await newMember.guild.fetchAuditLogs({ limit: 5, type: 24 });
+
+            entry = auditLogs.entries.find(e =>
+                e.target?.id === newMember.user.id &&
+                e.executor?.id === process.env.BOT_ALVO_ID &&
+                Date.now() - e.createdTimestamp < 15000
             );
 
-            log.success(
-                `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} — nickname registrado em tempo real: ` +
-                `${chalk.red(oldMember.nickname ?? 'nenhum')} ${chalk.gray('→')} ${chalk.green(newMember.nickname ?? 'nenhum')} ${chalk.gray(`| ${newMember.guild.name}`)}`
-            );
+            if (entry) break;
         }
+
+        if (!entry) return;
+
+        const nickAtual     = newMember.nickname || newMember.user.username;
+        const contaExtraida = extrairContaDoNickname(nickAtual);
+
+        const setPayload = {
+            username:  newMember.user.username,
+            nickname:  newMember.nickname,
+            updatedAt: new Date(),
+        };
+        if (contaExtraida) setPayload.conta = contaExtraida;
+
+        await Usuarios.findOneAndUpdate(
+            { guildId: newMember.guild.id, userId: newMember.user.id },
+            { $set: setPayload },
+            { upsert: true, new: true }
+        );
+
+        log.success(
+            `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} — nickname registrado em tempo real: ` +
+            `${chalk.red(oldMember.nickname ?? 'nenhum')} ${chalk.gray('→')} ${chalk.green(newMember.nickname ?? 'nenhum')}` +
+            (contaExtraida ? chalk.gray(` | conta: ${contaExtraida}`) : '') +
+            chalk.gray(` | ${newMember.guild.name}`)
+        );
+
     } catch (e) {
-        if (e.code === 50278) return; 
+        if (e.code === 50278) return;
         log.warn('Erro ao sincronizar nickname: ' + e.message);
     }
 });
@@ -154,7 +170,7 @@ mongoose.connect(process.env.MONGODB_URI)
         process.exit(1);
     });
 
-client.once('clientReady', (readyClient) => {
+client.once('clientReady', async (readyClient) => {
     console.log(chalk.cyan.bold('\n' + '═'.repeat(60)));
     log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.username)}`);
 
@@ -198,6 +214,8 @@ client.once('clientReady', (readyClient) => {
     iniciarAutoFinalizador(client);
     iniciarPoller(client);
 
+    await limparMenusOrfaos(client);
+
     readyClient.user.setPresence({
         activities: [{
             name: "Foxyapollyon na Twitch",
@@ -240,6 +258,12 @@ client.on('messageCreate', async (message) => {
     }
 });
 
+client.on('messageUpdate', async (oldMessage, newMessage) => {
+    if (!newMessage.guild) return;
+    const config = await getConfig(newMessage.guild.id) ?? {};
+    await verificaEdicao(oldMessage, newMessage, Strike, config);
+});
+
 client.on('interactionCreate', async (interaction) => {
     try {
         const startTime = Date.now();
@@ -252,7 +276,7 @@ client.on('interactionCreate', async (interaction) => {
         }
     } catch (error) {
         if (error.code === 50278) return;
-        if (error.code === 10062) return; 
+        if (error.code === 10062) return;
 
         log.error(`Erro na interação (${interaction?.customId ?? 'desconhecido'}): ${error.message}`);
 
