@@ -24,12 +24,14 @@ function criarAvisoDenuncia(commandChannelId) {
 • Vídeos com menos de 10 segundos (sem contexto da situação).
 • Arquivos que exijam download externo (.rar, .zip, .mp4 anexado).
 • Links de sites de hospedagem de arquivos desconhecidos.
+• Videos com mais de 48 horas apos ocorrido ( adm ao analisar ou recusar nao tem essa regra para setar essa punição).
 
 ⚠️ **REGRAS E PUNIÇÕES:**
 • **PROVAS DELETADAS:** Apagar provas após o envio resultará em punição severa.
 • **TOPICO RESTRITO:** O canal é exclusivo para denúncia/contra-prova. Conversas desnecessárias ou "farpas" resultarão em **7 dias de castigo**.
 • **ATAQUES PESSOAIS:** Mute de 7 dias para qualquer desrespeito.
 • **DENÚNCIAS FALSAS:** Má fé ou provas forjadas resultarão em banimento grave.
+• **ANT-RP NA PROPRIA DENUNCIA:** Caso comenta ant-rp na denuncia sera punido de acordo com a gravidade.
 
 💡 **DICA:** Seja claro, objetivo e respeite os administradores. Aguarde o prazo de análise da nossa equipe.
 

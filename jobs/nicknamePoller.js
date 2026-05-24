@@ -19,7 +19,7 @@ async function repararContasComDiscordId(client) {
             { $expr: { $eq: ['$conta', '$userId'] } },
             { conta: { $regex: /^\d{17,19}$/ } }
         ]
-    });
+    }).lean();
 
     if (registros.length === 0) {
         log.info('[REPARO] Nenhum registro corrompido encontrado.');
@@ -48,16 +48,18 @@ async function repararContasComDiscordId(client) {
             }
 
             const entrada = auditLogs.entries.find(entry => {
-                const ehOBot = BOT_ALVO_IDS.includes(entry.executor?.id);
-                const ehOAlvo = entry.target?.id === registro.userId;
+                const ehOBot   = BOT_ALVO_IDS.includes(entry.executor?.id);
+                const ehOAlvo  = entry.target?.id === registro.userId;
                 const mudouNick = entry.changes?.some(c => c.key === 'nick');
                 return ehOBot && ehOAlvo && mudouNick;
             });
 
             if (!entrada) {
-                const membro = await guild.members.fetch(registro.userId).catch(() => null);
-                const nickAtual = membro?.nickname || membro?.user?.username || null;
-                const contaDoNick = nickAtual ? extrairContaDoNickname(nickAtual) : null;
+                // FIX: cache: false + delete após uso
+                const membro = await guild.members.fetch({ user: registro.userId, cache: false }).catch(() => null);
+                const nickAtual    = membro?.nickname || membro?.user?.username || null;
+                const contaDoNick  = nickAtual ? extrairContaDoNickname(nickAtual) : null;
+                if (membro) guild.members.cache.delete(registro.userId);
 
                 if (!contaDoNick) {
                     await Usuarios.deleteOne({ _id: registro._id });
@@ -69,13 +71,12 @@ async function repararContasComDiscordId(client) {
                     { _id: registro._id },
                     { $set: { conta: contaDoNick, updatedAt: new Date() } }
                 );
-
                 totalReparados++;
                 continue;
             }
 
-            const nickDoLog = entrada.changes?.find(c => c.key === 'nick')?.new ?? null;
-            const contaExtraida = nickDoLog ? extrairContaDoNickname(nickDoLog) : null;
+            const nickDoLog      = entrada.changes?.find(c => c.key === 'nick')?.new ?? null;
+            const contaExtraida  = nickDoLog ? extrairContaDoNickname(nickDoLog) : null;
 
             if (!contaExtraida) {
                 await Usuarios.deleteOne({ _id: registro._id });
@@ -87,7 +88,6 @@ async function repararContasComDiscordId(client) {
                 { _id: registro._id },
                 { $set: { conta: contaExtraida, updatedAt: new Date() } }
             );
-
             totalReparados++;
         } catch (err) {
             log.error(`[REPARO] Erro ao reparar userId ${registro.userId}: ${err.message}`);
@@ -104,20 +104,20 @@ async function repararContasComDiscordId(client) {
 async function verificarNicknames(client) {
     const BOT_ALVO_IDS = (process.env.BOT_ALVO_ID || '').split(',').map(id => id.trim()).filter(Boolean);
 
-    let totalNovos = 0;
-    let totalAtualizados = 0;
+    let totalNovos          = 0;
+    let totalAtualizados    = 0;
     let totalContaCorrigida = 0;
 
     for (const guild of client.guilds.cache.values()) {
         try {
             const auditLogs = await guild.fetchAuditLogs({ limit: 100, type: 24 });
 
-            const entradasBot = auditLogs.entries.filter(entry => {
-                const ehOBot = BOT_ALVO_IDS.includes(entry.executor?.id);
-                const mudouNick = entry.changes?.some(c => c.key === 'nick');
-                return ehOBot && mudouNick;
-            });
+            const entradasBot = auditLogs.entries.filter(entry =>
+                BOT_ALVO_IDS.includes(entry.executor?.id) &&
+                entry.changes?.some(c => c.key === 'nick')
+            );
 
+            // Última entrada por userId
             const ultimasEntradas = new Map();
             for (const entry of entradasBot) {
                 const userId = entry.target?.id;
@@ -126,71 +126,99 @@ async function verificarNicknames(client) {
                 }
             }
 
-            for (const entry of ultimasEntradas.values()) {
-                const userId = entry.target?.id;
-                const nickNovo = entry.changes?.find(c => c.key === 'nick')?.new ?? null;
-                const nickVelho = entry.changes?.find(c => c.key === 'nick')?.old ?? null;
+            if (ultimasEntradas.size > 0) {
+                // FIX: buscar todos os registros relevantes em uma query só
+                const userIds = [...ultimasEntradas.keys()];
+                const registrosExistentes = await Usuarios.find({
+                    guildId: guild.id,
+                    userId:  { $in: userIds },
+                }).lean();
+                const registroMap = new Map(registrosExistentes.map(r => [r.userId, r]));
 
-                if (!userId) continue;
+                const bulkOpsAudit = [];
 
-                const existente = await Usuarios.findOne({ guildId: guild.id, userId });
+                for (const entry of ultimasEntradas.values()) {
+                    const userId   = entry.target?.id;
+                    const nickNovo = entry.changes?.find(c => c.key === 'nick')?.new ?? null;
+                    if (!userId) continue;
 
-                if (existente?.nickname?.toLowerCase() === nickNovo?.toLowerCase()) continue;
+                    const existente = registroMap.get(userId);
+                    if (existente?.nickname?.toLowerCase() === nickNovo?.toLowerCase()) continue;
 
-                const membro = await guild.members.fetch(userId).catch(() => null);
-                const username = membro?.user?.username ?? 'Desconhecido';
+                    // FIX: cache: false + delete após uso
+                    const membro   = await guild.members.fetch({ user: userId, cache: false }).catch(() => null);
+                    const username = membro?.user?.username ?? 'Desconhecido';
+                    if (membro) guild.members.cache.delete(userId);
 
-                const contaExtraida = nickNovo ? extrairContaDoNickname(nickNovo) : null;
+                    const contaExtraida = nickNovo ? extrairContaDoNickname(nickNovo) : null;
 
-                const setPayload = {
-                    username,
-                    nickname: nickNovo ?? username,
-                    conta: contaExtraida || existente?.conta || userId,
-                    updatedAt: new Date(),
-                };
+                    bulkOpsAudit.push({
+                        updateOne: {
+                            filter:  { guildId: guild.id, userId },
+                            update:  { $set: {
+                                username,
+                                nickname: nickNovo ?? username,
+                                conta:    contaExtraida || existente?.conta || userId,
+                                updatedAt: new Date(),
+                            }},
+                            upsert: true,
+                        },
+                    });
 
-                await Usuarios.findOneAndUpdate(
-                    { guildId: guild.id, userId },
-                    { $set: setPayload },
-                    { upsert: true, new: false }
-                );
+                    if (!existente) totalNovos++;
+                    else totalAtualizados++;
+                }
 
-                if (!existente) totalNovos++;
-                else totalAtualizados++;
+                // FIX: bulkWrite ao invés de N operações individuais
+                if (bulkOpsAudit.length > 0) await Usuarios.bulkWrite(bulkOpsAudit);
             }
 
-            await guild.members.fetch();
-            const members = guild.members.cache.filter(m => !m.user.bot);
+            // FIX: REMOVIDO guild.members.fetch() sem argumentos
+            // Processar somente membros já presentes no cache (sem forçar carregamento de todos)
+            const membersEmCache = guild.members.cache.filter(m => !m.user.bot);
 
-            for (const member of members.values()) {
-                const nickAtual = member.nickname || member.user.username;
-                const contaNoNick = extrairContaDoNickname(nickAtual);
+            if (membersEmCache.size > 0) {
+                // FIX: buscar todos os registros dos membros em cache de uma vez
+                const cachedIds = [...membersEmCache.keys()];
+                const registrosCached = await Usuarios.find({
+                    guildId: guild.id,
+                    userId:  { $in: cachedIds },
+                }).lean();
 
-                const registro = await Usuarios.findOne({ guildId: guild.id, userId: member.id });
-                if (!registro) continue;
+                const bulkOpsCache = [];
 
-                if (!contaNoNick && registro.conta && registro.conta !== member.id) continue;
+                for (const registro of registrosCached) {
+                    const member = membersEmCache.get(registro.userId);
+                    if (!member) continue;
 
-                const contaEsperada = contaNoNick || registro.conta || member.id;
+                    const nickAtual   = member.nickname || member.user.username;
+                    const contaNoNick = extrairContaDoNickname(nickAtual);
 
-                if (
-                    registro.conta === contaEsperada &&
-                    registro.nickname === member.nickname
-                ) continue;
+                    if (!contaNoNick && registro.conta && registro.conta !== member.id) continue;
 
-                await Usuarios.updateOne(
-                    { guildId: guild.id, userId: member.id },
-                    {
-                        $set: {
-                            username: member.user.username,
-                            nickname: member.nickname ?? member.user.username,
-                            conta: contaEsperada,
-                            updatedAt: new Date(),
+                    const contaEsperada = contaNoNick || registro.conta || member.id;
+
+                    if (
+                        registro.conta    === contaEsperada &&
+                        registro.nickname === member.nickname
+                    ) continue;
+
+                    bulkOpsCache.push({
+                        updateOne: {
+                            filter: { guildId: guild.id, userId: member.id },
+                            update: { $set: {
+                                username:  member.user.username,
+                                nickname:  member.nickname ?? member.user.username,
+                                conta:     contaEsperada,
+                                updatedAt: new Date(),
+                            }},
                         },
-                    }
-                );
+                    });
+                    totalContaCorrigida++;
+                }
 
-                totalContaCorrigida++;
+                // FIX: bulkWrite ao invés de N updates individuais
+                if (bulkOpsCache.length > 0) await Usuarios.bulkWrite(bulkOpsCache);
             }
 
         } catch (err) {

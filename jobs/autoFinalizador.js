@@ -15,21 +15,21 @@ const log = {
     system:  (msg, meta = {}) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} [${meta.guildName || ''}] ${msg}`),
 };
 
-const DIAS_PARA_FINALIZAR = 8;
-const INTERVALO_CICLO_MS = 3 * 60 * 1000;
-const DELAY_ENTRE_ITENS_MS = 5 * 1000;
-const LOTE_MAXIMO = 1;
-const STATUS_FINALIZAVEIS = ['pendente', 'analise', 'reivindicacao', 'aceita', 'recusada'];
+const DIAS_PARA_FINALIZAR    = 8;
+const INTERVALO_CICLO_MS     = 3 * 60 * 1000;
+const DELAY_ENTRE_ITENS_MS   = 5 * 1000;
+const LOTE_MAXIMO            = 1;
+const STATUS_FINALIZAVEIS    = ['pendente', 'analise', 'reivindicacao', 'aceita', 'recusada'];
 
 const EXPORT = {
-    MAX_UPLOAD_BYTES: 45 * 1024 * 1024,
-    FILES_PER_MESSAGE: 10,
-    TIMEZONE: 'America/Sao_Paulo',
-    FETCH_TIMEOUT_MS: 15000,
-    MAX_TOTAL_DOWNLOAD_BYTES: 200 * 1024 * 1024,
-    MAX_SINGLE_DOWNLOAD_BYTES: 50 * 1024 * 1024,
-    AVATAR_SIZE: 64,
-    GUILD_ICON_SIZE: 64,
+    MAX_UPLOAD_BYTES:           45 * 1024 * 1024,
+    FILES_PER_MESSAGE:          10,
+    TIMEZONE:                   'America/Sao_Paulo',
+    FETCH_TIMEOUT_MS:           15000,
+    MAX_TOTAL_DOWNLOAD_BYTES:   200 * 1024 * 1024,
+    MAX_SINGLE_DOWNLOAD_BYTES:  50 * 1024 * 1024,
+    AVATAR_SIZE:                64,
+    GUILD_ICON_SIZE:            64,
 };
 
 const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -60,7 +60,7 @@ function getHighestRole(member) {
         .sort((a, b) => b.position - a.position)
         .first();
     return {
-        name: highestRole ? highestRole.name : '',
+        name:  highestRole ? highestRole.name : '',
         color: highestRole && highestRole.color !== 0
             ? '#' + highestRole.color.toString(16).padStart(6, '0')
             : '#99aab5',
@@ -69,7 +69,7 @@ function getHighestRole(member) {
 
 async function fetchWithTimeout(url, timeout = EXPORT.FETCH_TIMEOUT_MS) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const timeoutId  = setTimeout(() => controller.abort(), timeout);
     try {
         const res = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
@@ -112,7 +112,7 @@ async function runGcComLog(label = '', meta = {}) {
 
     await new Promise(r => setImmediate(r));
 
-    const depois = process.memoryUsage();
+    const depois   = process.memoryUsage();
     const deltaHeap = antes.heapUsed - depois.heapUsed;
     const deltaRss  = antes.rss      - depois.rss;
 
@@ -126,7 +126,9 @@ async function runGcComLog(label = '', meta = {}) {
         `heap: ${chalk.yellow(mbStr(depois.heapUsed))}/${chalk.white(mbStr(depois.heapTotal))} ` +
         `| RSS: ${chalk.cyan(mbStr(depois.rss))} ` +
         `| liberado: heap ${sinal} ${deltaStr}` +
-        (deltaRss !== 0 ? ` / RSS ${deltaRss >= 0 ? chalk.green('▼') : chalk.red('▲')} ${deltaRss >= 0 ? chalk.green('-') : chalk.red('+')}${mbStr(Math.abs(deltaRss))}` : ''),
+        (deltaRss !== 0
+            ? ` / RSS ${deltaRss >= 0 ? chalk.green('▼') : chalk.red('▲')} ${deltaRss >= 0 ? chalk.green('-') : chalk.red('+')}${mbStr(Math.abs(deltaRss))}`
+            : ''),
         meta
     );
 
@@ -189,13 +191,17 @@ class ZipBatcher {
     async _flush() {
         if (this.currentBatch.length === 0) return;
 
-        const buf = await buildZipBuffer(this.currentBatch);
+        // FIX: usar let para poder nulificar após uso
+        let buf = await buildZipBuffer(this.currentBatch);
 
         for (const f of this.currentBatch) f.content = null;
         this.currentBatch = [];
         this.currentSize  = 0;
 
         await this.onFlush(buf, this.partIndex++);
+
+        // FIX: liberar buffer após envio
+        buf = null;
     }
 
     async finalize() {
@@ -424,6 +430,8 @@ async function finalizarDenuncia(client, denuncia) {
                     thread.messages.cache.clear();
                     await thread.setLocked(true).catch(() => {});
                     await thread.setArchived(true).catch(() => {});
+                    // FIX: remover thread do cache após arquivar
+                    if (guild) guild.channels.cache.delete(thread.id);
                     log.success(`Denúncia ${denuncia._id} recusada automaticamente.`, { guildName });
                 } catch (err) {
                     log.error(`Erro ao recusar automaticamente: ${err.message}`, { guildName });
@@ -483,7 +491,8 @@ async function finalizarDenuncia(client, denuncia) {
                 partsEnviadas++;
                 const partLabel = `**[ARQUIVAMENTO AUTOMATICO - PARTE ${partsEnviadas}]**`;
 
-                const zipAttachment = new AttachmentBuilder(buf, {
+                // FIX: usar let para poder nulificar após envio
+                let zipAttachment = new AttachmentBuilder(buf, {
                     name: `${baseFileName}_PARTE_${partsEnviadas}.zip`,
                 });
 
@@ -498,6 +507,10 @@ async function finalizarDenuncia(client, denuncia) {
                         log.warn(`Falha ao enviar parte ${partsEnviadas}: ${err.message}`, { guildName });
                     }
                 }
+
+                // FIX: liberar buffer interno do AttachmentBuilder após envio
+                zipAttachment.attachment = null;
+                zipAttachment = null;
 
                 await runGcComLog(`pós-parte-${partsEnviadas}`, { guildName });
             });
@@ -515,11 +528,13 @@ async function finalizarDenuncia(client, denuncia) {
                         if (!res?.ok) continue;
                         const len = Number(res.headers.get('content-length') || 0);
                         if (len && len > EXPORT.MAX_SINGLE_DOWNLOAD_BYTES) continue;
-                        const buf = await res.buffer();
-                        if (buf.length > EXPORT.MAX_SINGLE_DOWNLOAD_BYTES) continue;
-                        if (downloadedBytes + buf.length > EXPORT.MAX_TOTAL_DOWNLOAD_BYTES) break;
+                        let buf = await res.buffer();
+                        if (buf.length > EXPORT.MAX_SINGLE_DOWNLOAD_BYTES) { buf = null; continue; }
+                        if (downloadedBytes + buf.length > EXPORT.MAX_TOTAL_DOWNLOAD_BYTES) { buf = null; break; }
                         downloadedBytes += buf.length;
                         await batcher.add(`anexos/${attachmentNameByUrl.get(attachment.url)}`, buf);
+                        // FIX: liberar referência local após entregar ao batcher
+                        buf = null;
                     } catch (err) {
                         log.warn(`Falha ao baixar attachment: ${err.message}`, { guildName });
                     }
@@ -533,9 +548,12 @@ async function finalizarDenuncia(client, denuncia) {
                     if (!user) continue;
                     const res = await fetchWithTimeout(user.displayAvatarURL({ extension: 'png', size: EXPORT.AVATAR_SIZE }));
                     if (!res?.ok) continue;
-                    const buf = await res.buffer();
+                    let buf = await res.buffer();
                     downloadedBytes += buf.length;
                     await batcher.add(`anexos/${avatarName}`, buf);
+                    // FIX: liberar referência local e remover do cache de usuários
+                    buf = null;
+                    client.users.cache.delete(uid);
                 } catch (err) {
                     log.warn(`Falha ao baixar avatar: ${err.message}`, { guildName });
                 }
@@ -543,11 +561,17 @@ async function finalizarDenuncia(client, denuncia) {
 
             await batcher.finalize();
 
+            // Limpeza completa de referências
             thread.messages.cache.clear();
             sortedMessages.length = 0;
             membersMap.clear();
             avatarNameByUserId.clear();
             attachmentNameByUrl.clear();
+
+            // FIX: remover membros buscados do cache da guild
+            for (const id of authorIds) {
+                if (guild) guild.members.cache.delete(id);
+            }
 
             await runGcComLog('pós-batcher', { guildName });
 
@@ -557,7 +581,7 @@ async function finalizarDenuncia(client, denuncia) {
                     const logEmbed = new EmbedBuilder()
                         .setColor('#2F3136')
                         .setAuthor({
-                            name: `Denúncia Finalizada e Arquivada`,
+                            name:    `Denúncia Finalizada e Arquivada`,
                             iconURL: guild?.iconURL({ extension: 'png', size: EXPORT.GUILD_ICON_SIZE }) || undefined,
                         })
                         .setThumbnail(guild?.iconURL({ extension: 'png', size: EXPORT.GUILD_ICON_SIZE }) || '')
@@ -572,15 +596,15 @@ async function finalizarDenuncia(client, denuncia) {
                             `\n\n[🔗 Abrir Mensagem Original](${denunciaMsgLink})`
                         )
                         .addFields(
-                            { name: 'Partes ZIP Enviadas',  value: `${partsEnviadas}`,         inline: true },
-                            { name: 'ID da Mensagem',       value: `${denuncia.messageId}`,    inline: true },
-                            { name: 'Servidor',             value: guildName,                  inline: false },
-                            { name: 'Data de Finalização',  value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: false },
-                            { name: 'Status Original',      value: String(denuncia.status).toUpperCase(), inline: true },
-                            { name: 'ID da Denúncia',       value: String(denuncia._id),       inline: true }
+                            { name: 'Partes ZIP Enviadas',  value: `${partsEnviadas}`,                                    inline: true  },
+                            { name: 'ID da Mensagem',       value: `${denuncia.messageId}`,                               inline: true  },
+                            { name: 'Servidor',             value: guildName,                                             inline: false },
+                            { name: 'Data de Finalização',  value: `<t:${Math.floor(Date.now() / 1000)}:f>`,              inline: false },
+                            { name: 'Status Original',      value: String(denuncia.status).toUpperCase(),                 inline: true  },
+                            { name: 'ID da Denúncia',       value: String(denuncia._id),                                  inline: true  }
                         )
                         .setFooter({
-                            text: `Finalizado automaticamente após ${DIAS_PARA_FINALIZAR} dias | Sistema Althea`,
+                            text:    `Finalizado automaticamente após ${DIAS_PARA_FINALIZAR} dias | Sistema Althea`,
                             iconURL: 'https://cdn-icons-png.flaticon.com/512/1828/1828640.png',
                         })
                         .setTimestamp();
@@ -595,7 +619,7 @@ async function finalizarDenuncia(client, denuncia) {
                 try {
                     await logsChannel.send({
                         content: `**[PRE-VISUALIZACAO]** ${thread.name}`,
-                        files: [htmlAttachment],
+                        files:   [htmlAttachment],
                     });
                 } catch (err) {
                     log.warn(`Falha ao enviar preview: ${err.message}`, { guildName });
@@ -606,7 +630,8 @@ async function finalizarDenuncia(client, denuncia) {
             if (denunciante) {
                 try {
                     const denunciaMsgLinkDm = `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`;
-                    const threadLinkDm = denuncia.threadId ? `https://discord.com/channels/${denuncia.guildId}/${denuncia.threadId}` : null;
+                    const threadLinkDm = denuncia.threadId
+                        ? `https://discord.com/channels/${denuncia.guildId}/${denuncia.threadId}` : null;
                     await denunciante.send({
                         embeds: [new EmbedBuilder()
                             .setColor(statusMeta.color)
@@ -624,9 +649,15 @@ async function finalizarDenuncia(client, denuncia) {
                 } catch (err) {
                     log.warn(`Falha ao notificar denunciante: ${err.message}`, { guildName });
                 }
+                // FIX: remover denunciante do cache após uso
+                client.users.cache.delete(String(denuncia.criadoPor));
             }
 
-            htmlAttachment = null;
+            // FIX: liberar buffer interno do htmlAttachment antes de nulificar
+            if (htmlAttachment) {
+                htmlAttachment.attachment = null;
+                htmlAttachment = null;
+            }
 
             try {
                 const recentMessages = await thread.messages.fetch({ limit: 10 }).catch(() => new Map());
@@ -644,16 +675,19 @@ async function finalizarDenuncia(client, denuncia) {
             await thread.setLocked(true).catch(err => log.warn(`Falha ao trancar tópico: ${err.message}`, { guildName }));
             await thread.setArchived(true).catch(err => log.warn(`Falha ao arquivar tópico: ${err.message}`, { guildName }));
 
+            // FIX: remover thread do cache de canais após arquivar
+            if (guild) guild.channels.cache.delete(thread.id);
+
             if (logMessage) {
                 try {
                     await Denuncia.findByIdAndUpdate(denuncia._id, {
                         logMessageId: logMessage.id,
                         $push: {
                             historico: {
-                                acao: 'FINALIZADA_AUTOMATICAMENTE',
-                                staffId: 'sistema',
-                                data: new Date(),
-                                detalhes: { messageLink: logMessage.url },
+                                acao:      'FINALIZADA_AUTOMATICAMENTE',
+                                staffId:   'sistema',
+                                data:      new Date(),
+                                detalhes:  { messageLink: logMessage.url },
                             },
                         },
                     });
@@ -672,19 +706,20 @@ async function finalizarDenuncia(client, denuncia) {
                         `\u27B1 **Status**: \`Finalizado 📦\``
                     );
                     if (novoTexto !== mainMsg.content) await mainMsg.edit({ content: novoTexto });
-                    channel.messages.cache.delete(denuncia.messageId);
                 }
             } catch (err) {
                 log.warn(`Falha ao editar mensagem principal: ${err.message}`, { guildName });
             }
+            // FIX: limpar todo o cache do canal, não só uma mensagem
+            channel.messages.cache.clear();
         }
 
         try {
             await Denuncia.findByIdAndUpdate(denuncia._id, {
-                status: 'finalizada',
-                dataAtualizacao: new Date(),
-                'ultimaEdicao.motivoEdicao': `Finalizado automaticamente apos ${DIAS_PARA_FINALIZAR} dias`,
-                'ultimaEdicao.data': new Date(),
+                status:                         'finalizada',
+                dataAtualizacao:                new Date(),
+                'ultimaEdicao.motivoEdicao':    `Finalizado automaticamente apos ${DIAS_PARA_FINALIZAR} dias`,
+                'ultimaEdicao.data':            new Date(),
             });
             log.success(`Status atualizado para 'finalizada': ${denuncia._id}`, { guildName });
         } catch (err) {
@@ -714,8 +749,8 @@ async function verificarEFinalizarDenuncias(client) {
         const dataLimite = calcularDataLimite();
         const denuncias  = await Denuncia.find({
             dataCriacao: { $lte: dataLimite },
-            guildId: { $exists: true, $ne: null, $ne: '' },
-            status: { $in: STATUS_FINALIZAVEIS },
+            guildId:     { $exists: true, $ne: null, $ne: '' },
+            status:      { $in: STATUS_FINALIZAVEIS },
         })
         .sort({ dataCriacao: 1 })
         .limit(LOTE_MAXIMO)
