@@ -32,6 +32,7 @@ require('dotenv').config();
 const BUTTON_REFRESH_INTERVAL = 1800000;
 const SUPORTE_BOT_ID = process.env.SUPORTE_BOT_ID;
 const COOLDOWN_MS = 3 * 60 * 1000;
+const PROVAS_TIMEOUT_MS = 5 * 60 * 1000;
 
 const URL_REGEX = /https?:\/\/[^\s]+/gi;
 const BROKEN_LINK_REGEX = /\b(?!https?:\/\/)[a-zA-Z]{1,5}:\/\/[^\s]+/gi;
@@ -49,11 +50,49 @@ const PALAVRAS_BLOQUEADAS = [
     'telegram.me/',
 ];
 
-const MOTIVOS_INVALIDOS = [
-    'kk', 'kkk', 'kkkk',
-    'sub lider', 'sublider', 'sub líder', 'sublíder',
+// Palavrões e chingamentos bloqueados no Motivo e no Acusado
+const PALAVROES = [
+    'fdp', 'filho da puta', 'filha da puta',
+    'viado', 'viadão', 'viadinho',
+    'cuzao', 'cuzão', 'cu',
+    'porra', 'puta merda', 'puta que pariu',
+    'vai se foder', 'vai tomar no cu', 'vai tomar no',
+    'foder', 'fodase', 'foda-se', 'foda se',
+    'otario', 'otário', 'otaria', 'otária',
+    'idiota', 'imbecil', 'retardado', 'retardada',
+    'burro', 'burra', 'animal',
+    'lixo humano', 'escoria', 'escória',
+    'vagabundo', 'vagabunda',
+    'prostituta', 'puta', 'piranha',
+    'corno', 'corna',
+    'babaca', 'baba ovo', 'babaovo',
+    'arrombado', 'arrombada',
+    'merda',
+    'inutil', 'inútil',
+    'desgraçado', 'desgraçada', 'desgraçado', 'desgraca',
+    'maldito', 'maldita',
+    'lazaro', 'lazarento', 'lazarenta',
+    'peste',
+    'sua mae', 'sua mãe', 'tua mae', 'tua mãe',
+    'cala boca', 'cala a boca',
+    'bosta',
+    'cagao', 'cagão',
+    'covarde',
     'lixo',
-    'princesa',
+];
+
+// Lista unificada — usada tanto no Acusado quanto no Motivo (tudo em minúsculo)
+const CONTEUDO_INVALIDO = [
+    // Risadas / textos sem sentido
+    'kk', 'kkk', 'kkkk', 'kkkkk', 'kkkkkk',
+    'haha', 'huhu', 'rsrs', 'hehe', 'ahahah', 'hauhau', 'kkkkkkk',
+    // Cargos e funções (ninguém denuncia "ADM", denuncia um ID)
+    'adm', 'admin', 'staff', 'suporte', 'moderador', 'mod', 'dono',
+    'lider', 'líder', 'sub lider', 'sublider', 'sub líder', 'sublíder',
+    // Palavras genéricas sem sentido como motivo/acusado
+    'princesa', 'lixo',
+    // Textos de xingamento direto no campo (já cobertos por PALAVROES, mas redundância é segurança)
+    'vai tomar no cu', 'fdp',
 ];
 
 const denunciaCooldowns = new Map();
@@ -86,6 +125,14 @@ function validarPalavrasProibidas(texto) {
     return null;
 }
 
+// Valida palavrões/chingamentos — aplicado no Motivo e no Acusado
+function validarPalavroes(texto, nomeCampo) {
+    const lower = texto.toLowerCase();
+    const encontrado = PALAVROES.find(p => lower.includes(p));
+    if (encontrado) return `❌ O campo **${nomeCampo}** contém uma palavra ou expressão ofensiva. Utilize linguagem adequada ao preencher a denúncia.`;
+    return null;
+}
+
 function validarMotivo(motivo) {
     BROKEN_LINK_REGEX.lastIndex = 0;
     if (BROKEN_LINK_REGEX.test(motivo)) return '❌ O campo **Motivo** contém um link inválido. Não é permitido incluir links no motivo.';
@@ -97,8 +144,20 @@ function validarMotivo(motivo) {
 function validarMotivoConteudo(motivo) {
     const lower = motivo.trim().toLowerCase();
     if (motivo.trim().length < 2) return '❌ O campo **Motivo** é muito curto. Digite pelo menos 2 caracteres.';
-    const invalido = MOTIVOS_INVALIDOS.find(p => lower.includes(p));
+    const invalido = CONTEUDO_INVALIDO.find(p => lower.includes(p.toLowerCase()));
     if (invalido) return '❌ O campo **Motivo** contém um texto inválido. Descreva claramente a infração cometida, sem textos desnecessários.';
+    return null;
+}
+
+function validarAcusadoConteudo(acusado) {
+    if (acusado.trim().length < 1) return '❌ O campo **Acusado** está vazio.';
+    const lower = acusado.trim().toLowerCase();
+    const partes = lower.split('+').map(s => s.trim());
+    const invalido = CONTEUDO_INVALIDO.find(p => {
+        const pl = p.toLowerCase();
+        return partes.includes(pl) || lower.includes(pl);
+    });
+    if (invalido) return '❌ O campo **Acusado** contém um valor inválido. Insira apenas IDs numéricos reais do jogo.';
     return null;
 }
 
@@ -168,6 +227,8 @@ async function handleDenunciaCommand(message) {
             '• Conversas paralelas resultarão em punição',
             '• Apagar mensagens ou provas resultará em punição',
             '• Todas as mensagens apagadas serão registradas',
+            '• ⚠️ **Cuidado com as palavras utilizadas** — linguagem ofensiva, chingamentos ou xingamentos dentro do tópico resultarão em punição imediata',
+            '• 🚫 **Enviar imagens ofensivas ou mensagens por brincadeira resultará em banimento permanente do servidor**',
             '',
             '### Sobre as Provas em Vídeo:',
             '• É recomendado enviar vídeos pelo YouTube',
@@ -184,7 +245,7 @@ async function handleDenunciaCommand(message) {
             '**Opção 2 - No tópico:**',
             '1. Envie sua denúncia normalmente',
             '2. Aguarde o tópico ser criado',
-            '3. Envie suas provas (vídeos/imagens) diretamente no tópico',
+            '3. Envie suas imagens diretamente no tópico',
             '',
             '### Tutorial:',
             'Confira nosso tutorial detalhado aqui: https://www.instagram.com/p/DPcEkcHlHDe/',
@@ -271,7 +332,6 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         const config = await getCachedConfig(interaction.guild.id, Config);
 
-        // FIX: o que o usuário digitou no modal tem prioridade sobre o contaSalva do banco
         const inputDigitado = interaction.fields.fields.has('denunciante_input')
             ? interaction.fields.getTextInputValue('denunciante_input').trim()
             : null;
@@ -282,12 +342,10 @@ async function handleDenunciaSubmit(interaction, platform) {
             return await interaction.editReply({ content: '❌ Não foi possível identificar o denunciante. Tente novamente.' });
         }
 
-        // Validacao: apenas numeros
         if (!/^\d+$/.test(denunciante)) {
             return await interaction.editReply({ content: '❌ O campo **Denunciante** deve conter apenas números.' });
         }
 
-        // Validacao: maximo 15 digitos
         if (denunciante.length > 15) {
             return await interaction.editReply({ content: '❌ O campo **Denunciante** deve ter no máximo 15 dígitos.' });
         }
@@ -300,6 +358,15 @@ async function handleDenunciaSubmit(interaction, platform) {
             return await interaction.editReply({ content: '❌ O campo **Acusado** só pode conter letras, números e o símbolo "+" para múltiplos IDs.' });
         }
 
+        // Validação de conteúdo do acusado
+        const erroAcusadoConteudo = validarAcusadoConteudo(acusado);
+        if (erroAcusadoConteudo) return await interaction.editReply({ content: erroAcusadoConteudo });
+
+        // Validação de palavrões no acusado
+        const erroPalavraoAcusado = validarPalavroes(acusado, 'Acusado');
+        if (erroPalavraoAcusado) return await interaction.editReply({ content: erroPalavraoAcusado });
+
+        // Validação de palavras bloqueadas em todos os campos
         const camposParaVerificar = [denunciante, acusado, motivo, provas];
         for (const campo of camposParaVerificar) {
             const erroSpam = validarPalavrasProibidas(campo);
@@ -311,6 +378,10 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         const erroMotivoConteudo = validarMotivoConteudo(motivo);
         if (erroMotivoConteudo) return await interaction.editReply({ content: erroMotivoConteudo });
+
+        // Validação de palavrões no motivo
+        const erroPalavraoMotivo = validarPalavroes(motivo, 'Motivo');
+        if (erroPalavraoMotivo) return await interaction.editReply({ content: erroPalavraoMotivo });
 
         if (provas !== 'Tópico') {
             const erroProvas = validarProvasLinks(provas);
@@ -476,8 +547,16 @@ async function handleDenunciaSubmit(interaction, platform) {
         }
 
         await garantirAvisoNoTopo(channel, interaction.channelId);
+
         await interaction.editReply({ 
-            content: `✅ Denúncia criada em ${thread} às ${dateUtils.getBrasiliaTime()}` 
+            content: [
+                `✅ Sua denúncia foi criada com sucesso em ${thread} às \`${dateUtils.getBrasiliaTime()}\`.`,
+                '',
+                '⚠️ **Atenção — leia antes de interagir no tópico:**',
+                '• Utilize linguagem respeitosa. Chingamentos e palavras ofensivas resultarão em **punição imediata**.',
+                '• Enviar **imagens ofensivas**, memes ou qualquer conteúdo por brincadeira dentro do tópico resultará em **banimento permanente do servidor**, sem direito a recurso.',
+                '• O tópico é exclusivo para apresentação de provas e contra-provas. Mensagens fora desse contexto serão removidas e o responsável punido.',
+            ].join('\n')
         });
 
     } catch (error) {
@@ -506,14 +585,11 @@ async function handleDenunciaButtons(interaction, client) {
         if (customId === 'finalizar_denuncia') return await handleExportButton(interaction);
         if (customId === 'abrir_input_id_log_aceite') return await handleInputIdLogAceite(interaction);
 
-        // Redireciona os botões de status para o handler centralizado
         if (['analiser', 'aceitar', 'recusar'].includes(customId)) {
-            // Importação dinâmica para evitar require circular
             const { handleStatusButton } = require('../Handlers/handlerStatusButton');
             return await handleStatusButton(interaction, customId);
         }
 
-        // Caso algum botão novo seja adicionado sem tratamento
         return await interaction.reply({
             content: '❌ Ação não reconhecida ou não suportada para este botão.',
             flags: [MessageFlags.Ephemeral]
@@ -576,8 +652,6 @@ async function openDenunciaModal(interaction, platform) {
             .setPlaceholder('Ex: 123456')
             .setMaxLength(15);
 
-        // FIX: só faz setValue se contaSalva for válido (apenas dígitos e até 15 chars)
-        // Evita erro do Discord.js ao tentar setar valor maior que maxLength
         if (contaSalva && /^\d+$/.test(contaSalva) && contaSalva.length <= 15) {
             denuncianteInput.setValue(contaSalva);
         }

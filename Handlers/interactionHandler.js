@@ -7,7 +7,9 @@ const {
   handleDenunciaMobile,
   handleModalSubmit, 
   handleMyDenunciasButton,    
-  handleConsultaModalSubmit   
+  handleConsultaModalSubmit,  
+  handleDenunciaButtons,
+  handleDenunciaModals
 } = require('../commands/denuncia');
 
 const {
@@ -86,9 +88,7 @@ async function handlePanelModalSubmit(interaction) {
     config.updatedBy = interaction.user.tag;
     await config.save();
 
-    await interaction.editReply({
-      content: '✅ Configuração salva com sucesso!'
-    });
+    await interaction.editReply({ content: '✅ Configuração salva com sucesso!' });
 
   } catch (error) {
     console.error('Erro ao processar modal do painel:', error);
@@ -107,18 +107,13 @@ async function interactionHandler(interaction) {
   try {
 
     // ======== FEEDBACK SELECT MENU ========
-    // ATENÇÃO: NÃO pode deferReply aqui pois handleFeedbackMenu
-    // chama showModal — que é incompatível com deferReply
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('feedback:select:')) {
       try {
         const denunciaId = interaction.customId.replace('feedback:select:', '');
         const denuncia = await Denuncia.findById(denunciaId);
 
         if (!denuncia) {
-          return interaction.reply({
-            content: '❌ Denúncia não encontrada.',
-            ephemeral: true
-          });
+          return interaction.reply({ content: '❌ Denúncia não encontrada.', ephemeral: true });
         }
 
         await handleFeedbackMenu(interaction, denuncia);
@@ -198,7 +193,6 @@ async function interactionHandler(interaction) {
 
     // ======== BOTÕES ========
     if (interaction.isButton()) {
-
       if (interaction.customId === 'denuncia_pc') {
         await handleDenunciaPC(interaction);
         return;
@@ -240,10 +234,11 @@ async function interactionHandler(interaction) {
     if (interaction.isModalSubmit()) {
       switch (interaction.customId) {
         case 'denuncia_pc_modal':
-        case 'denuncia_mobile_modal':
+        case 'denuncia_mobile_modal': {
           const platform = interaction.customId === 'denuncia_pc_modal' ? 'PC' : 'Mobile';
           await handleModalSubmit(interaction, platform);
           break;
+        }
 
         case 'consulta_denuncias_modal':
           await handleConsultaModalSubmit(interaction);
@@ -266,10 +261,7 @@ async function interactionHandler(interaction) {
     console.error('❌ Erro na interação:', error);
 
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: '❌ Ocorreu um erro.',
-        ephemeral: true
-      });
+      await interaction.reply({ content: '❌ Ocorreu um erro.', ephemeral: true });
     }
   }
 }

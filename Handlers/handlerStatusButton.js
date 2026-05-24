@@ -10,7 +10,8 @@ const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 const DM_IGNORED_CODES = [50007, 50278];
 
-const CLAIM_COOLDOWN_MS = 7 * 60 * 1000;
+const CLAIM_COOLDOWN_MS = 10 * 60 * 1000;
+const GUILD_COOLDOWN = '817924556358156360';
 const _claimCooldowns = new Map();
 const _sendOnceLocks = new Set();
 
@@ -939,7 +940,7 @@ async function handleClaimButton(interaction) {
       config?.roles?.responsavel_admin &&
       interaction.member.roles.cache.has(config.roles.responsavel_admin);
 
-    if (!isResponsavelAdmin) {
+    if (!isResponsavelAdmin && interaction.guild?.id === GUILD_COOLDOWN) {
       const lastClaim = _claimCooldowns.get(interaction.user.id);
       if (lastClaim) {
         const elapsed = Date.now() - lastClaim;
@@ -1039,7 +1040,7 @@ async function handleClaimButton(interaction) {
       return;
     }
 
-    if (!isResponsavelAdmin) {
+    if (!isResponsavelAdmin && interaction.guild?.id === GUILD_COOLDOWN) {
       _claimCooldowns.set(interaction.user.id, Date.now());
       setTimeout(() => _claimCooldowns.delete(interaction.user.id), CLAIM_COOLDOWN_MS);
     }
