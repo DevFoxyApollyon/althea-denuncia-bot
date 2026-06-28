@@ -98,8 +98,8 @@ async function sendToLogWithThread(logChannel, embed, attachments, threadName, a
 
     if (!logMsg) return;
 
-    const precisaTÃ³pico = attachments.length > 0 || isLong;
-    if (!precisaTÃ³pico) return;
+    const precisaTópico = attachments.length > 0 || isLong;
+    if (!precisaTópico) return;
 
     try {
         let thread = null;
