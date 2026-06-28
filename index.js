@@ -52,7 +52,7 @@ const log = {
     success: (msg) => console.log(`${chalk.green('✅')} ${chalk.gray('[SUCESSO]')} ${msg}`),
     warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
     error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
-    system:  (msg) => console.log(`${chalk.magenta('âš™')} ${chalk.gray('[SISTEMA]')} ${msg}`)
+    system:  (msg) => console.log(`${chalk.magenta('⚙️')} ${chalk.gray('[SISTEMA]')} ${msg}`)
 };
 
 const configCache = new Map();
@@ -141,7 +141,7 @@ client.on('guildMemberAdd', async (member) => {
         );
     } catch (e) {
         if (e.code === 50013) {
-            log.warn(`Sem permissÃ£o para restaurar nickname de ${member.user.username} em ${member.guild.name}`);
+            log.warn(`Sem permissão para restaurar nickname de ${member.user.username} em ${member.guild.name}`);
             return;
         }
         log.error(`Erro ao restaurar nickname: ${e.message}`);
@@ -153,7 +153,7 @@ mongoose.connect(process.env.MONGODB_URI)
         log.success('Database principal conectada.');
 
         if (secondaryConnection.readyState === 1) {
-            log.success('Database secundÃ¡ria jÃ¡ conectada.');
+            log.success('Database secundária já conectada.');
         }
 
         setInterval(async () => {
@@ -176,7 +176,7 @@ client.once('clientReady', async (readyClient) => {
     console.log(chalk.cyan.bold('\n' + 'â•'.repeat(60)));
     log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.username)}`);
 
-    log.info(`${chalk.bold('VersÃ£o do Bot:')} ${chalk.green(packageJson.version)}`);
+    log.info(`${chalk.bold('Versão do Bot:')} ${chalk.green(packageJson.version)}`);
     log.info(`${chalk.bold('Node.js:')} ${chalk.green(process.version)}`);
     log.info(`${chalk.bold('Discord.js:')} ${chalk.green(`v${discordVersion}`)}`);
 
@@ -188,7 +188,7 @@ client.once('clientReady', async (readyClient) => {
 
     const memoryUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
     const uptime = Math.floor(process.uptime() / 60);
-    log.info(`${chalk.bold('MemÃ³ria utilizada:')} ${chalk.green(memoryUsage)} MB`);
+    log.info(`${chalk.bold('Memória utilizada:')} ${chalk.green(memoryUsage)} MB`);
     log.info(`${chalk.bold('Uptime:')} ${chalk.green(uptime > 0 ? uptime + 'min' : '< 1min')}`);
 
     const cmdList = Object.keys(commands).join(', ');
@@ -280,7 +280,7 @@ client.on('interactionCreate', async (interaction) => {
         if (error.code === 50278) return;
         if (error.code === 10062) return;
 
-        log.error(`Erro na interaÃ§Ã£o (${interaction?.customId ?? 'desconhecido'}): ${error.message}`);
+        log.error(`Erro na interação (${interaction?.customId ?? 'desconhecido'}): ${error.message}`);
 
         try {
             if (!interaction.replied && !interaction.deferred) {
@@ -311,7 +311,7 @@ client.on('messageReactionRemoveAll', handleReactionRemoveAll);
 client.on('error', err => log.error('Discord API Error: ' + err.message));
 
 process.on('unhandledRejection', (reason) => {
-    log.error('RejeiÃ§Ã£o nÃ£o tratada: ' + (reason?.stack || reason));
+    log.error('Rejeição não tratada: ' + (reason?.stack || reason));
 });
 
 process.on('uncaughtException', (error) => {
@@ -319,7 +319,7 @@ process.on('uncaughtException', (error) => {
 });
 
 async function gracefulShutdown(signal) {
-    log.warn(`Sinal ${signal} recebido. Encerrando bot com seguranÃ§a...`);
+    log.warn(`Sinal ${signal} recebido. Encerrando bot com segurança...`);
     try {
         advancedMonitor.destroy();
         client.destroy();

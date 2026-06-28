@@ -40,15 +40,15 @@ const formatUptime = (seconds) => {
 const getProgressBar = (current, max, size = 12) => {
     const pct    = Math.min((current / max) * 100, 100);
     const filled = Math.round((pct / 100) * size);
-    const bar    = 'â–ˆ'.repeat(filled) + 'â–‘'.repeat(size - filled);
-    const color  = pct >= 85 ? 'ðŸ”´' : pct >= 60 ? 'ðŸŸ¡' : 'ðŸŸ¢';
+    const bar    = '█'.repeat(filled) + '░'.repeat(size - filled);
+    const color  = pct >= 85 ? '🔴' : pct >= 60 ? '🟠' : '🟢';
     return `${color} \`${bar}\` **${pct.toFixed(1)}%**`;
 };
 
 const getStatusBadge = (ping, dbLatency, memPct) => {
-    if (ping > 300 || dbLatency > 500 || memPct > 90) return { label: 'ðŸ”´ CRÃTICO',    color: '#e74c3c' };
-    if (ping > 150 || dbLatency > 250 || memPct > 70) return { label: 'ðŸŸ¡ DEGRADADO', color: '#f39c12' };
-    return { label: 'ðŸŸ¢ OPERACIONAL', color: '#2ecc71' };
+    if (ping > 300 || dbLatency > 500 || memPct > 90) return { label: '🔴 CRÍTICO',    color: '#e74c3c' };
+    if (ping > 150 || dbLatency > 250 || memPct > 70) return { label: '🟠 DEGRADADO', color: '#f39c12' };
+    return { label: '🟢 OPERACIONAL', color: '#2ecc71' };
 };
 
 const getCpuUsage = () => {
@@ -64,10 +64,10 @@ const getCpuUsage = () => {
 function buildLatencyGraph(history) {
     if (!history.length) return '`Sem dados suficientes`';
     const max  = Math.max(...history);
-    const bars = ['â–','â–‚','â–ƒ','â–„','â–…','â–†','â–‡','â–ˆ'];
+    const bars = ['▁','▂','▃','▄','▅','▆','▇','█'];
     const graph = history.map(v => bars[Math.min(Math.floor((v / max) * (bars.length - 1)), bars.length - 1)]).join('');
     const last  = history[history.length - 1];
-    return `\`${graph}\`  _Ãºltimo: **${last}ms**_`;
+    return `\`${graph}\`  _último: **${last}ms**_`;
 }
 
 function recordMetrics(ping, ramMB) {
@@ -112,15 +112,15 @@ function createStatusEmbed(client) {
 
     return new EmbedBuilder()
         .setAuthor({ 
-            name: `${client.user.username} â€” Painel Administrativo`, 
+            name: `${client.user.username} — Painel Administrativo`, 
             iconURL: client.user.displayAvatarURL({ dynamic: true }) 
         })
         .setColor(statusColor)
         .setThumbnail(client.user.displayAvatarURL({ dynamic: true }))
-        .setDescription(`## ${statusLabel}\n> DiagnÃ³stico completo em tempo real.\n\u200B`)
+        .setDescription(`## ${statusLabel}\n> Diagnóstico completo em tempo real.\n\u200B`)
         .addFields(
             {
-                name: 'ðŸŒ Rede & API',
+                name: '🌐 Rede & API',
                 value: `**WebSocket:** \`${wsPing}ms\`\n` +
                        `**Database:** \`${dbLatency}ms\`\n` +
                        `**Servidores:** \`${totalGuilds}\`\n` +
@@ -129,7 +129,7 @@ function createStatusEmbed(client) {
                 inline: true
             },
             {
-                name: 'âš™ï¸ Runtime',
+                name: '⚙️ Runtime',
                 value: `**Node.js:** \`${process.version}\`\n` +
                        `**Discord.js:** \`v${djsVersion}\`\n` +
                        `**PID:** \`${process.pid}\`\n` +
@@ -139,58 +139,58 @@ function createStatusEmbed(client) {
             },
             { name: '\u200B', value: '\u200B', inline: false },
             {
-                name: 'ðŸ§  MemÃ³ria RAM',
+                name: '🧠 Memória RAM',
                 value: `${getProgressBar(memUsedMB, MAX_RAM_MB)}\n` +
                        `**Usada:** \`${memUsedMB} MB\` / \`${MAX_RAM_MB} MB\`\n` +
                        `**Heap:** \`${formatMB(mem.heapUsed)} MB\` usado de \`${formatMB(mem.heapTotal)} MB\`\n` +
                        `**Externo:** \`${formatMB(mem.external)} MB\`\n` +
-                       `**Pico da sessÃ£o:** ${peakRamStr}`,
+                       `**Pico da sessão:** ${peakRamStr}`,
                 inline: false
             },
             {
-                name: 'ðŸ–¥ï¸ CPU',
+                name: '🔥 CPU',
                 value: `${getProgressBar(cpuPct, 100)}\n` +
                        `**Load:** \`${os.loadavg().map(l => l.toFixed(2)).join(' | ')}\` (1m / 5m / 15m)\n` +
                        `**Cores:** \`${os.cpus().length}x\` ${os.cpus()[0].model.split('@')[0].trim()}`,
                 inline: false
             },
             {
-                name: 'ðŸ“ˆ HistÃ³rico de LatÃªncia (WebSocket)',
-                value: buildLatencyGraph(pingHistory) + `\n**Pico da sessÃ£o:** ${peakPingStr}`,
+                name: '📈 Histórico de Latência (WebSocket)',
+                value: buildLatencyGraph(pingHistory) + `\n**Pico da sessão:** ${peakPingStr}`,
                 inline: false
             },
             {
-                name: 'ðŸ“¦ Cache',
+                name: '🗃️ Cache',
                 value: `**Objetos:** \`${cache.size ?? 'N/A'}\`\n` +
                        `**Hit Rate:** \`${cache.hitRate ?? 'N/A'}\`\n` +
                        `**Tamanho:** \`${cache.memoryUsage ?? 'N/A'}\``,
                 inline: true
             },
             {
-                name: 'ðŸ“Š Performance',
-                value: `**Cmds/SessÃ£o:** \`${report.totalCommands || 0}\`\n` +
-                       `**InteraÃ§Ãµes:** \`${report.totalInteractions || 0}\`\n` +
+                name: '⚡ Performance',
+                value: `**Cmds/Sessão:** \`${report.totalCommands || 0}\`\n` +
+                       `**Interações:** \`${report.totalInteractions || 0}\`\n` +
                        `**Erros:** \`${errors || 0}\``,
                 inline: true
             },
         )
-        .setFooter({ text: `Atualizado automaticamente a cada 60s â€¢` })
+        .setFooter({ text: `Atualizado automaticamente a cada 60s •` })
         .setTimestamp();
 }
 
 function createStatusButtons(restarting = false) {
     return [
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('refresh_status').setLabel('Atualizar').setEmoji('ðŸ”„').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('status_ping_test').setLabel('Teste de Ping').setEmoji('ðŸ“¡').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('status_cache_clear').setLabel('Limpar Cache').setEmoji('ðŸ—‘ï¸').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('refresh_status').setLabel('Atualizar').setEmoji('🔄').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('status_ping_test').setLabel('Teste de Ping').setEmoji('📶').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('status_cache_clear').setLabel('Limpar Cache').setEmoji('🧹').setStyle(ButtonStyle.Danger),
         ),
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('status_toggle_autorefresh').setLabel('Auto-Refresh').setEmoji('â±ï¸').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('status_toggle_autorefresh').setLabel('Auto-Refresh').setEmoji('⏱️').setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId('status_restart_confirm')
-                .setLabel(restarting ? 'Confirmar ReinÃ­cio' : 'Reiniciar Bot')
-                .setEmoji(restarting ? 'âš ï¸' : 'ðŸ”')
+                .setLabel(restarting ? 'Confirmar Reinício' : 'Reiniciar Bot')
+                .setEmoji(restarting ? '⚠️' : '🔁')
                 .setStyle(restarting ? ButtonStyle.Danger : ButtonStyle.Secondary),
         )
     ];
@@ -205,9 +205,9 @@ async function checkAndSendAlerts(client, logChannelId, adminRoleId) {
     const dbLat   = monitor.getMetrics().dbLatency || 0;
 
     const alertas = [];
-    if (wsPing > ALERT_PING_MS)  alertas.push(`ðŸ”´ **Ping alto:** \`${wsPing}ms\` (limite: ${ALERT_PING_MS}ms)`);
-    if (memPct > ALERT_RAM_PCT)  alertas.push(`ðŸ”´ **RAM crÃ­tica:** \`${memPct.toFixed(1)}%\` de ${MAX_RAM_MB}MB`);
-    if (dbLat > ALERT_DB_MS)     alertas.push(`ðŸ”´ **Database lenta:** \`${dbLat}ms\` (limite: ${ALERT_DB_MS}ms)`);
+    if (wsPing > ALERT_PING_MS)  alertas.push(`🔴 **Ping alto:** \`${wsPing}ms\` (limite: ${ALERT_PING_MS}ms)`);
+    if (memPct > ALERT_RAM_PCT)  alertas.push(`🔴 **RAM crítica:** \`${memPct.toFixed(1)}%\` de ${MAX_RAM_MB}MB`);
+    if (dbLat > ALERT_DB_MS)     alertas.push(`🔴 **Database lenta:** \`${dbLat}ms\` (limite: ${ALERT_DB_MS}ms)`);
 
     if (!alertas.length) return;
 
@@ -216,7 +216,7 @@ async function checkAndSendAlerts(client, logChannelId, adminRoleId) {
 
     const embed = new EmbedBuilder()
         .setColor('#e74c3c')
-        .setTitle('ðŸš¨ Alerta de Sistema')
+        .setTitle('🚨 Alerta de Sistema')
         .setDescription(alertas.join('\n'))
         .setTimestamp();
 
@@ -253,7 +253,7 @@ async function handleStatusButtons(interaction, config) {
     if (!validIds.includes(interaction.customId)) return;
 
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ content: 'âŒ Acesso negado.', flags: [MessageFlags.Ephemeral] });
+        return interaction.reply({ content: '❌ Acesso negado.', flags: [MessageFlags.Ephemeral] });
     }
 
     const { customId, client, message } = interaction;
@@ -271,11 +271,11 @@ async function handleStatusButtons(interaction, config) {
         const wsPing    = client.ws.ping;
         const embed = new EmbedBuilder()
             .setColor('#3498db')
-            .setTitle('ðŸ“¡ Teste de Ping')
+            .setTitle('📶 Teste de Ping')
             .addFields(
                 { name: 'WebSocket',     value: `\`${wsPing}ms\``,     inline: true },
                 { name: 'Roundtrip API', value: `\`${roundtrip}ms\``,  inline: true },
-                { name: 'Qualidade',     value: wsPing < 100 ? 'ðŸŸ¢ Excelente' : wsPing < 200 ? 'ðŸŸ¡ Boa' : 'ðŸ”´ Alta latÃªncia', inline: true }
+                { name: 'Qualidade',     value: wsPing < 100 ? '🟢 Excelente' : wsPing < 200 ? '🟠 Boa' : '🔴 Alta latência', inline: true }
             )
             .setTimestamp();
         await interaction.editReply({ embeds: [embed] });
@@ -287,9 +287,9 @@ async function handleStatusButtons(interaction, config) {
         try {
             globalCache.clear?.();
             await interaction.editReply({ embeds: [createStatusEmbed(client)], components: createStatusButtons() });
-            await interaction.followUp({ content: 'âœ… Cache limpo com sucesso.', flags: [MessageFlags.Ephemeral] });
+            await interaction.followUp({ content: '✅ Cache limpo com sucesso.', flags: [MessageFlags.Ephemeral] });
         } catch {
-            await interaction.followUp({ content: 'âŒ Erro ao limpar o cache.', flags: [MessageFlags.Ephemeral] });
+            await interaction.followUp({ content: '❌ Erro ao limpar o cache.', flags: [MessageFlags.Ephemeral] });
         }
         return;
     }
@@ -301,7 +301,7 @@ async function handleStatusButtons(interaction, config) {
         if (autoRefreshMap.has(msgId)) {
             clearInterval(autoRefreshMap.get(msgId));
             autoRefreshMap.delete(msgId);
-            await interaction.followUp({ content: 'â¹ï¸ Auto-refresh **desativado**.', flags: [MessageFlags.Ephemeral] });
+            await interaction.followUp({ content: '⏹️ Auto-refresh **desativado**.', flags: [MessageFlags.Ephemeral] });
         } else {
             const interval = setInterval(async () => {
                 try {
@@ -316,7 +316,7 @@ async function handleStatusButtons(interaction, config) {
             }, AUTO_REFRESH_MS);
 
             autoRefreshMap.set(msgId, interval);
-            await interaction.followUp({ content: `â–¶ï¸ Auto-refresh **ativado** â€” atualiza a cada ${AUTO_REFRESH_MS / 1000}s.`, flags: [MessageFlags.Ephemeral] });
+            await interaction.followUp({ content: `⏱️ Auto-refresh **ativado** — atualiza a cada ${AUTO_REFRESH_MS / 1000}s.`, flags: [MessageFlags.Ephemeral] });
         }
         return;
     }
@@ -330,12 +330,12 @@ async function handleStatusButtons(interaction, config) {
             await interaction.deferUpdate();
             await interaction.editReply({ embeds: [createStatusEmbed(client)], components: createStatusButtons(true) });
             await interaction.followUp({
-                content: 'âš ï¸ Clique em **Confirmar ReinÃ­cio** novamente em atÃ© 10 segundos para reiniciar o bot.',
+                content: '⚠️ Clique em **Confirmar Reinício** novamente em até 10 segundos para reiniciar o bot.',
                 flags: [MessageFlags.Ephemeral]
             });
         } else {
             restartConfirmPending.delete(userId);
-            await interaction.reply({ content: 'ðŸ” Reiniciando o bot...', flags: [MessageFlags.Ephemeral] });
+            await interaction.reply({ content: '🔁 Reiniciando o bot...', flags: [MessageFlags.Ephemeral] });
             setTimeout(() => process.exit(0), 1500);
         }
     }

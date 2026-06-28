@@ -26,17 +26,17 @@ const configSchema = new mongoose.Schema({
     denuncia_aceita: { 
       type: String, 
       required: false, 
-      default: 'âž¥ DenÃºncia aceita Acusado ({acusadoId}) tomarÃ¡ puniÃ§Ã£o por ({motivo}) Data {dataPunicao} Link: {messageUrl}' 
+      default: '✔️ Denúncia aceita. Acusado ({acusadoId}) tomará punição por ({motivo}). Data: {dataPunicao}. Link: {messageUrl}' 
     },
     denuncia_analise: { 
       type: String, 
       required: false, 
-      default: 'ðŸ”Ž Esta denÃºncia estÃ¡ em anÃ¡lise por {user} Acusado: ({acusado}) Motivo: ({motivo}) Link: {messageUrl}' 
+      default: '🔎 Esta denúncia está em análise por {user}. Acusado: ({acusado}). Motivo: ({motivo}). Link: {messageUrl}' 
     },
     denuncia_recusada: { 
       type: String, 
       required: false, 
-      default: 'âŒ DenÃºncia recusada por {user}' 
+      default: '❌ Denúncia recusada por {user}' 
     }
   },
   lastUpdated: { 

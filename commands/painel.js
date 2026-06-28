@@ -25,15 +25,15 @@ function getCurrentUser(interaction) {
 }
 
 function getChannelName(interaction, channelId) {
-  if (!channelId) return '`NÃ£o configurado`';
+  if (!channelId) return '`Não configurado`';
   const channel = interaction.guild.channels.cache.get(channelId);
-  return channel ? `<#${channelId}> \`${channelId}\`` : '`Canal nÃ£o encontrado`';
+  return channel ? `<#${channelId}> \`${channelId}\`` : '`Canal não encontrado`';
 }
 
 function getRoleName(interaction, roleId) {
-  if (!roleId) return '`NÃ£o configurado`';
+  if (!roleId) return '`Não configurado`';
   const role = interaction.guild.roles.cache.get(roleId);
-  return role ? `<@&${roleId}> \`${roleId}\`` : '`Cargo nÃ£o encontrado`';
+  return role ? `<@&${roleId}> \`${roleId}\`` : '`Cargo não encontrado`';
 }
 
 
@@ -52,9 +52,9 @@ function createChannelsModal1(currentConfig = null) {
 
 function createChannelsModal2(currentConfig = null) {
   const modal = new ModalBuilder().setCustomId('channels_modal_2').setTitle('Configurar Canais (Parte 2)');
-  const logAdmin = new TextInputBuilder().setCustomId('log_admin_channel').setLabel('Canal de Log AdministraÃ§Ã£o').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.log || '');
-  const analysis = new TextInputBuilder().setCustomId('analysis_channel').setLabel('Canal de AnÃ¡lise').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.analysis || '');
-  const topDaily = new TextInputBuilder().setCustomId('top_daily_channel').setLabel('Canal do Top DiÃ¡rio').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.topDaily || '');
+  const logAdmin = new TextInputBuilder().setCustomId('log_admin_channel').setLabel('Canal de Log Administração').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.log || '');
+  const analysis = new TextInputBuilder().setCustomId('analysis_channel').setLabel('Canal de Análise').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.analysis || '');
+  const topDaily = new TextInputBuilder().setCustomId('top_daily_channel').setLabel('Canal do Top Diário').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.topDaily || '');
 
   return modal.addComponents(
     new ActionRowBuilder().addComponents(logAdmin),
@@ -77,7 +77,7 @@ function createRolesModal1(currentConfig = null) {
 function createRolesModal2(currentConfig = null) {
   const modal = new ModalBuilder().setCustomId('roles_modal_2').setTitle('Configurar Cargos (Parte 2)');
   const admin = new TextInputBuilder().setCustomId('admin_role').setLabel('Cargo Administrador').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.roles?.administrador || '');
-  const resp = new TextInputBuilder().setCustomId('resp_admin_role').setLabel('Cargo ResponsÃ¡vel Admin').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.roles?.responsavel_admin || '');
+  const resp = new TextInputBuilder().setCustomId('resp_admin_role').setLabel('Cargo Responsável Admin').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.roles?.responsavel_admin || '');
 
   return modal.addComponents(
     new ActionRowBuilder().addComponents(admin),
@@ -93,7 +93,7 @@ async function saveChannels1(interaction) {
   const logsId = fields.getTextInputValue('logs_channel');
 
   if (!guild.channels.cache.has(pcId) || !guild.channels.cache.has(mobileId) || !guild.channels.cache.has(logsId)) {
-    return interaction.reply({ content: 'âŒ Um ou mais IDs de canal nÃ£o existem neste servidor.', flags: [64] });
+    return interaction.reply({ content: '❌ Um ou mais IDs de canal não existem neste servidor.', flags: [64] });
   }
 
   await Config.findOneAndUpdate(
@@ -105,7 +105,7 @@ async function saveChannels1(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: 'âœ… Canais Principais atualizados!', flags: [64] });
+  return interaction.reply({ content: '✅ Canais Principais atualizados!', flags: [64] });
 }
 
 async function saveChannels2(interaction) {
@@ -123,7 +123,7 @@ async function saveChannels2(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: 'âœ… Canais Administrativos atualizados!', flags: [64] });
+  return interaction.reply({ content: '✅ Canais Administrativos atualizados!', flags: [64] });
 }
 
 async function saveRoles1(interaction) {
@@ -132,7 +132,7 @@ async function saveRoles1(interaction) {
   const pcId = fields.getTextInputValue('pc_role');
 
   if (!guild.roles.cache.has(permitidoId) || !guild.roles.cache.has(pcId)) {
-    return interaction.reply({ content: 'âŒ Um ou mais IDs de cargo nÃ£o existem.', flags: [64] });
+    return interaction.reply({ content: '❌ Um ou mais IDs de cargo não existem.', flags: [64] });
   }
 
   await Config.findOneAndUpdate(
@@ -144,7 +144,7 @@ async function saveRoles1(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: 'âœ… Cargos Principais atualizados!', flags: [64] });
+  return interaction.reply({ content: '✅ Cargos Principais atualizados!', flags: [64] });
 }
 
 async function saveRoles2(interaction) {
@@ -161,44 +161,44 @@ async function saveRoles2(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: 'âœ… Cargos Administrativos atualizados!', flags: [64] });
+  return interaction.reply({ content: '✅ Cargos Administrativos atualizados!', flags: [64] });
 }
 
 
 async function createPanelSelectMenu(interaction) {
   const options = [
-    { label: 'ðŸ“‹ Ver Todas as ConfiguraÃ§Ãµes', value: 'view_config', description: 'Status atual do servidor', emoji: 'ðŸ“‹' },
-    { label: 'ðŸ“º Canais Principais', value: 'edit_channels_1', description: 'PC, Mobile e Cadeia Staff', emoji: 'ðŸ–¥ï¸' },
-    { label: 'ðŸ“Š Canais Administrativos', value: 'edit_channels_2', description: 'Log Admin, AnÃ¡lise e Top DiÃ¡rio', emoji: 'ðŸ“Š' },
-    { label: 'ðŸ‘¥ Cargos Principais', value: 'edit_roles_1', description: 'Cargos Mobile e PC', emoji: 'ðŸ‘¥' },
-    { label: 'ðŸ‘‘ Cargos Administrativos', value: 'edit_roles_2', description: 'Admin e ResponsÃ¡vel Admin', emoji: 'ðŸ‘‘' }
+    { label: '📋 Ver Todas as Configurações', value: 'view_config', description: 'Status atual do servidor', emoji: '📋' },
+    { label: '📌 Canais Principais', value: 'edit_channels_1', description: 'PC, Mobile e Cadeia Staff', emoji: '🖥️' },
+    { label: '🛠️ Canais Administrativos', value: 'edit_channels_2', description: 'Log Admin, Análise e Top Diário', emoji: '🛠️' },
+    { label: '👥 Cargos Principais', value: 'edit_roles_1', description: 'Cargos Mobile e PC', emoji: '👥' },
+    { label: '🧑‍💼 Cargos Administrativos', value: 'edit_roles_2', description: 'Admin e Responsável Admin', emoji: '🧑‍💼' }
   ];
 
   return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId('panel_menu').setPlaceholder('âš™ï¸ Escolha uma categoria...').addOptions(options)
+    new StringSelectMenuBuilder().setCustomId('panel_menu').setPlaceholder('⚙️ Escolha uma categoria...').addOptions(options)
   );
 }
 
 async function handlePainelCommand(message) {
-  if (!await hasPermission(message)) return message.reply({ content: 'ðŸš« Sem permissÃ£o.', flags: [64] });
+  if (!await hasPermission(message)) return message.reply({ content: '❌ Sem permissão.', flags: [64] });
 
   const config = await Config.findOne({ guildId: message.guild.id });
   const menu = await createPanelSelectMenu(message);
 
   const embed = new EmbedBuilder()
     .setColor('#5865F2')
-    .setTitle('âš™ï¸ Painel de ConfiguraÃ§Ãµes')
+    .setTitle('⚙️ Painel de Configurações')
     .setDescription([
-      '**ðŸ“º Canais:**',
-      `> ðŸ–¥ï¸ **PC:** ${getChannelName(message, config?.channels?.pc)}`,
-      `> ðŸ“± **Mobile:** ${getChannelName(message, config?.channels?.mobile)}`,
-      `> ðŸ“ **Cadeia Staff:** ${getChannelName(message, config?.channels?.logs)}`,
+      '**📌 Canais:**',
+      `> 🖥️ **PC:** ${getChannelName(message, config?.channels?.pc)}`,
+      `> 📱 **Mobile:** ${getChannelName(message, config?.channels?.mobile)}`,
+      `> 🧾 **Cadeia Staff:** ${getChannelName(message, config?.channels?.logs)}`,
       '',
-      '**ðŸ‘¥ Cargos:**',
-      `> ðŸ“± **Mobile:** ${getRoleName(message, config?.roles?.permitido)}`,
-      `> ðŸ–¥ï¸ **PC:** ${getRoleName(message, config?.roles?.pc)}`,
+      '**👥 Cargos:**',
+      `> 📱 **Mobile:** ${getRoleName(message, config?.roles?.permitido)}`,
+      `> 🖥️ **PC:** ${getRoleName(message, config?.roles?.pc)}`,
       '',
-      'Escolha uma opÃ§Ã£o no menu abaixo para editar.'
+      'Escolha uma opção no menu abaixo para editar.'
     ].join('\n'))
     .setTimestamp()
     .setFooter({ text: 'Esta mensagem expira em 5 minutos.' });
@@ -209,25 +209,25 @@ async function handlePainelCommand(message) {
 
 async function showConfig(interaction) {
   const config = await Config.findOne({ guildId: interaction.guild.id });
-  if (!config) return interaction.reply({ content: 'âš ï¸ Configure o servidor primeiro.', flags: [64] });
+  if (!config) return interaction.reply({ content: '⚠️ Configure o servidor primeiro.', flags: [64] });
 
   const embed = new EmbedBuilder()
     .setColor('#5865F2')
-    .setTitle('ðŸ› ï¸ ConfiguraÃ§Ãµes Atuais')
+    .setTitle('📋 Configurações Atuais')
     .addFields(
-      { name: 'ðŸ“º Canais', value: [
-        `ðŸ–¥ï¸ PC: <#${config.channels.pc}>`,
-        `ðŸ“± Mobile: <#${config.channels.mobile}>`,
-        `ðŸ“ Cadeia: <#${config.channels.logs}>`,
-        `ðŸ“‹ Log Admin: <#${config.channels.log || 'N/A'}>`,
-        `ðŸ—‚ï¸ AnÃ¡lise: <#${config.channels.analysis || 'N/A'}>`,
-        `ðŸ“Š Top DiÃ¡rio: <#${config.channels.topDaily || 'N/A'}>`
+      { name: '📌 Canais', value: [
+        `🖥️ PC: <#${config.channels.pc}>`,
+        `📱 Mobile: <#${config.channels.mobile}>`,
+        `🧾 Cadeia: <#${config.channels.logs}>`,
+        `📋 Log Admin: <#${config.channels.log || 'N/A'}>`,
+        `🔎 Análise: <#${config.channels.analysis || 'N/A'}>`,
+        `🏆 Top Diário: <#${config.channels.topDaily || 'N/A'}>`
       ].join('\n') },
-      { name: 'ðŸŽ­ Cargos', value: [
-        `ðŸ“± Mobile: <@&${config.roles.permitido}>`,
-        `ðŸ–¥ï¸ PC: <@&${config.roles.pc}>`,
-        `ðŸ‘‘ Admin: <@&${config.roles.administrador || 'N/A'}>`,
-        `ðŸ‘¤ Resp Admin: <@&${config.roles.responsavel_admin || 'N/A'}>`
+      { name: '🎖️ Cargos', value: [
+        `📱 Mobile: <@&${config.roles.permitido}>`,
+        `🖥️ PC: <@&${config.roles.pc}>`,
+        `🧑‍💼 Admin: <@&${config.roles.administrador || 'N/A'}>`,
+        `🧑‍🔧 Resp Admin: <@&${config.roles.responsavel_admin || 'N/A'}>`
       ].join('\n') }
     );
 

@@ -24,7 +24,7 @@ async function fetchYouTubeTitle(videoId) {
     const data = await response.json();
     return data.title || null;
   } catch (error) {
-    console.error('Erro ao buscar tÃ­tulo do YouTube:', error);
+    console.error('Erro ao buscar título do YouTube:', error);
     return null;
   }
 }
@@ -44,19 +44,19 @@ async function sendLog(message, motivo, videoTitle) {
     const logChannelId = configDoc?.channels?.log || configDoc?.channels?.logs || null;
 
     if (!logChannelId) {
-      console.error('Canal de log nÃ£o encontrado em config.channels.log / config.channels.logs');
+      console.error('Canal de log não encontrado em config.channels.log / config.channels.logs');
       return;
     }
 
     const logChannel = await message.guild.channels.fetch(logChannelId).catch(() => null);
     if (!logChannel) {
-      console.error('Canal de log nÃ£o encontrado ou sem permissÃ£o de acesso.');
+      console.error('Canal de log não encontrado ou sem permissão de acesso.');
       return;
     }
 
     const embed = new EmbedBuilder()
       .setColor('#d7263d')
-      .setTitle('ðŸš¨ Registro de RemoÃ§Ã£o de Mensagem do YouTube')
+      .setTitle('🛡️ Registro de Remoção de Mensagem do YouTube')
       .setAuthor({
         name: `${message.author.tag} (${message.author.id})`,
         iconURL: message.author.displayAvatarURL(),
@@ -65,11 +65,11 @@ async function sendLog(message, motivo, videoTitle) {
       .setDescription(
         `Mensagem removida no canal <#${message.channel.id}>\n` +
         `[Acessar canal](https://discord.com/channels/${message.guild.id}/${message.channel.id})\n\n` +
-        `**Motivo:** ${motivo}${videoTitle ? ` â€” *${videoTitle}*` : ''}`
+        `**Motivo:** ${motivo}${videoTitle ? ` — *${videoTitle}*` : ''}`
       )
       .addFields(
-        { name: 'UsuÃ¡rio',           value: `<@${message.author.id}>`,                        inline: true  },
-        { name: 'ID do UsuÃ¡rio',     value: message.author.id,                                inline: true  },
+        { name: 'Usuário',           value: `<@${message.author.id}>`,                        inline: true  },
+        { name: 'ID do Usuário',     value: message.author.id,                                inline: true  },
         { name: 'Staff (Bot)',        value: `<@${message.client.user.id}>`,                   inline: true  },
         { name: 'Mensagem Original', value: message.content?.slice(0, 1024) || 'N/A',         inline: false },
         { name: 'Data/Hora',         value: dateUtils.getBrasiliaDateTime(),                   inline: true  },
@@ -78,7 +78,7 @@ async function sendLog(message, motivo, videoTitle) {
         { name: 'Servidor',          value: `${message.guild.name} (${message.guild.id})`,    inline: false },
       )
       .setFooter({
-        text: 'Log de auditoria â€¢ Sistema Althea',
+        text: 'Log de auditoria • Sistema Althea',
         iconURL: message.client.user.displayAvatarURL(),
       })
       .setTimestamp();
@@ -94,17 +94,17 @@ async function handleDivulgacaoIndevida(message, videoTitle) {
 
   const embedCanal = new EmbedBuilder()
     .setColor('#d7263d')
-    .setTitle('ðŸš« DivulgaÃ§Ã£o Indevida de ConteÃºdo do YouTube')
+    .setTitle('📵 Divulgação Indevida de Conteúdo do YouTube')
     .setDescription(
-      `<@${message.author.id}>, sua mensagem foi removida por divulgaÃ§Ã£o indevida de conteÃºdo do YouTube.`
+      `<@${message.author.id}>, sua mensagem foi removida por divulgação indevida de conteúdo do YouTube.`
     )
     .setImage(GIFS_YOUTUBE.divulgacao)
     .addFields(
-      { name: 'TÃ­tulo do VÃ­deo', value: videoTitle || 'NÃ£o identificado', inline: false },
-      { name: 'HorÃ¡rio',         value: dateUtils.getBrasiliaDateTime(),   inline: true  },
+      { name: 'Título do Vídeo', value: videoTitle || 'Não identificado', inline: false },
+      { name: 'Horário',         value: dateUtils.getBrasiliaDateTime(),   inline: true  },
       { name: 'Canal',           value: `<#${message.channel.id}>`,        inline: true  },
     )
-    .setFooter({ text: 'Mensagem removida automaticamente â€¢ Sistema Althea' })
+    .setFooter({ text: 'Mensagem removida automaticamente • Sistema Althea' })
     .setTimestamp();
 
   await message.channel.send({
@@ -113,7 +113,7 @@ async function handleDivulgacaoIndevida(message, videoTitle) {
   }).then(msg => setTimeout(() => msg.delete().catch(() => {}), TEMPO_AVISO_CANAL))
     .catch(() => {});
 
-  await sendLog(message, 'DivulgaÃ§Ã£o indevida de conteÃºdo do YouTube', videoTitle);
+  await sendLog(message, 'Divulgação indevida de conteúdo do YouTube', videoTitle);
 }
 
 async function handleHLDivulgacao(message, videoTitle) {
@@ -121,17 +121,17 @@ async function handleHLDivulgacao(message, videoTitle) {
 
   const embedCanal = new EmbedBuilder()
     .setColor('#d7263d')
-    .setTitle('ðŸš« DivulgaÃ§Ã£o Indevida de ConteÃºdo do YouTube')
+    .setTitle('📵 Divulgação Indevida de Conteúdo do YouTube')
     .setDescription(
-      `<@${message.author.id}>, sua mensagem foi removida por divulgaÃ§Ã£o indevida de vÃ­deo do YouTube.`
+      `<@${message.author.id}>, sua mensagem foi removida por divulgação indevida de vídeo do YouTube.`
     )
     .setImage(GIFS_YOUTUBE.hl)
     .addFields(
-      { name: 'TÃ­tulo do VÃ­deo', value: videoTitle || 'NÃ£o identificado', inline: false },
-      { name: 'HorÃ¡rio',         value: dateUtils.getBrasiliaDateTime(),   inline: true  },
+      { name: 'Título do Vídeo', value: videoTitle || 'Não identificado', inline: false },
+      { name: 'Horário',         value: dateUtils.getBrasiliaDateTime(),   inline: true  },
       { name: 'Canal',           value: `<#${message.channel.id}>`,        inline: true  },
     )
-    .setFooter({ text: 'Mensagem removida automaticamente â€¢ Sistema Althea' })
+    .setFooter({ text: 'Mensagem removida automaticamente • Sistema Althea' })
     .setTimestamp();
 
   await message.channel.send({
@@ -142,24 +142,24 @@ async function handleHLDivulgacao(message, videoTitle) {
 
   const embedDM = new EmbedBuilder()
     .setColor('#d7263d')
-    .setTitle('ðŸš« DivulgaÃ§Ã£o Indevida de ConteÃºdo do YouTube')
-    .setDescription('Sua mensagem foi removida por divulgaÃ§Ã£o indevida de vÃ­deo do YouTube.')
+    .setTitle('📵 Divulgação Indevida de Conteúdo do YouTube')
+    .setDescription('Sua mensagem foi removida por divulgação indevida de vídeo do YouTube.')
     .setImage(GIFS_YOUTUBE.hl)
     .addFields(
-      { name: 'TÃ­tulo do VÃ­deo', value: videoTitle || 'NÃ£o identificado', inline: false },
+      { name: 'Título do Vídeo', value: videoTitle || 'Não identificado', inline: false },
       { name: 'Servidor',        value: message.guild.name,               inline: true  },
-      { name: 'HorÃ¡rio',         value: dateUtils.getBrasiliaDateTime(),   inline: true  },
+      { name: 'Horário',         value: dateUtils.getBrasiliaDateTime(),   inline: true  },
     )
-    .setFooter({ text: 'Mensagem removida automaticamente â€¢ Sistema Althea' })
+    .setFooter({ text: 'Mensagem removida automaticamente • Sistema Althea' })
     .setTimestamp();
 
   await message.author.send({ embeds: [embedDM] }).catch(() => {});
 
-  await sendLog(message, 'RemoÃ§Ã£o de vÃ­deo do YouTube (HL)', videoTitle);
+  await sendLog(message, 'Remoção de vídeo do YouTube (HL)', videoTitle);
 }
 
 async function handleYoutubeDenuncia(message) {
-  const isDenuncia = message.channel?.name?.toLowerCase().includes('denÃºncia');
+  const isDenuncia = message.channel?.name?.toLowerCase().includes('denúncia');
   if (!isDenuncia || !message.content) return false;
 
   const links = findYouTubeLinks(message.content);
@@ -171,7 +171,7 @@ async function handleYoutubeDenuncia(message) {
     if (videoId) title = await fetchYouTubeTitle(videoId);
 
     if ((title && title.toLowerCase().includes('hl')) || !title) {
-      await handleHLDivulgacao(message, title || 'Link invÃ¡lido ou indevido');
+      await handleHLDivulgacao(message, title || 'Link inválido ou indevido');
       return true;
     }
   }

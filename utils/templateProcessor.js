@@ -5,9 +5,9 @@ const Config = require('../models/Config');
 class TemplateProcessor {
   constructor() {
     this.defaultTemplates = {
-      denuncia_aceita: 'âž¥ DenÃºncia aceita Acusado ({acusadoId}) tomarÃ¡ puniÃ§Ã£o por ({motivo}) Data {dataPunicao} Link: {messageUrl}',
-      denuncia_analise: 'ðŸ”Ž Esta denÃºncia estÃ¡ em anÃ¡lise por {user} Acusado: ({acusado}) Motivo: ({motivo}) Link: {messageUrl}',
-      denuncia_recusada: 'âŒ DenÃºncia recusada por {user}'
+      denuncia_aceita: '✔️ Denúncia aceita. Acusado ({acusadoId}) tomará punição por ({motivo}). Data: {dataPunicao}. Link: {messageUrl}',
+      denuncia_analise: '🔎 Esta denúncia está em análise por {user}. Acusado: ({acusado}). Motivo: ({motivo}). Link: {messageUrl}',
+      denuncia_recusada: '❌ Denúncia recusada por {user}'
     };
   }
 
@@ -21,7 +21,7 @@ class TemplateProcessor {
         template = config.templates[templateType];
       }
       
-      // Substitui as variÃ¡veis no template
+      // Substitui as variáveis no template
       let processedTemplate = template;
       for (const [key, value] of Object.entries(variables)) {
         const placeholder = `{${key}}`;
@@ -31,7 +31,7 @@ class TemplateProcessor {
       return processedTemplate;
     } catch (error) {
       console.error('Erro ao processar template:', error);
-      // Retorna template padrÃ£o em caso de erro
+      // Retorna template padrão em caso de erro
       return this.processDefaultTemplate(templateType, variables);
     }
   }
@@ -96,7 +96,7 @@ class TemplateProcessor {
   getTemplateWarnings(template, templateType) {
     const warnings = [];
     
-    // Verifica se tem variÃ¡veis nÃ£o utilizadas
+    // Verifica se tem variáveis não utilizadas
     const availableVariables = this.getAvailableVariables(templateType);
     const usedVariables = template.match(/\{([^}]+)\}/g) || [];
     const unusedVariables = availableVariables.filter(v => 
@@ -104,16 +104,16 @@ class TemplateProcessor {
     );
     
     if (unusedVariables.length > 0) {
-      warnings.push(`VariÃ¡veis nÃ£o utilizadas: ${unusedVariables.join(', ')}`);
+      warnings.push(`Variáveis não utilizadas: ${unusedVariables.join(', ')}`);
     }
     
-    // Verifica se tem variÃ¡veis invÃ¡lidas
+    // Verifica se tem variáveis inválidas
     const invalidVariables = usedVariables.filter(v => 
       !availableVariables.includes(v.replace(/[{}]/g, ''))
     );
     
     if (invalidVariables.length > 0) {
-      warnings.push(`VariÃ¡veis invÃ¡lidas: ${invalidVariables.join(', ')}`);
+      warnings.push(`Variáveis inválidas: ${invalidVariables.join(', ')}`);
     }
     
     return warnings;
