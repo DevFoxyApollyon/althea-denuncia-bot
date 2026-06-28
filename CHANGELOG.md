@@ -1,5 +1,5 @@
 ﻿// CHANGELOG.md
-# ðŸ“¦ Changelog
+# 📋 Changelog
 
 Todas as mudanÃ§as relevantes deste projeto serÃ£o documentadas neste arquivo.
 
@@ -10,7 +10,7 @@ Este projeto segue o padrÃ£o de versionamento semÃ¢ntico (SemVer).
 ## [1.2.1] - 2026-06-27
 ### ðŸ“ DocumentaÃ§Ã£o e preparaÃ§Ã£o de release
 
-#### âœ¨ AtualizaÃ§Ãµes
+#### ✨ Atualizações
 - Ajuste de documentaÃ§Ã£o de fluxo, botÃµes e modelos para a release 1.2.1
 - OrganizaÃ§Ã£o do repositÃ³rio para publicaÃ§Ã£o no GitHub
 - PreparaÃ§Ã£o do projeto para versionamento e distribuiÃ§Ã£o consistentes
@@ -39,7 +39,7 @@ Este projeto segue o padrÃ£o de versionamento semÃ¢ntico (SemVer).
 - CorreÃ§Ã£o de imports ausentes em `Handlers/interactionHandler.js`
 - RemoÃ§Ã£o de handlers nÃ£o implementados (`atualizar`, `detalhe`)
 
-#### âœ¨ Melhorias
+#### ✨ Melhorias
 - CÃ³digo mais limpo e organizado
 - ReduÃ§Ã£o de avisos de deprecaÃ§Ã£o
 - Melhor separaÃ§Ã£o de responsabilidades
@@ -49,7 +49,7 @@ Este projeto segue o padrÃ£o de versionamento semÃ¢ntico (SemVer).
 ## [1.0.0] - 2026-01-25
 ### ðŸŽ‰ LanÃ§amento Inicial
 
-#### âœ¨ Adicionado
+#### ✨ Adicionado
 - Sistema completo de denÃºncias com organizaÃ§Ã£o automÃ¡tica em threads
 - BotÃµes interativos (PC, Mobile, Minhas DenÃºncias, CorreÃ§Ã£o)
 - Modal de criaÃ§Ã£o de denÃºncia

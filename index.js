@@ -49,9 +49,9 @@ const client = new Client({
 
 const log = {
     info:    (msg) => console.log(`${chalk.blue('â„¹')} ${chalk.gray('[INFO]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('âœ”')} ${chalk.gray('[SUCESSO]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('âš ')} ${chalk.gray('[AVISO]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('âœ–')} ${chalk.gray('[ERRO]')} ${msg}`),
+    success: (msg) => console.log(`${chalk.green('✅')} ${chalk.gray('[SUCESSO]')} ${msg}`),
+    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
+    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
     system:  (msg) => console.log(`${chalk.magenta('âš™')} ${chalk.gray('[SISTEMA]')} ${msg}`)
 };
 
@@ -284,7 +284,7 @@ client.on('interactionCreate', async (interaction) => {
 
         try {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: 'âŒ Erro interno.', flags: [MessageFlags.Ephemeral] });
+                await interaction.reply({ content: '❌ Erro interno.', flags: [MessageFlags.Ephemeral] });
             }
         } catch (_) {}
     }

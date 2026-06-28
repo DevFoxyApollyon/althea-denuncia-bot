@@ -93,7 +93,7 @@ const CONTEUDO_INVALIDO = [
     // Palavras genÃ©ricas sem sentido como motivo/acusado
     'princesa', 'lixo',
     // Textos de xingamento direto no campo (jÃ¡ cobertos por PALAVROES, mas redundÃ¢ncia Ã© seguranÃ§a)
-    'vai tomar no cu', 'fdp',
+    'vai tomar no cu', 'fdp','macacada','macaco',
 ];
 
 const denunciaCooldowns = new Map();
@@ -122,7 +122,7 @@ function createDenunciaButtons() {
 function validarPalavrasProibidas(texto) {
     const lower = texto.toLowerCase();
     const encontrada = PALAVRAS_BLOQUEADAS.find(p => lower.includes(p));
-    if (encontrada) return 'âŒ Sua denÃºncia nÃ£o pÃ´de ser enviada. Verifique os campos e tente novamente.';
+    if (encontrada) return '❌ Sua denúncia não pôde ser enviada. Verifique os campos e tente novamente.';
     return null;
 }
 
@@ -130,61 +130,79 @@ function validarPalavrasProibidas(texto) {
 function validarPalavroes(texto, nomeCampo) {
     const lower = texto.toLowerCase();
     const encontrado = PALAVROES.find(p => lower.includes(p));
-    if (encontrado) return `âŒ O campo **${nomeCampo}** contÃ©m uma palavra ou expressÃ£o ofensiva. Utilize linguagem adequada ao preencher a denÃºncia.`;
+    if (encontrado) return `❌ O campo **${nomeCampo}** contém uma palavra ou expressão ofensiva. Utilize linguagem adequada ao preencher a denúncia.`;
     return null;
 }
 
 function validarMotivo(motivo) {
     BROKEN_LINK_REGEX.lastIndex = 0;
-    if (BROKEN_LINK_REGEX.test(motivo)) return 'âŒ O campo **Motivo** contÃ©m um link invÃ¡lido. NÃ£o Ã© permitido incluir links no motivo.';
+    if (BROKEN_LINK_REGEX.test(motivo)) return '❌ O campo **Motivo** contém um link inválido. Não é permitido incluir links no motivo.';
     URL_REGEX.lastIndex = 0;
-    if (URL_REGEX.test(motivo)) return 'âŒ O campo **Motivo** nÃ£o pode conter links. Descreva o motivo em texto.';
+    if (URL_REGEX.test(motivo)) return '❌ O campo **Motivo** não pode conter links. Descreva o motivo em texto.';
     return null;
 }
 
 function validarMotivoConteudo(motivo) {
     const lower = motivo.trim().toLowerCase();
-    if (motivo.trim().length < 2) return 'âŒ O campo **Motivo** Ã© muito curto. Digite pelo menos 2 caracteres.';
+    if (motivo.trim().length < 2) return '❌ O campo **Motivo** é muito curto. Digite pelo menos 2 caracteres.';
     const invalido = CONTEUDO_INVALIDO.find(p => lower.includes(p.toLowerCase()));
-    if (invalido) return 'âŒ O campo **Motivo** contÃ©m um texto invÃ¡lido. Descreva claramente a infraÃ§Ã£o cometida, sem textos desnecessÃ¡rios.';
+    if (invalido) return '❌ O campo **Motivo** contém um texto inválido. Descreva claramente a infração cometida, sem textos desnecessários.';
     return null;
 }
 
 function validarAcusadoConteudo(acusado) {
-    if (acusado.trim().length < 1) return 'âŒ O campo **Acusado** estÃ¡ vazio.';
+    if (acusado.trim().length < 1) return '❌ O campo **Acusado** está vazio.';
     const lower = acusado.trim().toLowerCase();
     const partes = lower.split('+').map(s => s.trim());
     const invalido = CONTEUDO_INVALIDO.find(p => {
         const pl = p.toLowerCase();
         return partes.includes(pl) || lower.includes(pl);
     });
-    if (invalido) return 'âŒ O campo **Acusado** contÃ©m um valor invÃ¡lido. Insira apenas IDs numÃ©ricos reais do jogo.';
+    if (invalido) return '❌ O campo **Acusado** contém um valor inválido. Insira apenas IDs numéricos reais do jogo.';
     return null;
 }
 
-function validarProvasLinks(provas) {
+function validarProvasLinks(provas, currentGuildId) {
     BROKEN_LINK_REGEX.lastIndex = 0;
     if (BROKEN_LINK_REGEX.test(provas)) {
-        return 'âŒ O campo **Provas** contÃ©m um link invÃ¡lido (ex: `htts://...`, `ttps://...`). Certifique-se de copiar o link completo comeÃ§ando com `https://`.';
+        return '❌ O campo **Provas** contém um link inválido (ex: `htts://...`, `ttps://...`). Certifique-se de copiar o link completo começando com `https://`.';
     }
 
     URL_REGEX.lastIndex = 0;
     const links = provas.match(URL_REGEX);
     if (links) {
+        const invitePattern = /https?:\/\/(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[^\s]+/i;
+        const blockedInvite = links.find(link => invitePattern.test(link));
+        if (blockedInvite) {
+                return '❌ O campo **Provas** contém um link de convite do Discord. Convites para outros servidores não são permitidos.';
+        }
         const allowedDomains = [
             'youtube.com/',
             'youtu.be/',
-            'discord.com/',
-            'discord.gg/',
-            'discordapp.com/',
             'cdn.discordapp.com/',
             'ptb.discord.com/',
             'canary.discord.com/',
             'discord.media/',
             'media.discordapp.net/'
         ];
-        const bloqueado = links.find(link => !allowedDomains.some(domain => link.includes(domain)));
-        if (bloqueado) return 'âŒ O campo **Provas** contÃ©m um link nÃ£o permitido. Apenas links do YouTube ou domÃ­nios oficiais do Discord sÃ£o aceitos.';
+
+        for (const link of links) {
+            // Allow YouTube and CDN/media links
+            if (allowedDomains.some(domain => link.includes(domain))) continue;
+
+            // Handle discord channel links specifically: only allow if same guild
+            const channelLinkMatch = link.match(/discord(?:app)?\.com\/channels\/(\d+)\//i);
+            if (channelLinkMatch) {
+                const linkedGuildId = channelLinkMatch[1];
+                if (linkedGuildId !== String(currentGuildId)) {
+                    return '❌ O campo **Provas** contém um link para outro servidor Discord. Links de outros servidores não são permitidos.';
+                }
+                continue;
+            }
+
+            // Any other link that is not explicitly allowed is rejected
+            return '❌ O campo **Provas** contém um link não permitido. Apenas links do YouTube ou domínios oficiais do Discord (neste servidor) são aceitos.';
+        }
     }
 
     return null;
@@ -200,7 +218,7 @@ async function validarVideosHL(provas) {
         try {
             const title = await fetchYouTubeTitle(videoId);
             if (title && title.toLowerCase().includes('hl')) {
-                return 'âŒ Um dos vÃ­deos enviados no campo **Provas** nÃ£o Ã© permitido. Verifique os links e tente novamente.';
+                return '❌ Um dos vídeos enviados no campo **Provas** não é permitido. Verifique os links e tente novamente.';
             }
         } catch {}
     }
@@ -213,7 +231,7 @@ async function handleDenunciaCommand(message) {
         const config = await getCachedConfig(message.guild.id, Config);
         const hasPerm = message.member.roles.cache.has(config.roles.responsavel_admin);
         
-        if (!hasPerm && message.author.id !== SUPORTE_BOT_ID) return message.reply('âŒ Sem permissÃ£o.');
+        if (!hasPerm && message.author.id !== SUPORTE_BOT_ID) return message.reply('❌ Sem permissão.');
 
         const embedDesc = [
             '### FaÃ§a sua DenÃºncia',
@@ -340,15 +358,15 @@ async function handleDenunciaSubmit(interaction, platform) {
         const denunciante = inputDigitado || contaSalva;
 
         if (!denunciante) {
-            return await interaction.editReply({ content: 'âŒ NÃ£o foi possÃ­vel identificar o denunciante. Tente novamente.' });
+            return await interaction.editReply({ content: '❌ Não foi possível identificar o denunciante. Tente novamente.' });
         }
 
         if (!/^\d+$/.test(denunciante)) {
-            return await interaction.editReply({ content: 'âŒ O campo **Denunciante** deve conter apenas nÃºmeros.' });
+            return await interaction.editReply({ content: '❌ O campo **Denunciante** deve conter apenas números.' });
         }
 
         if (denunciante.length > 15) {
-            return await interaction.editReply({ content: 'âŒ O campo **Denunciante** deve ter no mÃ¡ximo 15 dÃ­gitos.' });
+            return await interaction.editReply({ content: '❌ O campo **Denunciante** deve ter no máximo 15 dígitos.' });
         }
 
         const acusado = interaction.fields.getTextInputValue('acusado_input');
@@ -356,7 +374,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         let provas    = interaction.fields.getTextInputValue('provas_input') || 'TÃ³pico';
 
         if (!/^[a-zA-Z0-9+ ]+$/.test(acusado)) {
-            return await interaction.editReply({ content: 'âŒ O campo **Acusado** sÃ³ pode conter letras, nÃºmeros e o sÃ­mbolo "+" para mÃºltiplos IDs.' });
+            return await interaction.editReply({ content: '❌ O campo **Acusado** só pode conter letras, números e o símbolo "+" para múltiplos IDs.' });
         }
 
         // ValidaÃ§Ã£o de conteÃºdo do acusado
@@ -385,7 +403,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         if (erroPalavraoMotivo) return await interaction.editReply({ content: erroPalavraoMotivo });
 
         if (provas !== 'TÃ³pico') {
-            const erroProvas = validarProvasLinks(provas);
+            const erroProvas = validarProvasLinks(provas, interaction.guild.id);
             if (erroProvas) return await interaction.editReply({ content: erroProvas });
 
             const erroHL = await validarVideosHL(provas);
@@ -397,7 +415,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         const contaDenunciante = denunciante.toLowerCase();
         const eAutodenunciando = acusadoIds.some(id => id.toLowerCase() === contaDenunciante);
         if (eAutodenunciando) {
-            return await interaction.editReply({ content: 'âŒ VocÃª nÃ£o pode denunciar a si mesmo.' });
+            return await interaction.editReply({ content: '❌ Você não pode denunciar a si mesmo.' });
         }
 
         let acusadoTexto = '';

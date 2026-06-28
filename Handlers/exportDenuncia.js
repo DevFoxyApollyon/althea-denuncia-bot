@@ -497,7 +497,7 @@ async function handleExportButton(interaction) {
   try {
     if (!interaction.channel.isThread()) {
       return interaction.editReply({
-        content: 'âŒ Este comando sÃ³ pode ser usado dentro do tÃ³pico de uma denÃºncia.',
+        content: '❌ Este comando só pode ser usado dentro do tópico de uma denúncia.',
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -507,7 +507,7 @@ async function handleExportButton(interaction) {
 
     if (!config) {
       return interaction.editReply({
-        content: 'âŒ ConfiguraÃ§Ãµes do servidor nÃ£o encontradas.',
+        content: '❌ Configurações do servidor não encontradas.',
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -515,7 +515,7 @@ async function handleExportButton(interaction) {
     const requiredRoleId = config.roles?.responsavel_admin;
     if (!requiredRoleId || !interaction.member.roles.cache.has(requiredRoleId)) {
       return interaction.editReply({
-        content: `âŒ VocÃª nÃ£o tem permissÃ£o para usar este botÃ£o. Apenas membros com o cargo de responsÃ¡vel (${requiredRoleId ? `<@&${requiredRoleId}>` : 'ID nÃ£o configurado'}) podem finalizar e exportar denÃºncias.`,
+        content: `❌ Você não tem permissão para usar este botão. Apenas membros com o cargo de responsável (${requiredRoleId ? `<@&${requiredRoleId}>` : 'ID não configurado'}) podem finalizar e exportar denúncias.`,
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -525,7 +525,7 @@ async function handleExportButton(interaction) {
 
     if (!denuncia) {
       return interaction.editReply({
-        content: 'âŒ DenÃºncia nÃ£o encontrada no banco de dados.',
+        content: '❌ Denúncia não encontrada no banco de dados.',
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -769,7 +769,7 @@ async function handleExportButton(interaction) {
       await logMessage.edit({ embeds: [logEmbed] });
 
       await interaction.editReply({
-        content: `âœ… DenÃºncia exportada e arquivada em **${zipCount}** arquivo(s) ZIP. O tÃ³pico foi trancado e arquivado.\n\nðŸ”— **Link do Log Principal:** [Clique Aqui](${logMessage.url})`,
+        content: `✅ Denúncia exportada e arquivada em **${zipCount}** arquivo(s) ZIP. O tópico foi trancado e arquivado.\n\n📁 **Link do Log Principal:** [Clique Aqui](${logMessage.url})`,
         flags: MessageFlags.Ephemeral,
       });
     } else {
@@ -782,13 +782,13 @@ async function handleExportButton(interaction) {
         });
 
         await interaction.editReply({
-          content: `âœ… DenÃºncia exportada e arquivada. O **canal de logs nÃ£o foi encontrado**, os arquivos foram enviados para sua DM.`,
+          content: `✅ Denúncia exportada e arquivada. O **canal de logs não foi encontrado**, os arquivos foram enviados para sua DM.`,
           flags: MessageFlags.Ephemeral,
         });
       } catch (dmError) {
         console.error('Erro ao enviar log por DM:', dmError);
         await interaction.editReply({
-          content: `âŒ **O canal de logs e sua DM falharam.** NÃ£o foi possÃ­vel salvar os arquivos.`,
+          content: `❌ **O canal de logs e sua DM falharam.** Não foi possível salvar os arquivos.`,
           flags: MessageFlags.Ephemeral,
         });
         logMessage = null;
@@ -872,7 +872,7 @@ async function handleExportButton(interaction) {
     console.error('Erro fatal ao exportar denÃºncia:', error);
 
     const errorMessage =
-      `âŒ Ocorreu um erro fatal ao exportar a denÃºncia. O arquivamento pode nÃ£o ter sido concluÃ­do.\n` +
+      `❌ Ocorreu um erro fatal ao exportar a denúncia. O arquivamento pode não ter sido concluído.\n` +
       `Detalhes: \`\`\`${String(error?.message || error).substring(0, 1500)}\`\`\``;
 
     await interaction.editReply({

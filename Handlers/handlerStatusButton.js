@@ -49,8 +49,8 @@ async function safeReplyOrEdit(interaction, payload) {
 
 const STATUS_PATTERNS = [
   'ðŸ”Ž Esta denÃºncia estÃ¡ em anÃ¡lise por',
-  'âœ… DenÃºncia aceita por',
-  'âŒ DenÃºncia recusada por',
+  '✅ Denúncia aceita por',
+  '❌ Denúncia recusada por',
 ];
 
 const REANALISE_PATTERNS = [
@@ -75,13 +75,13 @@ function isOurBotAnaliseMessage(msg) {
 function isOurBotAceitaMessage(msg) {
   if (!msg?.author?.bot) return false;
   const content = String(msg.content || '');
-  return content.includes('âœ… DenÃºncia aceita por');
+  return content.includes('✅ Denúncia aceita por');
 }
 
 function isOurBotRecusadaMessage(msg) {
   if (!msg?.author?.bot) return false;
   const content = String(msg.content || '');
-  return content.includes('âŒ DenÃºncia recusada por');
+  return content.includes('❌ Denúncia recusada por');
 }
 
 function isOurBotReanaliseMessage(msg) {
@@ -174,7 +174,7 @@ async function cleanupStatusMessages(targetChannel, cleanupType = 'all') {
 }
 
 const statusConfig = {
-  aceitar: { emoji: 'âœ…', message: 'DenÃºncia aceita', color: '#00FF00' },
+  aceitar: { emoji: '✅', message: 'Denúncia aceita', color: '#00FF00' },
   recusar: { emoji: 'âŒ', message: 'DenÃºncia recusada', color: '#FF0000' },
   analiser: { emoji: 'ðŸ”Ž', message: 'DenÃºncia em anÃ¡lise', color: '#FFA500' },
   reivindicar: { emoji: 'ðŸ“', message: 'DenÃºncia reivindicada', color: '#1E90FF' },
