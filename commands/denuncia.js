@@ -102,20 +102,20 @@ const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 
 function createStatusButtons() {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('reivindicar').setLabel('Reivindicar').setEmoji('ðŸ“').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('analiser').setLabel('Analisar').setEmoji('ðŸ”Ž').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('aceitar').setLabel('Aceitar').setEmoji('âœ…').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('recusar').setLabel('Recusar').setEmoji('âŒ').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('finalizar_denuncia').setLabel('Finalizar').setEmoji('ðŸ“¦').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('reivindicar').setLabel('Reivindicar').setEmoji('🤝').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('analiser').setLabel('Analisar').setEmoji('🔍').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('aceitar').setLabel('Aceitar').setEmoji('✅').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('recusar').setLabel('Recusar').setEmoji('❌').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('finalizar_denuncia').setLabel('Finalizar').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
     );
 }
 
 function createDenunciaButtons() {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('denuncia_pc').setLabel('DenÃºncia PC').setEmoji('ðŸ’»').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('denuncia_mobile').setLabel('DenÃºncia Mobile').setEmoji('ðŸ“±').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas DenÃºncias').setEmoji('ðŸ“‹').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('abrir_input_id_log_aceite').setLabel('CorreÃ§Ã£o').setEmoji('ðŸ› ï¸').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('denuncia_pc').setLabel('Denúncia PC').setEmoji('➱').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('denuncia_mobile').setLabel('Denúncia Mobile').setEmoji('➱').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas Denúncias').setEmoji('📂').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('abrir_input_id_log_aceite').setLabel('Correção').setEmoji('🛠️').setStyle(ButtonStyle.Danger)
     );
 }
 
@@ -439,19 +439,19 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         const textoDenuncia = [
             `|| ${interaction.user} ||`,
-            `âž± **Denunciante**: \`${denunciante}\``,
-            `âž± **Acusado**: ${acusadoTexto}`,
-            `âž± **Motivo**: \`${motivo}\``,
-            `âž± **Prova(s)**: ${provas}`,
-            `âž± **Status**: \`Pendente\``
+            `➱ **Denunciante**: \`${denunciante}\``,
+            `➱ **Acusado**: ${acusadoTexto}`,
+            `➱ **Motivo**: \`${motivo}\``,
+            `➱ **Prova(s)**: ${provas}`,
+            `➱ **Status**: \`Pendente\``
         ].join('\n');
 
         const textoDenunciaTopico = [
             `|| ${interaction.user} ||`,
-            `âž± **Denunciante**: \`${denunciante}\``,
-            `âž± **Acusado**: ${acusadoTexto}`,
-            `âž± **Motivo**: \`${motivo}\``,
-            `âž± **Prova(s)**: ${provas}`
+            `➱ **Denunciante**: \`${denunciante}\``,
+            `➱ **Acusado**: ${acusadoTexto}`,
+            `➱ **Motivo**: \`${motivo}\``,
+            `➱ **Prova(s)**: ${provas}`
         ].join('\n');
 
         const mainMessage = await channel.send({
@@ -468,7 +468,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         } catch (e) {
             console.error('Erro ao criar o tÃ³pico da denÃºncia:', e.message);
             await interaction.editReply({
-                content: 'âŒ Erro ao criar o tÃ³pico da denÃºncia. Isso pode ocorrer por falta de permissÃ£o, limite de tÃ³picos ou configuraÃ§Ã£o do canal. Por favor, tente novamente ou contate um administrador.'
+                content: '❌ Erro ao criar o tópico da denúncia. Isso pode ocorrer por falta de permissão, limite de tópicos ou configuração do canal. Por favor, tente novamente ou contate um administrador.'
             });
             return;
         }
@@ -569,7 +569,7 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         await interaction.editReply({ 
             content: [
-                `âœ… Sua denÃºncia foi criada com sucesso em ${thread} Ã s \`${dateUtils.getBrasiliaTime()}\`.`,
+                `✅ Sua denúncia foi criada com sucesso em ${thread} às \`${dateUtils.getBrasiliaTime()}\`.`,
                 '',
                 'âš ï¸ **AtenÃ§Ã£o â€” leia antes de interagir no tÃ³pico:**',
                 'â€¢ Utilize linguagem respeitosa. Chingamentos e palavras ofensivas resultarÃ£o em **puniÃ§Ã£o imediata**.',
@@ -581,7 +581,7 @@ async function handleDenunciaSubmit(interaction, platform) {
     } catch (error) {
         console.error(error);
         try {
-            await interaction.editReply({ content: 'âŒ Erro ao processar sua denÃºncia.' });
+            await interaction.editReply({ content: '❌ Erro ao processar sua denúncia.' });
         } catch (e) {
             console.error('NÃ£o foi possÃ­vel editar a resposta de erro:', e.message);
         }
@@ -610,7 +610,7 @@ async function handleDenunciaButtons(interaction, client) {
         }
 
         return await interaction.reply({
-            content: 'âŒ AÃ§Ã£o nÃ£o reconhecida ou nÃ£o suportada para este botÃ£o.',
+            content: '❌ Ação não reconhecida ou não suportada para este botão.',
             flags: [MessageFlags.Ephemeral]
         });
     } catch (error) { console.error(error); }
@@ -620,7 +620,7 @@ async function handleDenunciaPC(interaction) {
     const config = await getCachedConfig(interaction.guild.id, Config);
     const roleRequired = config.roles.pc;
     if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
-        return interaction.reply({ content: `âŒ VocÃª nÃ£o tem permissÃ£o para usar o botÃ£o de denÃºncia PC. Ã‰ necessÃ¡rio o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
+        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia PC. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
     }
     await openDenunciaModal(interaction, 'PC');
 }
@@ -629,7 +629,7 @@ async function handleDenunciaMobile(interaction) {
     const config = await getCachedConfig(interaction.guild.id, Config);
     const roleRequired = config.roles.permitido;
     if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
-        return interaction.reply({ content: `âŒ VocÃª nÃ£o tem permissÃ£o para usar o botÃ£o de denÃºncia Mobile. Ã‰ necessÃ¡rio o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
+        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia Mobile. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
     }
     await openDenunciaModal(interaction, 'Mobile');
 }
@@ -714,8 +714,8 @@ async function handleModalSubmit(interaction, platform) {
     try {
         await handleDenunciaSubmit(interaction, platform);
     } catch (error) {
-        console.error('Erro ao processar submissÃ£o:', error.message);
-        const msg = { content: 'âŒ Erro ao processar sua denÃºncia.', flags: 64 };
+        console.error('Erro ao processar submissão:', error.message);
+        const msg = { content: '❌ Erro ao processar sua denúncia.', flags: 64 };
         if (!interaction.replied && !interaction.deferred) await interaction.reply(msg);
         else await interaction.editReply(msg);
     }
@@ -752,7 +752,7 @@ async function handleConsultaModalSubmit(interaction) {
         const idsToSearch = rawIds.replace(/\s*[+,|]\s*/g, ' ').split(/\s+/).filter(id => id.length > 0);
 
         if (idsToSearch.length === 0) {
-            return await interaction.editReply({ content: 'âŒ ForneÃ§a pelo menos um ID vÃ¡lido.' });
+            return await interaction.editReply({ content: '❌ Forneça pelo menos um ID válido.' });
         }
 
         const escapedIds = idsToSearch.map(id => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
@@ -776,7 +776,7 @@ async function handleConsultaModalSubmit(interaction) {
 
         if (allDenuncias.length === 0) {
             return await interaction.editReply({
-                content: `âœ… Nenhuma denÃºncia (pendente ou finalizada) encontrada para os IDs: \`${idsToSearch.join(', ')}\`.`,
+                content: `✅ Nenhuma denúncia (pendente ou finalizada) encontrada para os IDs: \`${idsToSearch.join(', ')}\`.`,
             });
         }
 
@@ -788,15 +788,15 @@ async function handleConsultaModalSubmit(interaction) {
             const chunk = allDenuncias.slice(i, i + DENUNCIAS_PER_EMBED);
             const embed = new EmbedBuilder()
                 .setColor(0x0099ff)
-                .setTitle(`ðŸ” Resultados da Consulta â€” Total: ${total}`)
+                .setTitle(`🔎 Resultados da Consulta — Total: ${total}`)
                 .setTimestamp();
 
             chunk.forEach((d) => {
-                let statusEmoji = 'ðŸ”';
+                    let statusEmoji = '⏳';
                 let statusNome  = 'PENDENTE / EM ANÃLISE';
 
-                if (d.status === 'aceita')   { statusEmoji = 'âœ…'; statusNome = 'ACEITA'; }
-                if (d.status === 'recusada') { statusEmoji = 'âŒ'; statusNome = 'RECUSADA'; }
+                    if (d.status === 'aceita')   { statusEmoji = '✅'; statusNome = 'ACEITA'; }
+                    if (d.status === 'recusada') { statusEmoji = '❌'; statusNome = 'RECUSADA'; }
 
                 const motivoOriginal = (d.status === 'aceita' && d.motivoAceite) ? d.motivoAceite : (d.motivo || 'N/A');
                 const motivoFinal    = motivoOriginal.length > 150 ? motivoOriginal.substring(0, 150) + '...' : motivoOriginal;
@@ -819,17 +819,17 @@ async function handleConsultaModalSubmit(interaction) {
     } catch (error) {
         console.error('Erro no modal de consulta:', error);
         
-        if (!deferred) {
+                if (!deferred) {
             try {
-                await interaction.reply({ content: 'âŒ Erro ao consultar o banco de dados.', flags: 64 });
+                await interaction.reply({ content: '❌ Erro ao consultar o banco de dados.', flags: 64 });
             } catch (replyError) {
-                console.error('NÃ£o foi possÃ­vel responder Ã  interaÃ§Ã£o:', replyError.code);
+                console.error('Não foi possível responder à interação:', replyError.code);
             }
         } else {
             try {
-                await interaction.editReply({ content: 'âŒ Erro ao consultar o banco de dados.' });
+                await interaction.editReply({ content: '❌ Erro ao consultar o banco de dados.' });
             } catch (editError) {
-                console.error('NÃ£o foi possÃ­vel editar a resposta:', editError.code);
+                console.error('Não foi possível editar a resposta:', editError.code);
             }
         }
     }
