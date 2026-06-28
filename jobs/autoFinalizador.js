@@ -821,7 +821,7 @@ function iniciarAutoFinalizador(client) {
                 await sleep(5 * 60 * 1000);
                 consecutiveErrors = 0;
                 return;
-            }
+            } 
         }
         autoFinalizadorLock = false;
     };

@@ -156,7 +156,7 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
 
     const attachmentsArray = Array.from(message.attachments.values());
     const { processed } = await processAttachments(attachmentsArray);
-
+ 
     const now = getBrasiliaDate();
     const timeStr = formatTimeBR(now);
     const dateStr = `${formatDateBR(now)} ${timeStr}`;

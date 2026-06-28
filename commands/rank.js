@@ -241,7 +241,7 @@ async function handleRankCommand(message) {
     if (totalPages <= 1) return;
 
     const collector = loadingMsg.createMessageComponentCollector({ idle: 120000 });
-
+ 
     collector.on('collect', async (i) => {
       if (i.user.id !== message.author.id) {
         return i.reply({ content: '❌ Apenas quem usou o comando.', flags: [MessageFlags.Ephemeral] });

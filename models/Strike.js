@@ -15,4 +15,4 @@ StrikeSchema.methods.cleanOldStrikes = function() {
   this.strikes = this.strikes.filter(s => (now - s.timestamp.getTime()) < 24 * 60 * 60 * 1000);
 };
 
-module.exports = mongoose.model('Strike', StrikeSchema);
+module.exports = mongoose.model('Strike', StrikeSchema); 

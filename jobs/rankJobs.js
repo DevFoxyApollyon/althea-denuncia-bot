@@ -283,7 +283,7 @@ function setupRankJobs(client) {
             console.error(error);
         }
     }, {
-        scheduled: true,
+        scheduled: true, 
         timezone: "America/Sao_Paulo"
     });
 }

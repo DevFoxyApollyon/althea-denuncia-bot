@@ -117,7 +117,7 @@ class TemplateProcessor {
     
     return warnings;
   }
-
+ 
   getTemplatePreview(template, templateType) {
     const sampleData = this.getSampleData(templateType);
     return this.processDefaultTemplate(templateType, sampleData);

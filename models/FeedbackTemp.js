@@ -23,4 +23,4 @@ const feedbackTempSchema = new Schema({
     }
 });
 
-module.exports = secondaryConnection.model('FeedbackTemp', feedbackTempSchema);
+module.exports = secondaryConnection.model('FeedbackTemp', feedbackTempSchema); 

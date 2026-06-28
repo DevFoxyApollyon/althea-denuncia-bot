@@ -6,4 +6,4 @@ module.exports = {
     'correcao': require('../commands/correcao').handleCorrecaoCommand,
     'status': require('../commands/status').handleStatusCommand,
     'semana': require('../commands/semana').handleSemanaCommand
-};
+}; 

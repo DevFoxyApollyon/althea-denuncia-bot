@@ -157,7 +157,7 @@ async function handleEditarAceiteModal(interaction) {
     }
   }
 }
-
+ 
 async function handleConfirmarCorrecaoAceite(interaction) {
   try {
     const messageId = interaction.customId.replace('confirmar_correcao_aceite_', '');

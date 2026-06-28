@@ -44,7 +44,7 @@ class Logger {
   constructor({ tag = 'BOT', debug = false } = {}) {
     this.tag = tag;
     this.debugEnabled = debug;
-  }
+  } 
 
   info(message, extra) {
     console.log(buildMsg(nowPrefix(this.tag), message, extra));

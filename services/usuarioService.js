@@ -22,7 +22,7 @@ async function enviarMensagemPvPorApelidoOuId(client, termo, mensagem) {
         console.error('Erro ao enviar DM:', e); 
         return false;
     }
-}
+} 
 
 module.exports = {
     buscarUsuarioPorApelidoOuId,

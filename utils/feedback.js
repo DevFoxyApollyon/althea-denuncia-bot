@@ -381,7 +381,7 @@ async function inserirFeedbackMenu(client, denuncia) {
             },
             { upsert: true, new: true }
         );
-
+ 
     } catch (err) {
         console.error('[Feedback] Erro ao inserir menu de feedback:', err.message);
     }

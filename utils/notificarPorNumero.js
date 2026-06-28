@@ -14,3 +14,4 @@ async function notificarPorNumero(numero, guild, client, mensagem) {
 }
 
 module.exports = notificarPorNumero;
+ 

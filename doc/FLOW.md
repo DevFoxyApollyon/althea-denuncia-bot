@@ -14,7 +14,7 @@ Antes de usar o sistema, o administrador deve executar:
 
 ### `!painel`
 Permite configurar no MongoDB:
-- Cargos administrativos
+- Cargos administrativos 
 - Canais de denúncia (PC/Mobile)
 - Canais de logs
 - Canal de análise

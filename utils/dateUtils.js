@@ -48,7 +48,7 @@ function getWeekDates() {
     weekEnd.setHours(23, 59, 59, 999);
     return { weekStart, weekEnd };
 }
-
+ 
 module.exports = {
     getBrasiliaDate,
     toBrasiliaDate,

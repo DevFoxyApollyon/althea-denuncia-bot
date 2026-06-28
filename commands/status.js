@@ -14,7 +14,7 @@ const { advancedMonitor } = require('../utils/advancedMonitoring');
 const { globalCache } = require('../utils/smartCache');
 
 const MAX_RAM_MB        = 4096;
-const PING_HISTORY_MAX  = 20;
+const PING_HISTORY_MAX  = 20; 
 const AUTO_REFRESH_MS   = 60_000;
 const ALERT_PING_MS     = 300;
 const ALERT_RAM_PCT     = 80;

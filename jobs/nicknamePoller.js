@@ -233,7 +233,7 @@ async function verificarNicknames(client) {
             `${chalk.yellow(totalContaCorrigida + ' conta(s) corrigida(s)')}`
         );
     }
-}
+} 
 
 function iniciarPoller(client) {
     log.info(chalk.magenta(`Poller iniciado. Verificando a cada ${chalk.bold('5 minutos')}.`));

@@ -161,7 +161,7 @@ ModerationActionSchema.statics.validarAcao = async function (moderatorId, action
     throw error;
   }
 };
-
+ 
 const ModerationAction =
   mongoose.models.ModerationAction || mongoose.model('ModerationAction', ModerationActionSchema);
 

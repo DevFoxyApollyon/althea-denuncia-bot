@@ -40,7 +40,7 @@ async function notificarAcusadoPv(client, guildId, acusadoId, mensagem) {
                 { userId: acusadoId },
                 { conta: acusadoId }
             ]
-        });
+        }); 
         if (!usuario) return false;
         // Garante que vai buscar o userId correto para enviar DM
         const user = await client.users.fetch(usuario.userId);

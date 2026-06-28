@@ -314,7 +314,7 @@ class AdvancedMonitor {
     return {
       total: errors.length,
       byType: errorTypes,
-      recent: errors.slice(-10)
+      recent: errors.slice(-10) 
     };
   }
 

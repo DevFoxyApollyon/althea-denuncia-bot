@@ -28,5 +28,5 @@ function extrairContaDoNickname(nickname) {
 
     return numero;
 }
-
+ 
 module.exports = { extrairContaDoNickname, normalizarNickname };

@@ -61,3 +61,4 @@ module.exports = async function syncUsuarioNick(member) {
     { upsert: true }
   );
 };
+ 

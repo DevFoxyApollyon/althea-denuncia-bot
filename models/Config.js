@@ -39,7 +39,7 @@ const configSchema = new mongoose.Schema({
     }
   },
   lastUpdated: { 
-    type: Date, 
+    type: Date,  
     default: Date.now 
   },
   updatedBy: { 

@@ -1,6 +1,4 @@
-﻿/**
- * Gera o texto do aviso com o cabeçalho original preservado
- */
+﻿
 function criarAvisoDenuncia(commandChannelId) {
     return `Brasil RolePlay • DENUNCIAS
 
@@ -38,9 +36,6 @@ function criarAvisoDenuncia(commandChannelId) {
  **Bom RP a todos** 🦊`;
 }
 
-/**
- * Envia o aviso e remove APENAS os avisos antigos em background
- */
 async function garantirAvisoNoTopo(channel, commandChannelId) {
     try {
         if (!channel) return;
@@ -49,7 +44,6 @@ async function garantirAvisoNoTopo(channel, commandChannelId) {
         const conteudo = criarAvisoDenuncia(commandChannelId);
         const novaMensagem = await channel.send(conteudo);
 
-        // 2. Limpa apenas os avisos antigos (sem travar a execução)
         limparAvisosAntigosBackground(channel, novaMensagem.id);
 
         return novaMensagem;
@@ -58,26 +52,18 @@ async function garantirAvisoNoTopo(channel, commandChannelId) {
     }
 }
 
-/**
- * Função interna de limpeza: Filtra estritamente pelo título do aviso
- */
 async function limparAvisosAntigosBackground(channel, skipMessageId) {
     try {
-        // Busca as últimas 50 mensagens
         const messages = await channel.messages.fetch({ limit: 50 });
         
-        // Filtro Restrito: 
-        // Deve ser do BOT && Conter o título exato && NÃO ser a mensagem nova
         const toDelete = messages.filter(m => 
             m.author.id === channel.client.user.id && 
             m.content.includes('Brasil RolePlay • DENUNCIAS') && 
             m.id !== skipMessageId
         );
-
+ 
         if (toDelete.size > 0) {
-            // Tenta bulkDelete (para mensagens < 14 dias)
             await channel.bulkDelete(toDelete).catch(async () => {
-                // Fallback: Deleta uma por uma se forem antigas
                 for (const [_, msg] of toDelete) {
                     try {
                         await msg.delete();

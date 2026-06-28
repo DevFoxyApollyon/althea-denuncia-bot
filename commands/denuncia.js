@@ -834,7 +834,7 @@ async function handleConsultaModalSubmit(interaction) {
         }
     }
 }
-
+ 
 module.exports = {
     handleDenunciaCommand,
     handleDenunciaSubmit,

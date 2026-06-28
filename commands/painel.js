@@ -10,7 +10,7 @@ const {
 } = require('discord.js');
 const Config = require('../models/Config');
 require('dotenv').config();
-
+ 
 const MESSAGE_TIMEOUT = 5 * 60 * 1000; 
 const SUPORTE_BOT_ID = process.env.SUPORTE_BOT_ID;
 

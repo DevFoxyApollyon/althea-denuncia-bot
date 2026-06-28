@@ -13,7 +13,7 @@ const { toBrasiliaDate, formatDateBR, getWeekDates } = require('../utils/dateUti
 
 const cache = new Map();
 const CACHE_TTL = 300000; 
-
+ 
 function getCache(key) {
     const item = cache.get(key);
     if (!item || Date.now() > item.expires) return null;

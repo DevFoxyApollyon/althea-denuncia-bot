@@ -13,3 +13,4 @@ const usuariosSchema = new Schema({
 
 
 module.exports = secondaryConnection.model('Usuarios', usuariosSchema, 'usuarios');
+ 

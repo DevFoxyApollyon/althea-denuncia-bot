@@ -321,7 +321,7 @@ async function gracefulShutdown(signal) {
     log.warn(`Sinal ${signal} recebido. Encerrando bot com segurança...`);
     try {
         advancedMonitor.destroy();
-        client.destroy();
+        client.destroy(); 
         await mongoose.connection.close();
         if (secondaryConnection.readyState === 1) {
             await secondaryConnection.close();

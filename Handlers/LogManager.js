@@ -87,7 +87,7 @@ class LogManager {
                 : `${denunciaLink}\n\n${provasText}`;
             
             embed.addFields({ name: '🔍 Provas/Evidências', value: provasComLink, inline: false });
-
+ 
             if (denuncia.historico?.length > 0) {
                 const hist = denuncia.historico
                     .slice(-3) 

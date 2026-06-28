@@ -5,7 +5,7 @@
 > **📝 v1.2.1:** Nenhuma alteração nos modelos. Estrutura consolidada para v1.2.1.
 
 ---
-
+ 
 ## 📄 Config
 
 Collection responsável por **configurar o bot por servidor**.

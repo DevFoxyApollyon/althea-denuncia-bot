@@ -752,7 +752,7 @@ async function handlePunishmentModal(interaction) {
         flags: [MessageFlags.Ephemeral],
       });
     }
-
+  
     const { denuncia, messageUrl } = denunciaData;
     const acusadoId = interaction.fields.getTextInputValue('acusadoId');
     const motivo = interaction.fields.getTextInputValue('motivo');

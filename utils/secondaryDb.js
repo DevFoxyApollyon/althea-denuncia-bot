@@ -29,7 +29,7 @@ const secondaryConnection = mongoose.createConnection(secondaryDbUri, {
 secondaryConnection.asPromise().catch((err) => {
     log.error('Erro Database: ' + err.message);
 });
-
+ 
 secondaryConnection.on('connected',    () => log.success('Database secundária conectada.'));
 secondaryConnection.on('reconnected',  () => log.success('Database secundária reconectada.'));
 secondaryConnection.on('disconnected', () => log.warn('Database secundária desconectada. Tentando reconectar...'));

@@ -148,7 +148,7 @@
     
     return item;
   }
-
+ 
   destroy() {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);

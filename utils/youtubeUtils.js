@@ -173,7 +173,7 @@ async function handleYoutubeDenuncia(message) {
       await handleHLDivulgacao(message, title || 'Link inválido ou indevido');
       return true;
     }
-  }
+  } 
 
   return false;
 }

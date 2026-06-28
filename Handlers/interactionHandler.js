@@ -230,7 +230,6 @@ async function interactionHandler(interaction) {
       }
     }
 
-    // ======== MODAIS ========
     if (interaction.isModalSubmit()) {
       switch (interaction.customId) {
         case 'denuncia_pc_modal':

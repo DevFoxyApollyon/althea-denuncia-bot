@@ -217,7 +217,7 @@ async function verificaEdicao(oldMessage, newMessage, Strike, config) {
     console.error('Erro ao verificar edição de mensagem:', e);
   }
 }
-
+ 
 module.exports = {
   PALAVRAS_PROIBIDAS,
   contemPalavraProibida,

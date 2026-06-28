@@ -108,7 +108,7 @@ Baseado em ações reais registradas no banco:
   - anexos (quando possível)
 - Gera:
   - HTML
-  - ZIP
+  - ZIP 
 - Envia o arquivo no Discord
 - **Tranca e arquiva o tópico automaticamente**
 - Encerra oficialmente a denúncia

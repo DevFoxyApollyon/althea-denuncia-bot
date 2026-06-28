@@ -1,5 +1,4 @@
-﻿// BUTTONS.md
-
+﻿
 # 🔘 Buttons & Interactions
 
 Este documento descreve **TODOS os botões e modais** utilizados pelo bot, seus `customId`, permissões e handlers responsáveis.

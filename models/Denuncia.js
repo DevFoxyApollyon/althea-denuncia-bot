@@ -143,4 +143,4 @@ denunciaSchema.index({ platform: 1 });
 denunciaSchema.index({ 'ultimaEdicao.data': 1 });
 denunciaSchema.index({ guildId: 1, createdAt: 1 });
 
-module.exports = mongoose.model('Denuncia', denunciaSchema);
+module.exports = mongoose.model('Denuncia', denunciaSchema); 

@@ -78,4 +78,4 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 ## [Unreleased]
 - Melhorias visuais
 - Internacionalização (EN)
-- Métricas avançadas
+- Métricas avançadas 

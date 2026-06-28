@@ -153,7 +153,7 @@ class PerformanceMonitor {
 }
 
 const monitor = new PerformanceMonitor();
-
+ 
 setInterval(() => {
   monitor.cleanup();
 }, 30 * 60 * 1000);

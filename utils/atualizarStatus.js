@@ -29,5 +29,5 @@ async function atualizarStatusNaMensagem(client, denuncia, novoStatus) {
         console.warn('Não foi possível atualizar o status na mensagem principal:', e.message);
     }
 }
-
+ 
 module.exports = { atualizarStatusNaMensagem };
