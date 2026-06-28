@@ -1,28 +1,27 @@
-﻿// CHANGELOG.md
-# 📋 Changelog
+﻿# 📋 Changelog
 
-Todas as mudanÃ§as relevantes deste projeto serÃ£o documentadas neste arquivo.
+Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
-Este projeto segue o padrÃ£o de versionamento semÃ¢ntico (SemVer).
+Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
 ## [1.2.1] - 2026-06-27
-### ðŸ“ DocumentaÃ§Ã£o e preparaÃ§Ã£o de release
+### 📝 Documentação e preparação de release
 
 #### ✨ Atualizações
-- Ajuste de documentaÃ§Ã£o de fluxo, botÃµes e modelos para a release 1.2.1
-- OrganizaÃ§Ã£o do repositÃ³rio para publicaÃ§Ã£o no GitHub
-- PreparaÃ§Ã£o do projeto para versionamento e distribuiÃ§Ã£o consistentes
+- Ajuste de documentação de fluxo, botões e modelos para a release 1.2.1
+- Organização do repositório para publicação no GitHub
+- Preparação do projeto para versionamento e distribuição consistentes
 
 ---
 
 ## [1.0.1] - 2026-01-25
-### ðŸ”§ ManutenÃ§Ã£o, RefatoraÃ§Ã£o e CorreÃ§Ãµes
+### 🔧 Manutenção, Refatoração e Correções
 
-#### â™»ï¸ RefatoraÃ§Ã£o
-- ConsolidaÃ§Ã£o de `denunciaButtons.js`: funcionalidades movidas para `commands/denuncia.js`
-- RemoÃ§Ã£o de arquivos nÃ£o utilizados ou redundantes:
+#### ♻️ Refatoração
+- Consolidação de `denunciaButtons.js`: funcionalidades movidas para `commands/denuncia.js`
+- Remoção de arquivos não utilizados ou redundantes:
   - `utils/performance.js`
   - `utils/monitoring.js`
   - `utils/commands.js`
@@ -30,53 +29,53 @@ Este projeto segue o padrÃ£o de versionamento semÃ¢ntico (SemVer).
   - `services/notificationService.js`
   - `buttons/denunciaButtons.js`
 
-#### ðŸ› CorreÃ§Ãµes
-- CorreÃ§Ã£o do aviso deprecated do Discord.js:  
-  `ephemeral` â†’ `flags: [MessageFlags.Ephemeral]`
+#### 🐛 Correções
+- Correção do aviso deprecated do Discord.js:  
+  `ephemeral` → `flags: [MessageFlags.Ephemeral]`
   - `Handlers/handlerStatusButton.js` (inclui `safeDefer`)
   - `jobs/rankJobs.js`
   - `commands/painel.js`
-- CorreÃ§Ã£o de imports ausentes em `Handlers/interactionHandler.js`
-- RemoÃ§Ã£o de handlers nÃ£o implementados (`atualizar`, `detalhe`)
+- Correção de imports ausentes em `Handlers/interactionHandler.js`
+- Remoção de handlers não implementados (`atualizar`, `detalhe`)
 
 #### ✨ Melhorias
-- CÃ³digo mais limpo e organizado
-- ReduÃ§Ã£o de avisos de deprecaÃ§Ã£o
-- Melhor separaÃ§Ã£o de responsabilidades
+- Código mais limpo e organizado
+- Redução de avisos de depreciação
+- Melhor separação de responsabilidades
 
 ---
 
 ## [1.0.0] - 2026-01-25
-### ðŸŽ‰ LanÃ§amento Inicial
+### 🎉 Lançamento Inicial
 
 #### ✨ Adicionado
-- Sistema completo de denÃºncias com organizaÃ§Ã£o automÃ¡tica em threads
-- BotÃµes interativos (PC, Mobile, Minhas DenÃºncias, CorreÃ§Ã£o)
-- Modal de criaÃ§Ã£o de denÃºncia
-- Modal de aplicaÃ§Ã£o de puniÃ§Ã£o
-- Sistema de reivindicaÃ§Ã£o de denÃºncias
-- Sistema de anÃ¡lise
-- Aceitar / Recusar denÃºncia
-- ExportaÃ§Ã£o de denÃºncias (HTML + ZIP)
-- BotÃ£o **Finalizar** (exporta, tranca e arquiva o tÃ³pico)
-- Sistema de correÃ§Ã£o (`!correcao` + botÃ£o)
-- Painel de configuraÃ§Ã£o do servidor (`!painel`)
+- Sistema completo de denúncias com organização automática em threads
+- Botões interativos (PC, Mobile, Minhas Denúncias, Correção)
+- Modal de criação de denúncia
+- Modal de aplicação de punição
+- Sistema de reivindicação de denúncias
+- Sistema de análise
+- Aceitar / Recusar denúncia
+- Exportação de denúncias (HTML + ZIP)
+- Botão **Finalizar** (exporta, tranca e arquiva o tópico)
+- Sistema de correção (`!correcao` + botão)
+- Painel de configuração do servidor (`!painel`)
 - Ranking mensal (`!rank`)
 - Ranking semanal (`!semana`)
-- Logs centralizados e auditÃ¡veis
-- IntegraÃ§Ã£o com MongoDB
+- Logs centralizados e auditáveis
+- Integração com MongoDB
 - Deploy preparado para SquareCloud
 
-#### ðŸ›¡ï¸ SeguranÃ§a
+#### 🛡️ Segurança
 - Tratamento de `Unknown interaction (10062)`
 - Tratamento de `InteractionNotReplied`
 - Tratamento de DM bloqueada (`50007`)
-- ProteÃ§Ã£o contra cliques duplicados
-- ValidaÃ§Ã£o de permissÃµes por cargo
+- Proteção contra cliques duplicados
+- Validação de permissões por cargo
 
 ---
 
 ## [Unreleased]
 - Melhorias visuais
-- InternacionalizaÃ§Ã£o (EN)
-- MÃ©tricas avanÃ§adas
+- Internacionalização (EN)
+- Métricas avançadas

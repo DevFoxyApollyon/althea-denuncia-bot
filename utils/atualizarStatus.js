@@ -1,12 +1,5 @@
-﻿// atualizarStatus.js
-// utils/atualizarStatus.js
+﻿// utils/atualizarStatus.js
 
-/**
- * Atualiza o status na mensagem principal da denÃºncia.
- * @param {Client} client - InstÃ¢ncia do Discord.js Client
- * @param {Denuncia} denuncia - Documento da denÃºncia
- * @param {string} novoStatus - Novo status (analise, aceita, recusada, reivindicacao, etc)
- */
 async function atualizarStatusNaMensagem(client, denuncia, novoStatus) {
     try {
         const channel = await client.channels.fetch(denuncia.channelId);
@@ -14,21 +7,18 @@ async function atualizarStatusNaMensagem(client, denuncia, novoStatus) {
 
         const statusMap = {
             'pendente':      'Pendente',
-            'analise':       'Em AnÃ¡lise',
+            'analise':       'Em Análise',
             'reivindicacao': 'Reivindicada',
             'reivindicado':  'Reivindicada',
-            'aceita':        'Aceita âœ…',
-            'recusada':      'Recusada âŒ',
+            'aceita':        'Aceita ✅',
+            'recusada':      'Recusada ❌',
         };
 
-        // Remove todas as linhas de status antigas e adiciona apenas uma correta ao final
-        const statusRegexGlobal = /^âž± \*\*Status\*\*: `[^`]*`$/gm;
+        const statusRegexGlobal = /^➱ \*\*Status\*\*: `[^`]*`$/gm;
         let textoSemStatus = msg.content.replace(statusRegexGlobal, '').trim();
-        // Garante que nÃ£o fique com linhas em branco extras
         textoSemStatus = textoSemStatus.replace(/\n{2,}/g, '\n');
-        const novoStatusLinha = `âž± **Status**: \`${statusMap[novoStatus] || novoStatus}\``;
+        const novoStatusLinha = `➱ **Status**: \`${statusMap[novoStatus] || novoStatus}\``;
         let novoTexto = textoSemStatus;
-        // Se jÃ¡ termina com o status, sÃ³ atualiza
         if (textoSemStatus.endsWith(novoStatusLinha)) {
             novoTexto = textoSemStatus;
         } else {
@@ -36,7 +26,7 @@ async function atualizarStatusNaMensagem(client, denuncia, novoStatus) {
         }
         await msg.edit({ content: novoTexto });
     } catch (e) {
-        console.warn('NÃ£o foi possÃ­vel atualizar o status na mensagem principal:', e.message);
+        console.warn('Não foi possível atualizar o status na mensagem principal:', e.message);
     }
 }
 

@@ -27,7 +27,7 @@ Projeto criado para **uso real em produção**, com foco em **estabilidade, orga
 
 ### 📌 Sistema de Denúncias
 - Criação de denúncias via **modal**
-- Separação por plataforma:
+- Separação por plataforma: 
   - 🖥️ PC
   - 📱 Mobile
 - Organização automática em **tópicos (threads)**

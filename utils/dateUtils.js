@@ -1,5 +1,4 @@
-﻿// dateUtils.js
-function getBrasiliaDate() {
+﻿function getBrasiliaDate() {
     const now = new Date();
     const BRASILIA_OFFSET = -3; 
     const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);

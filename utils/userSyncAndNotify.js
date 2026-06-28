@@ -1,5 +1,4 @@
-﻿// userSyncAndNotify.js
-// utils/userSyncAndNotify.js
+﻿// utils/userSyncAndNotify.js
 
 const Usuario = require('../models/Usuario');
 
@@ -16,10 +15,10 @@ async function syncUserOnNicknameChange(oldMember, newMember) {
                 if (match) {
                     conta = match[1];
                 } else {
-                    conta = userId; // fallback para userId se nÃ£o encontrar nÃºmero
+                    conta = userId; // fallback para userId se não encontrar número
                 }
             } else {
-                conta = userId; // fallback para userId se nÃ£o houver nickname
+                conta = userId; // fallback para userId se não houver nickname
             }
             await Usuario.findOneAndUpdate(
                 { guildId, userId },
@@ -28,13 +27,13 @@ async function syncUserOnNicknameChange(oldMember, newMember) {
             );
         }
     } catch (e) {
-        console.warn('NÃ£o foi possÃ­vel atualizar nick do usuÃ¡rio:', e.message);
+        console.warn('Não foi possível atualizar nick do usuário:', e.message);
     }
 }
 
 async function notificarAcusadoPv(client, guildId, acusadoId, mensagem) {
     try {
-        // Busca por userId OU conta (nÃºmero ou userId)
+        // Busca por userId OU conta (número ou userId)
         const usuario = await Usuario.findOne({
             guildId,
             $or: [
@@ -49,7 +48,7 @@ async function notificarAcusadoPv(client, guildId, acusadoId, mensagem) {
         await user.send(mensagem);
         return true;
     } catch (e) {
-        console.warn('NÃ£o foi possÃ­vel notificar acusado no PV:', e.message);
+        console.warn('Não foi possível notificar acusado no PV:', e.message);
         return false;
     }
 }

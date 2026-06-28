@@ -1,5 +1,4 @@
-﻿// rankJobs.js
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+﻿const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const cron = require('node-cron');
 const RankService = require('../services/rankService');
 const Config = require('../models/Config');
@@ -24,10 +23,10 @@ function buildTable(stats) {
     const sep    = '-----------------------------------------------------------';
 
     const rows = [
-        { emoji: 'âŒ', nome: 'Recusadas', key: 'recusadas', total: stats.total.recusadas },
-        { emoji: 'âœ…', nome: 'Aceitas',   key: 'aceitas',   total: stats.total.aceitas },
-        { emoji: 'ðŸ”', nome: 'AnÃ¡lises',  key: 'analisadas', total: stats.total.analisadas },
-        { emoji: 'ðŸ“', nome: 'Reivindicadas', key: 'reivindicadas', total: stats.total.reivindicadas }
+        { emoji: '❌', nome: 'Recusadas', key: 'recusadas', total: stats.total.recusadas },
+        { emoji: '✅', nome: 'Aceitas',   key: 'aceitas',   total: stats.total.aceitas },
+        { emoji: '🔍', nome: 'Análises',  key: 'analisadas', total: stats.total.analisadas },
+        { emoji: '📝', nome: 'Reivindicadas', key: 'reivindicadas', total: stats.total.reivindicadas }
     ];
 
     const formattedRows = rows.map(({ emoji, nome, key, total }) => {
@@ -51,28 +50,28 @@ async function generateRankTxt(actions) {
     const now = getBrasiliaDate();
     
     const content = [
-        `ðŸ† RANKING MENSAL DE DENÃšNCIAS`,
-        `PerÃ­odo: ${formatDateBR(monthStart)} atÃ© ${formatDateBR(monthEnd)}`,
-        `Gerado em: ${formatDateBR(now)} Ã s ${formatTimeBR(now)} (BrasÃ­lia)`,
+        `🏆 RANKING MENSAL DE DENÚNCIAS`,
+        `Período: ${formatDateBR(monthStart)} até ${formatDateBR(monthEnd)}`,
+        `Gerado em: ${formatDateBR(now)} às ${formatTimeBR(now)} (Brasília)`,
         `\n=================================\n`
     ];
 
     actions.forEach((mod, index) => {
         const moderatorId = String(mod._id ?? mod.userId ?? mod.moderatorId ?? mod.id ?? '').trim();
         const mention = moderatorId ? ` <@${moderatorId}>` : '';
-        const medal = index === 0 ? 'ðŸ¥‡' : index === 1 ? 'ðŸ¥ˆ' : index === 2 ? 'ðŸ¥‰' : 'â–«ï¸';
-        content.push(`${medal} ${index + 1}Âº Lugar | ${mod.tag || '[Sem tag]'}${mention}`);
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '▫️';
+        content.push(`${medal} ${index + 1}º Lugar | ${mod.tag || '[Sem tag]'}${mention}`);
 
         if (mod.stats) {
             content.push('```');
             content.push(buildTable(mod.stats));
             content.push('```');
         } else {
-            content.push(`ðŸ“Š Total: ${mod.total}`);
-            content.push(`ðŸ“ Reivindicadas: ${mod.reivindicacoes || 0}`);
-            content.push(`âœ… Aceitas: ${mod.aceitas}`);
-            content.push(`âŒ Recusadas: ${mod.recusadas}`);
-            content.push(`ðŸ”Ž AnÃ¡lises: ${mod.analises}`);
+            content.push(`📊 Total: ${mod.total}`);
+            content.push(`📝 Reivindicadas: ${mod.reivindicacoes || 0}`);
+            content.push(`✅ Aceitas: ${mod.aceitas}`);
+            content.push(`❌ Recusadas: ${mod.recusadas}`);
+            content.push(`🔎 Análises: ${mod.analises}`);
         }
 
         content.push(`=================================`);
@@ -139,51 +138,51 @@ async function generateRankEmbed(actions, guild, monthStart, monthEnd, now, file
     const rankContent = top10.map((mod, index) => {
         const moderatorId = String(mod._id ?? mod.userId ?? mod.moderatorId ?? mod.id ?? '').trim();
         const mention = moderatorId ? ` <@${moderatorId}>` : '';
-        const medal = index === 0 ? 'ðŸ¥‡' : index === 1 ? 'ðŸ¥ˆ' : index === 2 ? 'ðŸ¥‰' : 'â–«ï¸';
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '▫️';
         if (mod.stats) {
             return [
-                `${medal} ${index + 1}Âº Lugar | ${mod.tag || '[Sem tag]'}${mention}`,
+                `${medal} ${index + 1}º Lugar | ${mod.tag || '[Sem tag]'}${mention}`,
                 '```ansi',
                 buildTable(mod.stats),
                 '```',
-                `â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•`
+                `═══════════════════════════════`
             ].join('\n');
         } else {
             return [
-                `${medal} ${index + 1}Âº Lugar | ${mod.tag || '[Sem tag]'}${mention}`,
-                `ðŸ“Š Total: ${mod.total}`,
-                `ðŸ“ Reivindicadas: ${mod.reivindicacoes || 0}`,
-                `âœ… Aceitas: ${mod.aceitas} | âŒ Recusadas: ${mod.recusadas} | ðŸ”Ž AnÃ¡lises: ${mod.analises}`,
-                `â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•`
+                `${medal} ${index + 1}º Lugar | ${mod.tag || '[Sem tag]'}${mention}`,
+                `📊 Total: ${mod.total}`,
+                `📝 Reivindicadas: ${mod.reivindicacoes || 0}`,
+                `✅ Aceitas: ${mod.aceitas} | ❌ Recusadas: ${mod.recusadas} | 🔎 Análises: ${mod.analises}`,
+                `═══════════════════════════════`
             ].join('\n');
         }
     }).join('\n');
 
     const description = [
-        `*Ranking mensal acumulado de ${formatDateBR(monthStart)} atÃ© ${formatDateBR(monthEnd)}*`,
-        `*Atualizado em ${formatDateBR(now)} Ã s ${formatTimeBR(now)}*\n`,
-        `ðŸ“« **DenÃºncias hoje:** ${dailyStats.total}`,
-        `ðŸ“ **Reivindicadas hoje:** ${dailyStats.reivindicadas}`,
-        `ðŸ“Š **Pendentes hoje:** ${dailyStats.pendentes}\n`,
+        `*Ranking mensal acumulado de ${formatDateBR(monthStart)} até ${formatDateBR(monthEnd)}*`,
+        `*Atualizado em ${formatDateBR(now)} às ${formatTimeBR(now)}*\n`,
+        `📫 **Denúncias hoje:** ${dailyStats.total}`,
+        `📝 **Reivindicadas hoje:** ${dailyStats.reivindicadas}`,
+        `📊 **Pendentes hoje:** ${dailyStats.pendentes}\n`,
         rankContent,
-        `\nâš ï¸ Top 10 exibido. Total de participantes: ${actions.length}`
+        `\n⚠️ Top 10 exibido. Total de participantes: ${actions.length}`
     ];
 
     if (fileUrl) {
-        description.push(`\nðŸ“¥ [Clique aqui para baixar o ranking completo](${fileUrl})`);
+        description.push(`\n📥 [Clique aqui para baixar o ranking completo](${fileUrl})`);
     }
 
     const adminRoleId = config?.responsavel_admin ?? config?.adminRole ?? config?.responsavelAdmin ?? null;
     if (adminRoleId) {
-        description.unshift(`ðŸ“£ ResponsÃ¡vel: <@&${adminRoleId}>`);
+        description.unshift(`📣 Responsável: <@&${adminRoleId}>`);
     }
 
     return new EmbedBuilder()
         .setColor('#2F3136')
-        .setTitle('ðŸ† Ranking Mensal de DenÃºncias')
+        .setTitle('🏆 Ranking Mensal de Denúncias')
         .setDescription(description.join('\n'))
         .setTimestamp(now)
-        .setFooter({ text: 'AtualizaÃ§Ã£o diÃ¡ria automÃ¡tica', iconURL: guild.iconURL({ dynamic: true }) });
+        .setFooter({ text: 'Atualização diária automática', iconURL: guild.iconURL({ dynamic: true }) });
 }
 
 async function sendRankMessage(channel, embed, rankText, guild, config) {
@@ -193,12 +192,12 @@ async function sendRankMessage(channel, embed, rankText, guild, config) {
         const roleMention = adminRoleId ? ` <@&${adminRoleId}>` : '';
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('download_rank').setLabel('ðŸ“¥ Baixar Ranking').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('copy_rank').setLabel('ðŸ“‹ Copiar Ranking').setStyle(ButtonStyle.Primary)
+            new ButtonBuilder().setCustomId('download_rank').setLabel('📥 Baixar Ranking').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('copy_rank').setLabel('📋 Copiar Ranking').setStyle(ButtonStyle.Primary)
         );
 
         const sent = await channel.send({
-            content: `ðŸ“Š **RelatÃ³rio Mensal Acumulado**${roleMention}`,
+            content: `📊 **Relatório Mensal Acumulado**${roleMention}`,
             embeds: [embed],
             components: [row],
             files: [{

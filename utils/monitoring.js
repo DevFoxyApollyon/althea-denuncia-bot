@@ -1,7 +1,5 @@
-﻿// monitoring.js
-const { getPerformanceMetrics } = require('./performance');
+﻿const { getPerformanceMetrics } = require('./performance');
 
-// Sistema de monitoramento em tempo real
 class PerformanceMonitor {
   constructor() {
     this.metrics = {
@@ -15,49 +13,41 @@ class PerformanceMonitor {
     };
     
     this.responseTimes = [];
-    this.maxResponseTimeHistory = 100; // MantÃ©m apenas os Ãºltimos 100 tempos de resposta
+    this.maxResponseTimeHistory = 100; 
   }
 
-  // Registra execuÃ§Ã£o de comando
   recordCommand() {
     this.metrics.totalCommands++;
   }
 
-  // Registra interaÃ§Ã£o
   recordInteraction() {
     this.metrics.totalInteractions++;
   }
 
-  // Registra erro
   recordError() {
     this.metrics.errors++;
   }
 
-  // Registra tempo de resposta
   recordResponseTime(responseTime) {
     this.responseTimes.push(responseTime);
     
-    // MantÃ©m apenas os Ãºltimos N tempos
     if (this.responseTimes.length > this.maxResponseTimeHistory) {
       this.responseTimes.shift();
     }
     
-    // Calcula mÃ©dia
     this.metrics.averageResponseTime = 
       this.responseTimes.reduce((a, b) => a + b, 0) / this.responseTimes.length;
   }
 
-  // Atualiza uso de memÃ³ria
   updateMemoryUsage() {
     const usage = process.memoryUsage();
-    this.metrics.currentMemoryUsage = Math.round(usage.heapUsed / 1024 / 1024); // MB
+    this.metrics.currentMemoryUsage = Math.round(usage.heapUsed / 1024 / 1024); 
     
     if (this.metrics.currentMemoryUsage > this.metrics.peakMemoryUsage) {
       this.metrics.peakMemoryUsage = this.metrics.currentMemoryUsage;
     }
   }
 
-  // ObtÃ©m mÃ©tricas completas
   getMetrics() {
     this.updateMemoryUsage();
     const performanceMetrics = getPerformanceMetrics();
@@ -80,7 +70,6 @@ class PerformanceMonitor {
     };
   }
 
-  // Gera relatÃ³rio de performance
   generateReport() {
     const metrics = this.getMetrics();
     
@@ -110,7 +99,6 @@ class PerformanceMonitor {
     };
   }
 
-  // Determina status do sistema
   getSystemStatus(metrics) {
     if (metrics.errorRate > 10) return 'CRITICAL';
     if (metrics.errorRate > 5) return 'WARNING';
@@ -119,17 +107,14 @@ class PerformanceMonitor {
     return 'HEALTHY';
   }
 
-  // Calcula taxa de acerto do cache
   calculateCacheHitRate(metrics) {
     const totalCacheRequests = metrics.configCacheSize + metrics.denunciaCacheSize;
     if (totalCacheRequests === 0) return 'N/A';
     
-    // Estimativa baseada no tamanho do cache vs requests
     const estimatedHitRate = Math.min(95, Math.max(60, 100 - (totalCacheRequests / 10)));
     return estimatedHitRate.toFixed(1) + '%';
   }
 
-  // Gera recomendaÃ§Ãµes baseadas nas mÃ©tricas
   generateRecommendations(metrics) {
     const recommendations = [];
     
@@ -138,11 +123,11 @@ class PerformanceMonitor {
     }
     
     if (metrics.currentMemoryUsage > 300) {
-      recommendations.push('Alto uso de memÃ³ria. Considere reiniciar o bot periodicamente.');
+      recommendations.push('Alto uso de memória. Considere reiniciar o bot periodicamente.');
     }
     
     if (metrics.averageResponseTime > 3000) {
-      recommendations.push('Tempo de resposta alto. Verifique se hÃ¡ gargalos no banco de dados.');
+      recommendations.push('Tempo de resposta alto. Verifique se há gargalos no banco de dados.');
     }
     
     if (metrics.activeQueues > 10) {
@@ -150,34 +135,29 @@ class PerformanceMonitor {
     }
     
     if (metrics.commandsPerMinute > 50) {
-      recommendations.push('Alto volume de comandos. Sistema estÃ¡ funcionando bem sob carga.');
+      recommendations.push('Alto volume de comandos. Sistema está funcionando bem sob carga.');
     }
     
     if (recommendations.length === 0) {
-      recommendations.push('Sistema funcionando normalmente. Nenhuma aÃ§Ã£o necessÃ¡ria.');
+      recommendations.push('Sistema funcionando normalmente. Nenhuma ação necessária.');
     }
     
     return recommendations;
   }
 
-  // Limpa mÃ©tricas antigas
   cleanup() {
-    // Limpa tempos de resposta antigos
     if (this.responseTimes.length > this.maxResponseTimeHistory) {
       this.responseTimes = this.responseTimes.slice(-this.maxResponseTimeHistory);
     }
   }
 }
 
-// InstÃ¢ncia global do monitor
 const monitor = new PerformanceMonitor();
 
-// Limpa mÃ©tricas a cada 30 minutos
 setInterval(() => {
   monitor.cleanup();
 }, 30 * 60 * 1000);
 
-// Atualiza uso de memÃ³ria a cada 5 minutos
 setInterval(() => {
   monitor.updateMemoryUsage();
 }, 5 * 60 * 1000);

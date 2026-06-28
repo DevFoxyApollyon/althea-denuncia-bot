@@ -1,8 +1,4 @@
-﻿// exportDenuncia.js
-// /Handlers/exportDenuncia.js
-
-
-const { AttachmentBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+﻿const { AttachmentBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
 const archiver = require('archiver');
@@ -10,25 +6,21 @@ const fetch = require('node-fetch');
 const { PassThrough } = require('stream');
 
 const EXPORT_CONSTANTS = {
-  // Discord normalmente permite 50MB em alguns planos/servidores, mas margem evita erro.
   MAX_UPLOAD_BYTES: 45 * 1024 * 1024,
   COOLDOWN_SECONDS: 30,
   FILES_PER_MESSAGE: 10,
   TIMEZONE: 'America/Sao_Paulo',
-
-  // SeguranÃ§a / estabilidade
   FETCH_TIMEOUT_MS: 15000,
-  MAX_TOTAL_DOWNLOAD_BYTES: 800 * 1024 * 1024, // 800MB por exportaÃ§Ã£o (ajuste como quiser)
-  MAX_SINGLE_DOWNLOAD_BYTES: 300 * 1024 * 1024, // proteÃ§Ã£o extra caso content-length falhe (300MB)
+  MAX_TOTAL_DOWNLOAD_BYTES: 800 * 1024 * 1024,
+  MAX_SINGLE_DOWNLOAD_BYTES: 300 * 1024 * 1024,
   AVATAR_SIZE: 64,
   GUILD_ICON_SIZE: 64,
 };
 
 const urlRegex = /(https?:\/\/[^\s]+)/g;
 
-// cooldown real + anti-duplo clique
-const cooldowns = new Map();   // userId -> expiresAt
-const inProgress = new Map();  // userId -> true
+const cooldowns = new Map();
+const inProgress = new Map();
 
 function escapeHtml(str = '') {
   return String(str)
@@ -42,7 +34,7 @@ function escapeHtml(str = '') {
 function safeFileName(name = '') {
   return String(name)
     .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9._-]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '')
@@ -76,9 +68,6 @@ function fetchWithTimeout(url, timeout = EXPORT_CONSTANTS.FETCH_TIMEOUT_MS) {
   ]);
 }
 
-/**
- * Busca TODAS as mensagens do tÃ³pico (paginaÃ§Ã£o)
- */
 async function fetchAllThreadMessages(thread) {
   const all = [];
   let lastId = undefined;
@@ -94,21 +83,15 @@ async function fetchAllThreadMessages(thread) {
     const values = Array.from(batch.values());
     all.push(...values);
 
-    // id menor (mais antigo) para paginar
     lastId = values[values.length - 1].id;
 
-    // Se veio menos que 100, acabou
     if (batch.size < 100) break;
   }
 
-  // ordenar por timestamp crescente
   all.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
   return all;
 }
 
-/**
- * ZIP builder robusto via stream
- */
 async function buildZipBuffer(files) {
   return new Promise((resolve, reject) => {
     const archive = archiver('zip', { zlib: { level: 9 } });
@@ -120,7 +103,6 @@ async function buildZipBuffer(files) {
     stream.on('error', reject);
 
     archive.on('warning', (err) => {
-      // warnings nÃ£o necessariamente quebram, mas loga
       console.warn('[ZIP WARNING]', err?.message || err);
     });
     archive.on('error', reject);
@@ -135,27 +117,18 @@ async function buildZipBuffer(files) {
   });
 }
 
-/**
- * Divide recursivamente uma lista de arquivos atÃ© que cada zip final fique <= MAX_UPLOAD_BYTES.
- * Isso resolve o problema "estimei pelo size bruto e o zip final passou".
- */
 async function splitFilesIntoZipParts(files, maxBytes) {
-  // Caso vazio
   if (!files.length) return [];
 
-  // Tenta zipar tudo
   const buffer = await buildZipBuffer(files);
   if (buffer.length <= maxBytes) {
     return [{ buffer, filesCount: files.length }];
   }
 
-  // Se for 1 arquivo e ainda assim estoura, nÃ£o tem como mandar pelo Discord.
-  // Aqui a gente devolve como "oversize" para vocÃª decidir o que fazer (pular ou sÃ³ link no HTML).
   if (files.length === 1) {
     return [{ buffer, filesCount: 1, oversize: true }];
   }
 
-  // Divide ao meio e repete
   const mid = Math.floor(files.length / 2);
   const left = files.slice(0, mid);
   const right = files.slice(mid);
@@ -176,11 +149,6 @@ function makeStatusMeta(status) {
   return { label: (status || 'PENDENTE').toUpperCase(), color: '#99AAB5', bg: 'rgba(153, 170, 181, 0.12)' };
 }
 
-/**
- * Gera HTML base (preview ou arquivado), com escape anti-XSS.
- * - useRelativePaths: true => ./anexos/arquivo.ext
- * - useRelativePaths: false => links originais do Discord CDN
- */
 async function generateBaseHtml(thread, denunciaData, executor, useRelativePaths, preparedMaps) {
   const guild = thread.guild;
   const guildIconURL =
@@ -189,11 +157,10 @@ async function generateBaseHtml(thread, denunciaData, executor, useRelativePaths
 
   const guildName = escapeHtml(thread.name);
 
-  // Mensagens (jÃ¡ paginadas e ordenadas)
   const sortedMessages = preparedMaps?.sortedMessages || (await fetchAllThreadMessages(thread));
 
   const motivoHtml = denunciaData.motivo
-    ? `<p>Motivo da DenÃºncia: <strong>${escapeHtml(denunciaData.motivo)}</strong></p>`
+    ? `<p>Motivo da Denúncia: <strong>${escapeHtml(denunciaData.motivo)}</strong></p>`
     : '';
 
   let provasHtml = '';
@@ -209,12 +176,11 @@ async function generateBaseHtml(thread, denunciaData, executor, useRelativePaths
         const prova = escapeHtml(provaRaw);
         const lowered = provaRaw.trim().toLowerCase();
 
-        if (lowered === 'tÃ³pico' || lowered === 'topico') {
+        if (lowered === 'tópico' || lowered === 'topico') {
           provasHtml += `<li>${prova}</li>`;
         } else {
           const m = provaRaw.match(urlRegex);
           const link = m ? m[0] : provaRaw;
-          // link vai no href sem escape, mas vocÃª pode proteger:
           const safeHref = String(link).replace(/"/g, '%22');
           provasHtml += `<li><a href="${safeHref}" target="_blank" rel="noopener noreferrer">${prova}</a></li>`;
         }
@@ -233,13 +199,12 @@ async function generateBaseHtml(thread, denunciaData, executor, useRelativePaths
   const statusMeta = makeStatusMeta(denunciaData.status);
 
   const finalizationStatusHtml = `
-    <p>Status na FinalizaÃ§Ã£o:
+    <p>Status na Finalização:
       <span class="status-finalizacao" style="color: ${statusMeta.color}; background-color: ${statusMeta.bg};">
         ${escapeHtml(statusMeta.label)}
       </span>
     </p>`;
 
-  // Mapeamentos para nomes Ãºnicos (evita sobrescrita no zip)
   const avatarNameByUserId = preparedMaps?.avatarNameByUserId || new Map();
   const attachmentNameByUrl = preparedMaps?.attachmentNameByUrl || new Map();
 
@@ -249,7 +214,7 @@ async function generateBaseHtml(thread, denunciaData, executor, useRelativePaths
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registro de DenÃºncia #${escapeHtml(String(denunciaData.messageId))} | ${guildName}</title>
+  <title>Registro de Denúncia #${escapeHtml(String(denunciaData.messageId))} | ${guildName}</title>
   <style>
     :root {
       --bg-primary: #36393f;
@@ -333,8 +298,8 @@ async function generateBaseHtml(thread, denunciaData, executor, useRelativePaths
       <img class="server-logo" src="${guildIconURL}" alt="Logo do Servidor">
       <span class="server-name">${guildName}</span>
     </div>
-    <h1>Registro de DenÃºncia Arquivada</h1>
-    <p>ID da DenÃºncia: <code>${escapeHtml(String(denunciaData.messageId))}</code></p>
+    <h1>Registro de Denúncia Arquivada</h1>
+    <p>ID da Denúncia: <code>${escapeHtml(String(denunciaData.messageId))}</code></p>
     <p>Criada Por: ${escapeHtml(String(denunciaData.denunciante))} (ID: <code>${escapeHtml(String(denunciaData.criadoPor))}</code>)</p>
     <p>Acusado: ${escapeHtml(String(denunciaData.acusado))}</p>
     ${motivoHtml}
@@ -344,7 +309,7 @@ async function generateBaseHtml(thread, denunciaData, executor, useRelativePaths
     ${motivoAceiteHtml}
     <p>Finalizada Por: ${escapeHtml(executor.tag)}</p>
   </div>
-  <h2>Mensagens do TÃ³pico (${escapeHtml(thread.name)})</h2>
+  <h2>Mensagens do Tópico (${escapeHtml(thread.name)})</h2>
 `;
 
   for (const msg of sortedMessages) {
@@ -355,7 +320,6 @@ async function generateBaseHtml(thread, denunciaData, executor, useRelativePaths
       member = await thread.guild.members.fetch(msg.author.id).catch(() => null);
     } catch (_) {}
 
-    // avatar local no html arquivado, ou URL no preview
     const avatarFileName = avatarNameByUserId.get(msg.author.id) || `avatar_${msg.author.id}.png`;
     const avatarURL = msg.author.displayAvatarURL({ extension: 'png', size: EXPORT_CONSTANTS.AVATAR_SIZE });
     const avatarSrc = useRelativePaths ? `./anexos/${avatarFileName}` : avatarURL;
@@ -365,7 +329,6 @@ async function generateBaseHtml(thread, denunciaData, executor, useRelativePaths
 
     const { name: roleName, color: roleColor } = getHighestRole(member);
 
-    // conteÃºdo com escape + auto-link
     let content = escapeHtml(msg.content || '');
     content = content.replace(urlRegex, (url) => {
       const safeHref = String(url).replace(/"/g, '%22');
@@ -463,6 +426,7 @@ async function generateBaseHtml(thread, denunciaData, executor, useRelativePaths
 async function createHtmlArchivedTranscript(thread, denunciaData, executor, preparedMaps) {
   return generateBaseHtml(thread, denunciaData, executor, true, preparedMaps);
 }
+
 async function createHtmlPreviewTranscript(thread, denunciaData, executor, preparedMaps) {
   return generateBaseHtml(thread, denunciaData, executor, false, preparedMaps);
 }
@@ -472,26 +436,23 @@ async function handleExportButton(interaction) {
 
   const userId = interaction.user.id;
 
-  // anti-duplo clique enquanto processa
   if (inProgress.get(userId)) {
     return interaction.editReply({
-      content: `â³ JÃ¡ estou exportando uma denÃºncia para vocÃª. Aguarde finalizar.`,
+      content: `⏳ Já estou exportando uma denúncia para você. Aguarde finalizar.`,
       flags: MessageFlags.Ephemeral,
     });
   }
 
-  // cooldown real
   const now = nowMs();
   const expiresAt = cooldowns.get(userId);
   if (expiresAt && expiresAt > now) {
     const seconds = Math.ceil((expiresAt - now) / 1000);
     return interaction.editReply({
-      content: `â³ Por favor, espere **${seconds}s** para usar o botÃ£o novamente.`,
+      content: `⏳ Por favor, espere **${seconds}s** para usar o botão novamente.`,
       flags: MessageFlags.Ephemeral,
     });
   }
 
-  // marca processando
   inProgress.set(userId, true);
 
   try {
@@ -530,17 +491,13 @@ async function handleExportButton(interaction) {
       });
     }
 
-    // nome base seguro
     const baseFileName = safeFileName(`denuncia_${denuncia.messageId}_${denuncia.acusado}`);
 
-    // Busca TODAS mensagens
     const sortedMessages = await fetchAllThreadMessages(thread);
 
-    // Preparar mapas de nomes Ãºnicos (anexos e avatares) antes de gerar HTML
     const avatarNameByUserId = new Map();
     const attachmentNameByUrl = new Map();
 
-    // 1) Anexos (nomes Ãºnicos)
     for (const msg of sortedMessages) {
       for (const attachment of msg.attachments.values()) {
         const originalUrl = attachment.url;
@@ -550,7 +507,6 @@ async function handleExportButton(interaction) {
           attachmentNameByUrl.set(originalUrl, unique);
         }
       }
-      // 2) Avatares (um por usuÃ¡rio)
       if (!avatarNameByUserId.has(msg.author.id)) {
         avatarNameByUserId.set(msg.author.id, safeFileName(`avatar_${msg.author.id}.png`));
       }
@@ -558,16 +514,13 @@ async function handleExportButton(interaction) {
 
     const preparedMaps = { sortedMessages, avatarNameByUserId, attachmentNameByUrl };
 
-    // HTMLs
     const { htmlContent: zipHtmlContent } = await createHtmlArchivedTranscript(thread, denuncia, interaction.user, preparedMaps);
     const { htmlContent: previewHtmlContent } = await createHtmlPreviewTranscript(thread, denuncia, interaction.user, preparedMaps);
 
-    // Coletar downloads priorizando ANEXOS, depois AVATARES (pra nÃ£o gastar limite Ã  toa)
     const attachmentsToDownload = [];
     const avatarsToDownload = [];
 
     for (const msg of sortedMessages) {
-      // anexos
       for (const attachment of msg.attachments.values()) {
         const uniqueName = attachmentNameByUrl.get(attachment.url);
         attachmentsToDownload.push({
@@ -578,9 +531,7 @@ async function handleExportButton(interaction) {
       }
     }
 
-    // avatares (1 por user)
     for (const [uid, avatarName] of avatarNameByUserId.entries()) {
-      // pega um usuÃ¡rio de referÃªncia (da Ãºltima msg, etc). Aqui basta usar interaction.client.users.fetch.
       const user = await interaction.client.users.fetch(uid).catch(() => null);
       if (!user) continue;
 
@@ -592,12 +543,10 @@ async function handleExportButton(interaction) {
       });
     }
 
-    // Primeiro arquivo HTML do zip
     const zipFiles = [
       { name: `${baseFileName}.html`, content: Buffer.from(zipHtmlContent, 'utf8') },
     ];
 
-    // Baixar anexos com limite total
     let downloadedBytes = 0;
     let skippedLargeCount = 0;
     let skippedByBudgetCount = 0;
@@ -624,16 +573,10 @@ async function handleExportButton(interaction) {
         return;
       }
 
-      // tenta pular arquivos grandes via content-length
       const len = Number(res.headers.get('content-length') || 0);
-      if (len && len > EXPORT_CONSTANTS.MAX_UPLOAD_BYTES) {
-        // Se o arquivo Ã© maior que o que dÃ¡ pra anexar de qualquer jeito,
-        // ainda pode valer salvar no zip (pois o zip serÃ¡ dividido),
-        // mas vÃ­deos enormes podem matar RAM. Aqui fazemos regra: se for MUITO grande, pula.
-        if (len > EXPORT_CONSTANTS.MAX_SINGLE_DOWNLOAD_BYTES) {
-          skippedLargeCount++;
-          return;
-        }
+      if (len && len > EXPORT_CONSTANTS.MAX_SINGLE_DOWNLOAD_BYTES) {
+        skippedLargeCount++;
+        return;
       }
 
       const buf = await res.buffer();
@@ -652,21 +595,16 @@ async function handleExportButton(interaction) {
       zipFiles.push({ name: item.filename, content: buf });
     }
 
-    // 1) anexos
     for (const item of attachmentsToDownload) {
       await downloadAndPush(item);
     }
 
-    // 2) avatares (somente se sobrar orÃ§amento)
     for (const item of avatarsToDownload) {
       await downloadAndPush(item);
     }
 
-    // Agora dividir em zips garantindo o tamanho REAL do zip <= limite
     const zipParts = await splitFilesIntoZipParts(zipFiles, EXPORT_CONSTANTS.MAX_UPLOAD_BYTES);
 
-    // Se algum zipPart ficou oversize (1 arquivo impossivel), a gente remove esse arquivo e segue.
-    // (MantÃ©m como link no HTML, mas o arquivo nÃ£o entra no zip).
     const finalZipParts = [];
     let oversizeCount = 0;
 
@@ -694,38 +632,37 @@ async function handleExportButton(interaction) {
     const zipCount = zipAttachments.length;
     const totalLogBatches = Math.ceil(zipCount / EXPORT_CONSTANTS.FILES_PER_MESSAGE);
 
-    // Avisos para staff (quando pulou coisa)
     const warnings = [];
-    if (skippedLargeCount > 0) warnings.push(`â€¢ ${skippedLargeCount} arquivo(s) foram ignorados por serem grandes demais/arriscados.`);
-    if (skippedByBudgetCount > 0) warnings.push(`â€¢ ${skippedByBudgetCount} arquivo(s) foram ignorados por limite total de download (orÃ§amento).`);
-    if (downloadErrors > 0) warnings.push(`â€¢ ${downloadErrors} arquivo(s) falharam ao baixar (timeout/erro).`);
-    if (oversizeCount > 0) warnings.push(`â€¢ ${oversizeCount} item(ns) nÃ£o puderam ser anexados por exceder o limite mesmo sozinho.`);
+    if (skippedLargeCount > 0) warnings.push(`• ${skippedLargeCount} arquivo(s) foram ignorados por serem grandes demais.`);
+    if (skippedByBudgetCount > 0) warnings.push(`• ${skippedByBudgetCount} arquivo(s) foram ignorados por limite total de download.`);
+    if (downloadErrors > 0) warnings.push(`• ${downloadErrors} arquivo(s) falharam ao baixar (timeout/erro).`);
+    if (oversizeCount > 0) warnings.push(`• ${oversizeCount} item(ns) não puderam ser anexados por exceder o limite mesmo sozinhos.`);
 
-    const warningText = warnings.length ? `\n\nâš ï¸ **Avisos:**\n${warnings.join('\n')}` : '';
+    const warningText = warnings.length ? `\n\n⚠️ **Avisos:**\n${warnings.join('\n')}` : '';
 
     const logEmbed = new EmbedBuilder()
       .setColor(statusMeta.color)
-      .setTitle(`ðŸ“¦ Arquivamento de DenÃºncia - Finalizada`)
+      .setTitle(`📦 Arquivamento de Denúncia - Finalizada`)
       .setDescription(
         `**STATUS:** ${statusLabel}\n\n` +
-        `**MENSAGEM 1 DE MÃšLTIPLAS (PROVAS PERMANENTES):** ${zipCount} arquivo(s) ZIP (mÃ¡x. ~45MB cada).` +
+        `**MENSAGEM 1 DE MÚLTIPLAS (PROVAS PERMANENTES):** ${zipCount} arquivo(s) ZIP (máx. ~45MB cada).` +
         warningText
       )
       .setThumbnail(guild.iconURL({ extension: 'png', size: EXPORT_CONSTANTS.GUILD_ICON_SIZE }))
-      .setFooter({ text: `ID da DenÃºncia: ${denuncia.messageId} | Arquivado por: ${interaction.user.tag}` });
+      .setFooter({ text: `ID da Denúncia: ${denuncia.messageId} | Arquivado por: ${interaction.user.tag}` });
 
     const fields = [
       { name: 'Denunciante', value: String(denuncia.denunciante || 'N/A'), inline: true },
       { name: 'Acusado', value: String(denuncia.acusado || 'N/A'), inline: true },
-      { name: 'TÃ³pico Original', value: `<#${thread.id}>`, inline: true },
+      { name: 'Tópico Original', value: `<#${thread.id}>`, inline: true },
       { name: 'Motivo', value: String(denuncia.motivo || 'N/A'), inline: false },
-      { name: 'Link de PrÃ©-visualizaÃ§Ã£o RÃ¡pida', value: 'Aguarde... (PrÃ³xima Mensagem)', inline: false },
+      { name: 'Link de Pré-visualização Rápida', value: 'Aguarde... (Próxima Mensagem)', inline: false },
     ];
 
     if (String(denuncia.status).toLowerCase() === 'aceita' && denuncia.motivoAceite) {
-      fields.push({ name: 'Motivo da AceitaÃ§Ã£o (Staff)', value: String(denuncia.motivoAceite), inline: false });
+      fields.push({ name: 'Motivo da Aceitação (Staff)', value: String(denuncia.motivoAceite), inline: false });
     } else if (String(denuncia.status).toLowerCase() === 'recusada') {
-      fields.push({ name: 'Motivo da Recusa (Staff)', value: String(denuncia.motivoRecusa || 'NÃ£o registrado'), inline: false });
+      fields.push({ name: 'Motivo da Recusa (Staff)', value: String(denuncia.motivoRecusa || 'Não registrado'), inline: false });
     }
 
     logEmbed.addFields(fields);
@@ -753,17 +690,16 @@ async function handleExportButton(interaction) {
       }
 
       const previewMessage = await logsChannel.send({
-        content: `**[PRÃ‰-VISUALIZAÃ‡ÃƒO]** ${thread.name} - Arquivo HTML solto.`,
+        content: `**[PRÉ-VISUALIZAÇÃO]** ${thread.name} - Arquivo HTML solto.`,
         files: [htmlAttachment],
       });
 
       const previewLink = previewMessage.url;
 
-      // Atualiza o campo de preview
       logEmbed.spliceFields(
-        fields.findIndex(f => f.name === 'Link de PrÃ©-visualizaÃ§Ã£o RÃ¡pida'),
+        fields.findIndex(f => f.name === 'Link de Pré-visualização Rápida'),
         1,
-        { name: 'Link de PrÃ©-visualizaÃ§Ã£o RÃ¡pida (HTML)', value: `[Clique Aqui - MÃ­dia Original](${previewLink})`, inline: false }
+        { name: 'Link de Pré-visualização Rápida (HTML)', value: `[Clique Aqui - Mídia Original](${previewLink})`, inline: false }
       );
 
       await logMessage.edit({ embeds: [logEmbed] });
@@ -773,12 +709,11 @@ async function handleExportButton(interaction) {
         flags: MessageFlags.Ephemeral,
       });
     } else {
-      // fallback DM staff
       try {
         logMessage = await interaction.user.send({
-          content: `âš ï¸ **Aviso:** O canal de logs nÃ£o foi encontrado. A exportaÃ§Ã£o (ZIPs e HTML) foi enviada por DM.`,
+          content: `⚠️ **Aviso:** O canal de logs não foi encontrado. A exportação (ZIPs e HTML) foi enviada por DM.`,
           embeds: [logEmbed],
-          files: [...zipAttachments, htmlAttachment].slice(0, 10), // proteÃ§Ã£o: dm tambÃ©m tem limite
+          files: [...zipAttachments, htmlAttachment].slice(0, 10),
         });
 
         await interaction.editReply({
@@ -795,17 +730,16 @@ async function handleExportButton(interaction) {
       }
     }
 
-    // DM para denunciante (somente preview, que Ã© leve)
     const denunciante = await interaction.client.users.fetch(String(denuncia.criadoPor)).catch(() => null);
     if (denunciante) {
       try {
         const dmEmbed = new EmbedBuilder()
           .setColor(statusMeta.color)
-          .setTitle(`ðŸ“¢ DenÃºncia Arquivada - Status: ${statusLabel}`)
-          .setDescription(`Sua denÃºncia sobre **${denuncia.acusado}** no servidor **${guild.name}** foi finalizada pela equipe de moderaÃ§Ã£o.`)
+          .setTitle(`📢 Denúncia Arquivada - Status: ${statusLabel}`)
+          .setDescription(`Sua denúncia sobre **${denuncia.acusado}** no servidor **${guild.name}** foi finalizada pela equipe de moderação.`)
           .addFields(
             { name: 'Motivo Registrado', value: String(denuncia.motivo || 'N/A'), inline: false },
-            { name: 'DocumentaÃ§Ã£o', value: 'O histÃ³rico de conversas estÃ¡ no arquivo HTML anexo (links de mÃ­dia originais incluÃ­dos).', inline: false }
+            { name: 'Documentação', value: 'O histórico de conversas está no arquivo HTML anexo (links de mídia originais incluídos).', inline: false }
           )
           .setTimestamp();
 
@@ -815,13 +749,12 @@ async function handleExportButton(interaction) {
         });
       } catch (dmError) {
         await interaction.followUp({
-          content: `âš ï¸ Aviso: NÃ£o foi possÃ­vel enviar a DM para o denunciante. Motivo: **${dmError.code === 50007 ? 'O usuÃ¡rio bloqueou o bot ou desativou as DMs.' : 'Erro de conexÃ£o/API.'}** O staff tem acesso total aos arquivos no canal de logs.`,
+          content: `⚠️ Aviso: Não foi possível enviar a DM para o denunciante. Motivo: **${dmError.code === 50007 ? 'O usuário bloqueou o bot ou desativou as DMs.' : 'Erro de conexão/API.'}** O staff tem acesso total aos arquivos no canal de logs.`,
           flags: MessageFlags.Ephemeral,
         });
       }
     }
 
-    // Salvar histÃ³rico no banco se logMessage existe
     if (logMessage) {
       await Denuncia.updateOne(
         { _id: denuncia._id },
@@ -848,28 +781,25 @@ async function handleExportButton(interaction) {
       );
     }
 
-    // Mensagem final no tÃ³pico
     try {
       await thread.send({
         content:
-          `**ðŸš¨ DenÃºncia Finalizada e Arquivada.**\n\n` +
-          `Caso precise de reanÃ¡lise ou queira recorrer da decisÃ£o, por favor, abra um **NOVO TICKET** no canal de suporte. ` +
-          `Este tÃ³pico serÃ¡ trancado.`,
+          `**🚨 Denúncia Finalizada e Arquivada.**\n\n` +
+          `Caso precise de reanálise ou queira recorrer da decisão, por favor, abra um **NOVO TICKET** no canal de suporte. ` +
+          `Este tópico será trancado.`,
       });
     } catch (error) {
-      console.error('Erro ao enviar mensagem de finalizaÃ§Ã£o no tÃ³pico:', error);
+      console.error('Erro ao enviar mensagem de finalização no tópico:', error);
     }
 
-    // Trancar e arquivar
     if (thread.manageable) {
-      await thread.setLocked(true, 'DenÃºncia finalizada e exportada.');
-      await thread.setArchived(true, 'DenÃºncia finalizada e exportada.');
+      await thread.setLocked(true, 'Denúncia finalizada e exportada.');
+      await thread.setArchived(true, 'Denúncia finalizada e exportada.');
     }
 
-    // seta cooldown depois de concluir (cooldown real)
     cooldowns.set(userId, nowMs() + EXPORT_CONSTANTS.COOLDOWN_SECONDS * 1000);
   } catch (error) {
-    console.error('Erro fatal ao exportar denÃºncia:', error);
+    console.error('Erro fatal ao exportar denúncia:', error);
 
     const errorMessage =
       `❌ Ocorreu um erro fatal ao exportar a denúncia. O arquivamento pode não ter sido concluído.\n` +
@@ -880,7 +810,6 @@ async function handleExportButton(interaction) {
       flags: MessageFlags.Ephemeral,
     });
 
-    // mesmo com erro, aplica cooldown curto pra evitar spam de erro
     cooldowns.set(userId, nowMs() + 10 * 1000);
   } finally {
     inProgress.delete(userId);

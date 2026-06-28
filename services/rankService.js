@@ -1,23 +1,15 @@
-﻿// rankService.js
-// services/rankService.js
+﻿// services/rankService.js
 const ModerationAction = require('../models/ModerationAction');
 const Config = require('../models/Config');
 
 class RankService {
   static rankCache = new Map();
-  static cacheTimeout = 5 * 60 * 1000; // 5 minutos
+  static cacheTimeout = 5 * 60 * 1000; 
 
-  /**
-   * type:
-   *  - 'month' (padrÃ£o recomendado)
-   *  - 'week'
-   *  - 'day'
-   */
   static async getRankData(guild, type = 'month', forceRefresh = false) {
     try {
       const safeType = (type === 'week' || type === 'day' || type === 'month') ? type : 'month';
 
-      // Cache separado por guild + tipo
       const cacheKey = `${guild.id}:${safeType}`;
       const cached = this.rankCache.get(cacheKey);
 
@@ -27,7 +19,6 @@ class RankService {
 
       const config = await Config.findOne({ guildId: guild.id }).lean();
 
-      // Busca o cargo (administrador) pra tags amigÃ¡veis
       const adminRoleId = config?.roles?.administrador || config?.administrador;
       let activeModeratorMembers = new Map();
 
@@ -38,7 +29,6 @@ class RankService {
         }
       }
 
-      // âœ… Busca aÃ§Ãµes conforme o tipo
       let allActions = [];
       if (safeType === 'day') {
         allActions = await ModerationAction.getActionsForToday(guild.id);
@@ -54,10 +44,8 @@ class RankService {
         const moderatorId = action._id;
         if (!moderatorId) continue;
 
-        // tenta pegar pela lista do cargo, senÃ£o cache geral
         const member = activeModeratorMembers.get(moderatorId) || guild.members.cache.get(moderatorId);
 
-        // tag amigÃ¡vel (sem remover do rank se nÃ£o existir)
         const tag = member?.user?.username || member?.user?.tag || `Staff Antigo (${moderatorId})`;
 
         finalActions.push({
@@ -75,7 +63,6 @@ class RankService {
         });
       }
 
-      // Ordena por total
       finalActions.sort((a, b) => b.total - a.total);
 
       const result = {
@@ -91,7 +78,6 @@ class RankService {
         },
       };
 
-      // Salva cache
       this.rankCache.set(cacheKey, {
         data: result,
         timestamp: Date.now(),

@@ -1,5 +1,4 @@
-﻿// feedback.js
-const {
+﻿const {
     ActionRowBuilder,
     StringSelectMenuBuilder,
     ModalBuilder,
@@ -19,10 +18,10 @@ function gerarCodigoFeedback() {
 }
 
 function gerarEmojiNota(nota) {
-    if (nota >= 9) return '\uD83C\uDF1F';  // ðŸŒŸ
-    if (nota >= 7) return '\u2705';         // âœ…
-    if (nota >= 5) return '\u26A0\uFE0F';  // âš ï¸
-    return '\u274C';                        // âŒ
+    if (nota >= 9) return '\uD83C\uDF1F';  
+    if (nota >= 7) return '\u2705';        
+    if (nota >= 5) return '\u26A0\uFE0F';  
+    return '\u274C';                        
 }
 
 function gerarCorNota(nota) {
@@ -46,17 +45,12 @@ function gerarEstrelasNota(nota) {
     return cheias + vazias;
 }
 
-// =========================
-// LIMPAR MENUS ORFAOS
-// Chame isso no startup do bot (index.js)
-// =========================
 async function limparMenusOrfaos(client) {
     try {
         const pendentes = await FeedbackTemp.find({});
 
         if (pendentes.length === 0) return;
 
-        //console.log(`[FeedbackTemp] ${pendentes.length} menu(s) orfao(s) encontrado(s). Limpando...`);
 
         for (const entry of pendentes) {
             try {
@@ -68,7 +62,6 @@ async function limparMenusOrfaos(client) {
                 }
 
                 await FeedbackTemp.deleteOne({ _id: entry._id });
-                //console.log(`[FeedbackTemp] Orfao removido: denunciaId=${entry.denunciaId}`);
             } catch (err) {
                 console.error(`[FeedbackTemp] Erro ao limpar orfao ${entry.denunciaId}:`, err.message);
             }
@@ -149,7 +142,7 @@ async function enviarFeedbackStaff(client, staffId, data) {
 }
 
 // =========================
-// MONTAR EMBED â€” DESIGN PROFISSIONAL
+// MONTAR EMBED — DESIGN PROFISSIONAL
 // =========================
 function criarEmbedFeedback(data, isDM = false) {
     const nota     = Number(data.nota);
@@ -219,13 +212,6 @@ function criarEmbedFeedback(data, isDM = false) {
         .setTimestamp();
 }
 
-// =========================
-// SELECT MENU -> ABRE MODAL
-// CORRIGIDO: Nenhuma query ao banco aqui.
-// showModal deve ser chamado imediatamente,
-// pois o token da interacao expira em 3 segundos.
-// As validacoes foram movidas para handleFeedbackModal.
-// =========================
 async function handleFeedbackMenu(interaction) {
     const denunciaId = interaction.customId.split(':')[2];
     const nota = interaction.values[0];
@@ -266,7 +252,6 @@ async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
             return interaction.editReply({ content: '\u274C Den\u00FAncia n\u00E3o encontrada.' });
         }
 
-        // Validacoes movidas do handleFeedbackMenu para ca
         if (denuncia.feedbackEnviado) {
             return interaction.editReply({ content: '\u274C Voc\u00EA j\u00E1 avaliou esta den\u00FAncia.' });
         }

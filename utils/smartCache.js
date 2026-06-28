@@ -1,5 +1,4 @@
-﻿// smartCache.js
-class SmartCache {
+﻿class SmartCache {
   constructor() {
     this.cache = new Map();
     this.stats = {
@@ -10,7 +9,7 @@ class SmartCache {
     };
     this.cleanupInterval = setInterval(() => {
       this.cleanup();
-    }, 5 * 60 * 1000); // Limpa a cada 5 minutos
+    }, 5 * 60 * 1000); 
   }
 
   get(key) {
@@ -31,7 +30,7 @@ class SmartCache {
     return item.data;
   }
 
-  set(key, data, ttl = 300000) { // 5 minutos padrÃ£o
+  set(key, data, ttl = 300000) { 
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
@@ -61,7 +60,6 @@ class SmartCache {
     this.cache.clear();
   }
 
-  // Cache com invalidaÃ§Ã£o inteligente por padrÃ£o
   invalidatePattern(pattern) {
     let deleted = 0;
     for (const key of this.cache.keys()) {
@@ -74,21 +72,19 @@ class SmartCache {
     return deleted;
   }
 
-  // Cache com TTL dinÃ¢mico baseado no tipo de dados
   setWithDynamicTTL(key, data, dataType = 'default') {
     const ttlMap = {
-      'config': 10 * 60 * 1000,      // 10 minutos para configuraÃ§Ãµes
-      'denuncia': 2 * 60 * 1000,     // 2 minutos para denÃºncias
-      'user': 5 * 60 * 1000,         // 5 minutos para dados de usuÃ¡rio
-      'guild': 15 * 60 * 1000,       // 15 minutos para dados de servidor
-      'default': 5 * 60 * 1000       // 5 minutos padrÃ£o
+      'config': 10 * 60 * 1000,      
+      'denuncia': 2 * 60 * 1000,     
+      'user': 5 * 60 * 1000,         
+      'guild': 15 * 60 * 1000,       
+      'default': 5 * 60 * 1000       
     };
 
     const ttl = ttlMap[dataType] || ttlMap['default'];
     this.set(key, data, ttl);
   }
 
-  // EstatÃ­sticas do cache
   getStats() {
     const total = this.stats.hits + this.stats.misses;
     return {
@@ -99,18 +95,16 @@ class SmartCache {
     };
   }
 
-  // Estimativa de uso de memÃ³ria
   estimateMemoryUsage() {
     let totalSize = 0;
     for (const [key, value] of this.cache.entries()) {
-      totalSize += key.length * 2; // String length * 2 bytes
+      totalSize += key.length * 2; 
       totalSize += JSON.stringify(value.data).length * 2;
-      totalSize += 24; // Overhead do objeto (timestamp, ttl)
+      totalSize += 24; 
     }
-    return Math.round(totalSize / 1024); // KB
+    return Math.round(totalSize / 1024); 
   }
 
-  // Limpeza de itens expirados
   cleanup() {
     const now = Date.now();
     let cleaned = 0;
@@ -125,11 +119,10 @@ class SmartCache {
     this.stats.evictions += cleaned;
     
     if (cleaned > 0) {
-      console.log(`ðŸ§¹ Cache cleanup: ${cleaned} itens removidos`);
+      console.log(`🧹 Cache cleanup: ${cleaned} itens removidos`);
     }
   }
 
-  // Cache com compressÃ£o para dados grandes
   setCompressed(key, data, ttl = 300000) {
     try {
       const compressed = JSON.stringify(data);
@@ -156,7 +149,6 @@ class SmartCache {
     return item;
   }
 
-  // Destruir o cache e limpar intervalos
   destroy() {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
@@ -165,7 +157,6 @@ class SmartCache {
   }
 }
 
-// InstÃ¢ncia global do cache
 const globalCache = new SmartCache();
 
 module.exports = { SmartCache, globalCache };

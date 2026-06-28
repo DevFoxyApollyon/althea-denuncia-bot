@@ -1,5 +1,4 @@
-﻿// Config.js
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 
 const configSchema = new mongoose.Schema({
   guildId: { 
@@ -10,8 +9,8 @@ const configSchema = new mongoose.Schema({
   channels: {
     pc: { type: String, required: false, default: '' },
     mobile: { type: String, required: false, default: '' },
-    logs: { type: String, required: false, default: '' }, // Log de status (texto)
-    log: { type: String, required: false, default: '' },  // Log de auditoria (embed)
+    logs: { type: String, required: false, default: '' }, 
+    log: { type: String, required: false, default: '' }, 
     analysis: { type: String, required: false, default: '' },
     topDaily: { type: String, required: false, default: '' },
     databaseprovas: { type: String, required: false, default: '' } 
@@ -26,12 +25,12 @@ const configSchema = new mongoose.Schema({
     denuncia_aceita: { 
       type: String, 
       required: false, 
-      default: '✔️ Denúncia aceita. Acusado ({acusadoId}) tomará punição por ({motivo}). Data: {dataPunicao}. Link: {messageUrl}' 
+      default: '➥ Denúncia aceita Acusado ({acusadoId}) tomará punição por ({motivo}) Data {dataPunicao} Link: {messageUrl}' 
     },
     denuncia_analise: { 
       type: String, 
       required: false, 
-      default: '🔎 Esta denúncia está em análise por {user}. Acusado: ({acusado}). Motivo: ({motivo}). Link: {messageUrl}' 
+      default: '🔎 Esta denúncia está em análise por {user} Acusado: ({acusado}) Motivo: ({motivo}) Link: {messageUrl}' 
     },
     denuncia_recusada: { 
       type: String, 

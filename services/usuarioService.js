@@ -1,5 +1,4 @@
-﻿// usuarioService.js
-const Usuario = require('../models/Usuario');
+﻿const Usuario = require('../models/Usuario');
 
 async function buscarUsuarioPorApelidoOuId(termo) {
     return await Usuario.findOne({

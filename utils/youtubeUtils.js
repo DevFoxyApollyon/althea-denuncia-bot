@@ -1,5 +1,4 @@
-﻿// youtubeUtils.js
-const fetch = require('node-fetch');
+﻿const fetch = require('node-fetch');
 const { EmbedBuilder } = require('discord.js');
 const dateUtils = require('./dateUtils');
 
@@ -56,7 +55,7 @@ async function sendLog(message, motivo, videoTitle) {
 
     const embed = new EmbedBuilder()
       .setColor('#d7263d')
-      .setTitle('🛡️ Registro de Remoção de Mensagem do YouTube')
+      .setTitle('🚨 Registro de Remoção de Mensagem do YouTube')
       .setAuthor({
         name: `${message.author.tag} (${message.author.id})`,
         iconURL: message.author.displayAvatarURL(),
@@ -94,7 +93,7 @@ async function handleDivulgacaoIndevida(message, videoTitle) {
 
   const embedCanal = new EmbedBuilder()
     .setColor('#d7263d')
-    .setTitle('📵 Divulgação Indevida de Conteúdo do YouTube')
+    .setTitle('🚫 Divulgação Indevida de Conteúdo do YouTube')
     .setDescription(
       `<@${message.author.id}>, sua mensagem foi removida por divulgação indevida de conteúdo do YouTube.`
     )
@@ -121,7 +120,7 @@ async function handleHLDivulgacao(message, videoTitle) {
 
   const embedCanal = new EmbedBuilder()
     .setColor('#d7263d')
-    .setTitle('📵 Divulgação Indevida de Conteúdo do YouTube')
+    .setTitle('🚫 Divulgação Indevida de Conteúdo do YouTube')
     .setDescription(
       `<@${message.author.id}>, sua mensagem foi removida por divulgação indevida de vídeo do YouTube.`
     )
@@ -142,7 +141,7 @@ async function handleHLDivulgacao(message, videoTitle) {
 
   const embedDM = new EmbedBuilder()
     .setColor('#d7263d')
-    .setTitle('📵 Divulgação Indevida de Conteúdo do YouTube')
+    .setTitle('🚫 Divulgação Indevida de Conteúdo do YouTube')
     .setDescription('Sua mensagem foi removida por divulgação indevida de vídeo do YouTube.')
     .setImage(GIFS_YOUTUBE.hl)
     .addFields(

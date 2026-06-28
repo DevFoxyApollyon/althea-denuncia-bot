@@ -1,17 +1,15 @@
-﻿// advancedMonitoring.js
-const { globalCache } = require('./smartCache');
+﻿const { globalCache } = require('./smartCache');
 const chalk = require('chalk');
 
 const log = {
-    info:    (msg) => console.log(`${chalk.blue('â„¹')} ${chalk.gray('[INFO]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('âœ”')} ${chalk.gray('[SUCESSO]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('âš ')} ${chalk.gray('[AVISO]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('âœ–')} ${chalk.gray('[ERRO]')} ${msg}`),
+    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
+    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
+    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
+    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
 };
 
 class AdvancedMonitor {
   constructor() {
-    // Evita criar mÃºltiplas instÃ¢ncias caso o mÃ³dulo seja recarregado
     if (AdvancedMonitor._instance) {
       return AdvancedMonitor._instance;
     }
@@ -45,22 +43,18 @@ class AdvancedMonitor {
   }
 
   startCollection() {
-    // Coleta mÃ©tricas a cada 30 segundos
     this.metricsInterval = setInterval(() => {
       this.collectSystemMetrics();
     }, 30000);
 
-    // Limpa dados antigos a cada hora
     this.cleanupInterval = setInterval(() => {
       this.cleanupOldData();
     }, 3600000);
 
-    // Atualiza uptime a cada minuto
     this.uptimeInterval = setInterval(() => {
       this.updateUptime();
     }, 60000);
 
-    // Permite que o processo encerre sem esperar esses timers
     this.metricsInterval.unref?.();
     this.cleanupInterval.unref?.();
     this.uptimeInterval.unref?.();
@@ -135,7 +129,6 @@ class AdvancedMonitor {
       timestamp: Date.now()
     });
 
-    // MantÃ©m apenas os Ãºltimos 100 erros
     if (this.metrics.errors.length > 100) {
       this.metrics.errors.shift();
     }
@@ -145,7 +138,7 @@ class AdvancedMonitor {
     const usage = process.memoryUsage();
     const memoryData = {
       timestamp: Date.now(),
-      heapUsed: Math.round(usage.heapUsed / 1024 / 1024), // MB
+      heapUsed: Math.round(usage.heapUsed / 1024 / 1024), 
       heapTotal: Math.round(usage.heapTotal / 1024 / 1024),
       external: Math.round(usage.external / 1024 / 1024),
       rss: Math.round(usage.rss / 1024 / 1024)
@@ -154,18 +147,15 @@ class AdvancedMonitor {
     this.metrics.performance.memoryUsage.push(memoryData);
     this.metrics.system.memory.current = memoryData.heapUsed;
 
-    // Atualiza pico de memÃ³ria
     if (memoryData.heapUsed > this.metrics.system.memory.peak) {
       this.metrics.system.memory.peak = memoryData.heapUsed;
     }
 
-    // Calcula mÃ©dia de memÃ³ria
     if (this.metrics.performance.memoryUsage.length > 0) {
       const total = this.metrics.performance.memoryUsage.reduce((sum, m) => sum + m.heapUsed, 0);
       this.metrics.system.memory.average = Math.round(total / this.metrics.performance.memoryUsage.length);
     }
 
-    // MantÃ©m apenas os Ãºltimos 100 registros
     if (this.metrics.performance.memoryUsage.length > 100) {
       this.metrics.performance.memoryUsage.shift();
     }
@@ -178,10 +168,8 @@ class AdvancedMonitor {
   cleanupOldData() {
     const oneHourAgo = Date.now() - (60 * 60 * 1000);
 
-    // Limpa erros antigos
     this.metrics.errors = this.metrics.errors.filter(error => error.timestamp > oneHourAgo);
 
-    // Limpa mÃ©tricas de performance antigas
     this.metrics.performance.memoryUsage = this.metrics.performance.memoryUsage.filter(
       m => m.timestamp > oneHourAgo
     );
@@ -266,7 +254,6 @@ class AdvancedMonitor {
   calculateHealthScore() {
     let score = 100;
 
-    // Penaliza por erros
     const totalCommands = Array.from(this.metrics.commands.values())
       .reduce((sum, cmd) => sum + cmd.total, 0);
     const totalErrors = Array.from(this.metrics.commands.values())
@@ -274,21 +261,18 @@ class AdvancedMonitor {
 
     if (totalCommands > 0) {
       const errorRate = (totalErrors / totalCommands) * 100;
-      score -= errorRate * 2; // -2 pontos por % de erro
+      score -= errorRate * 2;
     }
 
-    // Penaliza por uso de memÃ³ria alto
     const memory = this.metrics.system.memory;
     if (memory.current > 500)  score -= 20;
     if (memory.current > 1000) score -= 30;
     if (memory.current > 1500) score -= 40;
 
-    // Penaliza por tempo de resposta alto
     const avgResponseTime = this.getPerformanceStats().responseTime.average;
     if (avgResponseTime > 5000)  score -= 15;
     if (avgResponseTime > 10000) score -= 25;
 
-    // Bonus por cache hit rate alto
     const cacheStats = globalCache.getStats();
     const hitRate = parseFloat(cacheStats.hitRate);
     if (hitRate > 80) score += 5;
@@ -298,10 +282,10 @@ class AdvancedMonitor {
   }
 
   getHealthStatus(score) {
-    if (score >= 90) return 'ðŸŸ¢ Excelente';
-    if (score >= 80) return 'ðŸŸ¡ Bom';
-    if (score >= 60) return 'ðŸŸ  AtenÃ§Ã£o';
-    return 'ðŸ”´ CrÃ­tico';
+    if (score >= 90) return '🟢 Excelente';
+    if (score >= 80) return '🟡 Bom';
+    if (score >= 60) return '🟠 Atenção';
+    return '🔴 Crítico';
   }
 
   getTopCommands(limit = 5) {
@@ -334,7 +318,6 @@ class AdvancedMonitor {
     };
   }
 
-  // Limpa os intervalos ao encerrar o bot
   destroy() {
     if (this.metricsInterval) clearInterval(this.metricsInterval);
     if (this.cleanupInterval)  clearInterval(this.cleanupInterval);
@@ -344,7 +327,6 @@ class AdvancedMonitor {
   }
 }
 
-// InstÃ¢ncia global do monitor (singleton)
 const advancedMonitor = new AdvancedMonitor();
 
 module.exports = { AdvancedMonitor, advancedMonitor };

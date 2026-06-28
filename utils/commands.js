@@ -1,5 +1,4 @@
-﻿// commands.js
-// utils/commands.js
+﻿// utils/commands.js
 module.exports = {
     'rank': require('../commands/rank').handleRankCommand,
     'denuncia': require('../commands/denuncia').handleDenunciaCommand,

@@ -1,6 +1,4 @@
-﻿// rank.js
-// commands/rank.js  ✅ ATUALIZADO (sem opcode 8 / sem fetch geral de membros)
-const {
+﻿const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -15,9 +13,6 @@ const { getBrasiliaDate, formatDateBR } = require('../utils/dateUtils');
 
 const ITEMS_PER_PAGE = 8;
 
-// -------------------------
-// Helpers (anti rate-limit)
-// -------------------------
 function chunkArray(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -28,31 +23,23 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-
 async function fetchMembersByIdsSafe(guild, ids) {
   const uniqueIds = [...new Set(ids)].filter(Boolean);
 
   if (uniqueIds.length === 0) return;
 
-  // 50~80 é um tamanho seguro (evita bursts grandes)
   const chunks = chunkArray(uniqueIds, 80);
 
   for (const part of chunks) {
     try {
-      // ✅ NÃO dispara opcode 8
       await guild.members.fetch({ user: part, force: false });
     } catch (e) {
-      // Não quebra o comando por falha em 1 lote
       console.warn('[RANK] Falha ao buscar lote de membros:', e?.message || e);
     }
-    // delay curto pra aliviar REST se tiver muitos IDs
     await sleep(800);
   }
 }
 
-// -------------------------
-// Datas auxiliares
-// -------------------------
 function getMonthDates() {
   const now = getBrasiliaDate();
   return {
@@ -63,7 +50,7 @@ function getMonthDates() {
 
 function getWeekDatesLocal() {
   const now = getBrasiliaDate();
-  const day = now.getDay(); // 0 dom, 1 seg...
+  const day = now.getDay();
   const diffToMonday = (day + 6) % 7;
 
   const start = new Date(now);
@@ -81,9 +68,6 @@ function getTodayDatesLocal() {
   };
 }
 
-// -------------------------
-// Stats do dia (denúncias)
-// -------------------------
 async function getDailyStats(guildId) {
   try {
     const today = getBrasiliaDate();
@@ -112,9 +96,6 @@ async function getDailyStats(guildId) {
   }
 }
 
-// -------------------------
-// Tabela do Embed
-// -------------------------
 function buildRankTable(actions) {
   if (!actions.length) return 'Nenhuma ação registrada.';
 
@@ -129,9 +110,6 @@ function buildRankTable(actions) {
     .join('\n');
 }
 
-// -------------------------
-// TXT Completo
-// -------------------------
 function generateRankTxt(actions, guildName, label, period, daily) {
   const lines = [
     `🏆 RANKING ${label.toUpperCase()} - ${guildName.toUpperCase()}`,
@@ -156,19 +134,13 @@ function generateRankTxt(actions, guildName, label, period, daily) {
       `❌ Recusadas: ${a.recusadas}`,
       `🔎 Análises: ${a.analises}`,
       `📌 Reivindicações: ${a.reivindicacoes}`,
+      `====================================================`
+    );
   });
 
   return lines.join('\n');
 }
 
-// -------------------------
-// Comando !rank
-// -------------------------
-// PadrÃ£o: MENSAL
-// !rank
-// !rank mensal | mes
-// !rank semanal | semana
-// !rank hoje | dia
 async function handleRankCommand(message) {
   let loadingMsg = null;
   let page = 0;
@@ -201,13 +173,11 @@ async function handleRankCommand(message) {
       return loadingMsg.edit(`⚠️ Nenhuma ação registrada (${label}).`);
     }
 
-    // ✅ Anti-opcode-8: busca SOMENTE os membros do ranking (por IDs)
     const idsToFetch = rawActions.map((a) => a.userId || a._id).filter(Boolean);
     await fetchMembersByIdsSafe(message.guild, idsToFetch);
 
     const dailyStats = await getDailyStats(message.guild.id);
 
-    // Normaliza e monta tags (agora o cache tem bem mais chances de ter os membros)
     const actions = rawActions.map((a) => {
       const userId = a.userId || a._id;
       const member = message.guild.members.cache.get(userId);
@@ -285,7 +255,6 @@ async function handleRankCommand(message) {
     });
 
     collector.on('end', async () => {
-      // opcional: desabilitar botões quando expirar
       if (!loadingMsg) return;
       try {
         const disabledRow = new ActionRowBuilder().addComponents(

@@ -1,12 +1,11 @@
-﻿// templateProcessor.js
-const { getCachedConfig } = require('./performance');
+﻿const { getCachedConfig } = require('./performance');
 const Config = require('../models/Config');
 
 class TemplateProcessor {
   constructor() {
     this.defaultTemplates = {
-      denuncia_aceita: '✔️ Denúncia aceita. Acusado ({acusadoId}) tomará punição por ({motivo}). Data: {dataPunicao}. Link: {messageUrl}',
-      denuncia_analise: '🔎 Esta denúncia está em análise por {user}. Acusado: ({acusado}). Motivo: ({motivo}). Link: {messageUrl}',
+      denuncia_aceita: '➥ Denúncia aceita Acusado ({acusadoId}) tomará punição por ({motivo}) Data {dataPunicao} Link: {messageUrl}',
+      denuncia_analise: '🔎 Esta denúncia está em análise por {user} Acusado: ({acusado}) Motivo: ({motivo}) Link: {messageUrl}',
       denuncia_recusada: '❌ Denúncia recusada por {user}'
     };
   }

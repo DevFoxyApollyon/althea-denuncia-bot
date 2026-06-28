@@ -1,5 +1,4 @@
-﻿// Usuario.js
-const secondaryConnection = require('../utils/secondaryDb');
+﻿const secondaryConnection = require('../utils/secondaryDb');
 const { Schema } = require('mongoose');
 
 const usuariosSchema = new Schema({

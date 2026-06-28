@@ -1,5 +1,4 @@
-﻿// interactionHandler.js
-const { InteractionType, PermissionFlagsBits } = require('discord.js');
+﻿const { InteractionType, PermissionFlagsBits } = require('discord.js');
 const Config = require('../models/Config');
 
 const {
@@ -89,14 +88,14 @@ async function handlePanelModalSubmit(interaction) {
     config.updatedBy = interaction.user.tag;
     await config.save();
 
-    await interaction.editReply({ content: 'âœ… ConfiguraÃ§Ã£o salva com sucesso!' });
+    await interaction.editReply({ content: '✅ Configuração salva com sucesso!' });
 
   } catch (error) {
     console.error('Erro ao processar modal do painel:', error);
     if (interaction.replied || interaction.deferred) {
-      await interaction.editReply({ content: 'âŒ Erro ao salvar configuraÃ§Ãµes.' });
+      await interaction.editReply({ content: '❌ Erro ao salvar configurações.' });
     } else {
-      await interaction.reply({ content: 'âŒ Erro ao salvar configuraÃ§Ãµes.', ephemeral: true });
+      await interaction.reply({ content: '❌ Erro ao salvar configurações.', ephemeral: true });
     }
   }
 }
@@ -114,16 +113,16 @@ async function interactionHandler(interaction) {
         const denuncia = await Denuncia.findById(denunciaId);
 
         if (!denuncia) {
-          return interaction.reply({ content: 'âŒ DenÃºncia nÃ£o encontrada.', ephemeral: true });
+          return interaction.reply({ content: '❌ Denúncia não encontrada.', ephemeral: true });
         }
 
         await handleFeedbackMenu(interaction, denuncia);
       } catch (err) {
         console.error('Erro no feedback select:', err);
         if (interaction.replied || interaction.deferred) {
-          await interaction.editReply({ content: 'âŒ Erro ao processar feedback.' });
+          await interaction.editReply({ content: '❌ Erro ao processar feedback.' });
         } else {
-          await interaction.reply({ content: 'âŒ Erro ao processar feedback.', ephemeral: true });
+          await interaction.reply({ content: '❌ Erro ao processar feedback.', ephemeral: true });
         }
       }
       return;
@@ -136,15 +135,15 @@ async function interactionHandler(interaction) {
       } catch (err) {
         console.error('Erro no feedback modal:', err);
         if (interaction.replied || interaction.deferred) {
-          await interaction.editReply({ content: 'âŒ Erro ao enviar feedback.' });
+          await interaction.editReply({ content: '❌ Erro ao enviar feedback.' });
         } else {
-          await interaction.reply({ content: 'âŒ Erro ao enviar feedback.', ephemeral: true });
+          await interaction.reply({ content: '❌ Erro ao enviar feedback.', ephemeral: true });
         }
       }
       return;
     }
 
-    // ======== CORREÃ‡ÃƒO ACEITE ========
+    // ======== CORREÇÃO ACEITE ========
     if (interaction.isButton() && interaction.customId === 'abrir_input_id_log_aceite') {
       await handleInputIdLogAceite(interaction);
       return;
@@ -170,7 +169,7 @@ async function interactionHandler(interaction) {
       return;
     }
 
-    // ======== CORREÃ‡ÃƒO DENÃšNCIA ========
+    // ======== CORREÇÃO DENÚNCIA ========
     if (interaction.isButton() && interaction.customId === 'abrir_input_id_denuncia') {
       await handleInputIdDenuncia(interaction);
       return;
@@ -192,7 +191,7 @@ async function interactionHandler(interaction) {
       return;
     }
 
-    // ======== BOTÃ•ES ========
+    // ======== BOTÕES ========
     if (interaction.isButton()) {
       if (interaction.customId === 'denuncia_pc') {
         await handleDenunciaPC(interaction);
@@ -259,10 +258,10 @@ async function interactionHandler(interaction) {
     }
 
   } catch (error) {
-    console.error('âŒ Erro na interaÃ§Ã£o:', error);
+    console.error('❌ Erro na interação:', error);
 
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: 'âŒ Ocorreu um erro.', ephemeral: true });
+      await interaction.reply({ content: '❌ Ocorreu um erro.', ephemeral: true });
     }
   }
 }

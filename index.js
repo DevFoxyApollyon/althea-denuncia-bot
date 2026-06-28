@@ -1,5 +1,4 @@
-﻿// index.js
-process.env.TZ = 'America/Sao_Paulo';
+﻿process.env.TZ = 'America/Sao_Paulo';
 process.env.FORCE_COLOR = '3';
 require('dotenv').config();
 
@@ -48,11 +47,11 @@ const client = new Client({
 });
 
 const log = {
-    info:    (msg) => console.log(`${chalk.blue('â„¹')} ${chalk.gray('[INFO]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('✅')} ${chalk.gray('[SUCESSO]')} ${msg}`),
+    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
+    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
     warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
     error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
-    system:  (msg) => console.log(`${chalk.magenta('⚙️')} ${chalk.gray('[SISTEMA]')} ${msg}`)
+    system:  (msg) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} ${msg}`)
 };
 
 const configCache = new Map();
@@ -113,8 +112,8 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         );
 
         log.success(
-            `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} â€” nickname registrado: ` +
-            `${chalk.red(oldMember.nickname ?? 'nenhum')} ${chalk.gray('â†’')} ${chalk.green(newMember.nickname ?? 'nenhum')}` +
+            `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} — nickname registrado: ` +
+            `${chalk.red(oldMember.nickname ?? 'nenhum')} ${chalk.gray('→')} ${chalk.green(newMember.nickname ?? 'nenhum')}` +
             (contaExtraida ? chalk.gray(` | conta: ${contaExtraida}`) : '') +
             chalk.gray(` | ${newMember.guild.name}`)
         );
@@ -137,7 +136,7 @@ client.on('guildMemberAdd', async (member) => {
         await member.setNickname(usuario.nickname, 'Nickname restaurado automaticamente');
 
         log.success(
-            `${chalk.white(member.user.username)} ${chalk.gray(`(${member.user.id})`)} â€” nickname restaurado: ${chalk.green(usuario.nickname)} ${chalk.gray(`| ${member.guild.name}`)}`
+            `${chalk.white(member.user.username)} ${chalk.gray(`(${member.user.id})`)} — nickname restaurado: ${chalk.green(usuario.nickname)} ${chalk.gray(`| ${member.guild.name}`)}`
         );
     } catch (e) {
         if (e.code === 50013) {
@@ -173,7 +172,7 @@ mongoose.connect(process.env.MONGODB_URI)
     });
 
 client.once('clientReady', async (readyClient) => {
-    console.log(chalk.cyan.bold('\n' + 'â•'.repeat(60)));
+    console.log(chalk.cyan.bold('\n' + '═'.repeat(60)));
     log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.username)}`);
 
     log.info(`${chalk.bold('Versão do Bot:')} ${chalk.green(packageJson.version)}`);
@@ -208,8 +207,8 @@ client.once('clientReady', async (readyClient) => {
 
     setTimeout(() => {
         const ping = readyClient.ws.ping;
-        log.info(`${chalk.bold('LatÃªncia WebSocket:')} ${chalk.white.bold(ping)}ms`);
-        console.log(chalk.cyan.bold('â•'.repeat(60) + '\n'));
+        log.info(`${chalk.bold('Latência WebSocket:')} ${chalk.white.bold(ping)}ms`);
+        console.log(chalk.cyan.bold('═'.repeat(60) + '\n'));
     }, 5000);
 
     setupRankJobs(client);
@@ -291,7 +290,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.on('messageDelete', async (msg) => {
-    //console.log('[DEBUG] messageDelete â€” canal:', msg.channelId, '| partial:', msg.partial);
+    //console.log('[DEBUG] messageDelete — canal:', msg.channelId, '| partial:', msg.partial);
 
     if (msg.guild) {
         const config = await Config.findOne({ guildId: msg.guild.id });
@@ -315,7 +314,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 process.on('uncaughtException', (error) => {
-    log.error('ERRO CRÃTICO: ' + error.stack);
+    log.error('ERRO CRÍTICO: ' + error.stack);
 });
 
 async function gracefulShutdown(signal) {
