@@ -1,10 +1,6 @@
+# 🗄️ Modelos do Banco de Dados (MongoDB)
 
-# 🗄️ Modelos do Banco de Dados (MongoDB) — v3
-
-> **📝 v3:**
-> - Novo modelo `FeedbackTemp` para avaliações pós-denúncia
-> - Campos de controle de status, claimedBy, locks e cooldowns revisados
-> - Melhorias em Denuncia para rastreamento de fluxo e feedback
+> **📝 v1.0.1:** Nenhuma alteração nos modelos. Removido suporte a caching local (utils não utilizadas).
 
 ---
 
@@ -35,11 +31,11 @@ Representa uma denúncia individual.
 
 ### Campos:
 - `_id`
-- `status` (analise | aceita | recusada | finalizada)
+- `status` (analise | aceita | recusada)
 - `threadId`
 - `messageId`
 - `criadoPor`
-- `claimedBy` (staff que reivindicou, respeita cooldown)
+- `claimedBy`
 - `acusadoId`
 - `motivoAceite`
 - `dataPunicao`
@@ -47,16 +43,12 @@ Representa uma denúncia individual.
 - `createdAt`
 - `dataAtualizacao`
 - `ultimaEdicao`
-- `locked` (controle de lock para evitar ações simultâneas)
-- `cooldowns` (controle de cooldowns por ação)
-- `feedbackId` (referência para feedback pós-denúncia)
 
 Usado em:
 - botões
 - exportação
 - logs
 - rankings
-- feedback
 
 ---
 
@@ -66,7 +58,7 @@ Usado para estatísticas e ranking.
 
 ### Campos:
 - `moderatorId`
-- `action` (reivindicacao | analise | aceita | recusada | finalizada)
+- `action` (reivindicacao | analise | aceita | recusada)
 - `denunciaId`
 - `guildId`
 - `weekOf`
@@ -79,27 +71,3 @@ Usado em:
 - `rankJobs.js`
 
 ---
-
-## 🆕 FeedbackTemp
-
-Armazena avaliações temporárias pós-denúncia (menu/modal).
-
-### Campos:
-- `_id`
-- `denunciaId`
-- `userId`
-- `rating` (1-5)
-- `comentario`
-- `createdAt`
-
-Usado em:
-- Sistema de feedback pós-denúncia
-- Análise de atendimento
-
----
-
-## Observações v3
-
-- Todos os controles de status, locks e cooldowns são centralizados em `Handlers/handlerStatusButton.js`.
-- O campo `feedbackId` em Denuncia referencia o feedback dado pelo usuário.
-- O modelo FeedbackTemp é temporário e pode ser limpo periodicamente.

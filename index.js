@@ -38,10 +38,11 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMessageReactions,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildModeration
     ],
     sweepers: {
-        messages: { interval: 3600, lifetime: 1800 } 
+        messages: { interval: 3600, lifetime: 1800 }
     }
 });
 
@@ -111,7 +112,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         );
 
         log.success(
-            `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} — nickname registrado em tempo real: ` +
+            `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} — nickname registrado: ` +
             `${chalk.red(oldMember.nickname ?? 'nenhum')} ${chalk.gray('→')} ${chalk.green(newMember.nickname ?? 'nenhum')}` +
             (contaExtraida ? chalk.gray(` | conta: ${contaExtraida}`) : '') +
             chalk.gray(` | ${newMember.guild.name}`)
@@ -289,7 +290,17 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.on('messageDelete', async (msg) => {
-    try { await handleDeletedMessage(msg); } catch (e) { log.error('messageDelete: ' + e.message); }
+    //console.log('[DEBUG] messageDelete — canal:', msg.channelId, '| partial:', msg.partial);
+
+    if (msg.guild) {
+        const config = await Config.findOne({ guildId: msg.guild.id });
+    }
+
+    try {
+        await handleDeletedMessage(msg);
+    } catch (e) {
+        log.error('messageDelete: ' + e.message);
+    }
 });
 
 client.on('messageReactionAdd', handleReactionAdd);

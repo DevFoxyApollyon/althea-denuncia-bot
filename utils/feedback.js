@@ -55,7 +55,7 @@ async function limparMenusOrfaos(client) {
 
         if (pendentes.length === 0) return;
 
-        console.log(`[FeedbackTemp] ${pendentes.length} menu(s) orfao(s) encontrado(s). Limpando...`);
+        //console.log(`[FeedbackTemp] ${pendentes.length} menu(s) orfao(s) encontrado(s). Limpando...`);
 
         for (const entry of pendentes) {
             try {
@@ -67,7 +67,7 @@ async function limparMenusOrfaos(client) {
                 }
 
                 await FeedbackTemp.deleteOne({ _id: entry._id });
-                console.log(`[FeedbackTemp] Orfao removido: denunciaId=${entry.denunciaId}`);
+                //console.log(`[FeedbackTemp] Orfao removido: denunciaId=${entry.denunciaId}`);
             } catch (err) {
                 console.error(`[FeedbackTemp] Erro ao limpar orfao ${entry.denunciaId}:`, err.message);
             }

@@ -10,6 +10,11 @@ const log = {
 
 const secondaryDbUri = process.env.SECONDARY_DB_URI;
 
+if (!secondaryDbUri) {
+    log.error('SECONDARY_DB_URI não definida nas variáveis de ambiente.');
+    process.exit(1);
+}
+
 const secondaryConnection = mongoose.createConnection(secondaryDbUri, {
     serverSelectionTimeoutMS: 10000,
     socketTimeoutMS:          60000,
@@ -21,24 +26,14 @@ const secondaryConnection = mongoose.createConnection(secondaryDbUri, {
     retryReads:               true,
 });
 
-secondaryConnection.on('connected', () => {
-    log.success('Database secundária conectada.');
+secondaryConnection.asPromise().catch((err) => {
+    log.error('Erro Database: ' + err.message);
 });
 
-secondaryConnection.on('disconnected', () => {
-    log.warn('Database secundária desconectada. Tentando reconectar...');
-});
-
-secondaryConnection.on('reconnected', () => {
-    log.success('Database secundária reconectada.');
-});
-
-secondaryConnection.on('error', (err) => {
-    log.error('Erro na database secundária: ' + err.message);
-});
-
-secondaryConnection.on('close', () => {
-    log.warn('Conexão com database secundária encerrada.');
-});
+secondaryConnection.on('connected',    () => log.success('Database secundária conectada.'));
+secondaryConnection.on('reconnected',  () => log.success('Database secundária reconectada.'));
+secondaryConnection.on('disconnected', () => log.warn('Database secundária desconectada. Tentando reconectar...'));
+secondaryConnection.on('close',        () => log.warn('Conexão com database secundária encerrada.'));
+secondaryConnection.on('error',        (err) => log.error('Erro na database secundária: ' + err.message));
 
 module.exports = secondaryConnection;

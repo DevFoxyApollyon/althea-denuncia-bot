@@ -43,6 +43,21 @@ async function handleCorrecaoCommand(message) {
 }
 
 async function handleInputIdLogAceite(interaction) {
+  const config = await getCachedConfig(interaction.guild.id, Config);
+  
+  // Validação de permissão
+  const isResponsavelAdmin = config?.roles?.responsavel_admin && 
+    interaction.member.roles.cache.has(config.roles.responsavel_admin);
+  
+  if (!isResponsavelAdmin) {
+    const cargoMensao = config?.roles?.responsavel_admin ? `<@&${config.roles.responsavel_admin}>` : 'Responsável Admin';
+    await interaction.reply({
+      content: `❌ Você não tem permissão para corrigir denúncias. É necessário o cargo ${cargoMensao}.`,
+      flags: [MessageFlags.Ephemeral],
+    });
+    return;
+  }
+
   const modal = new ModalBuilder()
     .setCustomId('modal_logmessageid_para_correcao_aceite')
     .setTitle('Correção de Cadeia')
@@ -59,6 +74,21 @@ async function handleInputIdLogAceite(interaction) {
 }
 
 async function handleModalLogMessageIdCorrecaoAceite(interaction) {
+  const config = await getCachedConfig(interaction.guild.id, Config);
+  
+  // Validação de permissão
+  const isResponsavelAdmin = config?.roles?.responsavel_admin && 
+    interaction.member.roles.cache.has(config.roles.responsavel_admin);
+  
+  if (!isResponsavelAdmin) {
+    const cargoMensao = config?.roles?.responsavel_admin ? `<@&${config.roles.responsavel_admin}>` : 'Responsável Admin';
+    await interaction.reply({
+      content: `❌ Você não tem permissão para corrigir denúncias. É necessário o cargo ${cargoMensao}.`,
+      flags: [MessageFlags.Ephemeral],
+    });
+    return;
+  }
+
   const logMessageId = interaction.fields.getTextInputValue('logMessageId').trim();
   const denuncia = await getCachedDenuncia({ logMessageId: logMessageId }, Denuncia);
 
@@ -173,6 +203,21 @@ async function handleConfirmarCorrecaoAceite(interaction) {
 
 async function handleSalvarCorrecaoAceite(interaction) {
   const messageId = interaction.customId.replace('salvar_correcao_aceite_', '');
+  const config = await getCachedConfig(interaction.guild.id, Config);
+  
+  // Validação de permissão - camada adicional de segurança
+  const isResponsavelAdmin = config?.roles?.responsavel_admin && 
+    interaction.member.roles.cache.has(config.roles.responsavel_admin);
+  
+  if (!isResponsavelAdmin) {
+    const cargoMensao = config?.roles?.responsavel_admin ? `<@&${config.roles.responsavel_admin}>` : 'Responsável Admin';
+    await interaction.reply({
+      content: `❌ Você não tem permissão para corrigir denúncias. É necessário o cargo ${cargoMensao}.`,
+      flags: [MessageFlags.Ephemeral],
+    });
+    return;
+  }
+
   const acusadoId = interaction.fields.getTextInputValue('acusadoId');
   const motivoAceite = interaction.fields.getTextInputValue('motivoAceite');
   const dataPunicao = interaction.fields.getTextInputValue('dataPunicao');
@@ -212,7 +257,6 @@ async function handleSalvarCorrecaoAceite(interaction) {
   invalidateCache('denuncia', denuncia._id);
 
   let editSuccess = false, logMsgURL = null, errorMsg = '';
-  const config = await getCachedConfig(interaction.guild.id, Config);
 
   if (config?.channels?.logs) {
     const logChannel = await interaction.guild.channels.fetch(config.channels.logs).catch(() => null);

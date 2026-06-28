@@ -1,6 +1,5 @@
 # 🤖 ALTHEA — Bot de Denúncias para Discord
 
-
 **ALTHEA** é um bot completo de **gerenciamento de denúncias, moderação e controle de staff** para servidores Discord.  
 Desenvolvido em **Node.js + discord.js v14.25**, com **MongoDB**, **painéis interativos**, **botões**, **modais**, **logs centralizados**, **ranking de staff**, **exportação de denúncias** e **configuração dinâmica por servidor**.
 
@@ -128,11 +127,6 @@ Tratamento completo de erros comuns do Discord:
 
 ---
 
-### 🔄 Sincronização Automática de Nicknames
-O bot agora sincroniza automaticamente os nicknames dos usuários, restaurando-os ao entrarem no servidor e atualizando o banco de dados sempre que o bot alvo altera um nickname.
-
-> **Importante:** Defina a variável `BOT_ALVO_ID` no `.env` com o ID do bot que realiza as trocas de nickname para garantir a sincronização correta.
-
 ## 🧠 Tecnologias Utilizadas
 
 - Node.js 18+
@@ -163,17 +157,20 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 
 ```bash
 .
-althea-denuncia-bot
-│
-├── commands
-│   ├── correcao.js
+├── commands/
 │   ├── denuncia.js
 │   ├── painel.js
+│   ├── correcao.js
+│   ├── status.js
 │   ├── rank.js
-│   ├── semana.js
-│   └── status.js
+│   └── semana.js
 │
-├── handlers
+├── doc/
+│   ├── BUTTONS.md
+│   ├── DB_MODELS.md
+│   └── FLOW.md
+│
+├── Handlers/
 │   ├── exportDenuncia.js
 │   ├── handlerStatusButton.js
 │   ├── interactionHandler.js
@@ -182,46 +179,26 @@ althea-denuncia-bot
 │   ├── messageDeleteHandler.js
 │   └── messageReactionHandler.js
 │
-├── jobs
+├── jobs/
 │   └── rankJobs.js
 │
-├── models
+├── models/
 │   ├── Config.js
 │   ├── Denuncia.js
-│   ├── ModerationAction.js
-│   ├── Strike.js
-│   └── Usuario.js
+│   └── ModerationAction.js
 │
-├── services
-│   ├── rankService.js
-│   └── usuarioService.js
+├── services/
+│   └── rankService.js
 │
-├── utils
-│   ├── advancedMonitoring.js
-│   ├── commands.js
-│   ├── dateUtils.js
+├── utils/
 │   ├── logger.js
-│   ├── monitoring.js
-│   ├── notificarPorNumero.js
-│   ├── performance.js
-│   ├── secondaryDb.js
-│   ├── smartCache.js
-│   ├── strikeWords.js
-│   ├── syncUsuarioNick.js
-│   ├── templateProcessor.js
-│   ├── userSyncAndNotify.js
-│   └── youtubeUtils.js
+│   ├── dateUtils.js
+│   ├── advancedMonitoring.js
+│   └── smartCache.js
 │
-├── docs
-│   ├── BUTTONS.md
-│   ├── DB_MODELS.md
-│   └── FLOW.md
-│
-├── .env
-├── .env.example
-├── .gitignore
-├── CHANGELOG.md
-├── README.md
+├── index.js
 ├── package.json
-├── package-lock.json
-└── index.js
+├── squarecloud.app
+├── .env.example
+├── CHANGELOG.md
+└── README.md

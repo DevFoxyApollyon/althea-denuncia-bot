@@ -1,58 +1,8 @@
 # 📦 Changelog
 
-## [1.2.0] - 2026-04-01
-### 🚀 Novidades e Melhorias
-
-#### 🔄 Sincronização Automática de Nicknames
-- Novo job `nicknamePoller` que varre os logs de auditoria e atualiza nicknames no banco de dados.
-- Sincronização e restauração automática de nicknames ao entrar no servidor.
-
-#### 🛠️ AutoFinalizador Aprimorado
-- Processa apenas uma denúncia por ciclo para evitar sobrecarga.
-- Novos status finalizáveis: aceita, recusada, além dos já existentes.
-- Melhoria nos logs, controle de execução e tratamento de tópicos arquivados.
-
-#### 📝 Experiência de Denúncia Melhorada
-- Preenchimento automático do campo denunciante se o usuário já tiver conta salva.
-- Ajustes de validação, simplificação de código e melhorias de UX.
-
-#### 🧹 Refatoração e Organização
-- Código mais limpo, logs mais detalhados e melhor separação de responsabilidades.
-
----
-
 Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 Este projeto segue o padrão de versionamento semântico (SemVer).
-
----
-
-## [1.1.0] - 2026-03-15
-### 🚀 Novidades e Melhorias
-
-#### 🛡️ Filtro de YouTube e Palavrões
-- Mensagens com links do YouTube cujo título contenha palavras proibidas (ex: “hl”) agora são automaticamente filtradas e removidas em canais de denúncia.
-- Sistema de detecção de palavrões e menções indevidas, com aplicação automática de strikes.
-
-#### 🗄️ Dois Bancos de Dados
-- Integração com banco de dados principal e secundário para maior segurança e performance.
-- Sincronização automática de nicknames e dados dos usuários entre os bancos.
-
-#### 📩 Notificação de Acusado
-- O acusado recebe uma mensagem privada detalhada sempre que for denunciado, incluindo motivo, provas e link direto para a denúncia.
-- Busca inteligente do acusado tanto por número quanto por userId, garantindo que a notificação chegue mesmo se o campo “conta” for diferente.
-
-#### 🔄 Sincronização de Nickname
-- Sempre que um usuário troca o nickname no Discord, o sistema atualiza automaticamente o registro no banco de dados.
-
-#### 🧵 Registro do Último Tópico
-- O sistema salva o ID do último tópico de denúncia criado pelo usuário, facilitando consultas e histórico.
-
-#### 🛠️ Ajustes Gerais
-- Organização e padronização do código.
-- Correção de imports duplicados.
-- Atualização para uso correto de respostas efêmeras (flags: [MessageFlags.Ephemeral]).
-- Melhoria na documentação e estrutura do projeto.
 
 ---
 
