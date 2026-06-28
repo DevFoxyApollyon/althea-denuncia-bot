@@ -1,6 +1,6 @@
 # 🗄️ Modelos do Banco de Dados (MongoDB)
 
-> **📝 v1.0.1:** Nenhuma alteração nos modelos. Removido suporte a caching local (utils não utilizadas).
+> **📝 v1.2.1:** Nenhuma alteração nos modelos. Removido suporte a caching local (utils não utilizadas).
 
 ---
 

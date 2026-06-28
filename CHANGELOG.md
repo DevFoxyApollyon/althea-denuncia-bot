@@ -6,6 +6,16 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [1.2.1] - 2026-06-27
+### 📝 Documentação e preparação de release
+
+#### ✨ Atualizações
+- Ajuste de documentação de fluxo, botões e modelos para a release 1.2.1
+- Organização do repositório para publicação no GitHub
+- Preparação do projeto para versionamento e distribuição consistentes
+
+---
+
 ## [1.0.1] - 2026-01-25
 ### 🔧 Manutenção, Refatoração e Correções
 
