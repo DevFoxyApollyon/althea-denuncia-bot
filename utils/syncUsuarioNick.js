@@ -1,4 +1,5 @@
-// Sincroniza todos os nicks dos membros de um servidor para o banco de dados secundário
+﻿// syncUsuarioNick.js
+// Sincroniza todos os nicks dos membros de um servidor para o banco de dados secundÃ¡rio
 
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
@@ -28,9 +29,9 @@ client.once('ready', async () => {
       );
       count++;
     }
-    console.log(`Sincronização concluída: ${count} usuários atualizados.`);
+    console.log(`SincronizaÃ§Ã£o concluÃ­da: ${count} usuÃ¡rios atualizados.`);
   } catch (e) {
-    console.error('Erro ao sincronizar usuários:', e);
+    console.error('Erro ao sincronizar usuÃ¡rios:', e);
   } finally {
     client.destroy();
   }
@@ -42,7 +43,7 @@ const Usuarios = require('../models/Usuarios');
 module.exports = async function syncUsuarioNick(member) {
   const nick = member.nickname || member.user.username;
   const match = nick.match(/\d+/);
-  if (!match) return; // ignora quem não tem número
+  if (!match) return; // ignora quem nÃ£o tem nÃºmero
   const numero = match[0];
 
   const existente = await Usuarios.findOne({ guildId: member.guild.id, numero });

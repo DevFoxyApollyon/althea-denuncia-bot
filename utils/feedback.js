@@ -1,3 +1,4 @@
+﻿// feedback.js
 const {
     ActionRowBuilder,
     StringSelectMenuBuilder,
@@ -18,10 +19,10 @@ function gerarCodigoFeedback() {
 }
 
 function gerarEmojiNota(nota) {
-    if (nota >= 9) return '\uD83C\uDF1F';  // 🌟
-    if (nota >= 7) return '\u2705';         // ✅
-    if (nota >= 5) return '\u26A0\uFE0F';  // ⚠️
-    return '\u274C';                        // ❌
+    if (nota >= 9) return '\uD83C\uDF1F';  // ðŸŒŸ
+    if (nota >= 7) return '\u2705';         // âœ…
+    if (nota >= 5) return '\u26A0\uFE0F';  // âš ï¸
+    return '\u274C';                        // âŒ
 }
 
 function gerarCorNota(nota) {
@@ -148,7 +149,7 @@ async function enviarFeedbackStaff(client, staffId, data) {
 }
 
 // =========================
-// MONTAR EMBED — DESIGN PROFISSIONAL
+// MONTAR EMBED â€” DESIGN PROFISSIONAL
 // =========================
 function criarEmbedFeedback(data, isDM = false) {
     const nota     = Number(data.nota);

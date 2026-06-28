@@ -1,12 +1,13 @@
-# 🗄️ Modelos do Banco de Dados (MongoDB)
+﻿// DB_MODELS.md
+# ðŸ—„ï¸ Modelos do Banco de Dados (MongoDB)
 
-> **📝 v1.2.1:** Nenhuma alteração nos modelos. Removido suporte a caching local (utils não utilizadas).
+> **ðŸ“ v1.2.1:** Nenhuma alteraÃ§Ã£o nos modelos. Removido suporte a caching local (utils nÃ£o utilizadas).
 
 ---
 
-## 📄 Config
+## ðŸ“„ Config
 
-Collection responsável por **configurar o bot por servidor**.
+Collection responsÃ¡vel por **configurar o bot por servidor**.
 
 ### Campos principais:
 - `guildId`
@@ -19,15 +20,15 @@ Collection responsável por **configurar o bot por servidor**.
 - `channels.mobile`
 
 Usado em:
-- permissões
+- permissÃµes
 - envio de logs
-- criação de denúncias
+- criaÃ§Ã£o de denÃºncias
 
 ---
 
-## 📄 Denuncia
+## ðŸ“„ Denuncia
 
-Representa uma denúncia individual.
+Representa uma denÃºncia individual.
 
 ### Campos:
 - `_id`
@@ -45,16 +46,16 @@ Representa uma denúncia individual.
 - `ultimaEdicao`
 
 Usado em:
-- botões
-- exportação
+- botÃµes
+- exportaÃ§Ã£o
 - logs
 - rankings
 
 ---
 
-## 📄 ModerationAction
+## ðŸ“„ ModerationAction
 
-Usado para estatísticas e ranking.
+Usado para estatÃ­sticas e ranking.
 
 ### Campos:
 - `moderatorId`

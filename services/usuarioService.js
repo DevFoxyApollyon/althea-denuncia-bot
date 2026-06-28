@@ -1,3 +1,4 @@
+﻿// usuarioService.js
 const Usuario = require('../models/Usuario');
 
 async function buscarUsuarioPorApelidoOuId(termo) {

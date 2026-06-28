@@ -1,16 +1,17 @@
+﻿// advancedMonitoring.js
 const { globalCache } = require('./smartCache');
 const chalk = require('chalk');
 
 const log = {
-    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
+    info:    (msg) => console.log(`${chalk.blue('â„¹')} ${chalk.gray('[INFO]')} ${msg}`),
+    success: (msg) => console.log(`${chalk.green('âœ”')} ${chalk.gray('[SUCESSO]')} ${msg}`),
+    warn:    (msg) => console.log(`${chalk.yellow('âš ')} ${chalk.gray('[AVISO]')} ${msg}`),
+    error:   (msg) => console.log(`${chalk.red('âœ–')} ${chalk.gray('[ERRO]')} ${msg}`),
 };
 
 class AdvancedMonitor {
   constructor() {
-    // Evita criar múltiplas instâncias caso o módulo seja recarregado
+    // Evita criar mÃºltiplas instÃ¢ncias caso o mÃ³dulo seja recarregado
     if (AdvancedMonitor._instance) {
       return AdvancedMonitor._instance;
     }
@@ -44,7 +45,7 @@ class AdvancedMonitor {
   }
 
   startCollection() {
-    // Coleta métricas a cada 30 segundos
+    // Coleta mÃ©tricas a cada 30 segundos
     this.metricsInterval = setInterval(() => {
       this.collectSystemMetrics();
     }, 30000);
@@ -134,7 +135,7 @@ class AdvancedMonitor {
       timestamp: Date.now()
     });
 
-    // Mantém apenas os últimos 100 erros
+    // MantÃ©m apenas os Ãºltimos 100 erros
     if (this.metrics.errors.length > 100) {
       this.metrics.errors.shift();
     }
@@ -153,18 +154,18 @@ class AdvancedMonitor {
     this.metrics.performance.memoryUsage.push(memoryData);
     this.metrics.system.memory.current = memoryData.heapUsed;
 
-    // Atualiza pico de memória
+    // Atualiza pico de memÃ³ria
     if (memoryData.heapUsed > this.metrics.system.memory.peak) {
       this.metrics.system.memory.peak = memoryData.heapUsed;
     }
 
-    // Calcula média de memória
+    // Calcula mÃ©dia de memÃ³ria
     if (this.metrics.performance.memoryUsage.length > 0) {
       const total = this.metrics.performance.memoryUsage.reduce((sum, m) => sum + m.heapUsed, 0);
       this.metrics.system.memory.average = Math.round(total / this.metrics.performance.memoryUsage.length);
     }
 
-    // Mantém apenas os últimos 100 registros
+    // MantÃ©m apenas os Ãºltimos 100 registros
     if (this.metrics.performance.memoryUsage.length > 100) {
       this.metrics.performance.memoryUsage.shift();
     }
@@ -180,7 +181,7 @@ class AdvancedMonitor {
     // Limpa erros antigos
     this.metrics.errors = this.metrics.errors.filter(error => error.timestamp > oneHourAgo);
 
-    // Limpa métricas de performance antigas
+    // Limpa mÃ©tricas de performance antigas
     this.metrics.performance.memoryUsage = this.metrics.performance.memoryUsage.filter(
       m => m.timestamp > oneHourAgo
     );
@@ -276,7 +277,7 @@ class AdvancedMonitor {
       score -= errorRate * 2; // -2 pontos por % de erro
     }
 
-    // Penaliza por uso de memória alto
+    // Penaliza por uso de memÃ³ria alto
     const memory = this.metrics.system.memory;
     if (memory.current > 500)  score -= 20;
     if (memory.current > 1000) score -= 30;
@@ -297,10 +298,10 @@ class AdvancedMonitor {
   }
 
   getHealthStatus(score) {
-    if (score >= 90) return '🟢 Excelente';
-    if (score >= 80) return '🟡 Bom';
-    if (score >= 60) return '🟠 Atenção';
-    return '🔴 Crítico';
+    if (score >= 90) return 'ðŸŸ¢ Excelente';
+    if (score >= 80) return 'ðŸŸ¡ Bom';
+    if (score >= 60) return 'ðŸŸ  AtenÃ§Ã£o';
+    return 'ðŸ”´ CrÃ­tico';
   }
 
   getTopCommands(limit = 5) {
@@ -343,7 +344,7 @@ class AdvancedMonitor {
   }
 }
 
-// Instância global do monitor (singleton)
+// InstÃ¢ncia global do monitor (singleton)
 const advancedMonitor = new AdvancedMonitor();
 
 module.exports = { AdvancedMonitor, advancedMonitor };

@@ -1,3 +1,4 @@
+﻿// FeedbackTemp.js
 const secondaryConnection = require('../utils/secondaryDb');
 
 const { Schema } = require('mongoose');
@@ -19,7 +20,7 @@ const feedbackTempSchema = new Schema({
     criadoEm: {
         type: Date,
         default: Date.now,
-        // TTL: MongoDB deleta automaticamente após 1 dia (86400 segundos)
+        // TTL: MongoDB deleta automaticamente apÃ³s 1 dia (86400 segundos)
         expires: 86400
     }
 });

@@ -1,3 +1,4 @@
+﻿// ModerationAction.js
 // models/ModerationAction.js
 const mongoose = require('mongoose');
 const { getBrasiliaDate, getWeekDates } = require('../utils/dateUtils');
@@ -16,7 +17,7 @@ const ModerationActionSchema = new mongoose.Schema(
 
     denunciaId: { type: String },
 
-    // Data/hora real da ação (usada para filtrar dia/semana/mês)
+    // Data/hora real da aÃ§Ã£o (usada para filtrar dia/semana/mÃªs)
     timestamp: {
       type: Date,
       default: () => getBrasiliaDate(),
@@ -29,7 +30,7 @@ const ModerationActionSchema = new mongoose.Schema(
       default: () => getWeekDates().weekStart,
     },
 
-    // Número da semana (no ano) calculado no momento do registro
+    // NÃºmero da semana (no ano) calculado no momento do registro
     weekNumber: {
       type: Number,
       required: true,
@@ -45,16 +46,16 @@ const ModerationActionSchema = new mongoose.Schema(
   }
 );
 
-// --- ÍNDICES PARA PERFORMANCE ---
+// --- ÃNDICES PARA PERFORMANCE ---
 ModerationActionSchema.index({ guildId: 1, timestamp: 1 });
 ModerationActionSchema.index({ weekOf: 1, moderatorId: 1 });
 ModerationActionSchema.index({ weekNumber: 1, moderatorId: 1 });
 ModerationActionSchema.index({ timestamp: 1 });
 ModerationActionSchema.index({ moderatorId: 1, timestamp: 1 });
 
-// --- MÉTODOS ESTÁTICOS ---
+// --- MÃ‰TODOS ESTÃTICOS ---
 
-// Retorna o número da semana no ano
+// Retorna o nÃºmero da semana no ano
 ModerationActionSchema.statics.getCurrentWeekNumber = function () {
   const now = getBrasiliaDate();
   const start = new Date(now.getFullYear(), 0, 1);
@@ -64,14 +65,14 @@ ModerationActionSchema.statics.getCurrentWeekNumber = function () {
   return Math.ceil((days + 1) / 7);
 };
 
-// ✅ GENÉRICO: Busca ações por período (serve para dia/semana/mês)
+// âœ… GENÃ‰RICO: Busca aÃ§Ãµes por perÃ­odo (serve para dia/semana/mÃªs)
 ModerationActionSchema.statics.getActionsForPeriod = async function (guildId, startDate, endDate) {
   try {
     return await this.aggregate([
       {
         $match: {
           guildId: guildId,
-          // end exclusivo evita bugs de “perder” ações no último ms
+          // end exclusivo evita bugs de â€œperderâ€ aÃ§Ãµes no Ãºltimo ms
           timestamp: { $gte: startDate, $lt: endDate },
         },
       },
@@ -93,12 +94,12 @@ ModerationActionSchema.statics.getActionsForPeriod = async function (guildId, st
       { $sort: { total: -1 } },
     ]);
   } catch (error) {
-    console.error('Erro ao buscar ações por período:', error);
+    console.error('Erro ao buscar aÃ§Ãµes por perÃ­odo:', error);
     throw error;
   }
 };
 
-// ✅ SEMANAL: Busca ações da semana atual
+// âœ… SEMANAL: Busca aÃ§Ãµes da semana atual
 ModerationActionSchema.statics.getActionsForCurrentWeek = async function (guildId) {
   try {
     const { weekStart, weekEnd } = getWeekDates();
@@ -108,12 +109,12 @@ ModerationActionSchema.statics.getActionsForCurrentWeek = async function (guildI
 
     return await this.getActionsForPeriod(guildId, weekStart, endExclusive);
   } catch (error) {
-    console.error('Erro ao buscar ações da semana:', error);
+    console.error('Erro ao buscar aÃ§Ãµes da semana:', error);
     throw error;
   }
 };
 
-// ✅ Datas do mês atual (dia 1 00:00 até agora)
+// âœ… Datas do mÃªs atual (dia 1 00:00 atÃ© agora)
 ModerationActionSchema.statics.getMonthDates = function () {
   const now = getBrasiliaDate();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -121,19 +122,19 @@ ModerationActionSchema.statics.getMonthDates = function () {
   return { monthStart, monthEnd };
 };
 
-// ✅ MENSAL: Busca ações do mês atual
+// âœ… MENSAL: Busca aÃ§Ãµes do mÃªs atual
 ModerationActionSchema.statics.getActionsForCurrentMonth = async function (guildId) {
   try {
     const { monthStart, monthEnd } = this.getMonthDates();
     const endExclusive = new Date(monthEnd.getTime() + 1);
     return await this.getActionsForPeriod(guildId, monthStart, endExclusive);
   } catch (error) {
-    console.error('Erro ao buscar ações do mês:', error);
+    console.error('Erro ao buscar aÃ§Ãµes do mÃªs:', error);
     throw error;
   }
 };
 
-// ✅ Datas do dia atual (00:00 até agora)
+// âœ… Datas do dia atual (00:00 atÃ© agora)
 ModerationActionSchema.statics.getTodayDates = function () {
   const now = getBrasiliaDate();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
@@ -141,21 +142,21 @@ ModerationActionSchema.statics.getTodayDates = function () {
   return { startOfDay, endOfDay };
 };
 
-// ✅ DIÁRIO: Busca ações apenas de HOJE
+// âœ… DIÃRIO: Busca aÃ§Ãµes apenas de HOJE
 ModerationActionSchema.statics.getActionsForToday = async function (guildId) {
   try {
     const { startOfDay, endOfDay } = this.getTodayDates();
     const endExclusive = new Date(endOfDay.getTime() + 1);
     return await this.getActionsForPeriod(guildId, startOfDay, endExclusive);
   } catch (error) {
-    console.error('Erro ao buscar ações do dia:', error);
+    console.error('Erro ao buscar aÃ§Ãµes do dia:', error);
     throw error;
   }
 };
 
-// Valida e salva uma nova ação
+// Valida e salva uma nova aÃ§Ã£o
 ModerationActionSchema.statics.validarAcao = async function (moderatorId, action, denunciaId, guildId) {
-  if (!moderatorId || !action || !guildId) throw new Error('Dados obrigatórios ausentes');
+  if (!moderatorId || !action || !guildId) throw new Error('Dados obrigatÃ³rios ausentes');
 
   try {
     const { weekStart } = getWeekDates();
@@ -173,7 +174,7 @@ ModerationActionSchema.statics.validarAcao = async function (moderatorId, action
 
     return await novaAcao.save();
   } catch (error) {
-    console.error('Erro ao validar ação:', error);
+    console.error('Erro ao validar aÃ§Ã£o:', error);
     throw error;
   }
 };
@@ -182,8 +183,8 @@ const ModerationAction =
   mongoose.models.ModerationAction || mongoose.model('ModerationAction', ModerationActionSchema);
 
 // --- CRON JOB: RESET MENSAL ---
-// ⚠️ Mantido igual ao seu código: APAGA TUDO no dia 1.
-// Se você quiser histórico, não apague e use apenas filtro por timestamp.
+// âš ï¸ Mantido igual ao seu cÃ³digo: APAGA TUDO no dia 1.
+// Se vocÃª quiser histÃ³rico, nÃ£o apague e use apenas filtro por timestamp.
 cron.schedule(
   '5 0 1 * *',
   async () => {

@@ -1,3 +1,4 @@
+﻿// notificarPorNumero.js
 const Usuarios = require('../models/Usuarios');
 
 async function notificarPorNumero(numero, guild, client, mensagem) {

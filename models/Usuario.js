@@ -1,3 +1,4 @@
+﻿// Usuario.js
 const secondaryConnection = require('../utils/secondaryDb');
 const { Schema } = require('mongoose');
 

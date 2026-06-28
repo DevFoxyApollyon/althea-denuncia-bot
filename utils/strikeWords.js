@@ -1,3 +1,4 @@
+﻿// strikeWords.js
 const { EmbedBuilder } = require('discord.js');
 const dateUtils = require('./dateUtils');
 
@@ -11,23 +12,23 @@ const TEMPO_AVISO_CANAL = 5_000;
 
 const PALAVRAS_PROIBIDAS = [
   'animal', 'anta', 'arrombada', 'arrombado',
-  'babaca', 'besta', 'bobalhão', 'bobalhona', 'bocó', 'bosta', 'burra', 'burrice', 'burro',
-  'canalha', 'caralho', 'corna', 'corno', 'cretina', 'cretino', 'crápula', 'cuzão', 'cuzona',
-  'desgraçado', 'doente', 'doida', 'doido',
-  'energúmeno', 'escrota', 'escroto',
+  'babaca', 'besta', 'bobalhÃ£o', 'bobalhona', 'bocÃ³', 'bosta', 'burra', 'burrice', 'burro',
+  'canalha', 'caralho', 'corna', 'corno', 'cretina', 'cretino', 'crÃ¡pula', 'cuzÃ£o', 'cuzona',
+  'desgraÃ§ado', 'doente', 'doida', 'doido',
+  'energÃºmeno', 'escrota', 'escroto',
   'fdp', 'v conta', 'vendo conta',
   'galinha','mds', 'seu buraquinho','mrd',
-  'idiota', 'idiotice', 'imbecil','Chora n','Desgracado','vacilão','vacilão',
+  'idiota', 'idiotice', 'imbecil','Chora n','Desgracado','vacilÃ£o','vacilÃ£o',
   'jegue', 'jumento',
   'lambe botas', 'lixo',
-  'maluca', 'maluco', 'mané', 'merda', 'mongoloide', 'mongol', 'mula',
+  'maluca', 'maluco', 'manÃ©', 'merda', 'mongoloide', 'mongol', 'mula',
   'noob',
-  'otaria', 'otário', 'otária',
-  'palhaça', 'palhaço', 'panaca', 'passa pano', 'piranha', 'pnc', 'porra', 'prostituta', 'puta', 'puto', 'puxa saco',
+  'otaria', 'otÃ¡rio', 'otÃ¡ria',
+  'palhaÃ§a', 'palhaÃ§o', 'panaca', 'passa pano', 'piranha', 'pnc', 'porra', 'prostituta', 'puta', 'puto', 'puxa saco',
   'retardada', 'retardado',
   'tanso', 'tapada', 'tapado', 'traste', 'trouxa',
   'vadia', 'vagabunda', 'vagabundo', 'viado',
-  'zé ninguém', 'zé povinho', 'zé ruela',
+  'zÃ© ninguÃ©m', 'zÃ© povinho', 'zÃ© ruela',
   'chorao',
 ];
 
@@ -69,9 +70,9 @@ function getMotivoMarcacao(message) {
   if (message.mentions.everyone) return '@everyone/@here';
   if (message.mentions.roles.size > 0) {
     const nomes = message.mentions.roles.map(r => `@${r.name}`).join(', ');
-    return `marcação de cargo: ${nomes}`;
+    return `marcaÃ§Ã£o de cargo: ${nomes}`;
   }
-  return 'marcação de cargo';
+  return 'marcaÃ§Ã£o de cargo';
 }
 
 async function processaStrike(message, Strike, config) {
@@ -104,20 +105,20 @@ async function processaStrike(message, Strike, config) {
     let corEmbed     = '#ff9900';
 
     if (strikesCount === 1) {
-      titulo       = '⚠️ Primeiro aviso! (1/3)';
-      descricao    = `<@${message.author.id}>, evite usar palavras proibidas ou marcar @everyone, @here e qualquer cargo do servidor.\nVocê foi silenciado por **10 minutos**.`;
+      titulo       = 'âš ï¸ Primeiro aviso! (1/3)';
+      descricao    = `<@${message.author.id}>, evite usar palavras proibidas ou marcar @everyone, @here e qualquer cargo do servidor.\nVocÃª foi silenciado por **10 minutos**.`;
       motivo       = `1/3 - Palavra/cargo: ${motivoBase}`;
       tempoTimeout = 10 * 60 * 1000;
       corEmbed     = '#ff9900';
     } else if (strikesCount === 2) {
-      titulo       = '⚠️ Segundo aviso! (2/3)';
-      descricao    = `<@${message.author.id}>, esta é sua última chance antes de um silenciamento longo.\nVocê foi silenciado por **1 hora**.`;
+      titulo       = 'âš ï¸ Segundo aviso! (2/3)';
+      descricao    = `<@${message.author.id}>, esta Ã© sua Ãºltima chance antes de um silenciamento longo.\nVocÃª foi silenciado por **1 hora**.`;
       motivo       = `2/3 - Palavra/cargo: ${motivoBase}`;
       tempoTimeout = 60 * 60 * 1000;
       corEmbed     = '#ff6600';
     } else {
-      titulo       = '⛔ Terceiro aviso! (3/3)';
-      descricao    = `<@${message.author.id}>, você atingiu o limite. Seus strikes foram zerados.\nVocê foi silenciado por **1 dia**.`;
+      titulo       = 'â›” Terceiro aviso! (3/3)';
+      descricao    = `<@${message.author.id}>, vocÃª atingiu o limite. Seus strikes foram zerados.\nVocÃª foi silenciado por **1 dia**.`;
       motivo       = `3/3 - Palavra/cargo: ${motivoBase}`;
       tempoTimeout = 24 * 60 * 60 * 1000;
       corEmbed     = '#ff0000';
@@ -167,7 +168,7 @@ async function processaStrike(message, Strike, config) {
       if (logChannel) {
         const embedLog = new EmbedBuilder()
           .setColor('#ff9900')
-          .setTitle('🚨 Log de Strike Aplicado')
+          .setTitle('ðŸš¨ Log de Strike Aplicado')
           .setAuthor({
             name: `${message.author.tag} (${message.author.id})`,
             iconURL: message.author.displayAvatarURL?.() || undefined,
@@ -178,7 +179,7 @@ async function processaStrike(message, Strike, config) {
             `[Ir para o canal](https://discord.com/channels/${message.guild.id}/${message.channel.id})`
           )
           .addFields(
-            { name: 'Usuário',            value: `<@${message.author.id}>`,                     inline: true  },
+            { name: 'UsuÃ¡rio',            value: `<@${message.author.id}>`,                     inline: true  },
             { name: 'Staff (Bot)',         value: `<@${message.client.user.id}>`,                inline: true  },
             { name: 'Motivo',             value: motivo,                                         inline: false },
             { name: 'Mensagem Original',  value: message.content?.slice(0, 1024) || 'N/A',      inline: false },
@@ -186,7 +187,7 @@ async function processaStrike(message, Strike, config) {
             { name: 'Data/Hora',          value: dateUtils.getBrasiliaDateTime(),                inline: true  },
             { name: 'ID da Mensagem',     value: message.id,                                    inline: true  },
             { name: 'Canal',              value: `<#${message.channel.id}>`,                    inline: true  },
-            { name: 'Aviso via DM',       value: dmEnviada ? '✅ Enviado' : '❌ DMs fechadas',  inline: true  },
+            { name: 'Aviso via DM',       value: dmEnviada ? 'âœ… Enviado' : 'âŒ DMs fechadas',  inline: true  },
           )
           .setFooter({ text: `Servidor: ${message.guild.id}` })
           .setTimestamp();
@@ -214,7 +215,7 @@ async function verificaEdicao(oldMessage, newMessage, Strike, config) {
       await processaStrike(msg, Strike, config);
     }
   } catch (e) {
-    console.error('Erro ao verificar edição de mensagem:', e);
+    console.error('Erro ao verificar ediÃ§Ã£o de mensagem:', e);
   }
 }
 

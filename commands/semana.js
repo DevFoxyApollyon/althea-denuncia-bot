@@ -1,3 +1,4 @@
+﻿// semana.js
 const { 
     ActionRowBuilder, 
     ButtonBuilder, 
@@ -79,10 +80,10 @@ function buildTable(stats) {
     const header = 'Contagem semanal    | SEG | TER | QUA | QUI | SEX | SAB | DOM |';
     const sep = '-----------------------------------------------------------';
     const rows = [
-        { emoji: '✅', nome: 'Aceitas', key: 'aceitas' },
-        { emoji: '❌', nome: 'Recusadas', key: 'recusadas' },
-        { emoji: '🔍', nome: 'Análises', key: 'analisadas' },
-        { emoji: '📝', nome: 'Reivindicadas', key: 'reivindicadas' }
+        { emoji: 'âœ…', nome: 'Aceitas', key: 'aceitas' },
+        { emoji: 'âŒ', nome: 'Recusadas', key: 'recusadas' },
+        { emoji: 'ðŸ”', nome: 'AnÃ¡lises', key: 'analisadas' },
+        { emoji: 'ðŸ“', nome: 'Reivindicadas', key: 'reivindicadas' }
     ];
 
     const formattedRows = rows.map(row => {
@@ -90,7 +91,7 @@ function buildTable(stats) {
         return `${pad(stats.total[row.key], 3)} ${row.emoji} ${row.nome.padEnd(15)}| ${cols} |`;
     });
 
-    // CORREÇÃO: O rodapé da tabela agora mostra apenas o valor de Reivindicadas (194)
+    // CORREÃ‡ÃƒO: O rodapÃ© da tabela agora mostra apenas o valor de Reivindicadas (194)
     return [header, sep, ...formattedRows, sep, `Total na Semana: ${stats.total.reivindicadas}`].join('\n');
 }
 
@@ -98,11 +99,11 @@ async function handleSemanaCommand(message) {
     if (!message.guild) return;
     
     cache.clear();
-    const loadingMessage = await message.channel.send('⏳ Gerando ranking semanal...');
+    const loadingMessage = await message.channel.send('â³ Gerando ranking semanal...');
 
     try {
         const config = await Config.findOne({ guildId: message.guild.id }).lean();
-        if (!config) throw new Error('Configuração não encontrada.');
+        if (!config) throw new Error('ConfiguraÃ§Ã£o nÃ£o encontrada.');
         
         const { weekStart, weekEnd } = getWeekDates();
         const periodStr = `${formatDateBR(weekStart)} a ${formatDateBR(weekEnd)}`;
@@ -117,7 +118,7 @@ async function handleSemanaCommand(message) {
             const member = message.guild.members.cache.get(userId);
             const stats = await getWeeklyStats(userId, message.guild.id, weekStart, weekEnd, true);
             
-            // CORREÇÃO: O total usado para ordenar o ranking é apenas o da semana (Reivindicadas)
+            // CORREÃ‡ÃƒO: O total usado para ordenar o ranking Ã© apenas o da semana (Reivindicadas)
             const totalSemanal = stats.total.reivindicadas;
             
             return totalSemanal > 0 ? { 
@@ -129,12 +130,12 @@ async function handleSemanaCommand(message) {
         }));
 
         const sortedStats = allStats.filter(Boolean).sort((a, b) => b.total - a.total);
-        if (sortedStats.length === 0) return loadingMessage.edit(`⚠️ Nenhuma ação encontrada neste servidor em ${periodStr}`);
+        if (sortedStats.length === 0) return loadingMessage.edit(`âš ï¸ Nenhuma aÃ§Ã£o encontrada neste servidor em ${periodStr}`);
 
-        // Geração do arquivo TXT
+        // GeraÃ§Ã£o do arquivo TXT
         let txtContent = `RANKING STAFF - SERVIDOR: ${message.guild.name}\nPERIODO: ${periodStr}\n${'='.repeat(60)}\n\n`;
         sortedStats.forEach((s, i) => {
-            txtContent += `${i+1}º ${s.tag} (ID: ${s.userId}) - Total Semanal: ${s.total}\n${buildTable(s.stats)}\n\n`;
+            txtContent += `${i+1}Âº ${s.tag} (ID: ${s.userId}) - Total Semanal: ${s.total}\n${buildTable(s.stats)}\n\n`;
         });
         const attachment = new AttachmentBuilder(Buffer.from(txtContent, 'utf-8'), { name: 'ranking_staff.txt' });
 
@@ -145,20 +146,20 @@ async function handleSemanaCommand(message) {
         const createContent = (page) => {
             const startIdx = page * pageSize;
             const currentGroup = sortedStats.slice(startIdx, startIdx + pageSize);
-            let text = `🏆 **RANKING STAFF - ${periodStr}**\n*Servidor: ${message.guild.name}*\n\n`;
+            let text = `ðŸ† **RANKING STAFF - ${periodStr}**\n*Servidor: ${message.guild.name}*\n\n`;
             currentGroup.forEach((admin, index) => {
-                text += `**${startIdx + index + 1}º <@${admin.userId}>** (Total: ${admin.total})\n\`\`\`ansi\n${buildTable(admin.stats)}\n\`\`\`\n`;
+                text += `**${startIdx + index + 1}Âº <@${admin.userId}>** (Total: ${admin.total})\n\`\`\`ansi\n${buildTable(admin.stats)}\n\`\`\`\n`;
             });
-            text += `\n*Página ${page + 1} de ${totalPages}*`;
+            text += `\n*PÃ¡gina ${page + 1} de ${totalPages}*`;
             return text;
         };
 
         const createButtons = (page) => {
             return new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('first').setLabel('⏪').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-                new ButtonBuilder().setCustomId('prev').setLabel('⬅️').setStyle(ButtonStyle.Primary).setDisabled(page === 0),
-                new ButtonBuilder().setCustomId('next').setLabel('➡️').setStyle(ButtonStyle.Primary).setDisabled(page === totalPages - 1),
-                new ButtonBuilder().setCustomId('last').setLabel('⏩').setStyle(ButtonStyle.Secondary).setDisabled(page === totalPages - 1)
+                new ButtonBuilder().setCustomId('first').setLabel('âª').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+                new ButtonBuilder().setCustomId('prev').setLabel('â¬…ï¸').setStyle(ButtonStyle.Primary).setDisabled(page === 0),
+                new ButtonBuilder().setCustomId('next').setLabel('âž¡ï¸').setStyle(ButtonStyle.Primary).setDisabled(page === totalPages - 1),
+                new ButtonBuilder().setCustomId('last').setLabel('â©').setStyle(ButtonStyle.Secondary).setDisabled(page === totalPages - 1)
             );
         };
 
@@ -175,7 +176,7 @@ async function handleSemanaCommand(message) {
         
         collector.on('collect', async (i) => {
             if (i.user.id !== message.author.id) {
-                return i.reply({ content: '❌ Sem permissão.', flags: [MessageFlags.Ephemeral] });
+                return i.reply({ content: 'âŒ Sem permissÃ£o.', flags: [MessageFlags.Ephemeral] });
             }
             if (i.customId === 'prev') currentPage--;
             else if (i.customId === 'next') currentPage++;
@@ -191,7 +192,7 @@ async function handleSemanaCommand(message) {
 
     } catch (error) {
         console.error(error);
-        await loadingMessage.edit(`❌ Erro: ${error.message}`);
+        await loadingMessage.edit(`âŒ Erro: ${error.message}`);
     }
 }
 

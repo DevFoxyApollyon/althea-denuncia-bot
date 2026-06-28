@@ -1,3 +1,4 @@
+﻿// performance.js
 const { RateLimiter } = require('limiter');
 const Config = require('../models/Config');
 
@@ -52,7 +53,7 @@ class OperationQueue {
     try {
       await operation();
     } catch (error) {
-      console.error(`Erro na operação do usuário ${userId}:`, error);
+      console.error(`Erro na operaÃ§Ã£o do usuÃ¡rio ${userId}:`, error);
     }
 
     setTimeout(() => this.processQueue(userId), 100);
@@ -89,7 +90,7 @@ async function getCachedConfig(guildId) {
 
     return config;
   } catch (error) {
-    console.error('Erro ao buscar configuração:', error);
+    console.error('Erro ao buscar configuraÃ§Ã£o:', error);
     return null;
   }
 }
@@ -114,7 +115,7 @@ async function getCachedDenuncia(query, Denuncia) {
 
     return denuncia;
   } catch (error) {
-    console.error('Erro ao buscar denúncia:', error);
+    console.error('Erro ao buscar denÃºncia:', error);
     return null;
   }
 }

@@ -1,3 +1,4 @@
+﻿// Denuncia.js
 const mongoose = require('mongoose');
 const { getBrasiliaDate } = require('../utils/dateUtils');
 

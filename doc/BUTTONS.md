@@ -1,130 +1,131 @@
-# 🔘 Buttons & Interactions
+﻿// BUTTONS.md
+# ðŸ”˜ Buttons & Interactions
 
-Este documento descreve **TODOS os botões e modais** utilizados pelo bot, seus `customId`, permissões e handlers responsáveis.
+Este documento descreve **TODOS os botÃµes e modais** utilizados pelo bot, seus `customId`, permissÃµes e handlers responsÃ¡veis.
 
-> **📝 Nota v1.2.1:** Os handlers de botões foram consolidados para melhor organização. `buttons/denunciaButtons.js` foi integrado em `commands/denuncia.js`. Arquivo `buttons/statusButtons.js` foi removido (redundante).
+> **ðŸ“ Nota v1.2.1:** Os handlers de botÃµes foram consolidados para melhor organizaÃ§Ã£o. `buttons/denunciaButtons.js` foi integrado em `commands/denuncia.js`. Arquivo `buttons/statusButtons.js` foi removido (redundante).
 
 ---
 
-## 📌 Botões do Painel `!denuncia`
+## ðŸ“Œ BotÃµes do Painel `!denuncia`
 
 Local: mensagem enviada pelo comando `!denuncia`  
 Handler: `commands/denuncia.js` (consolidado em v1.2.1)
 
 ---
 
-### 🖥️ `denuncia_pc`
-**Função:**  
-Abrir modal para criação de denúncia PC.
+### ðŸ–¥ï¸ `denuncia_pc`
+**FunÃ§Ã£o:**  
+Abrir modal para criaÃ§Ã£o de denÃºncia PC.
 
 **Fluxo:**
 - Abre modal
-- Cria denúncia no MongoDB
-- Cria tópico/thread no canal PC
-- Publica denúncia
-- Adiciona botões de staff + Finalizar
+- Cria denÃºncia no MongoDB
+- Cria tÃ³pico/thread no canal PC
+- Publica denÃºncia
+- Adiciona botÃµes de staff + Finalizar
 
 ---
 
-### 📱 `denuncia_mobile`
-**Função:**  
-Abrir modal para criação de denúncia Mobile.
+### ðŸ“± `denuncia_mobile`
+**FunÃ§Ã£o:**  
+Abrir modal para criaÃ§Ã£o de denÃºncia Mobile.
 
 **Fluxo:**  
-Idêntico ao PC, porém usando `config.channels.mobile`.
+IdÃªntico ao PC, porÃ©m usando `config.channels.mobile`.
 
 ---
 
-### 📂 `minhas_denuncias`
-**Função:**  
-Permitir que o usuário visualize todas as denúncias que ele criou.
+### ðŸ“‚ `minhas_denuncias`
+**FunÃ§Ã£o:**  
+Permitir que o usuÃ¡rio visualize todas as denÃºncias que ele criou.
 
 **O que mostra:**
-- Lista de denúncias
+- Lista de denÃºncias
 - Status atual
-- Link do tópico (quando existir)
+- Link do tÃ³pico (quando existir)
 
 **Objetivo:**  
-Transparência e redução de tickets desnecessários.
+TransparÃªncia e reduÃ§Ã£o de tickets desnecessÃ¡rios.
 
 ---
 
-### 🛠️ `correcao`
-**Função:**  
-Iniciar fluxo de **correção de denúncia existente**.
+### ðŸ› ï¸ `correcao`
+**FunÃ§Ã£o:**  
+Iniciar fluxo de **correÃ§Ã£o de denÃºncia existente**.
 
 **Importante:**
-- NÃO cria nova denúncia
-- Reutiliza a lógica do comando `!correcao`
+- NÃƒO cria nova denÃºncia
+- Reutiliza a lÃ³gica do comando `!correcao`
 - Usado para corrigir erros humanos ou administrativos
 
-**Integração:**
-- Botão → `commands/denuncia.js`
-- Lógica → `commands/correcao.js`
+**IntegraÃ§Ã£o:**
+- BotÃ£o â†’ `commands/denuncia.js`
+- LÃ³gica â†’ `commands/correcao.js`
 
 ---
 
-## 📌 Botões do Tópico da Denúncia (Staff)
+## ðŸ“Œ BotÃµes do TÃ³pico da DenÃºncia (Staff)
 
 Handler: `Handlers/handlerStatusButton.js`
 
 ---
 
-### 📝 `reivindicar`
-**Função:**  
-Staff assume a denúncia.
+### ðŸ“ `reivindicar`
+**FunÃ§Ã£o:**  
+Staff assume a denÃºncia.
 
 **Efeitos:**
 - Define `claimedBy`
-- Registra ação em `ModerationAction`
-- Renomeia tópico
+- Registra aÃ§Ã£o em `ModerationAction`
+- Renomeia tÃ³pico
 
 ---
 
-### 🔎 `analiser`
-**Função:**  
-Marcar denúncia como **em análise**.
+### ðŸ”Ž `analiser`
+**FunÃ§Ã£o:**  
+Marcar denÃºncia como **em anÃ¡lise**.
 
-**Permissões:**
+**PermissÃµes:**
 - Quem reivindicou
-- Responsável admin
+- ResponsÃ¡vel admin
 
 ---
 
-### ✅ `aceitar`
-**Função:**  
-Aceitar denúncia e abrir **modal de punição**.
+### âœ… `aceitar`
+**FunÃ§Ã£o:**  
+Aceitar denÃºncia e abrir **modal de puniÃ§Ã£o**.
 
 ---
 
-### ❌ `recusar`
-**Função:**  
-Recusar denúncia.
+### âŒ `recusar`
+**FunÃ§Ã£o:**  
+Recusar denÃºncia.
 
 **Efeitos:**
 - Atualiza status
 - Remove logs
 - Envia DM
-- Mostra aviso de reanálise
+- Mostra aviso de reanÃ¡lise
 
 ---
 
-### ✅ `finalizar_denuncia`
-**Função:**  
-Exportar a denúncia e **fechar o tópico**.
+### âœ… `finalizar_denuncia`
+**FunÃ§Ã£o:**  
+Exportar a denÃºncia e **fechar o tÃ³pico**.
 
 **Efeitos:**
 - Exporta mensagens/anexos
 - Gera HTML/ZIP
 - Envia arquivo
-- Tranca e arquiva o tópico
+- Tranca e arquiva o tÃ³pico
 
 ---
 
-## 🪟 Modais
+## ðŸªŸ Modais
 
 ### `punishment_modal`
-**Usado em:** botão `aceitar`
+**Usado em:** botÃ£o `aceitar`
 
 **Campos:**
 - acusadoId
@@ -132,4 +133,4 @@ Exportar a denúncia e **fechar o tópico**.
 - data
 
 **Resultado:**  
-Denúncia aceita + logs + DM + aviso de reanálise
+DenÃºncia aceita + logs + DM + aviso de reanÃ¡lise

@@ -1,12 +1,13 @@
+﻿// templateProcessor.js
 const { getCachedConfig } = require('./performance');
 const Config = require('../models/Config');
 
 class TemplateProcessor {
   constructor() {
     this.defaultTemplates = {
-      denuncia_aceita: '➥ Denúncia aceita Acusado ({acusadoId}) tomará punição por ({motivo}) Data {dataPunicao} Link: {messageUrl}',
-      denuncia_analise: '🔎 Esta denúncia está em análise por {user} Acusado: ({acusado}) Motivo: ({motivo}) Link: {messageUrl}',
-      denuncia_recusada: '❌ Denúncia recusada por {user}'
+      denuncia_aceita: 'âž¥ DenÃºncia aceita Acusado ({acusadoId}) tomarÃ¡ puniÃ§Ã£o por ({motivo}) Data {dataPunicao} Link: {messageUrl}',
+      denuncia_analise: 'ðŸ”Ž Esta denÃºncia estÃ¡ em anÃ¡lise por {user} Acusado: ({acusado}) Motivo: ({motivo}) Link: {messageUrl}',
+      denuncia_recusada: 'âŒ DenÃºncia recusada por {user}'
     };
   }
 
@@ -20,7 +21,7 @@ class TemplateProcessor {
         template = config.templates[templateType];
       }
       
-      // Substitui as variáveis no template
+      // Substitui as variÃ¡veis no template
       let processedTemplate = template;
       for (const [key, value] of Object.entries(variables)) {
         const placeholder = `{${key}}`;
@@ -30,7 +31,7 @@ class TemplateProcessor {
       return processedTemplate;
     } catch (error) {
       console.error('Erro ao processar template:', error);
-      // Retorna template padrão em caso de erro
+      // Retorna template padrÃ£o em caso de erro
       return this.processDefaultTemplate(templateType, variables);
     }
   }
@@ -95,7 +96,7 @@ class TemplateProcessor {
   getTemplateWarnings(template, templateType) {
     const warnings = [];
     
-    // Verifica se tem variáveis não utilizadas
+    // Verifica se tem variÃ¡veis nÃ£o utilizadas
     const availableVariables = this.getAvailableVariables(templateType);
     const usedVariables = template.match(/\{([^}]+)\}/g) || [];
     const unusedVariables = availableVariables.filter(v => 
@@ -103,16 +104,16 @@ class TemplateProcessor {
     );
     
     if (unusedVariables.length > 0) {
-      warnings.push(`Variáveis não utilizadas: ${unusedVariables.join(', ')}`);
+      warnings.push(`VariÃ¡veis nÃ£o utilizadas: ${unusedVariables.join(', ')}`);
     }
     
-    // Verifica se tem variáveis inválidas
+    // Verifica se tem variÃ¡veis invÃ¡lidas
     const invalidVariables = usedVariables.filter(v => 
       !availableVariables.includes(v.replace(/[{}]/g, ''))
     );
     
     if (invalidVariables.length > 0) {
-      warnings.push(`Variáveis inválidas: ${invalidVariables.join(', ')}`);
+      warnings.push(`VariÃ¡veis invÃ¡lidas: ${invalidVariables.join(', ')}`);
     }
     
     return warnings;

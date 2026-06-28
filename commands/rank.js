@@ -1,4 +1,5 @@
-// commands/rank.js  ✅ ATUALIZADO (sem opcode 8 / sem fetch geral de membros)
+﻿// rank.js
+// commands/rank.js  âœ… ATUALIZADO (sem opcode 8 / sem fetch geral de membros)
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -28,23 +29,23 @@ function sleep(ms) {
 }
 
 /**
- * Busca somente os membros necessários (por IDs), evitando o Request Guild Members (opcode 8).
- * Isso usa REST e é bem mais seguro do que guild.members.fetch() sem parâmetros.
+ * Busca somente os membros necessÃ¡rios (por IDs), evitando o Request Guild Members (opcode 8).
+ * Isso usa REST e Ã© bem mais seguro do que guild.members.fetch() sem parÃ¢metros.
  */
 async function fetchMembersByIdsSafe(guild, ids) {
   const uniqueIds = [...new Set(ids)].filter(Boolean);
 
   if (uniqueIds.length === 0) return;
 
-  // 50~80 é um tamanho seguro (evita bursts grandes)
+  // 50~80 Ã© um tamanho seguro (evita bursts grandes)
   const chunks = chunkArray(uniqueIds, 80);
 
   for (const part of chunks) {
     try {
-      // ✅ NÃO dispara opcode 8
+      // âœ… NÃƒO dispara opcode 8
       await guild.members.fetch({ user: part, force: false });
     } catch (e) {
-      // Não quebra o comando por falha em 1 lote
+      // NÃ£o quebra o comando por falha em 1 lote
       console.warn('[RANK] Falha ao buscar lote de membros:', e?.message || e);
     }
     // delay curto pra aliviar REST se tiver muitos IDs
@@ -84,7 +85,7 @@ function getTodayDatesLocal() {
 }
 
 // -------------------------
-// Stats do dia (denúncias)
+// Stats do dia (denÃºncias)
 // -------------------------
 async function getDailyStats(guildId) {
   try {
@@ -118,15 +119,15 @@ async function getDailyStats(guildId) {
 // Tabela do Embed
 // -------------------------
 function buildRankTable(actions) {
-  if (!actions.length) return 'Nenhuma ação registrada.';
+  if (!actions.length) return 'Nenhuma aÃ§Ã£o registrada.';
 
   return actions
     .map((mod, index) => {
-      const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '▫️';
-      return `${medal} ${(index + 1).toString().padStart(2)}º ${mod.tag}
-📊 Total: ${mod.total} | ✅ ${mod.aceitas} | ❌ ${mod.recusadas} | 🔎 ${mod.analises}
-📝 Reivindicadas: ${mod.reivindicacoes}
-─────────────────────────`;
+      const medal = index === 0 ? 'ðŸ¥‡' : index === 1 ? 'ðŸ¥ˆ' : index === 2 ? 'ðŸ¥‰' : 'â–«ï¸';
+      return `${medal} ${(index + 1).toString().padStart(2)}Âº ${mod.tag}
+ðŸ“Š Total: ${mod.total} | âœ… ${mod.aceitas} | âŒ ${mod.recusadas} | ðŸ”Ž ${mod.analises}
+ðŸ“ Reivindicadas: ${mod.reivindicacoes}
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€`;
     })
     .join('\n');
 }
@@ -136,14 +137,14 @@ function buildRankTable(actions) {
 // -------------------------
 function generateRankTxt(actions, guildName, label, period, daily) {
   const lines = [
-    `🏆 RANKING ${label.toUpperCase()} - ${guildName.toUpperCase()}`,
-    `Período: ${formatDateBR(period.start)} até ${formatDateBR(period.end)}`,
+    `ðŸ† RANKING ${label.toUpperCase()} - ${guildName.toUpperCase()}`,
+    `PerÃ­odo: ${formatDateBR(period.start)} atÃ© ${formatDateBR(period.end)}`,
     `Gerado em: ${formatDateBR(getBrasiliaDate())}`,
     ``,
-    `--- ESTATÍSTICAS DE HOJE (DENÚNCIAS) ---`,
-    `📫 Denúncias: ${daily.total}`,
-    `📝 Reivindicadas: ${daily.reivindicadas}`,
-    `📊 Pendentes: ${daily.pendentes}`,
+    `--- ESTATÃSTICAS DE HOJE (DENÃšNCIAS) ---`,
+    `ðŸ“« DenÃºncias: ${daily.total}`,
+    `ðŸ“ Reivindicadas: ${daily.reivindicadas}`,
+    `ðŸ“Š Pendentes: ${daily.pendentes}`,
     ``,
     `--- RANKING INDIVIDUAL ---`,
     `====================================================`
@@ -151,13 +152,13 @@ function generateRankTxt(actions, guildName, label, period, daily) {
 
   actions.forEach((a, i) => {
     lines.push(
-      `${i + 1}º LUGAR: ${a.plainTag || a.userId}`,
+      `${i + 1}Âº LUGAR: ${a.plainTag || a.userId}`,
       `ID: ${a.userId}`,
       `Total: ${a.total}`,
-      `✅ Aceitas: ${a.aceitas}`,
-      `❌ Recusadas: ${a.recusadas}`,
-      `🔎 Análises: ${a.analises}`,
-      `📝 Reivindicações: ${a.reivindicacoes}`,
+      `âœ… Aceitas: ${a.aceitas}`,
+      `âŒ Recusadas: ${a.recusadas}`,
+      `ðŸ”Ž AnÃ¡lises: ${a.analises}`,
+      `ðŸ“ ReivindicaÃ§Ãµes: ${a.reivindicacoes}`,
       `----------------------------------------------------`
     );
   });
@@ -168,7 +169,7 @@ function generateRankTxt(actions, guildName, label, period, daily) {
 // -------------------------
 // Comando !rank
 // -------------------------
-// Padrão: MENSAL
+// PadrÃ£o: MENSAL
 // !rank
 // !rank mensal | mes
 // !rank semanal | semana
@@ -197,15 +198,15 @@ async function handleRankCommand(message) {
       period = getTodayDatesLocal();
     }
 
-    loadingMsg = await message.reply(`🔄 Gerando ranking **${label.toLowerCase()}**...`);
+    loadingMsg = await message.reply(`ðŸ”„ Gerando ranking **${label.toLowerCase()}**...`);
 
     const { actions: rawActions } = await RankService.getRankData(message.guild, type);
 
     if (!rawActions || rawActions.length === 0) {
-      return loadingMsg.edit(`⚠️ Nenhuma ação registrada (${label}).`);
+      return loadingMsg.edit(`âš ï¸ Nenhuma aÃ§Ã£o registrada (${label}).`);
     }
 
-    // ✅ Anti-opcode-8: busca SOMENTE os membros do ranking (por IDs)
+    // âœ… Anti-opcode-8: busca SOMENTE os membros do ranking (por IDs)
     const idsToFetch = rawActions.map((a) => a.userId || a._id).filter(Boolean);
     await fetchMembersByIdsSafe(message.guild, idsToFetch);
 
@@ -241,13 +242,13 @@ async function handleRankCommand(message) {
 
       return new EmbedBuilder()
         .setColor('#2F3136')
-        .setTitle(`🏆 Ranking ${label}`)
+        .setTitle(`ðŸ† Ranking ${label}`)
         .setDescription(
-          `*Período: ${formatDateBR(period.start)} até ${formatDateBR(period.end)}*\n\n` +
-            `📫 **Denúncias Hoje:** ${dailyStats.total} | 📝 **Reiv:** ${dailyStats.reivindicadas} | 📊 **Pend:** ${dailyStats.pendentes}\n\n` +
+          `*PerÃ­odo: ${formatDateBR(period.start)} atÃ© ${formatDateBR(period.end)}*\n\n` +
+            `ðŸ“« **DenÃºncias Hoje:** ${dailyStats.total} | ðŸ“ **Reiv:** ${dailyStats.reivindicadas} | ðŸ“Š **Pend:** ${dailyStats.pendentes}\n\n` +
             buildRankTable(slice)
         )
-        .setFooter({ text: `Página ${pageNum + 1} de ${totalPages}` })
+        .setFooter({ text: `PÃ¡gina ${pageNum + 1} de ${totalPages}` })
         .setTimestamp();
     };
 
@@ -260,13 +261,13 @@ async function handleRankCommand(message) {
           .setDisabled(pageNum === 0),
         new ButtonBuilder()
           .setCustomId('next')
-          .setLabel('Próximo')
+          .setLabel('PrÃ³ximo')
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(pageNum >= totalPages - 1)
       );
 
     await loadingMsg.edit({
-      content: `✅ Ranking **${label.toLowerCase()}** pronto!`,
+      content: `âœ… Ranking **${label.toLowerCase()}** pronto!`,
       embeds: [createEmbed(0)],
       components: totalPages > 1 ? [buttons(0)] : [],
       files: [file]
@@ -278,7 +279,7 @@ async function handleRankCommand(message) {
 
     collector.on('collect', async (i) => {
       if (i.user.id !== message.author.id) {
-        return i.reply({ content: '❌ Apenas quem usou o comando.', flags: [MessageFlags.Ephemeral] });
+        return i.reply({ content: 'âŒ Apenas quem usou o comando.', flags: [MessageFlags.Ephemeral] });
       }
 
       if (i.customId === 'prev') page--;
@@ -289,19 +290,19 @@ async function handleRankCommand(message) {
     });
 
     collector.on('end', async () => {
-      // opcional: desabilitar botões quando expirar
+      // opcional: desabilitar botÃµes quando expirar
       if (!loadingMsg) return;
       try {
         const disabledRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('prev').setLabel('Anterior').setStyle(ButtonStyle.Secondary).setDisabled(true),
-          new ButtonBuilder().setCustomId('next').setLabel('Próximo').setStyle(ButtonStyle.Secondary).setDisabled(true)
+          new ButtonBuilder().setCustomId('next').setLabel('PrÃ³ximo').setStyle(ButtonStyle.Secondary).setDisabled(true)
         );
         await loadingMsg.edit({ components: [disabledRow] }).catch(() => null);
       } catch {}
     });
   } catch (err) {
     console.error(err);
-    if (loadingMsg) loadingMsg.edit('❌ Erro ao gerar ranking.');
+    if (loadingMsg) loadingMsg.edit('âŒ Erro ao gerar ranking.');
   }
 }
 

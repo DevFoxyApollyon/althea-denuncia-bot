@@ -1,3 +1,4 @@
+﻿// nicknamePoller.js
 const chalk = require('chalk');
 const Usuarios = require('../models/Usuario');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
@@ -5,10 +6,10 @@ const { extrairContaDoNickname } = require('../utils/nickUtils');
 const INTERVALO_MS = 5 * 60 * 1000;
 
 const log = {
-    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[POLLER]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[POLLER]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[POLLER]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[POLLER]')} ${msg}`),
+    info:    (msg) => console.log(`${chalk.blue('â„¹')} ${chalk.gray('[POLLER]')} ${msg}`),
+    success: (msg) => console.log(`${chalk.green('âœ”')} ${chalk.gray('[POLLER]')} ${msg}`),
+    warn:    (msg) => console.log(`${chalk.yellow('âš ')} ${chalk.gray('[POLLER]')} ${msg}`),
+    error:   (msg) => console.log(`${chalk.red('âœ–')} ${chalk.gray('[POLLER]')} ${msg}`),
 };
 
 async function repararContasComDiscordId(client) {
@@ -55,7 +56,7 @@ async function repararContasComDiscordId(client) {
             });
 
             if (!entrada) {
-                // FIX: cache: false + delete após uso
+                // FIX: cache: false + delete apÃ³s uso
                 const membro = await guild.members.fetch({ user: registro.userId, cache: false }).catch(() => null);
                 const nickAtual    = membro?.nickname || membro?.user?.username || null;
                 const contaDoNick  = nickAtual ? extrairContaDoNickname(nickAtual) : null;
@@ -95,7 +96,7 @@ async function repararContasComDiscordId(client) {
     }
 
     log.info(
-        `[REPARO] Concluído — ` +
+        `[REPARO] ConcluÃ­do â€” ` +
         `${chalk.green(totalReparados + ' reparado(s)')} | ` +
         `${chalk.red(totalRemovidos + ' removido(s)')}`
     );
@@ -117,7 +118,7 @@ async function verificarNicknames(client) {
                 entry.changes?.some(c => c.key === 'nick')
             );
 
-            // Última entrada por userId
+            // Ãšltima entrada por userId
             const ultimasEntradas = new Map();
             for (const entry of entradasBot) {
                 const userId = entry.target?.id;
@@ -127,7 +128,7 @@ async function verificarNicknames(client) {
             }
 
             if (ultimasEntradas.size > 0) {
-                // FIX: buscar todos os registros relevantes em uma query só
+                // FIX: buscar todos os registros relevantes em uma query sÃ³
                 const userIds = [...ultimasEntradas.keys()];
                 const registrosExistentes = await Usuarios.find({
                     guildId: guild.id,
@@ -145,7 +146,7 @@ async function verificarNicknames(client) {
                     const existente = registroMap.get(userId);
                     if (existente?.nickname?.toLowerCase() === nickNovo?.toLowerCase()) continue;
 
-                    // FIX: cache: false + delete após uso
+                    // FIX: cache: false + delete apÃ³s uso
                     const membro   = await guild.members.fetch({ user: userId, cache: false }).catch(() => null);
                     const username = membro?.user?.username ?? 'Desconhecido';
                     if (membro) guild.members.cache.delete(userId);
@@ -169,12 +170,12 @@ async function verificarNicknames(client) {
                     else totalAtualizados++;
                 }
 
-                // FIX: bulkWrite ao invés de N operações individuais
+                // FIX: bulkWrite ao invÃ©s de N operaÃ§Ãµes individuais
                 if (bulkOpsAudit.length > 0) await Usuarios.bulkWrite(bulkOpsAudit);
             }
 
             // FIX: REMOVIDO guild.members.fetch() sem argumentos
-            // Processar somente membros já presentes no cache (sem forçar carregamento de todos)
+            // Processar somente membros jÃ¡ presentes no cache (sem forÃ§ar carregamento de todos)
             const membersEmCache = guild.members.cache.filter(m => !m.user.bot);
 
             if (membersEmCache.size > 0) {
@@ -217,7 +218,7 @@ async function verificarNicknames(client) {
                     totalContaCorrigida++;
                 }
 
-                // FIX: bulkWrite ao invés de N updates individuais
+                // FIX: bulkWrite ao invÃ©s de N updates individuais
                 if (bulkOpsCache.length > 0) await Usuarios.bulkWrite(bulkOpsCache);
             }
 
@@ -228,7 +229,7 @@ async function verificarNicknames(client) {
 
     if (totalNovos > 0 || totalAtualizados > 0 || totalContaCorrigida > 0) {
         log.info(
-            `Verificação concluída — ` +
+            `VerificaÃ§Ã£o concluÃ­da â€” ` +
             `${chalk.green(totalNovos + ' novo(s)')} | ` +
             `${chalk.blue(totalAtualizados + ' atualizado(s)')} | ` +
             `${chalk.yellow(totalContaCorrigida + ' conta(s) corrigida(s)')}`

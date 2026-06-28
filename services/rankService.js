@@ -1,3 +1,4 @@
+﻿// rankService.js
 // services/rankService.js
 const ModerationAction = require('../models/ModerationAction');
 const Config = require('../models/Config');
@@ -8,7 +9,7 @@ class RankService {
 
   /**
    * type:
-   *  - 'month' (padrão recomendado)
+   *  - 'month' (padrÃ£o recomendado)
    *  - 'week'
    *  - 'day'
    */
@@ -26,7 +27,7 @@ class RankService {
 
       const config = await Config.findOne({ guildId: guild.id }).lean();
 
-      // Busca o cargo (administrador) pra tags amigáveis
+      // Busca o cargo (administrador) pra tags amigÃ¡veis
       const adminRoleId = config?.roles?.administrador || config?.administrador;
       let activeModeratorMembers = new Map();
 
@@ -37,7 +38,7 @@ class RankService {
         }
       }
 
-      // ✅ Busca ações conforme o tipo
+      // âœ… Busca aÃ§Ãµes conforme o tipo
       let allActions = [];
       if (safeType === 'day') {
         allActions = await ModerationAction.getActionsForToday(guild.id);
@@ -53,10 +54,10 @@ class RankService {
         const moderatorId = action._id;
         if (!moderatorId) continue;
 
-        // tenta pegar pela lista do cargo, senão cache geral
+        // tenta pegar pela lista do cargo, senÃ£o cache geral
         const member = activeModeratorMembers.get(moderatorId) || guild.members.cache.get(moderatorId);
 
-        // tag amigável (sem remover do rank se não existir)
+        // tag amigÃ¡vel (sem remover do rank se nÃ£o existir)
         const tag = member?.user?.username || member?.user?.tag || `Staff Antigo (${moderatorId})`;
 
         finalActions.push({

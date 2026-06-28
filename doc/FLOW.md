@@ -1,119 +1,120 @@
-# 🔁 Fluxo Completo do Sistema de Denúncias
+﻿// FLOW.md
+# ðŸ” Fluxo Completo do Sistema de DenÃºncias
 
-Este documento descreve **TODO o fluxo do bot**, desde a configuração inicial até o encerramento da denúncia.
+Este documento descreve **TODO o fluxo do bot**, desde a configuraÃ§Ã£o inicial atÃ© o encerramento da denÃºncia.
 
-> **📝 Última atualização:** v1.2.1 - Atualização de documentação e preparação da release
+> **ðŸ“ Ãšltima atualizaÃ§Ã£o:** v1.2.1 - AtualizaÃ§Ã£o de documentaÃ§Ã£o e preparaÃ§Ã£o da release
 
 ---
 
-## 0️⃣ Configuração Inicial (`!painel`)
+## 0ï¸âƒ£ ConfiguraÃ§Ã£o Inicial (`!painel`)
 
 Antes de usar o sistema, o administrador deve executar:
 
 ### `!painel`
 Permite configurar no MongoDB:
 - cargos administrativos
-- canais de denúncia (PC/Mobile)
+- canais de denÃºncia (PC/Mobile)
 - canais de logs
-- canal de análise
+- canal de anÃ¡lise
 
-📌 Sem essa etapa, o bot não funciona corretamente.
+ðŸ“Œ Sem essa etapa, o bot nÃ£o funciona corretamente.
 
 ---
 
-## 1️⃣ Abertura do Painel de Denúncias (`!denuncia`)
+## 1ï¸âƒ£ Abertura do Painel de DenÃºncias (`!denuncia`)
 
 - Staff executa `!denuncia`
-- Bot envia embed **Sistema de Denúncias**
-- Botões:
-  - 🖥️ Denúncia PC
-  - 📱 Denúncia Mobile
-  - 📂 Minhas Denúncias
-  - 🛠️ Correção
+- Bot envia embed **Sistema de DenÃºncias**
+- BotÃµes:
+  - ðŸ–¥ï¸ DenÃºncia PC
+  - ðŸ“± DenÃºncia Mobile
+  - ðŸ“‚ Minhas DenÃºncias
+  - ðŸ› ï¸ CorreÃ§Ã£o
 
 ---
 
-## 2️⃣ Criação da Denúncia (PC/Mobile)
+## 2ï¸âƒ£ CriaÃ§Ã£o da DenÃºncia (PC/Mobile)
 
-- Usuário clica em PC ou Mobile
-- Modal é aberto
-- Usuário envia denúncia
+- UsuÃ¡rio clica em PC ou Mobile
+- Modal Ã© aberto
+- UsuÃ¡rio envia denÃºncia
 - Bot:
   - cria registro no MongoDB
-  - cria tópico/thread
-  - publica denúncia
+  - cria tÃ³pico/thread
+  - publica denÃºncia
   - fixa aviso no topo
-  - adiciona botões de staff + Finalizar
+  - adiciona botÃµes de staff + Finalizar
 
 ---
 
-## 3️⃣ Minhas Denúncias
+## 3ï¸âƒ£ Minhas DenÃºncias
 
-- Usuário clica em **Minhas Denúncias**
-- Bot lista denúncias criadas pelo usuário
-- Usuário acompanha status sem depender da staff
+- UsuÃ¡rio clica em **Minhas DenÃºncias**
+- Bot lista denÃºncias criadas pelo usuÃ¡rio
+- UsuÃ¡rio acompanha status sem depender da staff
 
 ---
 
-## 4️⃣ Correção via Botão ou Comando (`correcao`)
+## 4ï¸âƒ£ CorreÃ§Ã£o via BotÃ£o ou Comando (`correcao`)
 
-- Usuário/staff clica em **Correção** ou usa `!correcao`
+- UsuÃ¡rio/staff clica em **CorreÃ§Ã£o** ou usa `!correcao`
 - Bot:
-  - solicita ID da denúncia
+  - solicita ID da denÃºncia
   - localiza registro
-  - permite correção administrativa
+  - permite correÃ§Ã£o administrativa
 
-📌 Nenhuma nova denúncia é criada.
-
----
-
-## 5️⃣ Reivindicação
-
-- Staff clica em 📝 Reivindicar
-- Bot define responsável e registra ação
-- Renomeia tópico
+ðŸ“Œ Nenhuma nova denÃºncia Ã© criada.
 
 ---
 
-## 6️⃣ Análise
+## 5ï¸âƒ£ ReivindicaÃ§Ã£o
 
-- Staff clica em 🔎 Analisar
+- Staff clica em ðŸ“ Reivindicar
+- Bot define responsÃ¡vel e registra aÃ§Ã£o
+- Renomeia tÃ³pico
+
+---
+
+## 6ï¸âƒ£ AnÃ¡lise
+
+- Staff clica em ðŸ”Ž Analisar
 - Bot muda status e atualiza logs
 
 ---
 
-## 7️⃣ Decisão
+## 7ï¸âƒ£ DecisÃ£o
 
-### ✅ Aceitar
-- Modal de punição
+### âœ… Aceitar
+- Modal de puniÃ§Ã£o
 - Atualiza banco
 - Envia logs
 - Envia DM
-- Mostra aviso de reanálise
+- Mostra aviso de reanÃ¡lise
 
-### ❌ Recusar
+### âŒ Recusar
 - Atualiza banco
 - Remove logs
 - Envia DM
-- Mostra aviso de reanálise
+- Mostra aviso de reanÃ¡lise
 
 ---
 
-## 8️⃣ Finalizar (Exportar)
+## 8ï¸âƒ£ Finalizar (Exportar)
 
 - Staff clica em **Finalizar**
 - Bot:
-  - exporta histórico
+  - exporta histÃ³rico
   - gera ZIP/HTML
   - envia arquivo
-  - **tranca e arquiva tópico**
+  - **tranca e arquiva tÃ³pico**
 
-➡️ Denúncia encerrada.
+âž¡ï¸ DenÃºncia encerrada.
 
 ---
 
-## 9️⃣ Rankings
+## 9ï¸âƒ£ Rankings
 
-- Todas ações são registradas
-- `!rank` → mensal
-- `!semana` → semanal
+- Todas aÃ§Ãµes sÃ£o registradas
+- `!rank` â†’ mensal
+- `!semana` â†’ semanal

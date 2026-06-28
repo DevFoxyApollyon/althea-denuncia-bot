@@ -1,3 +1,4 @@
+﻿// smartCache.js
 class SmartCache {
   constructor() {
     this.cache = new Map();
@@ -30,7 +31,7 @@ class SmartCache {
     return item.data;
   }
 
-  set(key, data, ttl = 300000) { // 5 minutos padrão
+  set(key, data, ttl = 300000) { // 5 minutos padrÃ£o
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
@@ -60,7 +61,7 @@ class SmartCache {
     this.cache.clear();
   }
 
-  // Cache com invalidação inteligente por padrão
+  // Cache com invalidaÃ§Ã£o inteligente por padrÃ£o
   invalidatePattern(pattern) {
     let deleted = 0;
     for (const key of this.cache.keys()) {
@@ -73,21 +74,21 @@ class SmartCache {
     return deleted;
   }
 
-  // Cache com TTL dinâmico baseado no tipo de dados
+  // Cache com TTL dinÃ¢mico baseado no tipo de dados
   setWithDynamicTTL(key, data, dataType = 'default') {
     const ttlMap = {
-      'config': 10 * 60 * 1000,      // 10 minutos para configurações
-      'denuncia': 2 * 60 * 1000,     // 2 minutos para denúncias
-      'user': 5 * 60 * 1000,         // 5 minutos para dados de usuário
+      'config': 10 * 60 * 1000,      // 10 minutos para configuraÃ§Ãµes
+      'denuncia': 2 * 60 * 1000,     // 2 minutos para denÃºncias
+      'user': 5 * 60 * 1000,         // 5 minutos para dados de usuÃ¡rio
       'guild': 15 * 60 * 1000,       // 15 minutos para dados de servidor
-      'default': 5 * 60 * 1000       // 5 minutos padrão
+      'default': 5 * 60 * 1000       // 5 minutos padrÃ£o
     };
 
     const ttl = ttlMap[dataType] || ttlMap['default'];
     this.set(key, data, ttl);
   }
 
-  // Estatísticas do cache
+  // EstatÃ­sticas do cache
   getStats() {
     const total = this.stats.hits + this.stats.misses;
     return {
@@ -98,7 +99,7 @@ class SmartCache {
     };
   }
 
-  // Estimativa de uso de memória
+  // Estimativa de uso de memÃ³ria
   estimateMemoryUsage() {
     let totalSize = 0;
     for (const [key, value] of this.cache.entries()) {
@@ -124,11 +125,11 @@ class SmartCache {
     this.stats.evictions += cleaned;
     
     if (cleaned > 0) {
-      console.log(`🧹 Cache cleanup: ${cleaned} itens removidos`);
+      console.log(`ðŸ§¹ Cache cleanup: ${cleaned} itens removidos`);
     }
   }
 
-  // Cache com compressão para dados grandes
+  // Cache com compressÃ£o para dados grandes
   setCompressed(key, data, ttl = 300000) {
     try {
       const compressed = JSON.stringify(data);
@@ -164,7 +165,7 @@ class SmartCache {
   }
 }
 
-// Instância global do cache
+// InstÃ¢ncia global do cache
 const globalCache = new SmartCache();
 
 module.exports = { SmartCache, globalCache };

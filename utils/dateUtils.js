@@ -1,3 +1,4 @@
+﻿// dateUtils.js
 function getBrasiliaDate() {
     const now = new Date();
     const BRASILIA_OFFSET = -3; 

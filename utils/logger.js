@@ -1,3 +1,4 @@
+﻿// logger.js
 // utils/logger.js
 const { getBrasiliaDate, formatTimeBR } = require('./dateUtils');
 
@@ -11,7 +12,7 @@ function safeStringify(obj, maxLen = 800) {
     if (str.length > maxLen) return str.slice(0, maxLen) + '... [TRUNCADO]';
     return str;
   } catch {
-    return '[Objeto não serializável]';
+    return '[Objeto nÃ£o serializÃ¡vel]';
   }
 }
 

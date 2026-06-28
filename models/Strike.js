@@ -1,3 +1,4 @@
+﻿// Strike.js
 const mongoose = require('mongoose');
 
 const StrikeSchema = new mongoose.Schema({

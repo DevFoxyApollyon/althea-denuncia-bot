@@ -1,3 +1,4 @@
+﻿// index.js
 process.env.TZ = 'America/Sao_Paulo';
 process.env.FORCE_COLOR = '3';
 require('dotenv').config();
@@ -47,11 +48,11 @@ const client = new Client({
 });
 
 const log = {
-    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
-    system:  (msg) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} ${msg}`)
+    info:    (msg) => console.log(`${chalk.blue('â„¹')} ${chalk.gray('[INFO]')} ${msg}`),
+    success: (msg) => console.log(`${chalk.green('âœ”')} ${chalk.gray('[SUCESSO]')} ${msg}`),
+    warn:    (msg) => console.log(`${chalk.yellow('âš ')} ${chalk.gray('[AVISO]')} ${msg}`),
+    error:   (msg) => console.log(`${chalk.red('âœ–')} ${chalk.gray('[ERRO]')} ${msg}`),
+    system:  (msg) => console.log(`${chalk.magenta('âš™')} ${chalk.gray('[SISTEMA]')} ${msg}`)
 };
 
 const configCache = new Map();
@@ -112,8 +113,8 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         );
 
         log.success(
-            `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} — nickname registrado: ` +
-            `${chalk.red(oldMember.nickname ?? 'nenhum')} ${chalk.gray('→')} ${chalk.green(newMember.nickname ?? 'nenhum')}` +
+            `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} â€” nickname registrado: ` +
+            `${chalk.red(oldMember.nickname ?? 'nenhum')} ${chalk.gray('â†’')} ${chalk.green(newMember.nickname ?? 'nenhum')}` +
             (contaExtraida ? chalk.gray(` | conta: ${contaExtraida}`) : '') +
             chalk.gray(` | ${newMember.guild.name}`)
         );
@@ -136,11 +137,11 @@ client.on('guildMemberAdd', async (member) => {
         await member.setNickname(usuario.nickname, 'Nickname restaurado automaticamente');
 
         log.success(
-            `${chalk.white(member.user.username)} ${chalk.gray(`(${member.user.id})`)} — nickname restaurado: ${chalk.green(usuario.nickname)} ${chalk.gray(`| ${member.guild.name}`)}`
+            `${chalk.white(member.user.username)} ${chalk.gray(`(${member.user.id})`)} â€” nickname restaurado: ${chalk.green(usuario.nickname)} ${chalk.gray(`| ${member.guild.name}`)}`
         );
     } catch (e) {
         if (e.code === 50013) {
-            log.warn(`Sem permissão para restaurar nickname de ${member.user.username} em ${member.guild.name}`);
+            log.warn(`Sem permissÃ£o para restaurar nickname de ${member.user.username} em ${member.guild.name}`);
             return;
         }
         log.error(`Erro ao restaurar nickname: ${e.message}`);
@@ -152,7 +153,7 @@ mongoose.connect(process.env.MONGODB_URI)
         log.success('Database principal conectada.');
 
         if (secondaryConnection.readyState === 1) {
-            log.success('Database secundária já conectada.');
+            log.success('Database secundÃ¡ria jÃ¡ conectada.');
         }
 
         setInterval(async () => {
@@ -172,10 +173,10 @@ mongoose.connect(process.env.MONGODB_URI)
     });
 
 client.once('clientReady', async (readyClient) => {
-    console.log(chalk.cyan.bold('\n' + '═'.repeat(60)));
+    console.log(chalk.cyan.bold('\n' + 'â•'.repeat(60)));
     log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.username)}`);
 
-    log.info(`${chalk.bold('Versão do Bot:')} ${chalk.green(packageJson.version)}`);
+    log.info(`${chalk.bold('VersÃ£o do Bot:')} ${chalk.green(packageJson.version)}`);
     log.info(`${chalk.bold('Node.js:')} ${chalk.green(process.version)}`);
     log.info(`${chalk.bold('Discord.js:')} ${chalk.green(`v${discordVersion}`)}`);
 
@@ -187,7 +188,7 @@ client.once('clientReady', async (readyClient) => {
 
     const memoryUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
     const uptime = Math.floor(process.uptime() / 60);
-    log.info(`${chalk.bold('Memória utilizada:')} ${chalk.green(memoryUsage)} MB`);
+    log.info(`${chalk.bold('MemÃ³ria utilizada:')} ${chalk.green(memoryUsage)} MB`);
     log.info(`${chalk.bold('Uptime:')} ${chalk.green(uptime > 0 ? uptime + 'min' : '< 1min')}`);
 
     const cmdList = Object.keys(commands).join(', ');
@@ -207,8 +208,8 @@ client.once('clientReady', async (readyClient) => {
 
     setTimeout(() => {
         const ping = readyClient.ws.ping;
-        log.info(`${chalk.bold('Latência WebSocket:')} ${chalk.white.bold(ping)}ms`);
-        console.log(chalk.cyan.bold('═'.repeat(60) + '\n'));
+        log.info(`${chalk.bold('LatÃªncia WebSocket:')} ${chalk.white.bold(ping)}ms`);
+        console.log(chalk.cyan.bold('â•'.repeat(60) + '\n'));
     }, 5000);
 
     setupRankJobs(client);
@@ -279,18 +280,18 @@ client.on('interactionCreate', async (interaction) => {
         if (error.code === 50278) return;
         if (error.code === 10062) return;
 
-        log.error(`Erro na interação (${interaction?.customId ?? 'desconhecido'}): ${error.message}`);
+        log.error(`Erro na interaÃ§Ã£o (${interaction?.customId ?? 'desconhecido'}): ${error.message}`);
 
         try {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: '❌ Erro interno.', flags: [MessageFlags.Ephemeral] });
+                await interaction.reply({ content: 'âŒ Erro interno.', flags: [MessageFlags.Ephemeral] });
             }
         } catch (_) {}
     }
 });
 
 client.on('messageDelete', async (msg) => {
-    //console.log('[DEBUG] messageDelete — canal:', msg.channelId, '| partial:', msg.partial);
+    //console.log('[DEBUG] messageDelete â€” canal:', msg.channelId, '| partial:', msg.partial);
 
     if (msg.guild) {
         const config = await Config.findOne({ guildId: msg.guild.id });
@@ -310,15 +311,15 @@ client.on('messageReactionRemoveAll', handleReactionRemoveAll);
 client.on('error', err => log.error('Discord API Error: ' + err.message));
 
 process.on('unhandledRejection', (reason) => {
-    log.error('Rejeição não tratada: ' + (reason?.stack || reason));
+    log.error('RejeiÃ§Ã£o nÃ£o tratada: ' + (reason?.stack || reason));
 });
 
 process.on('uncaughtException', (error) => {
-    log.error('ERRO CRÍTICO: ' + error.stack);
+    log.error('ERRO CRÃTICO: ' + error.stack);
 });
 
 async function gracefulShutdown(signal) {
-    log.warn(`Sinal ${signal} recebido. Encerrando bot com segurança...`);
+    log.warn(`Sinal ${signal} recebido. Encerrando bot com seguranÃ§a...`);
     try {
         advancedMonitor.destroy();
         client.destroy();

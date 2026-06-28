@@ -1,8 +1,9 @@
+﻿// messageReactionHandler.js
 const { EmbedBuilder } = require('discord.js');
 const Config = require('../models/Config');
 
 /**
- * Converte o horário atual para o fuso de Brasília (UTC-3)
+ * Converte o horÃ¡rio atual para o fuso de BrasÃ­lia (UTC-3)
  * e retorna no formato YYYY-MM-DD HH:mm:ss
  * @returns {string} Data/hora formatada
  */
@@ -13,8 +14,8 @@ function getBrasiliaTime() {
 }
 
 /**
- * Converte emoji para string compatível com Discord
- * @param {MessageReaction} reaction - Reação do Discord
+ * Converte emoji para string compatÃ­vel com Discord
+ * @param {MessageReaction} reaction - ReaÃ§Ã£o do Discord
  * @returns {string} String formatada do emoji
  */
 function getEmojiString(reaction) {
@@ -24,7 +25,7 @@ function getEmojiString(reaction) {
 }
 
 /**
- * Retorna a URL do emoji customizado, se aplicável
+ * Retorna a URL do emoji customizado, se aplicÃ¡vel
  * @param {MessageReaction} reaction
  * @returns {string|null}
  */
@@ -37,9 +38,9 @@ function getEmojiURL(reaction) {
 }
 
 /**
- * Cria embed para log de reações, incluindo anexos e embeds da mensagem original
- * @param {MessageReaction} reaction - Reação do Discord
- * @param {User} user - Usuário que reagiu
+ * Cria embed para log de reaÃ§Ãµes, incluindo anexos e embeds da mensagem original
+ * @param {MessageReaction} reaction - ReaÃ§Ã£o do Discord
+ * @param {User} user - UsuÃ¡rio que reagiu
  * @param {boolean} isAdd - true se adicionou, false se removeu
  * @returns {EmbedBuilder} Embed formatado
  */
@@ -49,48 +50,48 @@ function createReactionLogEmbed(reaction, user, isAdd) {
 
   const embed = new EmbedBuilder()
     .setColor(isAdd ? '#00FF00' : '#FF0000')
-    .setTitle(`🔔 Log de Reação ${isAdd ? 'Adicionada' : 'Removida'}`)
+    .setTitle(`ðŸ”” Log de ReaÃ§Ã£o ${isAdd ? 'Adicionada' : 'Removida'}`)
     .addFields(
       {
-        name: '👤 Usuário',
+        name: 'ðŸ‘¤ UsuÃ¡rio',
         value: `Nome: ${user.tag}\nDiscord: <@${user.id}>`,
         inline: false
       },
       {
-        name: '📝 Mensagem',
-        value: message.content?.slice(0, 1024) || '[Sem conteúdo]',
+        name: 'ðŸ“ Mensagem',
+        value: message.content?.slice(0, 1024) || '[Sem conteÃºdo]',
         inline: false
       },
       {
-        name: 'ℹ️ Informações Adicionais',
+        name: 'â„¹ï¸ InformaÃ§Ãµes Adicionais',
         value: [
           `Emoji: ${getEmojiString(reaction)}`,
           emojiURL ? `[Ver Emoji](${emojiURL})` : '',
           `Canal: <#${message.channel?.id}>`,
           `ID da Mensagem: \`${message.id}\``,
-          `ID da Reação: \`${reaction.emoji.id || reaction.emoji.name}\``,
+          `ID da ReaÃ§Ã£o: \`${reaction.emoji.id || reaction.emoji.name}\``,
           `Link da Mensagem: [Clique Aqui](${message.url})`
         ].filter(Boolean).join('\n'),
         inline: false
       }
     )
     .setFooter({
-      text: getBrasiliaTime().split(' ')[1] // Só o horário, ex: "21:43:55"
+      text: getBrasiliaTime().split(' ')[1] // SÃ³ o horÃ¡rio, ex: "21:43:55"
     });
 
   // Anexos
   if (message.attachments?.size > 0) {
     embed.addFields({
-      name: '📎 Anexos',
+      name: 'ðŸ“Ž Anexos',
       value: message.attachments.map(a => `[${a.name}](${a.url})`).join('\n'),
       inline: false
     });
   }
 
-  // Embeds (exibe títulos ou URLs dos embeds da mensagem, se houver)
+  // Embeds (exibe tÃ­tulos ou URLs dos embeds da mensagem, se houver)
   if (message.embeds?.length > 0) {
     embed.addFields({
-      name: '🔗 Embeds',
+      name: 'ðŸ”— Embeds',
       value: message.embeds.map((e, i) => e.title ? `${i+1}: ${e.title}` : e.url ? `${i+1}: ${e.url}` : `${i+1}: [embed]`).join('\n'),
       inline: false
     });
@@ -103,32 +104,32 @@ function createReactionLogEmbed(reaction, user, isAdd) {
 }
 
 /**
- * Cria embed para log de remoção em massa de reações
+ * Cria embed para log de remoÃ§Ã£o em massa de reaÃ§Ãµes
  * @param {Message} message
  * @returns {EmbedBuilder}
  */
 function createReactionRemoveAllEmbed(message) {
   const embed = new EmbedBuilder()
     .setColor('#FFA500')
-    .setTitle('🚫 Todas as reações removidas')
+    .setTitle('ðŸš« Todas as reaÃ§Ãµes removidas')
     .addFields(
-      { name: '📝 Mensagem', value: message.content?.slice(0, 1024) || '[Sem conteúdo]', inline: false },
-      { name: '📄 ID da Mensagem', value: `\`${message.id}\``, inline: true },
-      { name: '📺 Canal', value: `<#${message.channel?.id}>`, inline: true },
-      { name: '🔗 Link da Mensagem', value: `[Clique Aqui](${message.url})`, inline: false }
+      { name: 'ðŸ“ Mensagem', value: message.content?.slice(0, 1024) || '[Sem conteÃºdo]', inline: false },
+      { name: 'ðŸ“„ ID da Mensagem', value: `\`${message.id}\``, inline: true },
+      { name: 'ðŸ“º Canal', value: `<#${message.channel?.id}>`, inline: true },
+      { name: 'ðŸ”— Link da Mensagem', value: `[Clique Aqui](${message.url})`, inline: false }
     )
-    .setFooter({ text: getBrasiliaTime().split(' ')[1] }); // Só o horário
+    .setFooter({ text: getBrasiliaTime().split(' ')[1] }); // SÃ³ o horÃ¡rio
 
   if (message.attachments?.size > 0) {
     embed.addFields({
-      name: '📎 Anexos',
+      name: 'ðŸ“Ž Anexos',
       value: message.attachments.map(a => `[${a.name}](${a.url})`).join('\n'),
       inline: false
     });
   }
   if (message.embeds?.length > 0) {
     embed.addFields({
-      name: '🔗 Embeds',
+      name: 'ðŸ”— Embeds',
       value: message.embeds.map((e, i) => e.title ? `${i+1}: ${e.title}` : e.url ? `${i+1}: ${e.url}` : `${i+1}: [embed]`).join('\n'),
       inline: false
     });
@@ -138,8 +139,8 @@ function createReactionRemoveAllEmbed(message) {
 }
 
 /**
- * Utilitário: busca/fetch reação se partial, com tratamento para erro 10008 (Mensagem desconhecida)
- * @returns {boolean} true se buscou e está ok, false se não é possível continuar (mensagem deletada, etc)
+ * UtilitÃ¡rio: busca/fetch reaÃ§Ã£o se partial, com tratamento para erro 10008 (Mensagem desconhecida)
+ * @returns {boolean} true se buscou e estÃ¡ ok, false se nÃ£o Ã© possÃ­vel continuar (mensagem deletada, etc)
  */
 async function safeFetchReaction(reaction, user, action) {
   if (reaction.partial) {
@@ -147,11 +148,11 @@ async function safeFetchReaction(reaction, user, action) {
       await reaction.fetch();
     } catch (error) {
       if (error.code === 10008) {
-        // Mensagem foi deletada ou não é mais acessível; caso comum, não é bug
-        console.warn(`⚠️ Mensagem já deletada ou inacessível ao processar ${action} de reação. Ignorando.`);
+        // Mensagem foi deletada ou nÃ£o Ã© mais acessÃ­vel; caso comum, nÃ£o Ã© bug
+        console.warn(`âš ï¸ Mensagem jÃ¡ deletada ou inacessÃ­vel ao processar ${action} de reaÃ§Ã£o. Ignorando.`);
       } else {
         // Outros erros: log completo
-        console.error(`❌ Erro ao buscar reação (${action}):`, error);
+        console.error(`âŒ Erro ao buscar reaÃ§Ã£o (${action}):`, error);
       }
       return false;
     }
@@ -160,22 +161,22 @@ async function safeFetchReaction(reaction, user, action) {
 }
 
 /**
- * Processa reações adicionadas em mensagens
- * @param {MessageReaction} reaction - Reação adicionada
- * @param {User} user - Usuário que adicionou a reação
+ * Processa reaÃ§Ãµes adicionadas em mensagens
+ * @param {MessageReaction} reaction - ReaÃ§Ã£o adicionada
+ * @param {User} user - UsuÃ¡rio que adicionou a reaÃ§Ã£o
  */
 async function handleReactionAdd(reaction, user) {
   try {
-    // Ignora reações de bots
+    // Ignora reaÃ§Ãµes de bots
     if (user.bot) return;
 
     // Busca/fetch seguro
-    if (!(await safeFetchReaction(reaction, user, 'adição'))) return;
+    if (!(await safeFetchReaction(reaction, user, 'adiÃ§Ã£o'))) return;
 
-    // Só processa reações em mensagens do próprio bot
+    // SÃ³ processa reaÃ§Ãµes em mensagens do prÃ³prio bot
     if (!reaction.message?.author || reaction.message.author.id !== reaction.client.user?.id) return;
 
-    // Busca canal de logs nas configurações
+    // Busca canal de logs nas configuraÃ§Ãµes
     const guildId = reaction.message.guild?.id;
     if (!guildId) return;
     const config = await Config.findOne({ guildId });
@@ -183,7 +184,7 @@ async function handleReactionAdd(reaction, user) {
 
     const logChannel = reaction.client.channels.cache.get(config.channels.log);
     if (!logChannel) {
-      console.warn(`⚠️ Canal de log (${config.channels.log}) não encontrado para o servidor ${guildId}.`);
+      console.warn(`âš ï¸ Canal de log (${config.channels.log}) nÃ£o encontrado para o servidor ${guildId}.`);
       return;
     }
 
@@ -192,7 +193,7 @@ async function handleReactionAdd(reaction, user) {
     await logChannel.send({ embeds: [logEmbed] });
 
   } catch (error) {
-    console.error('❌ Erro ao processar reação adicionada:', error);
+    console.error('âŒ Erro ao processar reaÃ§Ã£o adicionada:', error);
     console.error('Detalhes:', {
       guildId: reaction.message?.guild?.id,
       channelId: reaction.message?.channel?.id,
@@ -204,22 +205,22 @@ async function handleReactionAdd(reaction, user) {
 }
 
 /**
- * Processa reações removidas de mensagens
- * @param {MessageReaction} reaction - Reação removida
- * @param {User} user - Usuário que removeu a reação
+ * Processa reaÃ§Ãµes removidas de mensagens
+ * @param {MessageReaction} reaction - ReaÃ§Ã£o removida
+ * @param {User} user - UsuÃ¡rio que removeu a reaÃ§Ã£o
  */
 async function handleReactionRemove(reaction, user) {
   try {
-    // Ignora reações de bots
+    // Ignora reaÃ§Ãµes de bots
     if (user.bot) return;
 
     // Busca/fetch seguro
-    if (!(await safeFetchReaction(reaction, user, 'remoção'))) return;
+    if (!(await safeFetchReaction(reaction, user, 'remoÃ§Ã£o'))) return;
 
-    // Só processa reações em mensagens do próprio bot
+    // SÃ³ processa reaÃ§Ãµes em mensagens do prÃ³prio bot
     if (!reaction.message?.author || reaction.message.author.id !== reaction.client.user?.id) return;
 
-    // Busca canal de logs nas configurações
+    // Busca canal de logs nas configuraÃ§Ãµes
     const guildId = reaction.message.guild?.id;
     if (!guildId) return;
     const config = await Config.findOne({ guildId });
@@ -227,7 +228,7 @@ async function handleReactionRemove(reaction, user) {
 
     const logChannel = reaction.client.channels.cache.get(config.channels.log);
     if (!logChannel) {
-      console.warn(`⚠️ Canal de log (${config.channels.log}) não encontrado para o servidor ${guildId}.`);
+      console.warn(`âš ï¸ Canal de log (${config.channels.log}) nÃ£o encontrado para o servidor ${guildId}.`);
       return;
     }
 
@@ -236,7 +237,7 @@ async function handleReactionRemove(reaction, user) {
     await logChannel.send({ embeds: [logEmbed] });
 
   } catch (error) {
-    console.error('❌ Erro ao processar remoção de reação:', error);
+    console.error('âŒ Erro ao processar remoÃ§Ã£o de reaÃ§Ã£o:', error);
     console.error('Detalhes:', {
       guildId: reaction.message?.guild?.id,
       channelId: reaction.message?.channel?.id,
@@ -248,12 +249,12 @@ async function handleReactionRemove(reaction, user) {
 }
 
 /**
- * Processa remoção de todas as reações de uma mensagem (ex: por moderador, menu do Discord)
- * @param {Message} message - Mensagem de onde todas as reações foram removidas
+ * Processa remoÃ§Ã£o de todas as reaÃ§Ãµes de uma mensagem (ex: por moderador, menu do Discord)
+ * @param {Message} message - Mensagem de onde todas as reaÃ§Ãµes foram removidas
  */
 async function handleReactionRemoveAll(message) {
   try {
-    // Só processa mensagens do próprio bot (opcional)
+    // SÃ³ processa mensagens do prÃ³prio bot (opcional)
     if (!message.author || message.author.id !== message.client.user?.id) return;
 
     const guildId = message.guild?.id;
@@ -263,7 +264,7 @@ async function handleReactionRemoveAll(message) {
 
     const logChannel = message.client.channels.cache.get(config.channels.log);
     if (!logChannel) {
-      console.warn(`⚠️ Canal de log (${config.channels.log}) não encontrado para o servidor ${guildId}.`);
+      console.warn(`âš ï¸ Canal de log (${config.channels.log}) nÃ£o encontrado para o servidor ${guildId}.`);
       return;
     }
 
@@ -271,7 +272,7 @@ async function handleReactionRemoveAll(message) {
     await logChannel.send({ embeds: [logEmbed] });
 
   } catch (error) {
-    console.error('❌ Erro ao processar remoção de todas as reações:', error);
+    console.error('âŒ Erro ao processar remoÃ§Ã£o de todas as reaÃ§Ãµes:', error);
     console.error('Detalhes:', {
       guildId: message.guild?.id,
       channelId: message.channel?.id,
