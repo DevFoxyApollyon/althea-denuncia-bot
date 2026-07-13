@@ -19,7 +19,16 @@ const { handleDeletedMessage } = require('./Handlers/messageDeleteHandler');
 const { handleReactionAdd, handleReactionRemove, handleReactionRemoveAll } = require('./Handlers/messageReactionHandler');
 const commands = require('./utils/commands');
 const Config = require('./models/Config');
-const { contemPalavraProibida, contemMarcacaoAdmin, processaStrike, verificaEdicao } = require('./utils/strikeWords');
+const {
+    contemPalavraProibida,
+    contemMarcacaoAdmin,
+    contemLinkProibido,
+    contemEmojiFigurinhaOuGif,
+    processaStrike,
+    processaStrikeLink,
+    processaStrikeEmoji,
+    verificaEdicao
+} = require('./utils/strikeWords');
 const Strike = require('./models/Strike');
 const { handleYoutubeDenuncia } = require('./utils/youtubeUtils');
 const { advancedMonitor } = require('./utils/advancedMonitoring');
@@ -158,7 +167,13 @@ mongoose.connect(process.env.MONGODB_URI)
         setInterval(async () => {
             try {
                 const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
-                await Strike.updateMany({}, { $pull: { strikes: { timestamp: { $lt: limite } } } });
+                await Strike.updateMany({}, {
+                    $pull: {
+                        strikes:      { timestamp: { $lt: limite } },
+                        strikesLink:  { timestamp: { $lt: limite } },
+                        strikesEmoji: { timestamp: { $lt: limite } },
+                    }
+                });
             } catch (e) {
                 log.error('Erro na limpeza de strikes: ' + e.message);
             }
@@ -231,6 +246,20 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
     const config = await getConfig(message.guild.id) ?? {};
+
+    // 1) Link proibido (qualquer link que não seja YouTube, convite de discord, ou menção de canal)
+    if (contemLinkProibido(message.content)) {
+        await processaStrikeLink(message, Strike, config);
+        return;
+    }
+
+    // 2) Emoji, figurinha ou gif
+    if (contemEmojiFigurinhaOuGif(message)) {
+        await processaStrikeEmoji(message, Strike, config);
+        return;
+    }
+
+    // 3) Palavra proibida ou marcação de cargo/pessoa/@everyone
     if (contemPalavraProibida(message.content) || await contemMarcacaoAdmin(message, config)) {
         await processaStrike(message, Strike, config);
         return;
@@ -321,7 +350,7 @@ async function gracefulShutdown(signal) {
     log.warn(`Sinal ${signal} recebido. Encerrando bot com segurança...`);
     try {
         advancedMonitor.destroy();
-        client.destroy(); 
+        client.destroy();
         await mongoose.connection.close();
         if (secondaryConnection.readyState === 1) {
             await secondaryConnection.close();

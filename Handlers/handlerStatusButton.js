@@ -205,7 +205,7 @@ function createLogsMessage(type, user, data = {}) {
     case 'analise':
       return `🔎 Esta denúncia está em análise por ${user} Acusado: (${denunciaData.acusado || 'Não informado'}) Motivo: (${denunciaData.motivo || 'Não informado'}) Link: ${data.messageUrl}`;
     case 'aceita':
-      return `✅ Denúncia aceita Acusado (${data.acusadoId}) tomará punição por (${data.motivo}) Data ${data.dataPunicao} Link: ${data.messageUrl}`;
+      return `➱ Denúncia aceita Acusado (${data.acusadoId}) tomará punição por (${data.motivo}) Data ${data.dataPunicao} Link:|| ${data.messageUrl} ||`;
     case 'recusada':
       return `❌ Denúncia recusada por ${user}`;
     default:

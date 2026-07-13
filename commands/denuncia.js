@@ -803,7 +803,7 @@ async function handleConsultaModalSubmit(interaction) {
                 const linkOriginal   = `https://discord.com/channels/${d.guildId}/${d.channelId}/${d.messageId}`;
 
                 embed.addFields({
-                    name: `${statusEmoji} DenÃºncia #${d._id.toString().substring(0, 8)} [${statusNome}]`,
+                    name: `${statusEmoji} Denuncia #${d._id.toString().substring(0, 8)} [${statusNome}]`,
                     value: `**Denunciante:** <@${d.criadoPor}> (\`${d.denunciante || '?'}\`)\n` +
                            `**Acusado:** \`${d.acusado || '?'}\`\n` +
                            `**Motivo:** ${motivoFinal}\n` +
