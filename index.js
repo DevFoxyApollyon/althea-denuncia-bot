@@ -24,6 +24,7 @@ const {
     contemMarcacaoAdmin,
     contemLinkProibido,
     contemEmojiFigurinhaOuGif,
+    ehMensagemEncaminhada,
     processaStrike,
     processaStrikeLink,
     processaStrikeEmoji,
@@ -247,8 +248,9 @@ client.on('messageCreate', async (message) => {
 
     const config = await getConfig(message.guild.id) ?? {};
 
-    // 1) Link proibido (qualquer link que não seja YouTube, convite de discord, ou menção de canal)
-    if (contemLinkProibido(message.content)) {
+    // 1) Link proibido (qualquer link que não seja YouTube, convite de discord, menção de canal
+    //    ou mensagem encaminhada com o "Forward" nativo do Discord)
+    if (contemLinkProibido(message.content) || ehMensagemEncaminhada(message)) {
         await processaStrikeLink(message, Strike, config);
         return;
     }

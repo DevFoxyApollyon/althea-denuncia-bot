@@ -1,5 +1,4 @@
-﻿// handlerStatusButton.js
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
+﻿const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
 const { LogManager } = require('./LogManager');
@@ -213,10 +212,33 @@ function createLogsMessage(type, user, data = {}) {
   }
 }
 
+function createAnalysisUpdateMessage(type, data = {}) {
+  const denunciaData = data.denuncia || {};
+  const link = data.messageUrl || '';
+  if (type === 'aceita') {
+    const acusado = data.acusadoId || denunciaData.acusado || 'Não informado';
+    return `✅ Denúncia contra (${acusado}) foi aceita. Link: ${link}`;
+  }
+  if (type === 'recusada') {
+    const acusado = denunciaData.acusado || 'Não informado';
+    return `❌ Denúncia contra (${acusado}) foi recusada. Link: ${link}`;
+  }
+  return '';
+}
+
 async function fetchLogMessage(logsChannel, logMessageId) {
   if (!logsChannel || !logMessageId) return null;
   try {
     return await logsChannel.messages.fetch(logMessageId);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchAnalysisMessage(analysisChannel, analysisMessageId) {
+  if (!analysisChannel || !analysisMessageId) return null;
+  try {
+    return await analysisChannel.messages.fetch(analysisMessageId);
   } catch {
     return null;
   }
@@ -245,17 +267,25 @@ async function sendReanaliseNotice(channel) {
 
 async function manageStatusMessages(channel, newStatus, user, data = {}) {
   let discordLogMessage = null;
+  let discordAnalysisMessage = null;
   try {
     const logsChannel = data.logsChannel;
     const logMessageId = data.logMessageId;
     if (logsChannel && logMessageId) {
       discordLogMessage = await fetchLogMessage(logsChannel, logMessageId);
     }
+
     let statusChannel = channel;
+    let analysisChannel = null;
     if (data.analysisChannelId && channel.guild) {
-      const analysisChannel = await channel.guild.channels.fetch(data.analysisChannelId).catch(() => null);
+      analysisChannel = await channel.guild.channels.fetch(data.analysisChannelId).catch(() => null);
       if (analysisChannel?.isTextBased?.()) statusChannel = analysisChannel;
     }
+
+    if (analysisChannel && data.analysisMessageId) {
+      discordAnalysisMessage = await fetchAnalysisMessage(analysisChannel, data.analysisMessageId);
+    }
+
     if (newStatus === 'analise') {
       await cleanupStatusMessages(channel, 'aceita');
       await cleanupStatusMessages(channel, 'recusada');
@@ -274,7 +304,7 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         `Acusado: (${data.denuncia?.acusado || 'Não informado'}) ` +
         `Motivo: (${data.denuncia?.motivo || 'Não informado'}) ` +
         `Link: ${data.messageUrl}`;
-      await sendOnce(statusChannel, analysisMessageContent);
+      discordAnalysisMessage = await sendOnce(statusChannel, analysisMessageContent);
       const statusMsgContent = createStatusMessage(newStatus, user, {
         ...data,
         logMessage: discordLogMessage,
@@ -286,8 +316,9 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
       if (channel.id !== statusChannel.id) {
         await sendOnce(channel, statusMsgContent);
       }
-      return discordLogMessage;
+      return { logMessage: discordLogMessage, analysisMessage: discordAnalysisMessage };
     }
+
     if (newStatus === 'aceita') {
       await cleanupStatusMessages(channel, 'recusada');
       await cleanupStatusMessages(channel, 'analise');
@@ -312,8 +343,17 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         denuncia: data.denuncia,
       });
       await sendOnce(channel, statusMsgContent);
-      return discordLogMessage;
+
+      if (discordAnalysisMessage) {
+        const analysisUpdateContent = createAnalysisUpdateMessage('aceita', data);
+        await discordAnalysisMessage.edit(analysisUpdateContent).catch((e) =>
+          log.warn('Falha ao editar mensagem de análise (aceita)', e?.message)
+        );
+      }
+
+      return { logMessage: discordLogMessage, analysisMessage: discordAnalysisMessage };
     }
+
     if (newStatus === 'recusada') {
       await cleanupStatusMessages(channel, 'aceita');
       await cleanupStatusMessages(channel, 'analise');
@@ -330,12 +370,20 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         await discordLogMessage.delete().catch((e) => log.warn('Falha ao deletar mensagem de log', e));
         discordLogMessage = null;
       }
-      return null;
+
+      if (discordAnalysisMessage) {
+        const analysisUpdateContent = createAnalysisUpdateMessage('recusada', data);
+        await discordAnalysisMessage.edit(analysisUpdateContent).catch((e) =>
+          log.warn('Falha ao editar mensagem de análise (recusada)', e?.message)
+        );
+      }
+
+      return { logMessage: null, analysisMessage: discordAnalysisMessage };
     }
   } catch (error) {
     log.error('Erro ao gerenciar mensagens de status', error);
   }
-  return discordLogMessage;
+  return { logMessage: discordLogMessage, analysisMessage: discordAnalysisMessage };
 }
 
 async function updateDenunciaStatus(denunciaId, {
@@ -346,6 +394,8 @@ async function updateDenunciaStatus(denunciaId, {
   motivoAceite,
   dataPunicao,
   logMessageId,
+  analysisMessageId,
+  analysisChannelId,
 }) {
   const now = new Date();
   const updateFields = {
@@ -361,6 +411,12 @@ async function updateDenunciaStatus(denunciaId, {
   };
   if (logMessageId !== undefined) {
     updateFields.logMessageId = logMessageId;
+  }
+  if (analysisMessageId !== undefined) {
+    updateFields.analysisMessageId = analysisMessageId;
+  }
+  if (analysisChannelId !== undefined) {
+    updateFields.analysisChannelId = analysisChannelId;
   }
   return await Denuncia.findByIdAndUpdate(denunciaId, updateFields, { new: true });
 }
@@ -530,13 +586,14 @@ async function handleAnalise(interaction, denuncia, config, messageUrl, logsChan
     await safeDefer(interaction, true);
     await safeReplyOrEdit(interaction, { content: '⏳ Processando...' });
 
-    const discordLogMessage = await manageStatusMessages(interaction.channel, 'analise', interaction.user, {
+    const { logMessage: discordLogMessage, analysisMessage } = await manageStatusMessages(interaction.channel, 'analise', interaction.user, {
       messageUrl,
       logChannelId: config.channels.logs,
       logsChannel,
       previousStatus: denuncia.status,
       logMessageId: denuncia.logMessageId,
       analysisChannelId: config.channels.analysis,
+      analysisMessageId: denuncia.analysisMessageId,
       denuncia,
     });
 
@@ -546,6 +603,8 @@ async function handleAnalise(interaction, denuncia, config, messageUrl, logsChan
       staffId: interaction.user.id,
       motivoEdicao: 'Em análise',
       logMessageId: discordLogMessage ? discordLogMessage.id : denuncia.logMessageId || null,
+      analysisMessageId: analysisMessage ? analysisMessage.id : denuncia.analysisMessageId || null,
+      analysisChannelId: config.channels.analysis || null,
     });
 
     const logManager = new LogManager(interaction.client, config);
@@ -669,6 +728,8 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
       logsChannel,
       previousStatus: denuncia.status,
       logMessageId: null,
+      analysisChannelId: denuncia.analysisChannelId || config.channels.analysis,
+      analysisMessageId: denuncia.analysisMessageId,
       denuncia,
     });
 
@@ -780,6 +841,8 @@ async function handlePunishmentModal(interaction) {
       logsChannel,
       previousStatus: denuncia.status,
       logMessageId: denuncia.logMessageId,
+      analysisChannelId: denuncia.analysisChannelId || config?.channels?.analysis,
+      analysisMessageId: denuncia.analysisMessageId,
       denuncia,
     });
 
@@ -791,7 +854,7 @@ async function handlePunishmentModal(interaction) {
       acusadoId,
       motivoAceite: motivo,
       dataPunicao,
-      logMessageId: logMessage ? logMessage.id : denuncia.logMessageId || null,
+      logMessageId: logMessage?.logMessage ? logMessage.logMessage.id : denuncia.logMessageId || null,
     });
 
     const logManager = new LogManager(interaction.client, config);

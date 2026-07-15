@@ -21,23 +21,7 @@ const configSchema = new mongoose.Schema({
     administrador: { type: String, required: false, default: '' },
     responsavel_admin: { type: String, required: false, default: '' }
   },
-  templates: {
-    denuncia_aceita: { 
-      type: String, 
-      required: false, 
-      default: '➥ Denúncia aceita Acusado ({acusadoId}) tomará punição por ({motivo}) Data {dataPunicao} Link: {messageUrl}' 
-    },
-    denuncia_analise: { 
-      type: String, 
-      required: false, 
-      default: '🔎 Esta denúncia está em análise por {user} Acusado: ({acusado}) Motivo: ({motivo}) Link: {messageUrl}' 
-    },
-    denuncia_recusada: { 
-      type: String, 
-      required: false, 
-      default: '❌ Denúncia recusada por {user}' 
-    }
-  },
+  
   lastUpdated: { 
     type: Date,  
     default: Date.now 

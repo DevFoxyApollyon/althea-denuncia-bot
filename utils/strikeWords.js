@@ -1,4 +1,4 @@
-﻿const { EmbedBuilder } = require('discord.js');
+﻿const { EmbedBuilder, MessageReferenceType } = require('discord.js');
 const dateUtils = require('./dateUtils');
 
 const GIFS_STRIKE = {
@@ -7,14 +7,12 @@ const GIFS_STRIKE = {
   3: 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExOG0yZTY1bmRoN3huMXFwY3V6c3ZvNTZ3eHh0Z3Flc2lvNnZpY2lvYiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/0u7x2NpbMwtToOoSsY/giphy.gif',
 };
 
-// GIFs próprios pro strike de link (pode trocar pelos que quiser, ou reaproveitar os de cima)
 const GIFS_STRIKE_LINK = {
   1: 'https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExaDdqbzhjczU2aGZ2MXFhd3N0b3BsNHhqdTBsYzdwdnR5MGVmZWdpZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/geslvCFM31sFW/giphy.gif',
   2: 'https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWUxaXN0cm5ldmc0cHZoZzllam5ucnVyZGQ2dTBvNjB4OXg2bjFqeiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/eSwGh3YK54JKU/giphy.gif',
   3: 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExOG0yZTY1bmRoN3huMXFwY3V6c3ZvNTZ3eHh0Z3Flc2lvNnZpY2lvYiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/0u7x2NpbMwtToOoSsY/giphy.gif',
 };
 
-// GIFs próprios pro strike de emoji/figurinha/gif
 const GIFS_STRIKE_EMOJI = {
   1: 'https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExaDdqbzhjczU2aGZ2MXFhd3N0b3BsNHhqdTBsYzdwdnR5MGVmZWdpZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/geslvCFM31sFW/giphy.gif',
   2: 'https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWUxaXN0cm5ldmc0cHZoZzllam5ucnVyZGQ2dTBvNjB4OXg2bjFqeiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/eSwGh3YK54JKU/giphy.gif',
@@ -73,7 +71,6 @@ async function contemMarcacaoAdmin(message, config) {
   if (message.mentions.everyone) return true;
   if (message.mentions.roles.size > 0) return true;
 
-  // Qualquer marcação de pessoa (exceto o próprio autor se ele se marcar sem querer)
   const usuariosMencionados = message.mentions.users.filter(u => u.id !== message.author.id);
   if (usuariosMencionados.size > 0) return true;
 
@@ -94,25 +91,17 @@ function getMotivoMarcacao(message) {
   return 'marcação';
 }
 
-// ============================================================
-// FILTRO DE LINKS
-// ============================================================
-
-// Convite de Discord (server/canal externo) — sempre proibido, não entra na lista de permitidos
 const REGEX_CONVITE_DISCORD = /(discord\.gg|discord\.com\/invite|discordapp\.com\/invite)\/\S+/i;
 
-// Menção/link de outro canal do próprio servidor: formato <#123456789012345678>
 const REGEX_MENCAO_CANAL = /<#\d+>/;
 
-// Qualquer URL genérica
 const REGEX_LINK_GENERICO = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
 
-// Domínios liberados: apenas YouTube (vídeo) — ajuste aqui se quiser liberar mais coisa
 const DOMINIOS_PERMITIDOS = [
   'youtube.com',
   'youtu.be',
-  'cdn.discordapp.com',      // anexos/prints enviados direto no Discord
-  'media.discordapp.net',    // idem
+  'cdn.discordapp.com',
+  'media.discordapp.net',
 ];
 
 function contemLinkProibido(texto) {
@@ -144,35 +133,31 @@ function linkProibidoUsado(texto) {
   return links.find(link => !DOMINIOS_PERMITIDOS.some(dom => link.includes(dom))) || null;
 }
 
-// ============================================================
-// FILTRO DE EMOJI / FIGURINHA / GIF
-// ============================================================
+function ehMensagemEncaminhada(message) {
+  if (!message) return false;
+  if (message.messageSnapshots && message.messageSnapshots.size > 0) return true;
+  if (message.reference?.type === MessageReferenceType.Forward) return true;
+  return false;
+}
 
-// Emoji customizado do Discord: <:nome:id> ou animado <a:nome:id>
 const REGEX_EMOJI_CUSTOM = /<a?:\w+:\d+>/;
 
-// Emojis unicode (faixas mais comuns: emoticons, símbolos, transporte, bandeiras, setas, etc.)
 const REGEX_EMOJI_UNICODE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
 
-// Links de GIF (Tenor/Giphy) ou arquivo .gif direto na URL
 const REGEX_LINK_GIF = /(tenor\.com|giphy\.com|media\.tenor\.com)\/\S+|\.gif(\?\S*)?(\s|$)/i;
 
 function contemEmojiFigurinhaOuGif(message) {
   if (!message) return false;
 
-  // Figurinha (sticker) do Discord
   if (message.stickers && message.stickers.size > 0) return true;
 
   const texto = message.content || '';
 
-  // Emoji customizado ou unicode no texto
   if (REGEX_EMOJI_CUSTOM.test(texto)) return true;
   if (REGEX_EMOJI_UNICODE.test(texto)) return true;
 
-  // GIF em texto (link do Tenor/Giphy ou terminando em .gif)
   if (REGEX_LINK_GIF.test(texto.toLowerCase())) return true;
 
-  // GIF/imagem animada anexada como arquivo
   if (message.attachments && message.attachments.size > 0) {
     for (const anexo of message.attachments.values()) {
       const nome = (anexo.name || '').toLowerCase();
@@ -213,13 +198,9 @@ function motivoEmojiFigurinhaOuGif(message) {
   return 'emoji/figurinha/gif';
 }
 
-// ============================================================
-// STRIKE DE PALAVRA / MARCAÇÃO (sistema original, intacto)
-// ============================================================
-
 async function processaStrike(message, Strike, config) {
   try {
-    const canaisRegistrados = Object.values(config?.channels || {}).filter(Boolean);
+    const canaisRegistrados = [config?.channels?.pc, config?.channels?.mobile].filter(Boolean);
     let canalPrincipalId = message.channel.id;
 
     if (message.channel.isThread?.() && message.channel.parentId) {
@@ -342,13 +323,9 @@ async function processaStrike(message, Strike, config) {
   }
 }
 
-// ============================================================
-// STRIKE DE LINK (sistema novo e separado, contador próprio)
-// ============================================================
-
 async function processaStrikeLink(message, Strike, config) {
   try {
-    const canaisRegistrados = Object.values(config?.channels || {}).filter(Boolean);
+    const canaisRegistrados = [config?.channels?.pc, config?.channels?.mobile].filter(Boolean);
     let canalPrincipalId = message.channel.id;
 
     if (message.channel.isThread?.() && message.channel.parentId) {
@@ -361,10 +338,8 @@ async function processaStrikeLink(message, Strike, config) {
     if (!strike) {
       strike = new Strike({ userId: message.author.id, guildId: message.guild.id, strikes: [], strikesLink: [] });
     }
-    // Garante que o array existe mesmo em documentos antigos criados antes desse campo
     if (!strike.strikesLink) strike.strikesLink = [];
 
-    // Se você tiver um método próprio no model, troque a linha abaixo por: strike.cleanOldStrikesLink();
     if (typeof strike.cleanOldStrikesLink === 'function') {
       strike.cleanOldStrikesLink();
     }
@@ -373,7 +348,9 @@ async function processaStrikeLink(message, Strike, config) {
     const strikesCount = strike.strikesLink.length;
     await strike.save();
 
-    const motivoBase = linkProibidoUsado(message.content) || 'link não permitido';
+    const motivoBase = linkProibidoUsado(message.content)
+      || (ehMensagemEncaminhada(message) ? 'mensagem encaminhada (forward) de outro canal/servidor' : null)
+      || 'link não permitido';
 
     let titulo       = '';
     let descricao    = '';
@@ -479,13 +456,9 @@ async function processaStrikeLink(message, Strike, config) {
   }
 }
 
-// ============================================================
-// STRIKE DE EMOJI / FIGURINHA / GIF (sistema novo e separado, contador próprio)
-// ============================================================
-
 async function processaStrikeEmoji(message, Strike, config) {
   try {
-    const canaisRegistrados = Object.values(config?.channels || {}).filter(Boolean);
+    const canaisRegistrados = [config?.channels?.pc, config?.channels?.mobile].filter(Boolean);
     let canalPrincipalId = message.channel.id;
 
     if (message.channel.isThread?.() && message.channel.parentId) {
@@ -498,10 +471,8 @@ async function processaStrikeEmoji(message, Strike, config) {
     if (!strike) {
       strike = new Strike({ userId: message.author.id, guildId: message.guild.id, strikes: [], strikesLink: [], strikesEmoji: [] });
     }
-    // Garante que o array existe mesmo em documentos antigos criados antes desse campo
     if (!strike.strikesEmoji) strike.strikesEmoji = [];
 
-    // Se você tiver um método próprio no model, troque a linha abaixo por: strike.cleanOldStrikesEmoji();
     if (typeof strike.cleanOldStrikesEmoji === 'function') {
       strike.cleanOldStrikesEmoji();
     }
@@ -616,10 +587,6 @@ async function processaStrikeEmoji(message, Strike, config) {
   }
 }
 
-// ============================================================
-// VERIFICAÇÃO DE MENSAGEM EDITADA
-// ============================================================
-
 async function verificaEdicao(oldMessage, newMessage, Strike, config) {
   try {
     if (!newMessage.author || newMessage.author.bot) return;
@@ -630,7 +597,7 @@ async function verificaEdicao(oldMessage, newMessage, Strike, config) {
 
     const temPalavra = contemPalavraProibida(msg.content);
     const temAdmin   = await contemMarcacaoAdmin(msg, config);
-    const temLink    = contemLinkProibido(msg.content);
+    const temLink    = contemLinkProibido(msg.content) || ehMensagemEncaminhada(msg);
     const temEmoji   = contemEmojiFigurinhaOuGif(msg);
 
     if (temLink) {
@@ -662,6 +629,7 @@ module.exports = {
   processaStrikeEmoji,
   palavraProibidaUsada,
   linkProibidoUsado,
+  ehMensagemEncaminhada,
   motivoEmojiFigurinhaOuGif,
   verificaEdicao,
 };

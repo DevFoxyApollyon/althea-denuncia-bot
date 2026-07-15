@@ -1,5 +1,4 @@
-﻿// Denuncia.js
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 const { getBrasiliaDate } = require('../utils/dateUtils');
 
 const denunciaSchema = new mongoose.Schema({
@@ -99,6 +98,14 @@ const denunciaSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  analysisMessageId: {
+    type: String,
+    default: null
+  },
+  analysisChannelId: {
+    type: String,
+    default: null
+  },
   acusadoId: { 
     type: String
   },
@@ -143,4 +150,4 @@ denunciaSchema.index({ platform: 1 });
 denunciaSchema.index({ 'ultimaEdicao.data': 1 });
 denunciaSchema.index({ guildId: 1, createdAt: 1 });
 
-module.exports = mongoose.model('Denuncia', denunciaSchema); 
+module.exports = mongoose.model('Denuncia', denunciaSchema);

@@ -56,7 +56,6 @@ async function handlePanelModalSubmit(interaction) {
         guildId: interaction.guild.id,
         channels: { pc: '', mobile: '', logs: '', log: '', analysis: '', topDaily: '' },
         roles: { permitido: '', pc: '', administrador: '', responsavel_admin: '' },
-        templates: { denuncia_aceita: '', denuncia_analise: '', denuncia_recusada: '' },
         updatedBy: interaction.user.tag
       });
     }
