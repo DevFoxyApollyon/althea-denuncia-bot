@@ -25,7 +25,7 @@ const PALAVRAS_PROIBIDAS = [
   'animal', 'anta', 'arrombada', 'arrombado',
   'babaca', 'besta', 'bobalhão', 'bobalhona', 'bocó', 'bosta', 'burra', 'burrice', 'burro',
   'canalha', 'caralho', 'corna', 'corno', 'cretina', 'cretino', 'crápula', 'cuzão', 'cuzona',
-  'desgraçado', 'doente', 'doida', 'doido',
+  'desgraçado', 'doente', 'doida', 'doido', 'PCD', 'deficiente', 'deficiente mental', 'deficiente físico',
   'energúmeno', 'escrota', 'escroto',
   'fdp', 'v conta', 'vendo conta',
   'galinha','mds', 'seu buraquinho','mrd',
@@ -133,11 +133,35 @@ function linkProibidoUsado(texto) {
   return links.find(link => !DOMINIOS_PERMITIDOS.some(dom => link.includes(dom))) || null;
 }
 
+function extrairLinkMensagemEncaminhada(message) {
+  if (!message) return null;
+
+  const ref = message.reference;
+  if (ref?.guildId && ref?.channelId && ref?.messageId) {
+    return `https://discord.com/channels/${ref.guildId}/${ref.channelId}/${ref.messageId}`;
+  }
+
+  if (message.messageSnapshots && message.messageSnapshots.size > 0) {
+    const snapshot = [...message.messageSnapshots.values()][0];
+    if (snapshot?.guildId && snapshot?.channelId && snapshot?.id) {
+      return `https://discord.com/channels/${snapshot.guildId}/${snapshot.channelId}/${snapshot.id}`;
+    }
+  }
+
+  return null;
+}
+
 function ehMensagemEncaminhada(message) {
   if (!message) return false;
   if (message.messageSnapshots && message.messageSnapshots.size > 0) return true;
   if (message.reference?.type === MessageReferenceType.Forward) return true;
   return false;
+}
+
+function descricaoMensagemEncaminhada(message) {
+  const link = extrairLinkMensagemEncaminhada(message);
+  if (!link) return 'mensagem encaminhada (forward) de outro canal/servidor';
+  return `mensagem encaminhada (forward): [link da mensagem original](${link})`;
 }
 
 const REGEX_EMOJI_CUSTOM = /<a?:\w+:\d+>/;
@@ -348,8 +372,11 @@ async function processaStrikeLink(message, Strike, config) {
     const strikesCount = strike.strikesLink.length;
     await strike.save();
 
+    const linkEncaminhado = extrairLinkMensagemEncaminhada(message);
     const motivoBase = linkProibidoUsado(message.content)
-      || (ehMensagemEncaminhada(message) ? 'mensagem encaminhada (forward) de outro canal/servidor' : null)
+      || (ehMensagemEncaminhada(message)
+        ? (linkEncaminhado ? `mensagem encaminhada (forward): ${linkEncaminhado}` : 'mensagem encaminhada (forward) de outro canal/servidor')
+        : null)
       || 'link não permitido';
 
     let titulo       = '';
@@ -438,7 +465,7 @@ async function processaStrikeLink(message, Strike, config) {
             { name: 'Usuário',            value: `<@${message.author.id}>`,                     inline: true  },
             { name: 'Staff (Bot)',         value: `<@${message.client.user.id}>`,                inline: true  },
             { name: 'Motivo',             value: motivo,                                         inline: false },
-            { name: 'Mensagem Original',  value: message.content?.slice(0, 1024) || 'N/A',      inline: false },
+            { name: 'Mensagem Original',  value: `${message.content?.slice(0, 1024) || 'N/A'}${linkEncaminhado ? `\n\n[🔗 Link encaminhado](${linkEncaminhado})` : ''}`.slice(0, 1024), inline: false },
             { name: 'Strikes de Link',    value: String(strikesCount),                          inline: true  },
             { name: 'Data/Hora',          value: dateUtils.getBrasiliaDateTime(),                inline: true  },
             { name: 'ID da Mensagem',     value: message.id,                                    inline: true  },
@@ -627,9 +654,11 @@ module.exports = {
   processaStrike,
   processaStrikeLink,
   processaStrikeEmoji,
-  palavraProibidaUsada,
+  palavraProibidaUsado,
   linkProibidoUsado,
   ehMensagemEncaminhada,
+  extrairLinkMensagemEncaminhada,
+  descricaoMensagemEncaminhada,
   motivoEmojiFigurinhaOuGif,
   verificaEdicao,
 };

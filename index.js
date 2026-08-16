@@ -273,9 +273,13 @@ client.on('messageCreate', async (message) => {
         const ehTopicoDenuncia = parentId && (parentId === config?.channels?.pc || parentId === config?.channels?.mobile);
 
         if (ehTopicoDenuncia) {
-            const ehStaff = config?.roles?.responsavel_admin
+            const ehAdministrador = config?.roles?.administrador
+                ? message.member?.roles.cache.has(config.roles.administrador)
+                : false;
+            const ehResponsavelAdmin = config?.roles?.responsavel_admin
                 ? message.member?.roles.cache.has(config.roles.responsavel_admin)
                 : false;
+            const ehStaff = ehAdministrador || ehResponsavelAdmin;
 
             if (!ehStaff) {
                 const autorizado = await usuarioAutorizadoNoTopico(message.channel.id, message.author.id);

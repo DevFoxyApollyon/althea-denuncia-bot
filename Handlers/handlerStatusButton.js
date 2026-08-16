@@ -1282,6 +1282,8 @@ async function handleAddPlayerModal(interaction) {
       });
     }
 
+    const isDiscordId = /^\d{18,19}$/.test(playerId);
+
     const denuncia = await Denuncia.findOne({
       threadId: interaction.channel.id,
     }).sort({ createdAt: -1 });
@@ -1343,11 +1345,14 @@ async function handleAddPlayerModal(interaction) {
 
     registrarTopicoRestrito(denuncia.threadId, denuncia.criadoPor, updatedIds, true);
 
+    const tipoLabel = isDiscordId ? 'Discord' : 'Player';
+    const tipoExibicao = isDiscordId ? `<@${playerUserId}>` : `\`${playerId}\``;
+
     await safeReplyOrEdit(interaction, {
-      content: `✅ Player \`${playerId}\` adicionado com sucesso à lista de autorização deste tópico!`,
+      content: `✅ ${tipoLabel} ${tipoExibicao} adicionado com sucesso à lista de autorização deste tópico!`,
     });
 
-    const confirmMsg = `✅ **Player Autorizado**: O jogador \`${playerId}\` foi autorizado a falar neste tópico pelo administrador ${interaction.user}.`;
+    const confirmMsg = `✅ **Player Autorizado**: O ${tipoLabel} ${tipoExibicao} foi autorizado a falar neste tópico pelo administrador ${interaction.user}.`;
     await interaction.channel.send(confirmMsg).catch((e) => log.warn('Erro ao confirmar no tópico', e?.message));
 
     try {

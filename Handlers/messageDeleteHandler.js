@@ -12,6 +12,34 @@ function truncate(str, max = 1024) {
     return str.length <= max ? str : str.slice(0, 1021) + '...';
 }
 
+function extractForwardMessageLink(message) {
+    if (!message) return null;
+
+    const ref = message.reference;
+    if (ref?.guildId && ref?.channelId && ref?.messageId) {
+        return `https://discord.com/channels/${ref.guildId}/${ref.channelId}/${ref.messageId}`;
+    }
+
+    if (message.messageSnapshots && message.messageSnapshots.size > 0) {
+        const snapshot = [...message.messageSnapshots.values()][0];
+        if (snapshot?.guildId && snapshot?.channelId && snapshot?.id) {
+            return `https://discord.com/channels/${snapshot.guildId}/${snapshot.channelId}/${snapshot.id}`;
+        }
+    }
+
+    return null;
+}
+
+function getDisplayMessageText(message) {
+    if (!message) return '*Apenas mídia*';
+    if (message.content && message.content.trim()) return message.content;
+
+    const forwardLink = extractForwardMessageLink(message);
+    if (forwardLink) return `[Mensagem encaminhada](${forwardLink})`;
+
+    return '*Apenas mídia*';
+}
+
 function extractUrls(text) {
     if (!text) return [];
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -100,7 +128,7 @@ async function processAttachments(attachmentsArray) {
     return { processed, failed };
 }
 
-async function sendToLogWithThread(logChannel, embed, attachments, threadName, authorId, isLong, contentFile) {
+async function sendToLogWithThread(logChannel, embed, attachments, threadName, authorId, channelContextId, isLong, contentFile) {
     const logMsg = await sendWithRetry(() =>
         logChannel.send({ embeds: [embed] })
     ).catch(err => {
@@ -114,13 +142,14 @@ async function sendToLogWithThread(logChannel, embed, attachments, threadName, a
     if (!precisaTópico) return;
 
     try {
+        const cacheKey = `${authorId}:${channelContextId}`;
         let thread = null;
-        const cachedThreadId = THREAD_CACHE.get(authorId);
+        const cachedThreadId = THREAD_CACHE.get(cacheKey);
 
         if (cachedThreadId) {
             thread = await logChannel.client.channels.fetch(cachedThreadId).catch(() => null);
             if (thread?.archived || thread?.locked) thread = null;
-            if (!thread) THREAD_CACHE.delete(authorId);
+            if (!thread) THREAD_CACHE.delete(cacheKey);
         }
 
         if (!thread) {
@@ -130,7 +159,7 @@ async function sendToLogWithThread(logChannel, embed, attachments, threadName, a
                 reason: 'Evidências de deleção em denúncia',
             }).catch(() => null);
             if (!thread) return;
-            THREAD_CACHE.set(authorId, thread.id);
+            THREAD_CACHE.set(cacheKey, thread.id);
         } else {
             await thread.send({
                 embeds: [
@@ -196,7 +225,7 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
         fields.push({ name: '🔗 Links', value: urls.map(url => `[Link](${url})`).join('\n'), inline: true });
     }
 
-    fields.push({ name: '📝 Conteúdo', value: truncate(message.content), inline: false });
+    fields.push({ name: '📝 Conteúdo', value: truncate(getDisplayMessageText(message)), inline: false });
 
     warningEmbed.addFields(...fields);
     warningEmbed.setFooter({ text: `ID: ${message.id} • ${timeStr}` });
@@ -241,7 +270,7 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
 
         logFields.push(
             { name: '📎 Anexos',    value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s) — ver tópico` : 'Nenhum', inline: true },
-            { name: '📝 Conteúdo',  value: truncate(message.content), inline: false },
+            { name: '📝 Conteúdo',  value: truncate(getDisplayMessageText(message)), inline: false },
         );
 
         logEmbed.addFields(...logFields);
@@ -251,8 +280,9 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
         const isLong = (message.content?.length ?? 0) > 1024;
         const contentFile = isLong ? buildContentFile(message, message.author ?? { username: 'desconhecido', id: '0' }, dateStr) : null;
         const threadName = `🚨 ${message.author?.username ?? 'desconhecido'} • canal ${canalOrigem}`;
+        const channelContextId = channel.id;
 
-        await sendToLogWithThread(logChannel, logEmbed, processed, threadName, message.author?.id ?? '0', isLong, contentFile);
+        await sendToLogWithThread(logChannel, logEmbed, processed, threadName, message.author?.id ?? '0', channelContextId, isLong, contentFile);
     }
 
     return true;
@@ -271,13 +301,14 @@ async function handleDeletedMessage(message) {
     }
 
     if (!message.author) return;
-    
+
     if (INTENTIONAL_DELETES.has(message.id)) {
         INTENTIONAL_DELETES.delete(message.id);
         return;
     }
 
     const isBotRemoval = message.author.bot && message.author.id === message.client?.user?.id;
+    if (isBotRemoval) return;
 
     const config = await Config.findOne({ guildId: message.guild.id }).catch(() => null);
     if (!config) return;
@@ -345,7 +376,7 @@ async function handleDeletedMessage(message) {
         { name: '↩️ Resposta a',   value: message.reference?.messageId ? `\`${message.reference.messageId}\`` : 'Não era resposta', inline: true },
         {
             name: isLong ? '📝 Conteúdo (truncado — completo no tópico)' : '📝 Conteúdo',
-            value: truncate(message.content),
+            value: truncate(getDisplayMessageText(message)),
             inline: false,
         },
     );
@@ -364,8 +395,9 @@ async function handleDeletedMessage(message) {
 
     const threadName = `📁 ${message.author.username} • canal ${message.channel.id}`;
     const contentFile = isLong ? buildContentFile(message, message.author, dateStr) : null;
+    const channelContextId = message.channel.id;
 
-    await sendToLogWithThread(logChannel, mainEmbed, processedAttachments, threadName, message.author.id, isLong, contentFile);
+    await sendToLogWithThread(logChannel, mainEmbed, processedAttachments, threadName, message.author.id, channelContextId, isLong, contentFile);
 }
 
 async function notifyUncacheable(partialMessage) {
