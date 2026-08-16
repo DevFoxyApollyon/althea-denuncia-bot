@@ -6,6 +6,24 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.1.0] - 2026-08-16
+### 🚀 Atualizações de funcionalidade do ALTHEA
+
+#### ✨ Novidades
+- Sistema de restrição de tópicos por denunciante e acusados
+- Sincronização automática de nickname e restauração de perfil ao entrar no servidor
+- Finalização automática de denúncias sem resposta após prazo definido
+- Melhor monitoramento de mensagens com links proibidos, emojis e encaminhamentos
+- Fluxo mais robusto de exportação, arquivamento e envio de logs da denúncia
+- Revisão dos módulos de automação para maior estabilidade e memória segura em produção
+
+#### 🔧 Ajustes
+- Atualização da documentação do projeto para refletir as funcionalidades ativas do bot
+- Organização e reforço dos módulos de finalização, monitoramento e sincronização
+- Ajustes de compatibilidade para execução com uso real em servidores Discord ativos
+
+---
+
 ## [3.0.0] - 2026-08-16
 ### 🚀 Evolução principal do ALTHEA
 

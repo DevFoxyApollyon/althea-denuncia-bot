@@ -3,7 +3,7 @@
 
 Este documento descreve **TODOS os botões e modais** utilizados pelo bot, seus `customId`, permissões e handlers responsáveis.
 
-> **📝 Nota v3.0.0:** Os handlers de botões continuam organizados em módulos dedicados, com fluxo mais estável e documentação atualizada para a release 3.0 do ALTHEA.
+> **📝 Nota v3.1.0:** Os handlers de botões continuam organizados em módulos dedicados, com fluxo mais estável e documentação atualizada para a release 3.1 do ALTHEA.
 
 ---
 
@@ -129,4 +129,4 @@ Configuradas via comando `!painel`.
 
 ---
 
-**Última atualização:** v3.0.0
+**Última atualização:** v3.1.0

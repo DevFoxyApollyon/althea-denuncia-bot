@@ -4,7 +4,7 @@
 
 Este documento descreve **TODO o fluxo do bot**, desde a configuração inicial até o encerramento da denúncia.
 
-> **📝 Última atualização:** v3.0.0 — Revisão geral do fluxo do ALTHEA com refinamentos de automação e produção
+> **📝 Última atualização:** v3.1.0 — Revisão geral do fluxo do ALTHEA com automações de finalização, proteção de tópicos e sincronização de perfis
 
 ---
 
@@ -311,5 +311,5 @@ db.denuncias.deleteMany({})
 
 ---
 
-**Última atualização:** v3.0.0  
+**Última atualização:** v3.1.0  
 **Próximas melhorias:** Sistema de appeals, internacionalização

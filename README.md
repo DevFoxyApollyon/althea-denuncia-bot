@@ -19,7 +19,7 @@ Projeto criado para **uso real em produção**, com foco em **estabilidade, orga
 
 | Versão | Stack | Tecnologias |
 |--------|-------|-------------|
-| **v3.0.0** | **Node.js** (>= 18) | **discord.js v14**, **MongoDB**, **Mongoose**, **release** |
+| **v3.1.0** | **Node.js** (>= 18) | **discord.js v14**, **MongoDB**, **Mongoose**, **release** |
 
 ---
 
@@ -36,6 +36,30 @@ Projeto criado para **uso real em produção**, com foco em **estabilidade, orga
   - 🔎 Em análise
   - ✅ Aceita
   - ❌ Recusada
+- Finalização automática após prazo configurado
+- Arquivamento de histórico completo com exportação em HTML/ZIP
+
+---
+
+### 🔒 Tópicos Restritos e Controle de Acesso
+- Bloqueio de mensagens fora do escopo do denunciante e dos acusados
+- Proteção contra participação indevida em tópicos de denúncia
+- Registro e validação de autorização por usuário e thread
+
+---
+
+### 🧩 Sincronização de Nickname e Perfil
+- Atualização automática de nickname do usuário no MongoDB
+- Restauração automática do nickname ao entrar no servidor
+- Extração e persistência da conta associada ao apelido
+
+---
+
+### 🛡️ Monitoramento Automático
+- Detecção de links proibidos
+- Detecção de mensagens encaminhadas
+- Bloqueio de emojis figurinha/gif em contexto indevido
+- Verificação de marcação de admin e conteúdo sensível
 
 ---
 
@@ -112,6 +136,15 @@ Baseado em ações reais registradas no banco:
 - Envia o arquivo no Discord
 - **Tranca e arquiva o tópico automaticamente**
 - Encerra oficialmente a denúncia
+- Também pode ocorrer automaticamente por cronologia, pela rotina de finalização do ALTHEA
+
+---
+
+### 🤖 Automação da Rotina de Finalização
+- Verificação periódica de denúncias pendentes
+- Finalização automática de registros antigos
+- Encerramento seguro com logs de acompanhamento
+- Tratamento de timeouts e falhas por ciclo
 
 ---
 
