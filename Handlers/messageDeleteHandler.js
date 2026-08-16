@@ -168,10 +168,10 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
             name: message.author?.username ?? 'Desconhecido',
             iconURL: message.author?.displayAvatarURL(),
         })
-        .setTitle('🚨 Tentativa de Apagar Prova')
+        .setTitle('🚨 Remoção de Conteúdo em Tópico de Denúncia')
         .setDescription(
-            `> ⛔ **Apagar mensagens neste tópico é proibido.**\n` +
-            `> A mensagem foi recuperada e registrada no canal de log.`
+            `> ⛔ **Remover mensagens neste tópico é proibido.**\n` +
+            `> O conteúdo foi preservado e registrado no canal de log para auditoria.`
         )
         .addFields(
             { name: '👤 Autor',     value: message.author ? `<@${message.author.id}>\n\`${message.author.id}\`` : 'Desconhecido', inline: true },
@@ -200,9 +200,9 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
                 name: message.author?.username ?? 'Desconhecido',
                 iconURL: message.author?.displayAvatarURL(),
             })
-            .setTitle('🚨 Prova Apagada em Tópico de Denúncia')
+            .setTitle('🚨 Conteúdo Removido em Tópico de Denúncia')
             .setDescription(
-                `Mensagem deletada em <#${channel.id}>\n` +
+                `Mensagem removida em <#${channel.id}>\n` +
                 `Canal pai: <#${channel.parentId}>`
             )
             .addFields(
@@ -237,7 +237,7 @@ async function handleDeletedMessage(message) {
     }
 
     if (!message.author) return;
-    if (message.author.bot) return;
+    const isBotRemoval = message.author.bot && message.author.id === message.client?.user?.id;
 
     const config = await Config.findOne({ guildId: message.guild.id }).catch(() => null);
     if (!config) return;
@@ -245,6 +245,8 @@ async function handleDeletedMessage(message) {
     const { pc: pcChannelId, mobile: mobileChannelId, log: logChannelId } = config.channels ?? {};
 
     if (!logChannelId) return;
+
+    if (message.author.bot && !isBotRemoval) return;
 
     const isThreadDeletion = await handleThreadDeletion(
         message,
