@@ -1303,17 +1303,25 @@ async function handleAddPlayerModal(interaction) {
       if (usuario?.userId) {
         playerUserId = String(usuario.userId);
       } else {
+        if (/^\d{18,19}$/.test(playerId)) {
+          playerUserId = playerId;
+        } else {
+          return await safeReplyOrEdit(interaction, {
+            content: `❌ Não foi encontrado nenhum player com ID ou conta \`${playerId}\` no banco de dados.`,
+            flags: [MessageFlags.Ephemeral],
+          });
+        }
+      }
+    } catch (dbError) {
+      if (/^\d{18,19}$/.test(playerId)) {
+        playerUserId = playerId;
+      } else {
+        log.error('Erro ao buscar player no banco', dbError);
         return await safeReplyOrEdit(interaction, {
-          content: `❌ Não foi encontrado nenhum player com ID ou conta \`${playerId}\` no banco de dados.`,
+          content: '❌ Erro ao buscar player no banco de dados.',
           flags: [MessageFlags.Ephemeral],
         });
       }
-    } catch (dbError) {
-      log.error('Erro ao buscar player no banco', dbError);
-      return await safeReplyOrEdit(interaction, {
-        content: '❌ Erro ao buscar player no banco de dados.',
-        flags: [MessageFlags.Ephemeral],
-      });
     }
 
     const currentIds = denuncia.acusadoUserIds || [];
