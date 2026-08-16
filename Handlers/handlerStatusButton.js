@@ -11,8 +11,8 @@ const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 const DM_IGNORED_CODES = [50007, 50278];
 
-const CLAIM_COOLDOWN_MS = 10 * 60 * 1000;
-const GUILD_COOLDOWN = '817924556358156360';
+const CLAIM_COOLDOWN_MS = 5 * 60 * 1000;
+const GUILD_COOLDOWN = '0';
 const _claimCooldowns = new Map();
 const _sendOnceLocks = new Set();
 
