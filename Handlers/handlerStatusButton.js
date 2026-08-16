@@ -7,6 +7,7 @@ const { getBrasiliaDate, formatTimeBR } = require('../utils/dateUtils');
 const { Logger } = require('../utils/logger');
 const { inserirFeedbackMenu } = require('../utils/feedback');
 const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
+const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 const DM_IGNORED_CODES = [50007, 50278];
 
@@ -1331,12 +1332,23 @@ async function handleAddPlayerModal(interaction) {
       },
     });
 
+    registrarTopicoRestrito(denuncia.threadId, denuncia.criadoPor, updatedIds, true);
+
     await safeReplyOrEdit(interaction, {
       content: `✅ Player \`${playerId}\` adicionado com sucesso à lista de autorização deste tópico!`,
     });
 
     const confirmMsg = `✅ **Player Autorizado**: O jogador \`${playerId}\` foi autorizado a falar neste tópico pelo administrador ${interaction.user}.`;
     await interaction.channel.send(confirmMsg).catch((e) => log.warn('Erro ao confirmar no tópico', e?.message));
+
+    try {
+      const playerUser = await interaction.client.users.fetch(playerUserId);
+      if (playerUser) {
+        await playerUser.send(`✅ Você foi autorizado a falar no tópico de denúncia do servidor ${interaction.guild.name} pelo administrador ${interaction.user.tag}.`).catch(() => {});
+      }
+    } catch (e) {
+      log.debug('Não foi possível notificar o player em DM');
+    }
   } catch (error) {
     log.error('Erro ao processar modal de adicionar player', error);
     await safeReplyOrEdit(interaction, {
