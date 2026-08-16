@@ -3,7 +3,7 @@
 
 Este documento descreve **TODOS os botões e modais** utilizados pelo bot, seus `customId`, permissões e handlers responsáveis.
 
-> **📝 Nota v1.2.1:** Os handlers de botões foram consolidados para melhor organização. Arquivo `buttons/denunciaButtons.js` foi integrado em `commands/denuncia.js`.
+> **📝 Nota v3.0.0:** Os handlers de botões continuam organizados em módulos dedicados, com fluxo mais estável e documentação atualizada para a release 3.0 do ALTHEA.
 
 ---
 
@@ -129,4 +129,4 @@ Configuradas via comando `!painel`.
 
 ---
 
-**Última atualização:** v1.2.1
+**Última atualização:** v3.0.0

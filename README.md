@@ -19,7 +19,7 @@ Projeto criado para **uso real em produção**, com foco em **estabilidade, orga
 
 | Versão | Stack | Tecnologias |
 |--------|-------|-------------|
-| **v1.2.1** | **Node.js** (>= 18) | **discord.js v14**, **MongoDB**, **Mongoose**, **release** |
+| **v3.0.0** | **Node.js** (>= 18) | **discord.js v14**, **MongoDB**, **Mongoose**, **release** |
 
 ---
 

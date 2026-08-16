@@ -29,6 +29,14 @@ const denunciaSchema = new mongoose.Schema({
     type: String, 
     required: true 
   },
+  acusadoUserIds: {
+    type: [String],
+    default: []
+  },
+  restritoParticipacao: {
+    type: Boolean,
+    default: false
+  },
   motivo: { 
     type: String, 
     required: true 

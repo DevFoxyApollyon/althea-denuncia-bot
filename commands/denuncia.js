@@ -21,6 +21,7 @@ const { notificarAcusadoPv } = require('../utils/userSyncAndNotify');
 const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('../utils/youtubeUtils');
 const dateUtils = require('../utils/dateUtils');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
+const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
 
 const { 
     handleInputIdLogAceite, 
@@ -51,7 +52,6 @@ const PALAVRAS_BLOQUEADAS = [
     'telegram.me/',
 ];
 
-// Palavrões e chingamentos bloqueados no Motivo e no Acusado
 const PALAVROES = [
     'fdp', 'filho da puta', 'filha da puta',
     'viado', 'viadão', 'viadinho',
@@ -82,17 +82,12 @@ const PALAVROES = [
     'lixo',
 ];
 
-// Lista unificada — usada tanto no Acusado quanto no Motivo (tudo em minúsculo)
 const CONTEUDO_INVALIDO = [
-    // Risadas / textos sem sentido
     'kk', 'kkk', 'kkkk', 'kkkkk', 'kkkkkk',
     'haha', 'huhu', 'rsrs', 'hehe', 'ahahah', 'hauhau', 'kkkkkkk',
-    // Cargos e funções (ninguém denuncia "ADM", denuncia um ID)
     'adm', 'admin', 'staff', 'suporte', 'moderador', 'mod', 'dono',
     'líder', 'sub líder', 'sublíder',
-    // Palavras genéricas sem sentido como motivo/acusado
     'princesa', 'lixo',
-    // Textos de xingamento direto no campo (já cobertos por PALAVROES, mas redundância é segurança)
     'vai tomar no cu', 'fdp','macacada','macaco',
 ];
 
@@ -187,10 +182,8 @@ function validarProvasLinks(provas, currentGuildId) {
         ];
 
         for (const link of links) {
-            // Allow YouTube and CDN/media links
             if (allowedDomains.some(domain => link.includes(domain))) continue;
 
-            // Handle discord channel links specifically: only allow if same guild
             const channelLinkMatch = link.match(/discord(?:app)?\.com\/channels\/(\d+)\//i);
             if (channelLinkMatch) {
                 const linkedGuildId = channelLinkMatch[1];
@@ -200,7 +193,6 @@ function validarProvasLinks(provas, currentGuildId) {
                 continue;
             }
 
-            // Any other link that is not explicitly allowed is rejected
             return '❌ O campo **Provas** contém um link não permitido. Apenas links do YouTube ou domínios oficiais do Discord (neste servidor) são aceitos.';
         }
     }
@@ -419,16 +411,25 @@ async function handleDenunciaSubmit(interaction, platform) {
         }
 
         let acusadoTexto = '';
+        let acusadoUserIds = [];
+        let restritoParticipacao = false;
         try {
             const partes = await Promise.all(acusadoIds.map(async (id) => {
                 try {
                     const found = await Usuario.findOne({ guildId: interaction.guild.id, conta: id });
-                    return found ? `\`${id}\` (<@${found.userId}>)` : `\`${id}\``;
+                    return { texto: found ? `\`${id}\` (<@${found.userId}>)` : `\`${id}\``, userId: found?.userId || null };
                 } catch {
-                    return `\`${id}\``;
+                    return { texto: `\`${id}\``, userId: null };
                 }
             }));
-            acusadoTexto = partes.join(' ');
+            acusadoTexto = partes.map(p => p.texto).join(' ');
+
+            const userIdsEncontrados = partes.map(p => p.userId).filter(Boolean);
+            const todosResolvidos = userIdsEncontrados.length === acusadoIds.length;
+            if (todosResolvidos) {
+                acusadoUserIds = [...new Set(userIdsEncontrados)];
+                restritoParticipacao = true;
+            }
         } catch (e) {
             console.warn('Não foi possível buscar acusados no banco:', e.message);
             acusadoTexto = acusadoIds.map(id => `\`${id}\``).join(' ');
@@ -492,10 +493,14 @@ async function handleDenunciaSubmit(interaction, platform) {
             channelId: channel.id,
             threadId: thread.id,
             denunciante, acusado, motivo, provas, platform,
+            acusadoUserIds,
+            restritoParticipacao,
             criadoPor: interaction.user.id,
             status: 'pendente',
             dataCriacao: dateUtils.getBrasiliaDate()
         }).save();
+
+        registrarTopicoRestrito(thread.id, interaction.user.id, acusadoUserIds, restritoParticipacao);
 
         denunciaCooldowns.set(interaction.user.id, Date.now());
 

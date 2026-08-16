@@ -2,7 +2,7 @@
 
 # 📗 Modelos do Banco de Dados (MongoDB)
 
-> **📝 v1.2.1:** Nenhuma alteração nos modelos. Estrutura consolidada para v1.2.1.
+> **📝 v3.0.0:** Estrutura principal mantida e documentada para a release 3.0 do ALTHEA, com refinamentos de estabilidade e organização.
 
 ---
  
@@ -185,4 +185,4 @@ db.usuarios.createIndex({ userId: 1, guildId: 1 })
 
 ---
 
-**Última atualização:** v1.2.1
+**Última atualização:** v3.0.0

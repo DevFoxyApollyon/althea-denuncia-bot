@@ -2,7 +2,9 @@
 const Usuarios = require('../models/Usuario');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
 
-const INTERVALO_MS = 5 * 60 * 1000;
+const INTERVALO_MS       = 5 * 60 * 1000;
+const DELAY_ENTRE_ITENS_MS  = 300;
+const DELAY_ENTRE_GUILDS_MS = 500;
 
 const log = {
     info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[POLLER]')} ${msg}`),
@@ -10,6 +12,10 @@ const log = {
     warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[POLLER]')} ${msg}`),
     error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[POLLER]')} ${msg}`),
 };
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 async function repararContasComDiscordId(client) {
     const BOT_ALVO_IDS = (process.env.BOT_ALVO_ID || '').split(',').map(id => id.trim()).filter(Boolean);
@@ -30,6 +36,7 @@ async function repararContasComDiscordId(client) {
 
     let totalReparados = 0;
     let totalRemovidos = 0;
+    const auditLogsPorGuild = new Map();
 
     for (const registro of registros) {
         try {
@@ -40,7 +47,12 @@ async function repararContasComDiscordId(client) {
                 continue;
             }
 
-            const auditLogs = await guild.fetchAuditLogs({ limit: 100, type: 24 }).catch(() => null);
+            let auditLogs = auditLogsPorGuild.get(registro.guildId);
+            if (auditLogs === undefined) {
+                auditLogs = await guild.fetchAuditLogs({ limit: 100, type: 24 }).catch(() => null);
+                auditLogsPorGuild.set(registro.guildId, auditLogs);
+            }
+
             if (!auditLogs) {
                 await Usuarios.deleteOne({ _id: registro._id });
                 totalRemovidos++;
@@ -55,7 +67,6 @@ async function repararContasComDiscordId(client) {
             });
 
             if (!entrada) {
-                // FIX: cache: false + delete após uso
                 const membro = await guild.members.fetch({ user: registro.userId, cache: false }).catch(() => null);
                 const nickAtual    = membro?.nickname || membro?.user?.username || null;
                 const contaDoNick  = nickAtual ? extrairContaDoNickname(nickAtual) : null;
@@ -64,6 +75,7 @@ async function repararContasComDiscordId(client) {
                 if (!contaDoNick) {
                     await Usuarios.deleteOne({ _id: registro._id });
                     totalRemovidos++;
+                    await sleep(DELAY_ENTRE_ITENS_MS);
                     continue;
                 }
 
@@ -72,6 +84,7 @@ async function repararContasComDiscordId(client) {
                     { $set: { conta: contaDoNick, updatedAt: new Date() } }
                 );
                 totalReparados++;
+                await sleep(DELAY_ENTRE_ITENS_MS);
                 continue;
             }
 
@@ -81,6 +94,7 @@ async function repararContasComDiscordId(client) {
             if (!contaExtraida) {
                 await Usuarios.deleteOne({ _id: registro._id });
                 totalRemovidos++;
+                await sleep(DELAY_ENTRE_ITENS_MS);
                 continue;
             }
 
@@ -92,6 +106,7 @@ async function repararContasComDiscordId(client) {
         } catch (err) {
             log.error(`[REPARO] Erro ao reparar userId ${registro.userId}: ${err.message}`);
         }
+        await sleep(DELAY_ENTRE_ITENS_MS);
     }
 
     log.info(
@@ -108,7 +123,10 @@ async function verificarNicknames(client) {
     let totalAtualizados    = 0;
     let totalContaCorrigida = 0;
 
-    for (const guild of client.guilds.cache.values()) {
+    const guilds = [...client.guilds.cache.values()];
+
+    for (let i = 0; i < guilds.length; i++) {
+        const guild = guilds[i];
         try {
             const auditLogs = await guild.fetchAuditLogs({ limit: 100, type: 24 });
 
@@ -117,7 +135,6 @@ async function verificarNicknames(client) {
                 entry.changes?.some(c => c.key === 'nick')
             );
 
-            // Última entrada por userId
             const ultimasEntradas = new Map();
             for (const entry of entradasBot) {
                 const userId = entry.target?.id;
@@ -127,7 +144,6 @@ async function verificarNicknames(client) {
             }
 
             if (ultimasEntradas.size > 0) {
-                // FIX: buscar todos os registros relevantes em uma query só
                 const userIds = [...ultimasEntradas.keys()];
                 const registrosExistentes = await Usuarios.find({
                     guildId: guild.id,
@@ -135,21 +151,27 @@ async function verificarNicknames(client) {
                 }).lean();
                 const registroMap = new Map(registrosExistentes.map(r => [r.userId, r]));
 
-                const bulkOpsAudit = [];
-
+                const nickPorUserId = new Map();
                 for (const entry of ultimasEntradas.values()) {
                     const userId   = entry.target?.id;
-                    const nickNovo = entry.changes?.find(c => c.key === 'nick')?.new ?? null;
                     if (!userId) continue;
-
+                    const nickNovo = entry.changes?.find(c => c.key === 'nick')?.new ?? null;
                     const existente = registroMap.get(userId);
                     if (existente?.nickname?.toLowerCase() === nickNovo?.toLowerCase()) continue;
+                    nickPorUserId.set(userId, nickNovo);
+                }
 
-                    // FIX: cache: false + delete após uso
-                    const membro   = await guild.members.fetch({ user: userId, cache: false }).catch(() => null);
-                    const username = membro?.user?.username ?? 'Desconhecido';
-                    if (membro) guild.members.cache.delete(userId);
+                const idsParaBuscar = [...nickPorUserId.keys()];
+                const membrosBuscados = idsParaBuscar.length > 0
+                    ? await guild.members.fetch({ user: idsParaBuscar, cache: false }).catch(() => new Map())
+                    : new Map();
 
+                const bulkOpsAudit = [];
+
+                for (const [userId, nickNovo] of nickPorUserId.entries()) {
+                    const existente = registroMap.get(userId);
+                    const membro    = membrosBuscados.get(userId);
+                    const username  = membro?.user?.username ?? 'Desconhecido';
                     const contaExtraida = nickNovo ? extrairContaDoNickname(nickNovo) : null;
 
                     bulkOpsAudit.push({
@@ -169,16 +191,14 @@ async function verificarNicknames(client) {
                     else totalAtualizados++;
                 }
 
-                // FIX: bulkWrite ao invés de N operações individuais
+                for (const id of idsParaBuscar) guild.members.cache.delete(id);
+
                 if (bulkOpsAudit.length > 0) await Usuarios.bulkWrite(bulkOpsAudit);
             }
 
-            // FIX: REMOVIDO guild.members.fetch() sem argumentos
-            // Processar somente membros já presentes no cache (sem forçar carregamento de todos)
             const membersEmCache = guild.members.cache.filter(m => !m.user.bot);
 
             if (membersEmCache.size > 0) {
-                // FIX: buscar todos os registros dos membros em cache de uma vez
                 const cachedIds = [...membersEmCache.keys()];
                 const registrosCached = await Usuarios.find({
                     guildId: guild.id,
@@ -223,6 +243,7 @@ async function verificarNicknames(client) {
         } catch (err) {
             log.error(`Erro na guild ${chalk.white(guild.name)}: ${err.message}`);
         }
+        if (i < guilds.length - 1) await sleep(DELAY_ENTRE_GUILDS_MS);
     }
 
     if (totalNovos > 0 || totalAtualizados > 0 || totalContaCorrigida > 0) {
@@ -233,7 +254,7 @@ async function verificarNicknames(client) {
             `${chalk.yellow(totalContaCorrigida + ' conta(s) corrigida(s)')}`
         );
     }
-} 
+}
 
 function iniciarPoller(client) {
     log.info(chalk.magenta(`Poller iniciado. Verificando a cada ${chalk.bold('5 minutos')}.`));

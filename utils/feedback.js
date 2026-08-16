@@ -10,6 +10,12 @@
 const { v4: uuidv4 } = require('uuid');
 const FeedbackTemp = require('../models/FeedbackTemp');
 
+const DELAY_ENTRE_ITENS_MS = 250;
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // =========================
 // UTILITARIOS
 // =========================
@@ -51,10 +57,15 @@ async function limparMenusOrfaos(client) {
 
         if (pendentes.length === 0) return;
 
+        const canaisCache = new Map();
 
         for (const entry of pendentes) {
             try {
-                const channel = await client.channels.fetch(entry.channelId).catch(() => null);
+                let channel = canaisCache.get(entry.channelId);
+                if (channel === undefined) {
+                    channel = await client.channels.fetch(entry.channelId).catch(() => null);
+                    canaisCache.set(entry.channelId, channel);
+                }
 
                 if (channel) {
                     const msg = await channel.messages.fetch(entry.messageId).catch(() => null);
@@ -65,6 +76,7 @@ async function limparMenusOrfaos(client) {
             } catch (err) {
                 console.error(`[FeedbackTemp] Erro ao limpar orfao ${entry.denunciaId}:`, err.message);
             }
+            await sleep(DELAY_ENTRE_ITENS_MS);
         }
 
     } catch (err) {
@@ -236,8 +248,6 @@ async function handleFeedbackMenu(interaction) {
 
 // =========================
 // MODAL SUBMIT
-// Validacoes de permissao e estado feitas aqui,
-// onde temos deferReply e janela de 15 minutos.
 // =========================
 async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
     try {
@@ -381,13 +391,12 @@ async function inserirFeedbackMenu(client, denuncia) {
             },
             { upsert: true, new: true }
         );
- 
+
     } catch (err) {
         console.error('[Feedback] Erro ao inserir menu de feedback:', err.message);
     }
 }
 
-// =========================
 module.exports = {
     criarMenuFeedback,
     inserirFeedbackMenu,

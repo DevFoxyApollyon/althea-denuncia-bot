@@ -41,6 +41,7 @@ const { iniciarPoller } = require('./jobs/nicknamePoller');
 const Usuarios = require('./models/Usuario');
 const { limparMenusOrfaos } = require('./utils/feedback');
 const { extrairContaDoNickname } = require('./utils/nickUtils');
+const { usuarioAutorizadoNoTopico } = require('./utils/restricaoTopicos');
 
 const client = new Client({
     intents: [
@@ -165,20 +166,33 @@ mongoose.connect(process.env.MONGODB_URI)
             log.success('Database secundária já conectada.');
         }
 
-        setInterval(async () => {
+        async function limparStrikesAntigas() {
             try {
                 const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
-                await Strike.updateMany({}, {
+                const resultado = await Strike.updateMany({}, {
                     $pull: {
                         strikes:      { timestamp: { $lt: limite } },
                         strikesLink:  { timestamp: { $lt: limite } },
                         strikesEmoji: { timestamp: { $lt: limite } },
                     }
                 });
+                if (resultado.modifiedCount > 0) {
+                    log.info(`Limpeza de strikes: ${resultado.modifiedCount} documento(s) atualizado(s).`);
+                }
+
+                const remocao = await Strike.deleteMany({
+                    updatedAt: { $lt: limite },
+                });
+                if (remocao.deletedCount > 0) {
+                    log.info(`Limpeza de strikes: ${remocao.deletedCount} documento(s) sem atividade nas últimas 24h removido(s).`);
+                }
             } catch (e) {
                 log.error('Erro na limpeza de strikes: ' + e.message);
             }
-        }, 60 * 60 * 1000);
+        }
+
+        limparStrikesAntigas();
+        setInterval(limparStrikesAntigas, 60 * 60 * 1000);
 
         client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
     })
@@ -228,10 +242,16 @@ client.once('clientReady', async (readyClient) => {
     }, 5000);
 
     setupRankJobs(client);
-    iniciarAutoFinalizador(client);
-    iniciarPoller(client);
 
-    await limparMenusOrfaos(client);
+    setTimeout(() => {
+        iniciarPoller(client);
+    }, 5_000);
+
+    setTimeout(() => {
+        limparMenusOrfaos(client).catch(err => log.error('limparMenusOrfaos: ' + err.message));
+    }, 15_000);
+
+    iniciarAutoFinalizador(client);
 
     readyClient.user.setPresence({
         activities: [{
@@ -248,20 +268,39 @@ client.on('messageCreate', async (message) => {
 
     const config = await getConfig(message.guild.id) ?? {};
 
-    // 1) Link proibido (qualquer link que não seja YouTube, convite de discord, menção de canal
-    //    ou mensagem encaminhada com o "Forward" nativo do Discord)
+    if (message.channel.isThread?.()) {
+        const parentId = message.channel.parentId;
+        const ehTopicoDenuncia = parentId && (parentId === config?.channels?.pc || parentId === config?.channels?.mobile);
+
+        if (ehTopicoDenuncia) {
+            const ehStaff = config?.roles?.responsavel_admin
+                ? message.member?.roles.cache.has(config.roles.responsavel_admin)
+                : false;
+
+            if (!ehStaff) {
+                const autorizado = await usuarioAutorizadoNoTopico(message.channel.id, message.author.id);
+                if (!autorizado) {
+                    await message.delete().catch(() => {});
+                    const aviso = await message.channel.send({
+                        content: `<@${message.author.id}> Este tópico é restrito ao denunciante e ao(s) acusado(s). Sua mensagem foi removida.`,
+                    }).catch(() => null);
+                    if (aviso) setTimeout(() => aviso.delete().catch(() => {}), 5000);
+                    return;
+                }
+            }
+        }
+    }
+
     if (contemLinkProibido(message.content) || ehMensagemEncaminhada(message)) {
         await processaStrikeLink(message, Strike, config);
         return;
     }
 
-    // 2) Emoji, figurinha ou gif
     if (contemEmojiFigurinhaOuGif(message)) {
         await processaStrikeEmoji(message, Strike, config);
         return;
     }
 
-    // 3) Palavra proibida ou marcação de cargo/pessoa/@everyone
     if (contemPalavraProibida(message.content) || await contemMarcacaoAdmin(message, config)) {
         await processaStrike(message, Strike, config);
         return;
@@ -321,7 +360,6 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.on('messageDelete', async (msg) => {
-    //console.log('[DEBUG] messageDelete — canal:', msg.channelId, '| partial:', msg.partial);
 
     if (msg.guild) {
         const config = await Config.findOne({ guildId: msg.guild.id });

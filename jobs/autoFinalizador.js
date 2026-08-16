@@ -15,19 +15,20 @@ const log = {
     system:  (msg, meta = {}) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} [${meta.guildName || ''}] ${msg}`),
 };
 
-const DIAS_PARA_FINALIZAR    = 8;
-const INTERVALO_CICLO_MS     = 3 * 60 * 1000;
-const DELAY_ENTRE_ITENS_MS   = 5 * 1000;
-const LOTE_MAXIMO            = 1;
-const STATUS_FINALIZAVEIS    = ['pendente', 'analise', 'reivindicacao', 'aceita', 'recusada'];
+const DIAS_PARA_FINALIZAR     = 7;
+const INTERVALO_CICLO_MS      = 3 * 60 * 1000;
+const DELAY_ENTRE_ITENS_MS    = 5 * 1000;
+const LOTE_MAXIMO             = 1;
+const STATUS_FINALIZAVEIS     = ['pendente', 'analise', 'reivindicacao', 'aceita', 'recusada'];
+const TIMEOUT_GLOBAL_CICLO_MS = 10 * 60 * 1000;
 
 const EXPORT = {
-    MAX_UPLOAD_BYTES:           45 * 1024 * 1024,
+    MAX_UPLOAD_BYTES:           100 * 1024 * 1024,
     FILES_PER_MESSAGE:          10,
     TIMEZONE:                   'America/Sao_Paulo',
     FETCH_TIMEOUT_MS:           15000,
-    MAX_TOTAL_DOWNLOAD_BYTES:   200 * 1024 * 1024,
-    MAX_SINGLE_DOWNLOAD_BYTES:  50 * 1024 * 1024,
+    MAX_TOTAL_DOWNLOAD_BYTES:   300 * 1024 * 1024,
+    MAX_SINGLE_DOWNLOAD_BYTES:  100 * 1024 * 1024,
     AVATAR_SIZE:                64,
     GUILD_ICON_SIZE:            64,
 };
@@ -67,18 +68,66 @@ function getHighestRole(member) {
     };
 }
 
-async function fetchWithTimeout(url, timeout = EXPORT.FETCH_TIMEOUT_MS) {
+function combinarAbort(signalPai, controller) {
+    if (!signalPai) return () => {};
+    if (signalPai.aborted) {
+        controller.abort();
+        return () => {};
+    }
+    const onAbort = () => controller.abort();
+    signalPai.addEventListener('abort', onAbort, { once: true });
+    return () => signalPai.removeEventListener('abort', onAbort);
+}
+
+async function fetchBufferComTimeout(url, timeout = EXPORT.FETCH_TIMEOUT_MS, signalPai = null, maxBytes = EXPORT.MAX_SINGLE_DOWNLOAD_BYTES) {
     const controller = new AbortController();
     const timeoutId  = setTimeout(() => controller.abort(), timeout);
+    const removerListener = combinarAbort(signalPai, controller);
     try {
         const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        return res;
+        if (!res.ok) return { ok: false, headers: res.headers, buffer: null, tooLarge: false };
+
+        const declaredLen = Number(res.headers.get('content-length') || 0);
+        if (declaredLen && declaredLen > maxBytes) {
+            controller.abort();
+            return { ok: false, headers: res.headers, buffer: null, tooLarge: true };
+        }
+
+        const chunks = [];
+        let total = 0;
+        for await (const chunk of res.body) {
+            total += chunk.length;
+            if (total > maxBytes) {
+                controller.abort();
+                return { ok: false, headers: res.headers, buffer: null, tooLarge: true };
+            }
+            chunks.push(chunk);
+        }
+
+        const buffer = Buffer.concat(chunks, total);
+        return { ok: true, headers: res.headers, buffer, tooLarge: false };
     } catch (error) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') throw new Error(`Timeout após ${timeout}ms`);
+        if (error.name === 'AbortError') {
+            throw new Error(signalPai?.aborted ? 'Download abortado: timeout global do ciclo' : `Timeout após ${timeout}ms`);
+        }
         throw error;
+    } finally {
+        clearTimeout(timeoutId);
+        removerListener();
     }
+}
+
+function criarCicloComTimeout(fn, ms, label) {
+    const controller = new AbortController();
+    let timer;
+    const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+            controller.abort();
+            reject(new Error(`Timeout global (${label}) apos ${ms}ms`));
+        }, ms);
+    });
+    const execPromise = fn(controller.signal);
+    return Promise.race([execPromise, timeoutPromise]).finally(() => clearTimeout(timer));
 }
 
 function makeStatusMeta(status) {
@@ -96,9 +145,13 @@ function mbStr(bytes) {
     return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 
-function logMemoria() {
+function msStr(ms) {
+    return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+function logMemoria(label = '') {
     const mem = process.memoryUsage();
-    log.system(`Memória — heap: ${chalk.yellow(mbStr(mem.heapUsed))}/${chalk.white(mbStr(mem.heapTotal))} | RSS: ${chalk.cyan(mbStr(mem.rss))}`);
+    log.system(`Memória${label ? ` [${label}]` : ''} — heap: ${chalk.yellow(mbStr(mem.heapUsed))}/${chalk.white(mbStr(mem.heapTotal))} | RSS: ${chalk.cyan(mbStr(mem.rss))}`);
 }
 
 async function runGcComLog(label = '', meta = {}) {
@@ -112,7 +165,7 @@ async function runGcComLog(label = '', meta = {}) {
 
     await new Promise(r => setImmediate(r));
 
-    const depois   = process.memoryUsage();
+    const depois    = process.memoryUsage();
     const deltaHeap = antes.heapUsed - depois.heapUsed;
     const deltaRss  = antes.rss      - depois.rss;
 
@@ -191,7 +244,6 @@ class ZipBatcher {
     async _flush() {
         if (this.currentBatch.length === 0) return;
 
-        // FIX: usar let para poder nulificar após uso
         let buf = await buildZipBuffer(this.currentBatch);
 
         for (const f of this.currentBatch) f.content = null;
@@ -200,7 +252,6 @@ class ZipBatcher {
 
         await this.onFlush(buf, this.partIndex++);
 
-        // FIX: liberar buffer após envio
         buf = null;
     }
 
@@ -370,9 +421,10 @@ function buildPreviewHtml(zipHtml, attachmentNameByUrl) {
     });
 }
 
-async function finalizarDenuncia(client, denuncia) {
+async function finalizarDenuncia(client, denuncia, signal = null) {
     let guild     = null;
     let guildName = '';
+    let houveErroCritico = false;
     try {
         if (!denuncia.guildId) {
             log.warn(`Denúncia ignorada: guildId ausente`, { guildName: 'Desconhecido' });
@@ -413,6 +465,7 @@ async function finalizarDenuncia(client, denuncia) {
             }
 
             if (['reivindicada', 'analise'].includes(String(denuncia.status).toLowerCase())) {
+                let sucessoRecusaAuto = true;
                 try {
                     await Denuncia.findByIdAndUpdate(denuncia._id, {
                         status: 'recusada',
@@ -428,15 +481,15 @@ async function finalizarDenuncia(client, denuncia) {
                         await thread.send('❌ Denúncia recusada automaticamente após o tempo limite sem resolução. Caso deseje recorrer, abra um ticket no suporte.');
                     }
                     thread.messages.cache.clear();
-                    await thread.setLocked(true).catch(() => {});
-                    await thread.setArchived(true).catch(() => {});
-                    // FIX: remover thread do cache após arquivar
+                    await thread.setLocked(true).catch(() => { sucessoRecusaAuto = false; });
+                    await thread.setArchived(true).catch(() => { sucessoRecusaAuto = false; });
                     if (guild) guild.channels.cache.delete(thread.id);
-                    log.success(`Denúncia ${denuncia._id} recusada automaticamente.`, { guildName });
+                    if (sucessoRecusaAuto) log.success(`Denúncia ${denuncia._id} recusada automaticamente.`, { guildName });
                 } catch (err) {
                     log.error(`Erro ao recusar automaticamente: ${err.message}`, { guildName });
+                    sucessoRecusaAuto = false;
                 }
-                return true;
+                return sucessoRecusaAuto;
             }
 
             const sortedMessages = await fetchAllThreadMessages(thread).catch(e => {
@@ -491,7 +544,6 @@ async function finalizarDenuncia(client, denuncia) {
                 partsEnviadas++;
                 const partLabel = `**[ARQUIVAMENTO AUTOMATICO - PARTE ${partsEnviadas}]**`;
 
-                // FIX: usar let para poder nulificar após envio
                 let zipAttachment = new AttachmentBuilder(buf, {
                     name: `${baseFileName}_PARTE_${partsEnviadas}.zip`,
                 });
@@ -505,10 +557,10 @@ async function finalizarDenuncia(client, denuncia) {
                         if (partIndex === 0) logMessage = sent;
                     } catch (err) {
                         log.warn(`Falha ao enviar parte ${partsEnviadas}: ${err.message}`, { guildName });
+                        houveErroCritico = true;
                     }
                 }
 
-                // FIX: liberar buffer interno do AttachmentBuilder após envio
                 zipAttachment.attachment = null;
                 zipAttachment = null;
 
@@ -520,20 +572,22 @@ async function finalizarDenuncia(client, denuncia) {
 
             let downloadedBytes = 0;
             for (const msg of sortedMessages) {
+                if (signal?.aborted) { log.warn('Download de anexos abortado: timeout global do ciclo', { guildName }); break; }
                 if (downloadedBytes >= EXPORT.MAX_TOTAL_DOWNLOAD_BYTES) break;
                 for (const attachment of msg.attachments.values()) {
+                    if (signal?.aborted) break;
                     if (downloadedBytes >= EXPORT.MAX_TOTAL_DOWNLOAD_BYTES) break;
                     try {
-                        const res = await fetchWithTimeout(attachment.url);
-                        if (!res?.ok) continue;
-                        const len = Number(res.headers.get('content-length') || 0);
-                        if (len && len > EXPORT.MAX_SINGLE_DOWNLOAD_BYTES) continue;
-                        let buf = await res.buffer();
-                        if (buf.length > EXPORT.MAX_SINGLE_DOWNLOAD_BYTES) { buf = null; continue; }
-                        if (downloadedBytes + buf.length > EXPORT.MAX_TOTAL_DOWNLOAD_BYTES) { buf = null; break; }
+                        const bytesRestantes = EXPORT.MAX_TOTAL_DOWNLOAD_BYTES - downloadedBytes;
+                        const limiteEfetivo  = Math.min(EXPORT.MAX_SINGLE_DOWNLOAD_BYTES, bytesRestantes);
+                        const resultado = await fetchBufferComTimeout(attachment.url, EXPORT.FETCH_TIMEOUT_MS, signal, limiteEfetivo);
+                        if (!resultado.ok) {
+                            if (resultado.tooLarge) log.warn(`Anexo descartado por exceder o limite de tamanho: ${attachment.url}`, { guildName });
+                            continue;
+                        }
+                        let buf = resultado.buffer;
                         downloadedBytes += buf.length;
                         await batcher.add(`anexos/${attachmentNameByUrl.get(attachment.url)}`, buf);
-                        // FIX: liberar referência local após entregar ao batcher
                         buf = null;
                     } catch (err) {
                         log.warn(`Falha ao baixar attachment: ${err.message}`, { guildName });
@@ -542,16 +596,16 @@ async function finalizarDenuncia(client, denuncia) {
             }
 
             for (const [uid, avatarName] of avatarNameByUserId.entries()) {
+                if (signal?.aborted) { log.warn('Download de avatares abortado: timeout global do ciclo', { guildName }); break; }
                 if (downloadedBytes >= EXPORT.MAX_TOTAL_DOWNLOAD_BYTES) break;
                 try {
                     const user = await client.users.fetch(uid, { cache: false }).catch(() => null);
                     if (!user) continue;
-                    const res = await fetchWithTimeout(user.displayAvatarURL({ extension: 'png', size: EXPORT.AVATAR_SIZE }));
-                    if (!res?.ok) continue;
-                    let buf = await res.buffer();
+                    const resultado = await fetchBufferComTimeout(user.displayAvatarURL({ extension: 'png', size: EXPORT.AVATAR_SIZE }), EXPORT.FETCH_TIMEOUT_MS, signal, EXPORT.MAX_SINGLE_DOWNLOAD_BYTES);
+                    if (!resultado.ok) continue;
+                    let buf = resultado.buffer;
                     downloadedBytes += buf.length;
                     await batcher.add(`anexos/${avatarName}`, buf);
-                    // FIX: liberar referência local e remover do cache de usuários
                     buf = null;
                     client.users.cache.delete(uid);
                 } catch (err) {
@@ -559,16 +613,16 @@ async function finalizarDenuncia(client, denuncia) {
                 }
             }
 
+            logMemoria(`pós-download ${denuncia._id}`);
+
             await batcher.finalize();
 
-            // Limpeza completa de referências
             thread.messages.cache.clear();
             sortedMessages.length = 0;
             membersMap.clear();
             avatarNameByUserId.clear();
             attachmentNameByUrl.clear();
 
-            // FIX: remover membros buscados do cache da guild
             for (const id of authorIds) {
                 if (guild) guild.members.cache.delete(id);
             }
@@ -649,11 +703,9 @@ async function finalizarDenuncia(client, denuncia) {
                 } catch (err) {
                     log.warn(`Falha ao notificar denunciante: ${err.message}`, { guildName });
                 }
-                // FIX: remover denunciante do cache após uso
                 client.users.cache.delete(String(denuncia.criadoPor));
             }
 
-            // FIX: liberar buffer interno do htmlAttachment antes de nulificar
             if (htmlAttachment) {
                 htmlAttachment.attachment = null;
                 htmlAttachment = null;
@@ -672,10 +724,15 @@ async function finalizarDenuncia(client, denuncia) {
                 log.warn(`Falha ao enviar mensagem no tópico: ${err.message}`, { guildName });
             }
 
-            await thread.setLocked(true).catch(err => log.warn(`Falha ao trancar tópico: ${err.message}`, { guildName }));
-            await thread.setArchived(true).catch(err => log.warn(`Falha ao arquivar tópico: ${err.message}`, { guildName }));
+            await thread.setLocked(true).catch(err => {
+                log.warn(`Falha ao trancar tópico: ${err.message}`, { guildName });
+                houveErroCritico = true;
+            });
+            await thread.setArchived(true).catch(err => {
+                log.warn(`Falha ao arquivar tópico: ${err.message}`, { guildName });
+                houveErroCritico = true;
+            });
 
-            // FIX: remover thread do cache de canais após arquivar
             if (guild) guild.channels.cache.delete(thread.id);
 
             if (logMessage) {
@@ -710,7 +767,6 @@ async function finalizarDenuncia(client, denuncia) {
             } catch (err) {
                 log.warn(`Falha ao editar mensagem principal: ${err.message}`, { guildName });
             }
-            // FIX: limpar todo o cache do canal, não só uma mensagem
             channel.messages.cache.clear();
         }
 
@@ -724,73 +780,86 @@ async function finalizarDenuncia(client, denuncia) {
             log.success(`Status atualizado para 'finalizada': ${denuncia._id}`, { guildName });
         } catch (err) {
             log.warn(`Falha ao atualizar status no banco: ${err.message}`, { guildName });
+            houveErroCritico = true;
         }
 
-        log.success(
-            `AutoFinalizador: Denuncia ${chalk.white.bold(denuncia._id)} finalizada. ` +
-            `Denunciante: ${chalk.white(denuncia.denunciante || 'N/A')} | ` +
-            `Acusado: ${chalk.white(denuncia.acusado || 'N/A')} | ` +
-            `ID: ${chalk.yellow(denuncia.messageId)} | ` +
-            `Servidor: ${chalk.cyan(guildName)} | ` +
-            `messageId: ${chalk.magenta(denuncia.messageId)}`,
-            { guildName }
-        );
-        return true;
+        if (houveErroCritico) {
+            log.warn(
+                `AutoFinalizador: Denuncia ${denuncia._id} finalizada com falhas em etapas críticas — verifique os avisos acima.`,
+                { guildName }
+            );
+        } else {
+            log.success(
+                `AutoFinalizador: Denuncia ${chalk.white.bold(denuncia._id)} finalizada. ` +
+                `Denunciante: ${chalk.white(denuncia.denunciante || 'N/A')} | ` +
+                `Acusado: ${chalk.white(denuncia.acusado || 'N/A')} | ` +
+                `ID: ${chalk.yellow(denuncia.messageId)} | ` +
+                `Servidor: ${chalk.cyan(guildName)} | ` +
+                `messageId: ${chalk.magenta(denuncia.messageId)}`,
+                { guildName }
+            );
+        }
+        return !houveErroCritico;
     } catch (error) {
         log.error(`AutoFinalizador: Erro ao finalizar ${denuncia._id}: ${error.message}`, { guildName });
         return false;
     }
 }
 
-async function verificarEFinalizarDenuncias(client) {
-    try {
-        logMemoria();
+async function verificarEFinalizarDenuncias(client, signal = null) {
+    logMemoria('início do ciclo');
 
-        const dataLimite = calcularDataLimite();
-        const denuncias  = await Denuncia.find({
-            dataCriacao: { $lte: dataLimite },
-            guildId:     { $exists: true, $ne: null, $ne: '' },
-            status:      { $in: STATUS_FINALIZAVEIS },
-        })
-        .sort({ dataCriacao: 1 })
-        .limit(LOTE_MAXIMO)
-        .lean();
+    const dataLimite = calcularDataLimite();
+    const denuncias  = await Denuncia.find({
+        dataCriacao: { $lte: dataLimite },
+        guildId:     { $exists: true, $ne: null, $ne: '' },
+        status:      { $in: STATUS_FINALIZAVEIS },
+    })
+    .sort({ dataCriacao: 1 })
+    .limit(LOTE_MAXIMO)
+    .lean();
 
-        if (!denuncias || denuncias.length === 0) return;
+    if (!denuncias || denuncias.length === 0) return { finalizadas: 0, erros: 0 };
 
-        log.info(`AutoFinalizador: ${chalk.yellow.bold(denuncias.length)} denuncia(s) para finalização.`);
+    log.info(`AutoFinalizador: ${chalk.yellow.bold(denuncias.length)} denuncia(s) para finalização.`);
 
-        let finalizadas = 0;
-        let erros       = 0;
+    let finalizadas = 0;
+    let erros       = 0;
 
-        for (let i = 0; i < denuncias.length; i++) {
-            const denuncia = denuncias[i];
-            log.info(
-                `Iniciando finalização: ${chalk.cyan(denuncia._id)} | ` +
-                `Acusado: ${chalk.white(denuncia.acusado)} | ` +
-                `Denunciante: ${chalk.white(denuncia.denunciante)}`
-            );
-            try {
-                const sucesso = await finalizarDenuncia(client, denuncia);
-                if (sucesso) {
-                    finalizadas++;
-                    log.success(`Finalizada: ${chalk.cyan(denuncia._id)}`);
-                } else {
-                    erros++;
-                    log.error(`Falha: ${chalk.cyan(denuncia._id)}`);
-                }
-            } catch (err) {
-                erros++;
-                log.error(`Erro inesperado: ${chalk.cyan(denuncia._id)} | ${err.message}`);
-            }
-            await runGcComLog('pós-denuncia');
-            if (i < denuncias.length - 1) await sleep(DELAY_ENTRE_ITENS_MS);
+    for (let i = 0; i < denuncias.length; i++) {
+        if (signal?.aborted) {
+            log.warn('AutoFinalizador: ciclo abortado por timeout global, interrompendo processamento do lote.');
+            break;
         }
 
-        log.info(`AutoFinalizador: ${chalk.green.bold(finalizadas)} finalizadas, ${chalk.red.bold(erros)} com erro.`);
-    } catch (error) {
-        log.error(`AutoFinalizador: Erro durante verificação: ${error.message}`);
+        const denuncia = denuncias[i];
+        const inicio   = Date.now();
+        log.info(
+            `Iniciando finalização: ${chalk.cyan(denuncia._id)} | ` +
+            `Acusado: ${chalk.white(denuncia.acusado)} | ` +
+            `Denunciante: ${chalk.white(denuncia.denunciante)}`
+        );
+        try {
+            const sucesso = await finalizarDenuncia(client, denuncia, signal);
+            const duracao = Date.now() - inicio;
+            if (sucesso) {
+                finalizadas++;
+                log.success(`Finalizada: ${chalk.cyan(denuncia._id)} em ${chalk.white(msStr(duracao))}`);
+            } else {
+                erros++;
+                log.error(`Falha: ${chalk.cyan(denuncia._id)} após ${chalk.white(msStr(duracao))}`);
+            }
+        } catch (err) {
+            erros++;
+            const duracao = Date.now() - inicio;
+            log.error(`Erro inesperado: ${chalk.cyan(denuncia._id)} após ${msStr(duracao)} | ${err.message}`);
+        }
+        await runGcComLog('pós-denuncia');
+        if (i < denuncias.length - 1) await sleep(DELAY_ENTRE_ITENS_MS);
     }
+
+    log.info(`AutoFinalizador: ${chalk.green.bold(finalizadas)} finalizadas, ${chalk.red.bold(erros)} com erro.`);
+    return { finalizadas, erros };
 }
 
 let consecutiveErrors        = 0;
@@ -810,18 +879,22 @@ function iniciarAutoFinalizador(client) {
         }
         autoFinalizadorLock = true;
         try {
-            await verificarEFinalizarDenuncias(client);
+            await criarCicloComTimeout(
+                (signal) => verificarEFinalizarDenuncias(client, signal),
+                TIMEOUT_GLOBAL_CICLO_MS,
+                'AutoFinalizador'
+            );
             consecutiveErrors = 0;
         } catch (e) {
             consecutiveErrors++;
-            log.error(`AutoFinalizador: Erro no ciclo: ${e.message}`);
+            log.error(`AutoFinalizador: Erro no ciclo (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS} consecutivos): ${e.message}`);
             if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
                 log.error(`AutoFinalizador: ${MAX_CONSECUTIVE_ERRORS} falhas consecutivas. Pausando por 5 minutos.`);
                 autoFinalizadorLock = false;
                 await sleep(5 * 60 * 1000);
                 consecutiveErrors = 0;
                 return;
-            } 
+            }
         }
         autoFinalizadorLock = false;
     };

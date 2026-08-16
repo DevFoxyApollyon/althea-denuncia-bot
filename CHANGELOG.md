@@ -6,6 +6,24 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.0.0] - 2026-08-16
+### 🚀 Evolução principal do ALTHEA
+
+#### ✨ Novidades
+- Atualização geral da documentação do projeto para a release 3.0
+- Melhor organização da estrutura do bot e dos módulos de automação
+- Refino no sistema de denúncias, arquivamento e finalização automática
+- Melhor suporte a tópicos restritos, sincronização de nicknames e monitoramento
+- Ajustes de estabilidade para produção com processamento mais robusto
+- Manutenção e revisão de fluxos críticos do bot e da exportação de dados
+
+#### 🔧 Ajustes
+- Padronização de nomenclatura e documentação de módulos
+- Revisão do fluxo de finalização e exportação de tópicos
+- Redução de riscos operacionais em rotinas automáticas do sistema
+
+---
+
 ## [1.2.1] - 2026-06-27
 ### 📝 Documentação e preparação de release
 
