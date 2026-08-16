@@ -185,10 +185,6 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
         channel.send({ embeds: [warningEmbed] })
     ).catch(() => null);
 
-    if (warningMsg && isDenunciaChild) {
-        setTimeout(() => warningMsg.delete().catch(() => null), 5000);
-    }
-
     // Loga no canal de log e cria tópico com a mídia lá
     const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
     if (logChannel) {
