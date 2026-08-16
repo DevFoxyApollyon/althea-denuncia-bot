@@ -180,7 +180,8 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
         .addFields(
             { name: '👤 Autor',     value: message.author ? `<@${message.author.id}>\n\`${message.author.id}\`` : 'Desconhecido', inline: true },
             { name: '⏰ Data/Hora', value: dateStr, inline: true },
-            { name: '📝 Conteúdo',  value: truncate(message.content), inline: false },
+            { name: '� Link',      value: `[Ver mensagem](https://discord.com/channels/${message.guild.id}/${channel.id}/${message.id})`, inline: true },
+            { name: '�📝 Conteúdo',  value: truncate(message.content), inline: false },
         )
         .setFooter({ text: `ID: ${message.id} • ${timeStr}` })
         .setTimestamp();
@@ -214,7 +215,8 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
             .addFields(
                 { name: '👤 Autor',     value: message.author ? `<@${message.author.id}>\n\`${message.author.id}\`` : 'Desconhecido', inline: true },
                 { name: '⏰ Data/Hora', value: dateStr, inline: true },
-                { name: '📎 Anexos',    value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s) — ver tópico` : 'Nenhum', inline: true },
+                { name: '� Link',      value: `[Ver mensagem](https://discord.com/channels/${message.guild.id}/${channel.id}/${message.id})`, inline: true },
+                { name: '�📎 Anexos',    value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s) — ver tópico` : 'Nenhum', inline: true },
                 { name: '📝 Conteúdo',  value: truncate(message.content), inline: false },
             )
             .setFooter({ text: `ID da mensagem: ${message.id} • ${timeStr}` })
@@ -303,7 +305,8 @@ async function handleDeletedMessage(message) {
             { name: '👤 Autor',        value: `<@${message.author.id}>\n\`${message.author.id}\``, inline: true },
             { name: '🗑️ Deletada por', value: isSelfDelete ? '**Próprio autor**' : `<@${deletedBy.id}>\n\`${deletedBy.id}\``, inline: true },
             { name: '⏰ Data/Hora',    value: dateStr, inline: true },
-            { name: '💬 Menções',      value: mentions.length > 0 ? mentions.map(u => `<@${u.id}>`).join(', ') : 'Nenhuma', inline: true },
+            { name: '� Link',        value: `[Ver mensagem](https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id})`, inline: true },
+            { name: '�💬 Menções',      value: mentions.length > 0 ? mentions.map(u => `<@${u.id}>`).join(', ') : 'Nenhuma', inline: true },
             { name: '📎 Anexos',       value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s)${processedAttachments.length > 0 ? ' — ver tópico' : ''}` : 'Nenhum', inline: true },
             { name: '↩️ Resposta a',   value: message.reference?.messageId ? `\`${message.reference.messageId}\`` : 'Não era resposta', inline: true },
             {
