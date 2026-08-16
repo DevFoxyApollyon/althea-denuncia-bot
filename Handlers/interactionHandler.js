@@ -15,7 +15,9 @@ const {
 const {
   handleStatusButton,
   handlePunishmentModal,
-  handleClaimButton
+  handleClaimButton,
+  handleAddPlayer,
+  handleAddPlayerModal
 } = require('../Handlers/handlerStatusButton');
 
 const { handleExportButton } = require('../Handlers/exportDenuncia');
@@ -222,6 +224,10 @@ async function interactionHandler(interaction) {
           await handleStatusButton(interaction, interaction.customId);
           break;
 
+        case 'add_player':
+          await handleAddPlayer(interaction);
+          break;
+
         case 'refresh_status':
         case 'detailed_status':
           await handleStatusButtons(interaction);
@@ -244,6 +250,10 @@ async function interactionHandler(interaction) {
 
         case 'punishment_modal':
           await handlePunishmentModal(interaction);
+          break;
+
+        case 'add_player_modal':
+          await handleAddPlayerModal(interaction);
           break;
 
         case 'channels_modal_1':

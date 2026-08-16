@@ -1187,9 +1187,170 @@ async function handleClaimButton(interaction) {
   }
 }
 
+async function handleAddPlayer(interaction) {
+  try {
+    if (!interaction.isRepliable()) return;
+    await safeDefer(interaction, true);
+
+    const config = await Config.findOne({ guildId: interaction.guild.id });
+    if (!config) {
+      await safeReplyOrEdit(interaction, {
+        content: '❌ Configurações do servidor não encontradas.',
+        flags: [MessageFlags.Ephemeral],
+      });
+      return;
+    }
+
+    const isResponsavelAdmin =
+      config?.roles?.responsavel_admin &&
+      interaction.member.roles.cache.has(config.roles.responsavel_admin);
+    const isAdmin =
+      config?.roles?.administrador &&
+      interaction.member.roles.cache.has(config.roles.administrador);
+
+    if (!isResponsavelAdmin && !isAdmin) {
+      await safeReplyOrEdit(interaction, {
+        content: '❌ Apenas administradores e responsáveis admin podem adicionar players.',
+        flags: [MessageFlags.Ephemeral],
+      });
+      return;
+    }
+
+    const denuncia = await Denuncia.findOne({
+      threadId: interaction.channel.id,
+    }).sort({ createdAt: -1 });
+
+    if (!denuncia) {
+      await safeReplyOrEdit(interaction, {
+        content: '❌ Não foi possível encontrar uma denúncia neste canal.',
+        flags: [MessageFlags.Ephemeral],
+      });
+      return;
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId('add_player_modal')
+      .setTitle('Adicionar Player ao Tópico');
+
+    const playerId = new TextInputBuilder()
+      .setCustomId('player_id')
+      .setLabel('ID ou Conta do Player')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setPlaceholder('Digite o ID ou conta do player...')
+      .setMaxLength(50);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(playerId));
+
+    try {
+      await interaction.showModal(modal);
+    } catch (error) {
+      if (error.code === 'InteractionAlreadyReplied' || error?.code === 10062) {
+        log.debug('Modal já foi respondido ou interação expirou');
+      }
+    }
+  } catch (error) {
+    log.error('Erro ao abrir modal de adicionar player', error);
+    await safeReplyOrEdit(interaction, {
+      content: '❌ Ocorreu um erro ao abrir o modal.',
+      flags: [MessageFlags.Ephemeral],
+    });
+  }
+}
+
+async function handleAddPlayerModal(interaction) {
+  try {
+    if (!interaction.isModalSubmit()) return;
+    await safeDefer(interaction, true);
+    await safeReplyOrEdit(interaction, { content: '⏳ Processando...' });
+
+    const config = await Config.findOne({ guildId: interaction.guild.id });
+    if (!config) {
+      return await safeReplyOrEdit(interaction, {
+        content: '❌ Configurações do servidor não encontradas.',
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
+
+    const playerId = interaction.fields.getTextInputValue('player_id').trim();
+    if (!playerId) {
+      return await safeReplyOrEdit(interaction, {
+        content: '❌ ID do player não pode estar vazio.',
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
+
+    const denuncia = await Denuncia.findOne({
+      threadId: interaction.channel.id,
+    }).sort({ createdAt: -1 });
+
+    if (!denuncia) {
+      return await safeReplyOrEdit(interaction, {
+        content: '❌ Não foi possível encontrar a denúncia neste canal.',
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
+
+    let playerUserId = null;
+    try {
+      const usuario = await require('../models/Usuario').findOne({
+        guildId: interaction.guild.id,
+        $or: [{ conta: playerId }, { userId: playerId }],
+      });
+
+      if (usuario?.userId) {
+        playerUserId = String(usuario.userId);
+      } else {
+        return await safeReplyOrEdit(interaction, {
+          content: `❌ Não foi encontrado nenhum player com ID ou conta \`${playerId}\` no banco de dados.`,
+          flags: [MessageFlags.Ephemeral],
+        });
+      }
+    } catch (dbError) {
+      log.error('Erro ao buscar player no banco', dbError);
+      return await safeReplyOrEdit(interaction, {
+        content: '❌ Erro ao buscar player no banco de dados.',
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
+
+    const currentIds = denuncia.acusadoUserIds || [];
+    if (currentIds.includes(playerUserId)) {
+      return await safeReplyOrEdit(interaction, {
+        content: `✅ O player \`${playerId}\` já estava na lista de autorização.`,
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
+
+    const updatedIds = [...new Set([...currentIds, playerUserId])];
+
+    await Denuncia.findByIdAndUpdate(denuncia._id, {
+      $set: {
+        acusadoUserIds: updatedIds,
+        restritoParticipacao: true,
+      },
+    });
+
+    await safeReplyOrEdit(interaction, {
+      content: `✅ Player \`${playerId}\` adicionado com sucesso à lista de autorização deste tópico!`,
+    });
+
+    const confirmMsg = `✅ **Player Autorizado**: O jogador \`${playerId}\` foi autorizado a falar neste tópico pelo administrador ${interaction.user}.`;
+    await interaction.channel.send(confirmMsg).catch((e) => log.warn('Erro ao confirmar no tópico', e?.message));
+  } catch (error) {
+    log.error('Erro ao processar modal de adicionar player', error);
+    await safeReplyOrEdit(interaction, {
+      content: '❌ Ocorreu um erro ao adicionar o player.',
+      flags: [MessageFlags.Ephemeral],
+    });
+  }
+}
+
 module.exports = {
   handleStatusButton,
   handlePunishmentModal,
   denunciasMap,
   handleClaimButton,
+  handleAddPlayer,
+  handleAddPlayerModal,
 };
