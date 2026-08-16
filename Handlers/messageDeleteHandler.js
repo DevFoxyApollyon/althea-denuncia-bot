@@ -5,6 +5,7 @@ const { getBrasiliaDate, formatTimeBR, formatDateBR } = require('../utils/dateUt
 const MAX_FILE_SIZE_MB = 50;
 const DOWNLOAD_TIMEOUT_MS = 5000;
 const INTENTIONAL_DELETES = new Set();
+const THREAD_CACHE = new Map();
 
 function truncate(str, max = 1024) {
     if (!str) return '*Apenas mídia*';
