@@ -4,7 +4,7 @@ const { getBrasiliaDate, formatTimeBR, formatDateBR } = require('../utils/dateUt
 
 const MAX_FILE_SIZE_MB = 50;
 const DOWNLOAD_TIMEOUT_MS = 5000;
-const INTENTIONAL_DELETES = new Set(); // Rastreia mensagens deletadas intencionalmente pelo bot
+const INTENTIONAL_DELETES = new Set();
 
 function truncate(str, max = 1024) {
     if (!str) return '*Apenas mídia*';
@@ -14,8 +14,6 @@ function truncate(str, max = 1024) {
 function markForDeletion(messageId) {
     INTENTIONAL_DELETES.add(messageId);
     setTimeout(() => INTENTIONAL_DELETES.delete(messageId), 10000);
-}
-    return str.length <= max ? str : str.slice(0, 1021) + '...';
 }
 
 function buildContentFile(message, author, dateStr) {
@@ -168,7 +166,6 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
     const timeStr = formatTimeBR(now);
     const dateStr = `${formatDateBR(now)} ${timeStr}`;
 
-    // Avisa no próprio tópico (só embed, sem mídia)
     const warningEmbed = new EmbedBuilder()
         .setColor('#FF0000')
         .setAuthor({
@@ -199,7 +196,6 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
         }, 5000);
     }
 
-    // Loga no canal de log e cria tópico com a mídia lá
     const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
     if (logChannel) {
         const canalOrigem = isDenunciaChild ? channel.parentId : channel.id;
@@ -248,7 +244,6 @@ async function handleDeletedMessage(message) {
 
     if (!message.author) return;
     
-    // Ignora se foi uma deleção intencional do bot
     if (INTENTIONAL_DELETES.has(message.id)) {
         INTENTIONAL_DELETES.delete(message.id);
         return;
