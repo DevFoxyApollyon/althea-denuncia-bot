@@ -198,8 +198,8 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
     fields.push({ name: '📝 Conteúdo', value: truncate(message.content), inline: false });
 
     warningEmbed.addFields(...fields);
-        .setFooter({ text: `ID: ${message.id} • ${timeStr}` })
-        .setTimestamp();
+    warningEmbed.setFooter({ text: `ID: ${message.id} • ${timeStr}` });
+    warningEmbed.setTimestamp();
 
     const warningMsg = await sendWithRetry(() =>
         channel.send({ embeds: [warningEmbed] })
@@ -244,8 +244,8 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
         );
 
         logEmbed.addFields(...logFields);
-            .setFooter({ text: `ID da mensagem: ${message.id} • ${timeStr}` })
-            .setTimestamp();
+        logEmbed.setFooter({ text: `ID da mensagem: ${message.id} • ${timeStr}` });
+        logEmbed.setTimestamp();
 
         const isLong = (message.content?.length ?? 0) > 1024;
         const contentFile = isLong ? buildContentFile(message, message.author ?? { username: 'desconhecido', id: '0' }, dateStr) : null;
