@@ -11,6 +11,13 @@ function truncate(str, max = 1024) {
     return str.length <= max ? str : str.slice(0, 1021) + '...';
 }
 
+function extractUrls(text) {
+    if (!text) return [];
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const matches = text.match(urlRegex) || [];
+    return [...new Set(matches)];
+}
+
 function markForDeletion(messageId) {
     INTENTIONAL_DELETES.add(messageId);
     setTimeout(() => INTENTIONAL_DELETES.delete(messageId), 10000);
@@ -180,9 +187,17 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
         .addFields(
             { name: '👤 Autor',     value: message.author ? `<@${message.author.id}>\n\`${message.author.id}\`` : 'Desconhecido', inline: true },
             { name: '⏰ Data/Hora', value: dateStr, inline: true },
-            { name: '� Link',      value: `[Ver mensagem](https://discord.com/channels/${message.guild.id}/${channel.id}/${message.id})`, inline: true },
-            { name: '�📝 Conteúdo',  value: truncate(message.content), inline: false },
-        )
+        );
+
+    const fields = [];
+    const urls = extractUrls(message.content);
+    if (urls.length > 0) {
+        fields.push({ name: '🔗 Links', value: urls.map(url => `[Link](${url})`).join('\n'), inline: true });
+    }
+
+    fields.push({ name: '📝 Conteúdo', value: truncate(message.content), inline: false });
+
+    warningEmbed.addFields(...fields);
         .setFooter({ text: `ID: ${message.id} • ${timeStr}` })
         .setTimestamp();
 
@@ -215,10 +230,20 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
             .addFields(
                 { name: '👤 Autor',     value: message.author ? `<@${message.author.id}>\n\`${message.author.id}\`` : 'Desconhecido', inline: true },
                 { name: '⏰ Data/Hora', value: dateStr, inline: true },
-                { name: '� Link',      value: `[Ver mensagem](https://discord.com/channels/${message.guild.id}/${channel.id}/${message.id})`, inline: true },
-                { name: '�📎 Anexos',    value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s) — ver tópico` : 'Nenhum', inline: true },
-                { name: '📝 Conteúdo',  value: truncate(message.content), inline: false },
-            )
+            );
+
+        const logFields = [];
+        const logUrls = extractUrls(message.content);
+        if (logUrls.length > 0) {
+            logFields.push({ name: '🔗 Links', value: logUrls.map(url => `[Link](${url})`).join('\n'), inline: true });
+        }
+
+        logFields.push(
+            { name: '📎 Anexos',    value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s) — ver tópico` : 'Nenhum', inline: true },
+            { name: '📝 Conteúdo',  value: truncate(message.content), inline: false },
+        );
+
+        logEmbed.addFields(...logFields);
             .setFooter({ text: `ID da mensagem: ${message.id} • ${timeStr}` })
             .setTimestamp();
 
@@ -305,17 +330,27 @@ async function handleDeletedMessage(message) {
             { name: '👤 Autor',        value: `<@${message.author.id}>\n\`${message.author.id}\``, inline: true },
             { name: '🗑️ Deletada por', value: isSelfDelete ? '**Próprio autor**' : `<@${deletedBy.id}>\n\`${deletedBy.id}\``, inline: true },
             { name: '⏰ Data/Hora',    value: dateStr, inline: true },
-            { name: '� Link',        value: `[Ver mensagem](https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id})`, inline: true },
-            { name: '�💬 Menções',      value: mentions.length > 0 ? mentions.map(u => `<@${u.id}>`).join(', ') : 'Nenhuma', inline: true },
-            { name: '📎 Anexos',       value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s)${processedAttachments.length > 0 ? ' — ver tópico' : ''}` : 'Nenhum', inline: true },
-            { name: '↩️ Resposta a',   value: message.reference?.messageId ? `\`${message.reference.messageId}\`` : 'Não era resposta', inline: true },
-            {
-                name: isLong ? '📝 Conteúdo (truncado — completo no tópico)' : '📝 Conteúdo',
-                value: truncate(message.content),
-                inline: false,
-            },
-        )
-        .setFooter({ text: `ID: ${message.id} • ${timeStr}` })
+        );
+
+    const mainFields = [];
+    const mainUrls = extractUrls(message.content);
+    if (mainUrls.length > 0) {
+        mainFields.push({ name: '🔗 Links', value: mainUrls.map(url => `[Link](${url})`).join('\n'), inline: true });
+    }
+
+    mainFields.push(
+        { name: '💬 Menções',      value: mentions.length > 0 ? mentions.map(u => `<@${u.id}>`).join(', ') : 'Nenhuma', inline: true },
+        { name: '📎 Anexos',       value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s)${processedAttachments.length > 0 ? ' — ver tópico' : ''}` : 'Nenhum', inline: true },
+        { name: '↩️ Resposta a',   value: message.reference?.messageId ? `\`${message.reference.messageId}\`` : 'Não era resposta', inline: true },
+        {
+            name: isLong ? '📝 Conteúdo (truncado — completo no tópico)' : '📝 Conteúdo',
+            value: truncate(message.content),
+            inline: false,
+        },
+    );
+
+    mainEmbed.addFields(...mainFields);
+    mainEmbed.setFooter({ text: `ID: ${message.id} • ${timeStr}` })
         .setTimestamp();
 
     if (failedAttachmentUrls.length > 0) {
