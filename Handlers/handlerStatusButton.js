@@ -396,6 +396,8 @@ async function updateDenunciaStatus(denunciaId, {
   logMessageId,
   analysisMessageId,
   analysisChannelId,
+  acusadoUserIds,
+  restritoParticipacao,
 }) {
   const now = new Date();
   const updateFields = {
@@ -409,6 +411,12 @@ async function updateDenunciaStatus(denunciaId, {
     'ultimaEdicao.motivoEdicao': motivoEdicao,
     dataAtualizacao: now,
   };
+  if (acusadoUserIds !== undefined) {
+    updateFields.acusadoUserIds = acusadoUserIds;
+  }
+  if (restritoParticipacao !== undefined) {
+    updateFields.restritoParticipacao = restritoParticipacao;
+  }
   if (logMessageId !== undefined) {
     updateFields.logMessageId = logMessageId;
   }
@@ -832,6 +840,36 @@ async function handlePunishmentModal(interaction) {
       ? interaction.client.channels.cache.get(config.channels.logs)
       : null;
 
+    const idsAceitos = String(acusadoId).split('+').map((id) => id.trim()).filter(Boolean);
+    let acceptedUserIds = [];
+    let teveIdAusente = false;
+
+    try {
+      const usuariosAceitos = await Promise.all(
+        idsAceitos.map(async (id) => {
+          const usuarioAceito = await require('../models/Usuario').findOne({
+            guildId: interaction.guild.id,
+            conta: id,
+          });
+          if (!usuarioAceito?.userId) {
+            teveIdAusente = true;
+            return null;
+          }
+          return String(usuarioAceito.userId);
+        })
+      );
+      acceptedUserIds = [...new Set(usuariosAceitos.filter(Boolean))];
+    } catch (_) {
+      teveIdAusente = true;
+      acceptedUserIds = [];
+    }
+
+    const usuarioAceitoIds = [
+      ...(denuncia.acusadoUserIds || []),
+      ...acceptedUserIds,
+    ].filter(Boolean);
+    const restritoParticipacaoAceita = usuarioAceitoIds.length > 0 && !teveIdAusente;
+
     const logMessage = await manageStatusMessages(interaction.channel, 'aceita', interaction.user, {
       acusadoId,
       motivo,
@@ -855,6 +893,8 @@ async function handlePunishmentModal(interaction) {
       motivoAceite: motivo,
       dataPunicao,
       logMessageId: logMessage?.logMessage ? logMessage.logMessage.id : denuncia.logMessageId || null,
+      acusadoUserIds: [...new Set(usuarioAceitoIds)],
+      restritoParticipacao: restritoParticipacaoAceita,
     });
 
     const logManager = new LogManager(interaction.client, config);
