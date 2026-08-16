@@ -1191,7 +1191,6 @@ async function handleClaimButton(interaction) {
 async function handleAddPlayer(interaction) {
   try {
     if (!interaction.isRepliable()) return;
-    await safeDefer(interaction, true);
 
     const config = await Config.findOne({ guildId: interaction.guild.id });
     if (!config) {
@@ -1252,10 +1251,12 @@ async function handleAddPlayer(interaction) {
     }
   } catch (error) {
     log.error('Erro ao abrir modal de adicionar player', error);
-    await safeReplyOrEdit(interaction, {
-      content: '❌ Ocorreu um erro ao abrir o modal.',
-      flags: [MessageFlags.Ephemeral],
-    });
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: '❌ Ocorreu um erro ao abrir o modal.',
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
   }
 }
 
