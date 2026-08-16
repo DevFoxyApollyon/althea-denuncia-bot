@@ -100,13 +100,13 @@ function createStatusButtons() {
         new ButtonBuilder().setCustomId('reivindicar').setLabel('Reivindicar').setEmoji('🤝').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('analiser').setLabel('Analisar').setEmoji('🔍').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('aceitar').setLabel('Aceitar').setEmoji('✅').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('recusar').setLabel('Recusar').setEmoji('❌').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('add_player').setLabel('Add Player').setEmoji('➕').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('recusar').setLabel('Recusar').setEmoji('❌').setStyle(ButtonStyle.Danger)
     );
 }
 
 function createStatusButtonsRow2() {
     return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('add_player').setLabel('Add Player').setEmoji('➕').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('finalizar_denuncia').setLabel('Finalizar').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
     );
 }
