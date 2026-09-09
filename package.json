@@ -1,6 +1,6 @@
 {
   "name": "althea-denuncia-bot",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "ALTHEA — Bot Discord para gestão de denúncia, moderação, automações e arquivamento de logs.",
   "main": "index.js",
   "scripts": {

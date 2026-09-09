@@ -6,6 +6,13 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.2.2] - 2026-09-09
+### 🔧 Correção de publicação
+- Nova release para garantir que o deploy carregue os handlers de PC, Mobile e envio de formulário da denúncia.
+- Atualização da versão exibida no startup do bot para facilitar a conferência do deploy.
+
+---
+
 ## [3.2.1] - 2026-09-09
 ### 🚀 Sistema de denúncias, arquivamento e persistência
 
