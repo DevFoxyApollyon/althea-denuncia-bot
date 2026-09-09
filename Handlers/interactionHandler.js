@@ -340,6 +340,8 @@ async function interactionHandler(interaction) {
 
         case 'channels_modal_1':
         case 'channels_modal_2':
+        case 'channels_modal_3':
+        case 'channels_modal_4':
         case 'roles_modal_1':
         case 'roles_modal_2':
           await handlePanelModalSubmit(interaction);
