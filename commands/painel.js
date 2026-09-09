@@ -266,13 +266,13 @@ async function createPanelSelectMenu(interaction, currentConfig = null) {
   const options = [
     { label: 'Ver configurações', value: 'view_config', description: 'Visualizar o estado atual do servidor', emoji: '📋' },
     { label: 'Usuários isentos', value: 'edit_exempt_users', description: 'Lista global de usuários sem bloqueios', emoji: '🛡️' },
-    { label: 'Canais principais', value: encodePanelOption('edit_channels_1', [channels.pc, channels.mobile, channels.logs]), description: 'PC, Mobile e Cadeia Staff', emoji: '📌' },
-    { label: 'Canais administrativos', value: encodePanelOption('edit_channels_2', [channels.log, channels.backup, channels.armazem, channels.analysis, channels.topDaily]), description: 'Log, backup, armazém, análise e top diário', emoji: '🛠️' },
-    { label: 'Canais externos', value: encodePanelOption('edit_channels_3', [channels.registro, channels.cloud, channels.canalDenuncia]), description: 'Registro, cloud e canal fixo de denúncias', emoji: '🌐' },
-    { label: 'Canal de provas', value: encodePanelOption('edit_channels_4', [channels.databaseprovas]), description: 'Canal de banco de provas', emoji: '🗃️' },
-    { label: 'Manutenção de denúncias', value: encodePanelOption('toggle_maintenance', [currentConfig?.manutencaoDenuncia ? 'true' : 'false']), description: currentConfig?.manutencaoDenuncia ? 'Desativar manutenção' : 'Ativar manutenção', emoji: '🛠️' },
-    { label: 'Cargos principais', value: encodePanelOption('edit_roles_1', [roles.permitido, roles.pc]), description: 'Cargos Mobile e PC', emoji: '👥' },
-    { label: 'Cargos administrativos', value: encodePanelOption('edit_roles_2', [roles.administrador, roles.responsavel_admin]), description: 'Administrador e responsável', emoji: '🧑‍💼' }
+    { label: 'Canais principais', value: 'edit_channels_1', description: 'PC, Mobile e Cadeia Staff', emoji: '📌' },
+    { label: 'Canais administrativos', value: 'edit_channels_2', description: 'Log, backup, armazém, análise e top diário', emoji: '🛠️' },
+    { label: 'Canais externos', value: 'edit_channels_3', description: 'Registro, cloud e canal fixo de denúncias', emoji: '🌐' },
+    { label: 'Canal de provas', value: 'edit_channels_4', description: 'Canal de banco de provas', emoji: '🗃️' },
+    { label: 'Manutenção de denúncias', value: 'toggle_maintenance', description: currentConfig?.manutencaoDenuncia ? 'Desativar manutenção' : 'Ativar manutenção', emoji: '🛠️' },
+    { label: 'Cargos principais', value: 'edit_roles_1', description: 'Cargos Mobile e PC', emoji: '👥' },
+    { label: 'Cargos administrativos', value: 'edit_roles_2', description: 'Administrador e responsável', emoji: '🧑‍💼' }
   ];
 
   return new ActionRowBuilder().addComponents(

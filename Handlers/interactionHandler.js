@@ -170,7 +170,7 @@ async function handlePanelMenu(interaction) {
 
   switch (selectedOption) {
     case 'toggle_maintenance': {
-      const manutencaoDenuncia = encodedValues[0] !== 'true';
+      const manutencaoDenuncia = !Boolean(config?.manutencaoDenuncia);
       const configAtualizada = await Config.findOneAndUpdate(
         { guildId: interaction.guild.id },
         { $set: { manutencaoDenuncia, lastUpdated: new Date(), updatedBy: interaction.user.tag } },
