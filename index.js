@@ -47,7 +47,7 @@ const { extrairContaDoNickname } = require('./utils/nickUtils');
 const { usuarioAutorizadoNoTopico } = require('./utils/restricaoTopicos');
 const { usuarioIsento } = require('./utils/usuariosIsentos');
 const { handleRecusarPorMensagem } = require('./Handlers/handlerStatusButton');
-const { serializarMensagem } = require('./utils/denunciaMensagens');
+const { serializarMensagem, buscarCanal } = require('./utils/denunciaMensagens');
 
 const client = new Client({
     intents: [
@@ -276,6 +276,48 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
     const config = await getConfig(message.guild.id) ?? {};
+
+    if (message.channel.isThread?.() && message.attachments.size > 0 && config.channels?.databaseprovas) {
+        const denuncia = await Denuncia.findOne({
+            guildId: message.guild.id,
+            threadId: message.channel.id,
+        }).select('_id messageId');
+        const canalProvas = await buscarCanal(client, config.channels.databaseprovas);
+
+        if (denuncia && canalProvas?.isTextBased?.()) {
+            const anexos = Array.from(message.attachments.values());
+            const copia = await canalProvas.send({
+                content: [
+                    `🗃️ **Provas arquivadas**`,
+                    `Denúncia: \`${denuncia.messageId}\``,
+                    `Autor: <@${message.author.id}>`,
+                    `Origem: ${message.url}`,
+                ].join('\n'),
+                files: anexos.map(attachment => ({
+                    attachment: attachment.url,
+                    name: attachment.name || `prova-${attachment.id}`,
+                })),
+                allowedMentions: { parse: [] },
+            }).catch(error => {
+                log.warn('Não foi possível salvar prova no canal databaseprovas: ' + error.message);
+                return null;
+            });
+
+            if (copia) {
+                const anexosSalvos = Array.from(copia.attachments.values()).map(attachment => ({
+                    id: attachment.id,
+                    nome: attachment.name || '',
+                    url: attachment.url || '',
+                    tipo: attachment.contentType || '',
+                    tamanho: attachment.size ?? null,
+                }));
+                await Denuncia.updateOne(
+                    { _id: denuncia._id, 'mensagens.mensagemId': message.id },
+                    { $set: { 'mensagens.$.anexos': anexosSalvos } }
+                ).catch(error => log.warn('Não foi possível registrar URLs das provas arquivadas: ' + error.message));
+            }
+        }
+    }
 
     if (
         message.channel.isThread?.() &&

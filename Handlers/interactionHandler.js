@@ -7,7 +7,8 @@ const {
   handleDenunciaMobile,
   handleModalSubmit, 
   handleMyDenunciasButton,    
-  handleConsultaModalSubmit
+  handleConsultaModalSubmit,
+  atualizarMensagemDenuncia
 } = require('../commands/denuncia');
 
 const {
@@ -45,7 +46,7 @@ const {
 
 const { handleStatusButtons } = require('../commands/status');
 const { handleFeedbackMenu, handleFeedbackModal } = require('../utils/feedback');
-const { getCachedConfig } = require('../utils/performance');
+const { getCachedConfig, invalidateCache } = require('../utils/performance');
 const Denuncia = require('../models/Denuncia');
 
 async function handlePanelModalSubmit(interaction) {
@@ -168,6 +169,24 @@ async function handlePanelMenu(interaction) {
   const config = cachedConfig || encodedConfig;
 
   switch (selectedOption) {
+    case 'toggle_maintenance': {
+      const manutencaoDenuncia = encodedValues[0] !== 'true';
+      const configAtualizada = await Config.findOneAndUpdate(
+        { guildId: interaction.guild.id },
+        { $set: { manutencaoDenuncia, lastUpdated: new Date(), updatedBy: interaction.user.tag } },
+        { new: true, upsert: true }
+      );
+      invalidateCache('config', interaction.guild.id);
+      cachePanelConfig(interaction.guild.id, configAtualizada);
+      await atualizarMensagemDenuncia(interaction.client, interaction.guild, configAtualizada);
+      await interaction.reply({
+        content: manutencaoDenuncia
+          ? '🛠️ Modo manutenção ativado. Novos envios foram bloqueados.'
+          : '✅ Modo manutenção desativado. Os botões foram restaurados.',
+        flags: [64]
+      });
+      break;
+    }
     case 'view_config': {
       await interaction.deferReply({ flags: [64] });
       const config = await Config.findOne({ guildId: interaction.guild.id });

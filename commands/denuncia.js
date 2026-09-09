@@ -146,6 +146,121 @@ function createDenunciaButtons() {
     );
 }
 
+async function atualizarMensagemDenuncia(client, guild, config) {
+    const canal = config.channels?.canalDenuncia
+        ? await buscarCanal(client, config.channels.canalDenuncia)
+        : null;
+    if (!canal?.isTextBased?.()) return null;
+
+    const emManutencao = Boolean(config.manutencaoDenuncia);
+    const embed = emManutencao
+        ? new EmbedBuilder()
+            .setColor('#F0A500')
+            .setTitle('🛠️ Sistema de Denúncias em Manutenção')
+            .setDescription([
+                'O sistema de denúncias está temporariamente indisponível.',
+                '',
+                'A equipe está realizando ajustes de estabilidade, segurança e armazenamento.',
+                '',
+                '📌 **Durante a manutenção:**',
+                '• Novas denúncias estão bloqueadas.',
+                '• Denúncias já abertas continuam preservadas.',
+                '• Mensagens e provas existentes permanecem armazenadas.',
+                '',
+                'Aguarde a liberação do sistema e tente novamente mais tarde.'
+            ].join('\n'))
+            .setFooter({ text: `${guild.name} • Sistema Althea` })
+            .setTimestamp()
+        : new EmbedBuilder()
+            .setColor('#FF0000')
+            .setTitle('🚨 Sistema de Denúncias')
+            .setDescription([
+                '### Faça sua Denúncia',
+                'Escolha abaixo o dispositivo usado para registrar sua denúncia.',
+                '',
+                '• Informe dados verdadeiros e descreva o caso com clareza.',
+                '• Envie provas diretamente no tópico após sua criação.',
+                '• Não apague mensagens ou provas.',
+                '• Conversas paralelas e conteúdo ofensivo podem gerar punição.',
+                '',
+                '### Regras importantes',
+                '• O tópico é exclusivo para denúncia e contra-prova.',
+                '• Vídeos devem mostrar claramente a infração.',
+                '• O mau uso do sistema poderá resultar em punição.',
+                '',
+                `📍 **Horário de Brasília:** \`${dateUtils.getBrasiliaTime()}\``
+            ].join('\n'))
+            .setFooter({ text: 'Brasil RolePlay' });
+
+    const mensagens = await canal.messages.fetch({ limit: 50 }).catch(() => null);
+    const existente = mensagens?.find(message =>
+        message.author?.id === client.user.id &&
+        ['🚨 Sistema de Denúncias', '🛠️ Sistema de Denúncias em Manutenção'].includes(message.embeds?.[0]?.title)
+    );
+    const components = emManutencao ? [] : [createDenunciaButtons()];
+    return existente
+        ? existente.edit({ embeds: [embed], components })
+        : canal.send({ embeds: [embed], components });
+}
+
+async function atualizarMensagemDenuncia(client, guild, config) {
+    const canalDenuncia = config.channels?.canalDenuncia
+        ? await buscarCanal(client, config.channels.canalDenuncia)
+        : null;
+    const canalDestino = canalDenuncia?.isTextBased?.() ? canalDenuncia : null;
+    if (!canalDestino) return null;
+
+    const emManutencao = Boolean(config.manutencaoDenuncia);
+    const embed = emManutencao
+        ? new EmbedBuilder()
+            .setColor('#F0A500')
+            .setTitle('🛠️ Sistema de Denúncias em Manutenção')
+            .setDescription([
+                'O sistema de denúncias está temporariamente indisponível para manutenção.',
+                '',
+                'A equipe está realizando ajustes para melhorar a estabilidade, a segurança e o armazenamento das denúncias.',
+                '',
+                '📌 **Durante a manutenção:**',
+                '• Novas denúncias não poderão ser enviadas.',
+                '• Denúncias já abertas continuam preservadas.',
+                '• As provas e mensagens existentes permanecem armazenadas.',
+                '',
+                'Aguarde a liberação do sistema e tente novamente mais tarde.'
+            ].join('\n'))
+            .setFooter({ text: `${guild.name} • Sistema Althea` })
+            .setTimestamp()
+        : new EmbedBuilder()
+            .setColor('#FF0000')
+            .setTitle('🚨 Sistema de Denúncias')
+            .setDescription([
+                '### Faça sua Denúncia',
+                'Escolha abaixo o tipo de dispositivo usado para registrar sua denúncia.',
+                '',
+                '• Informe dados verdadeiros e descreva o caso com clareza.',
+                '• Envie provas diretamente no tópico após sua criação.',
+                '• Não apague mensagens ou provas.',
+                '• Conversas paralelas e conteúdo ofensivo podem gerar punição.',
+                '',
+                '### Regras importantes',
+                '• O tópico é exclusivo para denúncia e contra-prova.',
+                '• Vídeos do YouTube devem mostrar claramente a infração.',
+                '• O mau uso do sistema poderá resultar em punição.',
+                '',
+                `📍 **Horário de Brasília:** \`${dateUtils.getBrasiliaTime()}\``
+            ].join('\n'))
+            .setFooter({ text: 'Brasil RolePlay' });
+
+    const componentes = emManutencao ? [] : [createDenunciaButtons()];
+    const mensagens = await canalDestino.messages.fetch({ limit: 50 }).catch(() => null);
+    const existente = mensagens?.find(message =>
+        message.author?.id === client.user.id &&
+        ['🚨 Sistema de Denúncias', '🛠️ Sistema de Denúncias em Manutenção'].includes(message.embeds?.[0]?.title)
+    );
+
+    if (existente) return existente.edit({ embeds: [embed], components: componentes });
+    return canalDestino.send({ embeds: [embed], components: componentes });
+}
+
 function validarConteudoProibido(texto, nomeCampo) {
     const lower = texto.toLowerCase();
     const encontrada = PALAVRAS_PROIBIDAS.find(p => {
@@ -241,77 +356,7 @@ async function handleDenunciaCommand(message) {
         const hasPerm = message.member.roles.cache.has(config.roles.responsavel_admin);
         
         if (!hasPerm && message.author.id !== SUPORTE_BOT_ID) return message.reply('❌ Sem permissão.');
-
-        const embedDesc = [
-            '### Faça sua Denúncia',
-            'Para realizar a sua denúncia, você deverá apertar no botão abaixo de acordo com o seu dispositivo, lembrando que:',
-            '• É obrigatório estar com o Discord autenticado com o jogo',
-            '• Após o envio da Denúncia, você **NÃO** poderá apagar',
-            '• Caso seja constatado que foi apagada alguma prova, você poderá tomar punição',
-            '• O mau uso das denúncias resultará em punição',
-            '',
-            '### Regras do Tópico:',
-            '• O tópico é exclusivo para denúncia e contra-prova',
-            '• Conversas paralelas resultarão em punição',
-            '• Apagar mensagens ou provas resultará em punição',
-            '• Todas as mensagens apagadas serão registradas',
-            '• ⚠️ **Cuidado com as palavras utilizadas** — linguagem ofensiva, chingamentos ou xingamentos dentro do tópico resultarão em punição imediata',
-            '• 🛡️ **Enviar imagens ofensivas ou mensagens por brincadeira resultará em banimento permanente do servidor**',
-            '',
-            '### Sobre as Provas em Vídeo:',
-            '• É recomendado enviar vídeos pelo YouTube',
-            '• O vídeo deve mostrar claramente a infração',
-            '• Você pode deixar o vídeo como "não listado"',
-            '• Links de outros sites podem não funcionar',
-            '• Vídeos com "hl" no título (Highlights) não são aceitos como prova',
-            '',
-            '### Como enviar provas:',
-            '**Opção 1 - No formulário:**',
-            '1. Faça upload do vídeo no YouTube',
-            '2. Copie o link do vídeo',
-            '3. Cole o link no campo "Provas" da denúncia',
-            '**Opção 2 - No tópico:**',
-            '1. Envie sua denúncia normalmente',
-            '2. Aguarde o tópico ser criado',
-            '3. Envie suas imagens diretamente no tópico',
-            '',
-            '### Tutorial:',
-            'Confira nosso tutorial detalhado aqui: https://www.instagram.com/p/DPcEkcHlHDe/',
-            '',
-            `📍 **Horário de Brasília:** \`${dateUtils.getBrasiliaTime()}\``
-        ].join('\n');
-
-        const denunciaEmbed = new EmbedBuilder()
-            .setColor('#FF0000')
-            .setTitle('🚨 Sistema de Denúncias')
-            .setDescription(embedDesc)
-            .setFooter({ text: 'Brasil RolePlay' });
-
-        const canalDenuncia = config.channels.canalDenuncia
-            ? await buscarCanal(message.client, config.channels.canalDenuncia)
-            : message.channel;
-        const canalDestino = canalDenuncia?.isTextBased?.() ? canalDenuncia : message.channel;
-        const mensagemExistente = canalDestino.id !== message.channel.id
-            ? (await canalDestino.messages.fetch({ limit: 50 }).catch(() => null))
-                ?.find(item => item.author?.id === message.client.user.id && item.embeds?.[0]?.title === '🚨 Sistema de Denúncias')
-            : null;
-        const sentMessage = mensagemExistente
-            ? await mensagemExistente.edit({ embeds: [denunciaEmbed], components: [createDenunciaButtons()] })
-            : await canalDestino.send({
-                embeds: [denunciaEmbed],
-                components: [createDenunciaButtons()]
-            });
-
-        const startRefresh = (msg, embeds) => {
-            const timer = setTimeout(async () => {
-                try {
-                    await msg.edit({ embeds, components: [createDenunciaButtons()] });
-                    startRefresh(msg, embeds);
-                } catch {}
-            }, BUTTON_REFRESH_INTERVAL);
-            timer.unref?.();
-        };
-        startRefresh(sentMessage, [denunciaEmbed]);
+        await atualizarMensagemDenuncia(message.client, message.guild, config);
 
     } catch (error) { console.error(error); }
 }
@@ -346,6 +391,12 @@ async function handleDenunciaSubmit(interaction, platform) {
         const nickname = interaction.member?.nickname || null;
 
         const config = await getCachedConfig(interaction.guild.id, Config);
+
+        if (config?.manutencaoDenuncia) {
+            return await interaction.editReply({
+                content: '🛠️ O sistema de denúncias está em manutenção no momento. Tente novamente mais tarde.'
+            });
+        }
 
         const contaFromNick = extrairContaDoNickname(nickname);
 
@@ -489,14 +540,21 @@ async function handleDenunciaSubmit(interaction, platform) {
             allowedMentions: { parse: ['users'] }
         });
 
-        const registroChannelId = config.channels.registro || config.channels.armazem;
-        const registroChannel = await buscarCanal(interaction.client, registroChannelId);
-        if (registroChannel?.isTextBased?.()) {
-            await registroChannel.send({
+        const canaisEspelho = [...new Set([
+            config.channels.registro,
+            config.channels.armazem,
+        ].filter(Boolean))];
+        for (const channelId of canaisEspelho) {
+            const canalEspelho = await buscarCanal(interaction.client, channelId);
+            if (!canalEspelho?.isTextBased?.()) {
+                console.warn(`Canal de espelho não encontrado ou sem suporte a texto: ${channelId}`);
+                continue;
+            }
+            await canalEspelho.send({
                 content: `🗄️ **Cópia da denúncia original**\n${textoDenuncia}\n\n🔗 [Abrir denúncia original](${mainMessage.url})`,
                 allowedMentions: { parse: [] }
             }).catch(error => {
-                console.warn('Não foi possível espelhar a denúncia no canal Registro:', error.message);
+                console.warn(`Não foi possível espelhar a denúncia no canal ${channelId}:`, error.message);
             });
         }
 
@@ -890,5 +948,6 @@ module.exports = {
     handleModalSubmit,
     handleMyDenunciasButton,
     handleConsultaModalSubmit,
+    atualizarMensagemDenuncia,
     atualizarStatusNaMensagem
 };
