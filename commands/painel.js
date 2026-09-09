@@ -108,6 +108,18 @@ function createChannelsModal3(currentConfig = null) {
   );
 }
 
+function createChannelsModal4(currentConfig = null) {
+  const modal = new ModalBuilder().setCustomId('channels_modal_4').setTitle('Canal de Provas');
+  const databaseProvas = new TextInputBuilder()
+    .setCustomId('databaseprovas_channel')
+    .setLabel('Canal de Banco de Provas')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(currentConfig?.channels?.databaseprovas || '');
+
+  return modal.addComponents(new ActionRowBuilder().addComponents(databaseProvas));
+}
+
 function createRolesModal1(currentConfig = null) {
   const modal = new ModalBuilder().setCustomId('roles_modal_1').setTitle('Configurar Cargos (Parte 1)');
   const permitido = new TextInputBuilder().setCustomId('permitido_role').setLabel('Cargo Mobile').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.roles?.permitido || '');
@@ -257,6 +269,7 @@ async function createPanelSelectMenu(interaction, currentConfig = null) {
     { label: 'Canais principais', value: encodePanelOption('edit_channels_1', [channels.pc, channels.mobile, channels.logs]), description: 'PC, Mobile e Cadeia Staff', emoji: '📌' },
     { label: 'Canais administrativos', value: encodePanelOption('edit_channels_2', [channels.log, channels.backup, channels.armazem, channels.analysis, channels.topDaily]), description: 'Log, backup, armazém, análise e top diário', emoji: '🛠️' },
     { label: 'Canais externos', value: encodePanelOption('edit_channels_3', [channels.registro, channels.cloud, channels.canalDenuncia]), description: 'Registro, cloud e canal fixo de denúncias', emoji: '🌐' },
+    { label: 'Canal de provas', value: encodePanelOption('edit_channels_4', [channels.databaseprovas]), description: 'Canal de banco de provas', emoji: '🗃️' },
     { label: 'Cargos principais', value: encodePanelOption('edit_roles_1', [roles.permitido, roles.pc]), description: 'Cargos Mobile e PC', emoji: '👥' },
     { label: 'Cargos administrativos', value: encodePanelOption('edit_roles_2', [roles.administrador, roles.responsavel_admin]), description: 'Administrador e responsável', emoji: '🧑‍💼' }
   ];
@@ -301,6 +314,7 @@ async function handlePainelCommand(message) {
           `🌐 **Registro externo** ${getExternalChannelName(config?.channels?.registro)}`,
           `☁️ **Cloud externo** ${getExternalChannelName(config?.channels?.cloud)}`,
           `📣 **Canal de denúncias** ${getExternalChannelName(config?.channels?.canalDenuncia)}`,
+          `🗃️ **Banco de provas** ${getChannelName(message, config?.channels?.databaseprovas)}`,
           `🔎 **Análise** ${getChannelName(message, config?.channels?.analysis)}`,
           `🏆 **Top Diário** ${getChannelName(message, config?.channels?.topDaily)}`
         ].join('\n'),
@@ -350,6 +364,7 @@ async function showConfig(interaction, currentConfig = null) {
         `🌐 **Registro externo** ${getExternalChannelName(config.channels.registro)}`,
         `☁️ **Cloud externo** ${getExternalChannelName(config.channels.cloud)}`,
         `📣 **Canal de denúncias** ${getExternalChannelName(config.channels.canalDenuncia)}`,
+        `🗃️ **Banco de provas** ${getChannelName(interaction, config.channels.databaseprovas)}`,
         `🔎 **Análise** ${getChannelName(interaction, config.channels.analysis)}`,
         `🏆 **Top Diário** ${getChannelName(interaction, config.channels.topDaily)}`
       ].join('\n') },
@@ -375,6 +390,7 @@ module.exports = {
   createChannelsModal1,
   createChannelsModal2,
   createChannelsModal3,
+  createChannelsModal4,
   createRolesModal1,
   createRolesModal2,
   createExemptUsersModal,

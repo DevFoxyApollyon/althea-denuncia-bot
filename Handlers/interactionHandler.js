@@ -31,6 +31,7 @@ const {
   createChannelsModal1,
   createChannelsModal2,
   createChannelsModal3,
+  createChannelsModal4,
   createRolesModal1,
   createRolesModal2,
   createExemptUsersModal,
@@ -79,6 +80,9 @@ async function handlePanelModalSubmit(interaction) {
         config.channels.registro = fields.getTextInputValue('registro_channel').trim();
         config.channels.cloud = fields.getTextInputValue('cloud_channel').trim();
         config.channels.canalDenuncia = fields.getTextInputValue('canal_denuncia_channel').trim();
+        break;
+      case 'channels_modal_4':
+        config.channels.databaseprovas = fields.getTextInputValue('databaseprovas_channel').trim();
         break;
       case 'roles_modal_1':
         config.roles.permitido = fields.getTextInputValue('permitido_role').trim();
@@ -153,6 +157,8 @@ async function handlePanelMenu(interaction) {
     [encodedConfig.channels.log, encodedConfig.channels.backup, encodedConfig.channels.armazem, encodedConfig.channels.analysis, encodedConfig.channels.topDaily] = encodedValues;
   } else if (selectedOption === 'edit_channels_3') {
     [encodedConfig.channels.registro, encodedConfig.channels.cloud, encodedConfig.channels.canalDenuncia] = encodedValues;
+  } else if (selectedOption === 'edit_channels_4') {
+    [encodedConfig.channels.databaseprovas] = encodedValues;
   } else if (selectedOption === 'edit_roles_1') {
     [encodedConfig.roles.permitido, encodedConfig.roles.pc] = encodedValues;
   } else if (selectedOption === 'edit_roles_2') {
@@ -180,6 +186,9 @@ async function handlePanelMenu(interaction) {
       break;
     case 'edit_channels_3':
       await interaction.showModal(createChannelsModal3(config));
+      break;
+    case 'edit_channels_4':
+      await interaction.showModal(createChannelsModal4(config));
       break;
     case 'edit_roles_1':
       await interaction.showModal(createRolesModal1(config));
