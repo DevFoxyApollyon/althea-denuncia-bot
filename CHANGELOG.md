@@ -6,6 +6,13 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.2.3] - 2026-09-09
+### 🔧 Correção do painel
+- Corrigido o processamento dos modais de Canais Externos e Canal de Provas.
+- Os IDs de `registro`, `cloud`, `canalDenuncia` e `databaseprovas` agora são salvos corretamente.
+
+---
+
 ## [3.2.2] - 2026-09-09
 ### 🔧 Correção de publicação
 - Nova release para garantir que o deploy carregue os handlers de PC, Mobile e envio de formulário da denúncia.
