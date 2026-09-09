@@ -1,5 +1,6 @@
 ﻿const { EmbedBuilder, MessageReferenceType } = require('discord.js');
 const dateUtils = require('./dateUtils');
+const { usuarioIsento } = require('./usuariosIsentos');
 
 const GIFS_STRIKE = {
   1: 'https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExaDdqbzhjczU2aGZ2MXFhd3N0b3BsNHhqdTBsYzdwdnR5MGVmZWdpZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/geslvCFM31sFW/giphy.gif',
@@ -21,13 +22,30 @@ const GIFS_STRIKE_EMOJI = {
 
 const TEMPO_AVISO_CANAL = 5_000;
 
+async function podeFalarSemBloqueio(message, config) {
+  if (!message?.author || !message?.guild) return false;
+
+  if (await usuarioIsento(message.author.id)) return true;
+
+  const member = message.member;
+  if (!member) return false;
+
+  const cargoAdministrador = config?.roles?.administrador;
+  const cargoResponsavelAdmin = config?.roles?.responsavel_admin;
+
+  if (cargoAdministrador && member.roles.cache.has(cargoAdministrador)) return true;
+  if (cargoResponsavelAdmin && member.roles.cache.has(cargoResponsavelAdmin)) return true;
+
+  return false;
+}
+
 const PALAVRAS_PROIBIDAS = [
-  'animal', 'anta', 'arrombada', 'arrombado',
+  'animal', 'anta', 'arrombada', 'arrombado', 'chorão', 'mds', 'mds',
   'babaca', 'besta', 'bobalhão', 'bobalhona', 'bocó', 'bosta', 'burra', 'burrice', 'burro',
   'canalha', 'caralho', 'corna', 'corno', 'cretina', 'cretino', 'crápula', 'cuzão', 'cuzona',
   'desgraçado', 'doente', 'doida', 'doido', 'PCD', 'deficiente', 'deficiente mental', 'deficiente físico',
   'energúmeno', 'escrota', 'escroto',
-  'fdp', 'v conta', 'vendo conta',
+  'fdp', 'v conta', 'vendo conta', 'Choro',
   'galinha','mds', 'seu buraquinho','mrd',
   'idiota', 'idiotice', 'imbecil','Chora n','Desgracado','vacilão','vacilão',
   'jegue', 'jumento',
@@ -100,6 +118,9 @@ const REGEX_LINK_GENERICO = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
 const DOMINIOS_PERMITIDOS = [
   'youtube.com',
   'youtu.be',
+  'twitch.tv',
+  'clips.twitch.tv',
+  'kick.com',
   'cdn.discordapp.com',
   'media.discordapp.net',
 ];
@@ -385,7 +406,7 @@ async function processaStrikeLink(message, Strike, config) {
     let tempoTimeout = 0;
     let corEmbed     = '#ff9900';
 
-    const avisoBase = 'Aqui só é permitido enviar links do **YouTube**. Prints, capturas de tela e outros vídeos devem ser enviados como **anexo/imagem**, não como link.';
+    const avisoBase = 'Aqui só é permitido enviar links do **YouTube**, **Twitch** (incluindo clips) e **Kick**. Prints, capturas de tela e outros vídeos devem ser enviados como **anexo/imagem**, não como link.';
 
     if (strikesCount === 1) {
       titulo       = '🔗 Primeiro aviso de link! (1/3)';
@@ -621,6 +642,7 @@ async function verificaEdicao(oldMessage, newMessage, Strike, config) {
 
     const msg = newMessage.partial ? await newMessage.fetch().catch(() => null) : newMessage;
     if (!msg) return;
+    if (await podeFalarSemBloqueio(msg, config)) return;
 
     const temPalavra = contemPalavraProibida(msg.content);
     const temAdmin   = await contemMarcacaoAdmin(msg, config);
@@ -654,11 +676,13 @@ module.exports = {
   processaStrike,
   processaStrikeLink,
   processaStrikeEmoji,
-  palavraProibidaUsado,
+  palavraProibidaUsada,
+  palavraProibidaUsado: palavraProibidaUsada,
   linkProibidoUsado,
   ehMensagemEncaminhada,
   extrairLinkMensagemEncaminhada,
   descricaoMensagemEncaminhada,
   motivoEmojiFigurinhaOuGif,
+  podeFalarSemBloqueio,
   verificaEdicao,
 };

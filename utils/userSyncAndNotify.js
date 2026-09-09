@@ -48,7 +48,9 @@ async function notificarAcusadoPv(client, guildId, acusadoId, mensagem) {
         await user.send(mensagem);
         return true;
     } catch (e) {
-        console.warn('Não foi possível notificar acusado no PV:', e.message);
+        if (e.code !== 50007 && e.code !== 50001) {
+            console.warn('Não foi possível notificar acusado no PV:', e.message);
+        }
         return false;
     }
 }

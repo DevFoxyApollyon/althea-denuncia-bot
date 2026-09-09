@@ -11,6 +11,11 @@ const configSchema = new mongoose.Schema({
     mobile: { type: String, required: false, default: '' },
     logs: { type: String, required: false, default: '' }, 
     log: { type: String, required: false, default: '' }, 
+    backup: { type: String, required: false, default: '' },
+    armazem: { type: String, required: false, default: '' },
+    registro: { type: String, required: false, default: '' },
+    cloud: { type: String, required: false, default: '' },
+    canalDenuncia: { type: String, required: false, default: '' },
     analysis: { type: String, required: false, default: '' },
     topDaily: { type: String, required: false, default: '' },
     databaseprovas: { type: String, required: false, default: '' } 

@@ -1,5 +1,6 @@
 ﻿process.env.TZ = 'America/Sao_Paulo';
 process.env.FORCE_COLOR = '3';
+console.log('\x1b[36m' + '═'.repeat(60) + '\x1b[0m');
 require('dotenv').config();
 
 const { 
@@ -16,9 +17,9 @@ const packageJson = require('./package.json');
 
 const interactionHandler = require('./Handlers/interactionHandler');
 const { handleDeletedMessage } = require('./Handlers/messageDeleteHandler');
-const { handleReactionAdd, handleReactionRemove, handleReactionRemoveAll } = require('./Handlers/messageReactionHandler');
 const commands = require('./utils/commands');
 const Config = require('./models/Config');
+const Denuncia = require('./models/Denuncia');
 const {
     contemPalavraProibida,
     contemMarcacaoAdmin,
@@ -28,7 +29,8 @@ const {
     processaStrike,
     processaStrikeLink,
     processaStrikeEmoji,
-    verificaEdicao
+    verificaEdicao,
+    podeFalarSemBloqueio
 } = require('./utils/strikeWords');
 const Strike = require('./models/Strike');
 const { handleYoutubeDenuncia } = require('./utils/youtubeUtils');
@@ -38,10 +40,14 @@ const secondaryConnection = require('./utils/secondaryDb');
 const { syncUserOnNicknameChange } = require('./utils/userSyncAndNotify');
 const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 const { iniciarPoller } = require('./jobs/nicknamePoller');
+const { iniciarLimpezaContasDuplicadas } = require('./jobs/Limparcontasduplicadas');
 const Usuarios = require('./models/Usuario');
 const { limparMenusOrfaos } = require('./utils/feedback');
 const { extrairContaDoNickname } = require('./utils/nickUtils');
 const { usuarioAutorizadoNoTopico } = require('./utils/restricaoTopicos');
+const { usuarioIsento } = require('./utils/usuariosIsentos');
+const { handleRecusarPorMensagem } = require('./Handlers/handlerStatusButton');
+const { serializarMensagem } = require('./utils/denunciaMensagens');
 
 const client = new Client({
     intents: [
@@ -162,10 +168,6 @@ mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
         log.success('Database principal conectada.');
 
-        if (secondaryConnection.readyState === 1) {
-            log.success('Database secundária já conectada.');
-        }
-
         async function limparStrikesAntigas() {
             try {
                 const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -202,7 +204,6 @@ mongoose.connect(process.env.MONGODB_URI)
     });
 
 client.once('clientReady', async (readyClient) => {
-    console.log(chalk.cyan.bold('\n' + '═'.repeat(60)));
     log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.username)}`);
 
     log.info(`${chalk.bold('Versão do Bot:')} ${chalk.green(packageJson.version)}`);
@@ -238,17 +239,16 @@ client.once('clientReady', async (readyClient) => {
     setTimeout(() => {
         const ping = readyClient.ws.ping;
         log.info(`${chalk.bold('Latência WebSocket:')} ${chalk.white.bold(ping)}ms`);
-        console.log(chalk.cyan.bold('═'.repeat(60) + '\n'));
+        console.log(chalk.cyan.bold('═'.repeat(60)));
     }, 5000);
 
     setupRankJobs(client);
 
-    setTimeout(() => {
-        iniciarPoller(client);
-    }, 5_000);
-
-    setTimeout(() => {
-        limparMenusOrfaos(client).catch(err => log.error('limparMenusOrfaos: ' + err.message));
+    setTimeout(async () => {
+        iniciarLimpezaContasDuplicadas();
+        await limparMenusOrfaos(client).catch(err => log.error('limparMenusOrfaos: ' + err.message));
+        await iniciarPoller(client);
+        console.log(chalk.cyan.bold('═'.repeat(60) + '\n'));
     }, 15_000);
 
     iniciarAutoFinalizador(client);
@@ -264,11 +264,48 @@ client.once('clientReady', async (readyClient) => {
 });
 
 client.on('messageCreate', async (message) => {
-    if (message.author.bot || !message.guild) return;
+    if (!message.guild) return;
+
+    if (message.channel.isThread?.()) {
+        await Denuncia.updateOne(
+            { guildId: message.guild.id, threadId: message.channel.id },
+            { $push: { mensagens: serializarMensagem(message) } }
+        ).catch(error => log.warn('Não foi possível registrar mensagem da denúncia: ' + error.message));
+    }
+
+    if (message.author.bot) return;
 
     const config = await getConfig(message.guild.id) ?? {};
 
-    if (message.channel.isThread?.()) {
+    if (
+        message.channel.isThread?.() &&
+        ['recusado', 'recusada'].includes(message.content.trim().toLowerCase())
+    ) {
+        const responsavelAdmin = config.roles?.responsavel_admin;
+        const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+        const podeRecusar = await usuarioIsento(message.author.id) ||
+            Boolean(responsavelAdmin && member?.roles.cache.has(responsavelAdmin));
+
+        if (podeRecusar) {
+            const denuncia = await Denuncia.findOne({
+                guildId: message.guild.id,
+                threadId: message.channel.id,
+                status: { $nin: ['aceita', 'recusada'] }
+            });
+
+            if (denuncia) {
+                await handleRecusarPorMensagem(message, denuncia, config).catch((error) => {
+                    log.error('Erro ao recusar denúncia por palavra-chave: ' + error.message);
+                });
+                await message.delete().catch(() => {});
+                return;
+            }
+        }
+    }
+
+    const semBloqueio = await podeFalarSemBloqueio(message, config);
+
+    if (!semBloqueio && message.channel.isThread?.()) {
         const parentId = message.channel.parentId;
         const ehTopicoDenuncia = parentId && (parentId === config?.channels?.pc || parentId === config?.channels?.mobile);
 
@@ -295,17 +332,17 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    if (contemLinkProibido(message.content) || ehMensagemEncaminhada(message)) {
+        if (!semBloqueio && (contemLinkProibido(message.content) || ehMensagemEncaminhada(message))) {
         await processaStrikeLink(message, Strike, config);
         return;
     }
 
-    if (contemEmojiFigurinhaOuGif(message)) {
+        if (!semBloqueio && contemEmojiFigurinhaOuGif(message)) {
         await processaStrikeEmoji(message, Strike, config);
         return;
     }
 
-    if (contemPalavraProibida(message.content) || await contemMarcacaoAdmin(message, config)) {
+        if (!semBloqueio && (contemPalavraProibida(message.content) || await contemMarcacaoAdmin(message, config))) {
         await processaStrike(message, Strike, config);
         return;
     }
@@ -335,6 +372,18 @@ client.on('messageCreate', async (message) => {
 
 client.on('messageUpdate', async (oldMessage, newMessage) => {
     if (!newMessage.guild) return;
+    if (newMessage.channel.isThread?.()) {
+        await Denuncia.updateOne(
+            { guildId: newMessage.guild.id, threadId: newMessage.channel.id, 'mensagens.mensagemId': newMessage.id },
+            { $set: {
+                'mensagens.$.conteudo': newMessage.content || '',
+                'mensagens.$.editadaEm': new Date(),
+                'mensagens.$.embeds': (newMessage.embeds || []).map(embed =>
+                    typeof embed.toJSON === 'function' ? embed.toJSON() : embed
+                )
+            } }
+        ).catch(error => log.warn('Não foi possível atualizar mensagem da denúncia: ' + error.message));
+    }
     const config = await getConfig(newMessage.guild.id) ?? {};
     await verificaEdicao(oldMessage, newMessage, Strike, config);
 });
@@ -370,15 +419,17 @@ client.on('messageDelete', async (msg) => {
     }
 
     try {
+        if (msg.guild && msg.channel.isThread?.()) {
+            await Denuncia.updateOne(
+                { guildId: msg.guild.id, threadId: msg.channel.id, 'mensagens.mensagemId': msg.id },
+                { $set: { 'mensagens.$.apagadaEm': new Date() } }
+            ).catch(error => log.warn('Não foi possível marcar mensagem apagada da denúncia: ' + error.message));
+        }
         await handleDeletedMessage(msg);
     } catch (e) {
         log.error('messageDelete: ' + e.message);
     }
 });
-
-client.on('messageReactionAdd', handleReactionAdd);
-client.on('messageReactionRemove', handleReactionRemove);
-client.on('messageReactionRemoveAll', handleReactionRemoveAll);
 
 client.on('error', err => log.error('Discord API Error: ' + err.message));
 

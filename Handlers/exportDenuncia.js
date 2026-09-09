@@ -4,15 +4,16 @@ const Config = require('../models/Config');
 const archiver = require('archiver');
 const fetch = require('node-fetch');
 const { PassThrough } = require('stream');
+const { buscarCanal } = require('../utils/denunciaMensagens');
 
 const EXPORT_CONSTANTS = {
-  MAX_UPLOAD_BYTES: 45 * 1024 * 1024,
+  MAX_UPLOAD_BYTES: 100 * 1024 * 1024,
   COOLDOWN_SECONDS: 30,
-  FILES_PER_MESSAGE: 10,
+  FILES_PER_MESSAGE: 1,
   TIMEZONE: 'America/Sao_Paulo',
   FETCH_TIMEOUT_MS: 15000,
-  MAX_TOTAL_DOWNLOAD_BYTES: 800 * 1024 * 1024,
-  MAX_SINGLE_DOWNLOAD_BYTES: 300 * 1024 * 1024,
+  MAX_TOTAL_DOWNLOAD_BYTES: 300 * 1024 * 1024,
+  MAX_SINGLE_DOWNLOAD_BYTES: 100 * 1024 * 1024,
   AVATAR_SIZE: 64,
   GUILD_ICON_SIZE: 64,
 };
@@ -43,6 +44,16 @@ function safeFileName(name = '') {
 
 function nowMs() {
   return Date.now();
+}
+
+function getGuildUploadLimitBytes(guild) {
+  const tierBruto = guild?.premiumTier;
+  const tier = typeof tierBruto === 'number'
+    ? tierBruto
+    : { NONE: 0, TIER_1: 1, TIER_2: 2, TIER_3: 3 }[tierBruto] ?? 0;
+
+  const limiteBase = tier >= 3 ? 100 * 1024 * 1024 : tier === 2 ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+  return Math.max(Math.min(limiteBase - 1 * 1024 * 1024, EXPORT_CONSTANTS.MAX_UPLOAD_BYTES), 1 * 1024 * 1024);
 }
 
 function getHighestRole(member) {
@@ -473,6 +484,10 @@ async function handleExportButton(interaction) {
       });
     }
 
+    const cloudChannelId = config.channels?.cloud || config.channels?.backup || config.channels?.log;
+    const logsChannel = await buscarCanal(interaction.client, cloudChannelId);
+    const maxUploadBytes = getGuildUploadLimitBytes(logsChannel?.guild || guild);
+
     const requiredRoleId = config.roles?.responsavel_admin;
     if (!requiredRoleId || !interaction.member.roles.cache.has(requiredRoleId)) {
       return interaction.editReply({
@@ -603,7 +618,7 @@ async function handleExportButton(interaction) {
       await downloadAndPush(item);
     }
 
-    const zipParts = await splitFilesIntoZipParts(zipFiles, EXPORT_CONSTANTS.MAX_UPLOAD_BYTES);
+    const zipParts = await splitFilesIntoZipParts(zipFiles, maxUploadBytes);
 
     const finalZipParts = [];
     let oversizeCount = 0;
@@ -666,9 +681,6 @@ async function handleExportButton(interaction) {
     }
 
     logEmbed.addFields(fields);
-
-    const logsChannelId = config.channels?.log;
-    const logsChannel = logsChannelId ? interaction.client.channels.cache.get(logsChannelId) : null;
 
     let logMessage = null;
 

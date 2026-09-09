@@ -1,4 +1,5 @@
 const Denuncia = require('../models/Denuncia');
+const { usuarioIsento } = require('./usuariosIsentos');
 
 const CACHE_LIMIT = 300;
 const CACHE_TTL_MS = 60 * 60 * 1000;
@@ -43,6 +44,8 @@ async function obterRestricaoTopico(threadId) {
 }
 
 async function usuarioAutorizadoNoTopico(threadId, userId) {
+    if (await usuarioIsento(userId)) return true;
+
     const dados = await obterRestricaoTopico(threadId);
     if (!dados.restrito) return true;
     return dados.autorizados.has(userId);

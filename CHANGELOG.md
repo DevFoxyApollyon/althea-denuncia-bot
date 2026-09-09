@@ -6,6 +6,24 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.2.1] - 2026-09-09
+### 🚀 Sistema de denúncias, arquivamento e persistência
+
+#### ✨ Novidades
+- Mensagem fixa de abertura de denúncias com botões para PC, Mobile e consulta.
+- Configuração dos canais externos `registro` e `cloud` para armazenar denúncias e exportações.
+- Persistência das mensagens, anexos, embeds, edições e exclusões das denúncias no banco de dados.
+- Menu de feedback integrado diretamente à mensagem principal da denúncia.
+- Registro de mensagens da thread no banco em tempo real.
+
+#### 🔧 Ajustes
+- Exportação manual alinhada ao AutoFinalizador, com divisão por partes e limite de upload do servidor Cloud.
+- AutoFinalizador direcionado ao canal Cloud, com compatibilidade para configurações antigas.
+- Painel administrativo ampliado para configurar canais externos e canal fixo de denúncias.
+- Limpeza do feedback passa a remover apenas o menu, preservando a mensagem original.
+
+---
+
 ## [3.1.0] - 2026-08-16
 ### 🚀 Atualizações de funcionalidade do ALTHEA
 

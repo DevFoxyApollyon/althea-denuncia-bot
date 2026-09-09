@@ -1,5 +1,4 @@
-﻿// denuncia.js
-const { 
+﻿const { 
     EmbedBuilder, 
     ActionRowBuilder, 
     ButtonBuilder, 
@@ -22,12 +21,7 @@ const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('
 const dateUtils = require('../utils/dateUtils');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
 const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
-
-const { 
-    handleInputIdLogAceite, 
-    handleModalLogMessageIdCorrecaoAceite,
-    handleSalvarCorrecaoAceite 
-} = require('./correcao'); 
+const { serializarMensagem, buscarCanal } = require('../utils/denunciaMensagens');
 
 require('dotenv').config();
 
@@ -50,12 +44,18 @@ const PALAVRAS_BLOQUEADAS = [
     'saldo equipe',
     't.me/',
     'telegram.me/',
+    'ADM',
+    'TOMA NO CU',
+    'FILHO DA PUTA',
+    'FILHA DA PUTA',
+    'mcc',
 ];
 
 const PALAVROES = [
-    'fdp', 'filho da puta', 'filha da puta',
+    'fdp', 'filho da puta', 'filha da puta','ADM',
+    'TOMA NO CU',
     'viado', 'viadão', 'viadinho',
-    'cuzao', 'cuzão', 'cu',
+    'cuzao', 'cuzão', 'cu','chores',
     'porra', 'puta merda', 'puta que pariu',
     'vai se foder', 'vai tomar no cu', 'vai tomar no',
     'foder', 'fodase', 'foda-se', 'foda se',
@@ -67,8 +67,8 @@ const PALAVROES = [
     'prostituta', 'puta', 'piranha',
     'corno', 'corna',
     'babaca', 'baba ovo', 'babaovo',
-    'arrombado', 'arrombada',
-    'merda',
+    'arrombado', 'arrombada','mcc',
+    'merda','preto',
     'inútil',
     'desgraçado', 'desgraçado', 'desgraca',
     'maldito', 'maldita',
@@ -83,13 +83,40 @@ const PALAVROES = [
 ];
 
 const CONTEUDO_INVALIDO = [
-    'kk', 'kkk', 'kkkk', 'kkkkk', 'kkkkkk',
-    'haha', 'huhu', 'rsrs', 'hehe', 'ahahah', 'hauhau', 'kkkkkkk',
+    'fdp', 'filho da puta', 'filha da puta',
     'adm', 'admin', 'staff', 'suporte', 'moderador', 'mod', 'dono',
-    'líder', 'sub líder', 'sublíder',
+    'líder', 'sub líder', 'sublíder','ADM',
+    'TOMA NO CU',
     'princesa', 'lixo',
     'vai tomar no cu', 'fdp','macacada','macaco',
 ];
+
+const PALAVRAS_PROIBIDAS = [...new Set([
+    ...PALAVRAS_BLOQUEADAS,
+    ...PALAVROES,
+    ...CONTEUDO_INVALIDO
+].map(p => p.toLowerCase()))];
+
+const RISADA_REPETICAO_REGEX = /(.{1,3})\1{3,}/i;
+
+function pareceRisadaSpam(palavra) {
+    const limpa = palavra.replace(/[^a-zA-Zà-úÀ-Ú]/g, '');
+    if (limpa.length < 4) return false;
+    if (!/^[kshr]+$/i.test(limpa)) return false;
+    const totalKS = (limpa.match(/[ks]/gi) || []).length;
+    return totalKS >= limpa.length * 0.5;
+}
+
+function validarRisadaSpam(texto, nomeCampo) {
+    if (RISADA_REPETICAO_REGEX.test(texto)) {
+        return `❌ O campo **${nomeCampo}** parece conter repetição de risada/spam. Descreva o conteúdo normalmente, sem textos desnecessários.`;
+    }
+    const palavras = texto.split(/\s+/).filter(Boolean);
+    if (palavras.some(pareceRisadaSpam)) {
+        return `❌ O campo **${nomeCampo}** parece conter risada/spam em vez de conteúdo real. Descreva o conteúdo normalmente, sem textos desnecessários.`;
+    }
+    return null;
+}
 
 const denunciaCooldowns = new Map();
 
@@ -113,25 +140,19 @@ function createStatusButtonsRow2() {
 
 function createDenunciaButtons() {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('denuncia_pc').setLabel('Denúncia PC').setEmoji('➱').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('denuncia_mobile').setLabel('Denúncia Mobile').setEmoji('➱').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas Denúncias').setEmoji('📂').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('abrir_input_id_log_aceite').setLabel('Correção').setEmoji('🛠️').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('denuncia_pc').setLabel('Denúncia PC').setEmoji('🖥️').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('denuncia_mobile').setLabel('Denúncia Mobile').setEmoji('📱').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas Denúncias').setEmoji('📂').setStyle(ButtonStyle.Secondary)
     );
 }
 
-function validarPalavrasProibidas(texto) {
+function validarConteudoProibido(texto, nomeCampo) {
     const lower = texto.toLowerCase();
-    const encontrada = PALAVRAS_BLOQUEADAS.find(p => lower.includes(p));
-    if (encontrada) return '❌ Sua denúncia não pôde ser enviada. Verifique os campos e tente novamente.';
-    return null;
-}
-
-// Valida palavrões/chingamentos — aplicado no Motivo e no Acusado
-function validarPalavroes(texto, nomeCampo) {
-    const lower = texto.toLowerCase();
-    const encontrado = PALAVROES.find(p => lower.includes(p));
-    if (encontrado) return `❌ O campo **${nomeCampo}** contém uma palavra ou expressão ofensiva. Utilize linguagem adequada ao preencher a denúncia.`;
+    const encontrada = PALAVRAS_PROIBIDAS.find(p => {
+        const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`\\b${escaped}\\b`, 'i').test(lower);
+    });
+    if (encontrada) return `❌ O campo **${nomeCampo}** contém uma palavra ou expressão não permitida. Verifique o conteúdo e tente novamente.`;
     return null;
 }
 
@@ -143,23 +164,13 @@ function validarMotivo(motivo) {
     return null;
 }
 
-function validarMotivoConteudo(motivo) {
-    const lower = motivo.trim().toLowerCase();
+function validarMotivoTamanho(motivo) {
     if (motivo.trim().length < 2) return '❌ O campo **Motivo** é muito curto. Digite pelo menos 2 caracteres.';
-    const invalido = CONTEUDO_INVALIDO.find(p => lower.includes(p.toLowerCase()));
-    if (invalido) return '❌ O campo **Motivo** contém um texto inválido. Descreva claramente a infração cometida, sem textos desnecessários.';
     return null;
 }
 
-function validarAcusadoConteudo(acusado) {
+function validarAcusadoVazio(acusado) {
     if (acusado.trim().length < 1) return '❌ O campo **Acusado** está vazio.';
-    const lower = acusado.trim().toLowerCase();
-    const partes = lower.split('+').map(s => s.trim());
-    const invalido = CONTEUDO_INVALIDO.find(p => {
-        const pl = p.toLowerCase();
-        return partes.includes(pl) || lower.includes(pl);
-    });
-    if (invalido) return '❌ O campo **Acusado** contém um valor inválido. Insira apenas IDs numéricos reais do jogo.';
     return null;
 }
 
@@ -276,10 +287,20 @@ async function handleDenunciaCommand(message) {
             .setDescription(embedDesc)
             .setFooter({ text: 'Brasil RolePlay' });
 
-        const sentMessage = await message.channel.send({
-            embeds: [denunciaEmbed],
-            components: [createDenunciaButtons()]
-        });
+        const canalDenuncia = config.channels.canalDenuncia
+            ? await buscarCanal(message.client, config.channels.canalDenuncia)
+            : message.channel;
+        const canalDestino = canalDenuncia?.isTextBased?.() ? canalDenuncia : message.channel;
+        const mensagemExistente = canalDestino.id !== message.channel.id
+            ? (await canalDestino.messages.fetch({ limit: 50 }).catch(() => null))
+                ?.find(item => item.author?.id === message.client.user.id && item.embeds?.[0]?.title === '🚨 Sistema de Denúncias')
+            : null;
+        const sentMessage = mensagemExistente
+            ? await mensagemExistente.edit({ embeds: [denunciaEmbed], components: [createDenunciaButtons()] })
+            : await canalDestino.send({
+                embeds: [denunciaEmbed],
+                components: [createDenunciaButtons()]
+            });
 
         const startRefresh = (msg, embeds) => {
             const timer = setTimeout(async () => {
@@ -324,40 +345,24 @@ async function handleDenunciaSubmit(interaction, platform) {
         const username = interaction.user.username;
         const nickname = interaction.member?.nickname || null;
 
-        let contaSalva = null;
-        try {
-            const existing = await Usuario.findOne({ guildId, userId });
-            contaSalva = existing?.conta || null;
-
-            if (!contaSalva) {
-                const contaNick = extrairContaDoNickname(nickname);
-                const denuncianteInput = interaction.fields.getTextInputValue('denunciante_input').trim();
-                contaSalva = contaNick || denuncianteInput || null;
-            }
-
-            const updateFields = { username, nickname, updatedAt: new Date() };
-            if (contaSalva) updateFields.conta = contaSalva;
-
-            await Usuario.findOneAndUpdate(
-                { guildId, userId },
-                { $set: updateFields },
-                { upsert: true, new: true }
-            );
-        } catch (e) {
-            console.warn('Não foi possível registrar/atualizar nick do denunciante:', e.message);
-        }
-
         const config = await getCachedConfig(interaction.guild.id, Config);
+
+        const contaFromNick = extrairContaDoNickname(nickname);
+
+        if (!contaFromNick) {
+            return await interaction.editReply({
+                content: [
+                    '❌ Seu apelido no Discord não contém o ID da sua conta.',
+                    'Utilize `/menu` dentro do jogo para corrigir seu apelido no Discord (exemplo: `foxy_apollyon 1039`) e tente novamente.'
+                ].join('\n')
+            });
+        }
 
         const inputDigitado = interaction.fields.fields.has('denunciante_input')
             ? interaction.fields.getTextInputValue('denunciante_input').trim()
             : null;
 
-        const denunciante = inputDigitado || contaSalva;
-
-        if (!denunciante) {
-            return await interaction.editReply({ content: '❌ Não foi possível identificar o denunciante. Tente novamente.' });
-        }
+        const denunciante = inputDigitado || contaFromNick;
 
         if (!/^\d+$/.test(denunciante)) {
             return await interaction.editReply({ content: '❌ O campo **Denunciante** deve conter apenas números.' });
@@ -365,6 +370,27 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         if (denunciante.length > 15) {
             return await interaction.editReply({ content: '❌ O campo **Denunciante** deve ter no máximo 15 dígitos.' });
+        }
+
+        if (denunciante !== contaFromNick) {
+            return await interaction.editReply({
+                content: [
+                    `❌ O ID informado (\`${denunciante}\`) é diferente do ID presente no seu apelido do servidor (\`${contaFromNick}\`).`,
+                    'Utilize o comando `/menu` dentro do jogo e altere o seu nick no Discord (exemplo: `foxy_apollyon 1039`) para que fiquem iguais, depois tente novamente.'
+                ].join('\n')
+            });
+        }
+
+        try {
+            const updateFields = { username, nickname, conta: contaFromNick, updatedAt: new Date() };
+            await Usuario.deleteMany({ guildId, conta: contaFromNick, userId: { $ne: userId } });
+            await Usuario.findOneAndUpdate(
+                { guildId, userId },
+                { $set: updateFields },
+                { upsert: true, new: true }
+            );
+        } catch (e) {
+            console.warn('Não foi possível registrar/atualizar nick do denunciante:', e.message);
         }
 
         const acusado = interaction.fields.getTextInputValue('acusado_input');
@@ -375,30 +401,27 @@ async function handleDenunciaSubmit(interaction, platform) {
             return await interaction.editReply({ content: '❌ O campo **Acusado** só pode conter letras, números e o símbolo "+" para múltiplos IDs.' });
         }
 
-        // Validação de conteúdo do acusado
-        const erroAcusadoConteudo = validarAcusadoConteudo(acusado);
-        if (erroAcusadoConteudo) return await interaction.editReply({ content: erroAcusadoConteudo });
+        const erroAcusadoVazio = validarAcusadoVazio(acusado);
+        if (erroAcusadoVazio) return await interaction.editReply({ content: erroAcusadoVazio });
 
-        // Validação de palavrões no acusado
-        const erroPalavraoAcusado = validarPalavroes(acusado, 'Acusado');
-        if (erroPalavraoAcusado) return await interaction.editReply({ content: erroPalavraoAcusado });
-
-        // Validação de palavras bloqueadas em todos os campos
-        const camposParaVerificar = [denunciante, acusado, motivo, provas];
-        for (const campo of camposParaVerificar) {
-            const erroSpam = validarPalavrasProibidas(campo);
-            if (erroSpam) return await interaction.editReply({ content: erroSpam });
-        }
+        const erroMotivoTamanho = validarMotivoTamanho(motivo);
+        if (erroMotivoTamanho) return await interaction.editReply({ content: erroMotivoTamanho });
 
         const erroMotivo = validarMotivo(motivo);
         if (erroMotivo) return await interaction.editReply({ content: erroMotivo });
 
-        const erroMotivoConteudo = validarMotivoConteudo(motivo);
-        if (erroMotivoConteudo) return await interaction.editReply({ content: erroMotivoConteudo });
+        const camposParaVerificar = [
+            { texto: acusado, nome: 'Acusado' },
+            { texto: motivo, nome: 'Motivo' },
+            { texto: provas, nome: 'Provas' }
+        ];
+        for (const campo of camposParaVerificar) {
+            const erroProibido = validarConteudoProibido(campo.texto, campo.nome);
+            if (erroProibido) return await interaction.editReply({ content: erroProibido });
 
-        // Validação de palavrões no motivo
-        const erroPalavraoMotivo = validarPalavroes(motivo, 'Motivo');
-        if (erroPalavraoMotivo) return await interaction.editReply({ content: erroPalavraoMotivo });
+            const erroRisada = validarRisadaSpam(campo.texto, campo.nome);
+            if (erroRisada) return await interaction.editReply({ content: erroRisada });
+        }
 
         if (provas !== 'Tópico') {
             const erroProvas = validarProvasLinks(provas, interaction.guild.id);
@@ -422,7 +445,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         try {
             const partes = await Promise.all(acusadoIds.map(async (id) => {
                 try {
-                    const found = await Usuario.findOne({ guildId: interaction.guild.id, conta: id });
+                    const found = await Usuario.findOne({ guildId: interaction.guild.id, conta: id }).sort({ updatedAt: -1 });
                     return { texto: found ? `\`${id}\` (<@${found.userId}>)` : `\`${id}\``, userId: found?.userId || null };
                 } catch {
                     return { texto: `\`${id}\``, userId: null };
@@ -466,6 +489,17 @@ async function handleDenunciaSubmit(interaction, platform) {
             allowedMentions: { parse: ['users'] }
         });
 
+        const registroChannelId = config.channels.registro || config.channels.armazem;
+        const registroChannel = await buscarCanal(interaction.client, registroChannelId);
+        if (registroChannel?.isTextBased?.()) {
+            await registroChannel.send({
+                content: `🗄️ **Cópia da denúncia original**\n${textoDenuncia}\n\n🔗 [Abrir denúncia original](${mainMessage.url})`,
+                allowedMentions: { parse: [] }
+            }).catch(error => {
+                console.warn('Não foi possível espelhar a denúncia no canal Registro:', error.message);
+            });
+        }
+
         let thread;
         try {
             thread = await mainMessage.startThread({
@@ -480,8 +514,8 @@ async function handleDenunciaSubmit(interaction, platform) {
             return;
         }
 
-        await thread.send({ content: textoDenunciaTopico });
-        await thread.send({ components: [createStatusButtons(), createStatusButtonsRow2()] });
+        const threadMessage = await thread.send({ content: textoDenunciaTopico });
+        const controlsMessage = await thread.send({ components: [createStatusButtons(), createStatusButtonsRow2()] });
 
         try {
             await Usuario.findOneAndUpdate(
@@ -503,7 +537,8 @@ async function handleDenunciaSubmit(interaction, platform) {
             restritoParticipacao,
             criadoPor: interaction.user.id,
             status: 'pendente',
-            dataCriacao: dateUtils.getBrasiliaDate()
+            dataCriacao: dateUtils.getBrasiliaDate(),
+            mensagens: [mainMessage, threadMessage, controlsMessage].map(serializarMensagem)
         }).save();
 
         registrarTopicoRestrito(thread.id, interaction.user.id, acusadoUserIds, restritoParticipacao);
@@ -613,8 +648,6 @@ async function handleDenunciaButtons(interaction, client) {
 
         if (customId === 'reivindicar') return await handleClaimButton(interaction);
         if (customId === 'finalizar_denuncia') return await handleExportButton(interaction);
-        if (customId === 'abrir_input_id_log_aceite') return await handleInputIdLogAceite(interaction);
-
         if (['analiser', 'aceitar', 'recusar'].includes(customId)) {
             const { handleStatusButton } = require('../Handlers/handlerStatusButton');
             return await handleStatusButton(interaction, customId);
@@ -661,7 +694,9 @@ async function buscarContaComTimeout(guildId, userId, timeoutMs = 1500) {
 
 async function openDenunciaModal(interaction, platform) {
     try {
-        const contaSalva = await buscarContaComTimeout(
+        const nickname = interaction.member?.nickname || null;
+        const contaFromNick = extrairContaDoNickname(nickname);
+        const contaSalva = contaFromNick || await buscarContaComTimeout(
             interaction.guild.id,
             interaction.user.id
         );
@@ -855,10 +890,5 @@ module.exports = {
     handleModalSubmit,
     handleMyDenunciasButton,
     handleConsultaModalSubmit,
-    atualizarStatusNaMensagem,
-    handleDenunciaModals: async (interaction) => {
-        const { customId } = interaction;
-        if (customId === 'modal_logmessageid_para_correcao_aceite') return await handleModalLogMessageIdCorrecaoAceite(interaction);
-        if (customId.startsWith('salvar_correcao_aceite_')) return await handleSalvarCorrecaoAceite(interaction);
-    }
+    atualizarStatusNaMensagem
 };

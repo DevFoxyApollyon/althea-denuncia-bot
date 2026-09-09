@@ -302,7 +302,7 @@ async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
                 const channel = await interaction.client.channels.fetch(temp.channelId).catch(() => null);
                 if (channel) {
                     const msg = await channel.messages.fetch(temp.messageId).catch(() => null);
-                    if (msg) await msg.delete().catch(() => {});
+                    if (msg) await msg.edit({ components: [] }).catch(() => {});
                 }
                 await FeedbackTemp.deleteOne({ denunciaId: denunciaId.toString() });
             }
@@ -358,35 +358,38 @@ async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
 // =========================
 async function inserirFeedbackMenu(client, denuncia) {
     try {
-        if (!denuncia.threadId) {
-            console.error('[Feedback] threadId nao definido na denuncia.');
+        if (!denuncia.channelId || !denuncia.messageId) {
+            console.error('[Feedback] channelId/messageId nao definido na denuncia.');
             return;
         }
 
-        let thread = client.channels.cache.get(denuncia.threadId);
+        let channel = client.channels.cache.get(denuncia.channelId);
 
-        if (!thread) {
-            thread = await client.channels.fetch(denuncia.threadId).catch(() => null);
+        if (!channel) {
+            channel = await client.channels.fetch(denuncia.channelId).catch(() => null);
         }
 
-        if (!thread) {
-            console.error(`[Feedback] Thread nao encontrada ou foi deletada: ${denuncia.threadId}`);
+        if (!channel) {
+            console.error(`[Feedback] Canal da denuncia nao encontrado: ${denuncia.channelId}`);
+            return;
+        }
+
+        const message = await channel.messages.fetch(denuncia.messageId).catch(() => null);
+        if (!message) {
+            console.error(`[Feedback] Mensagem principal nao encontrada: ${denuncia.messageId}`);
             return;
         }
 
         const menu = criarMenuFeedback(denuncia._id);
 
-        const msg = await thread.send({
-            content: `<@${denuncia.criadoPor}> \uD83D\uDCCB Sua den\u00FAncia foi processada!\nPor favor, avalie o atendimento recebido. \u23F3 *Dispon\u00EDvel por 24 horas.*`,
-            components: [menu]
-        });
+        await message.edit({ components: [menu] });
 
         await FeedbackTemp.findOneAndUpdate(
             { denunciaId: denuncia._id.toString() },
             {
                 denunciaId: denuncia._id.toString(),
-                messageId: msg.id,
-                channelId: thread.id,
+                messageId: message.id,
+                channelId: channel.id,
                 criadoEm: new Date()
             },
             { upsert: true, new: true }
@@ -397,10 +400,23 @@ async function inserirFeedbackMenu(client, denuncia) {
     }
 }
 
+async function removerFeedbackMenu(client, denunciaId) {
+    const temp = await FeedbackTemp.findOne({ denunciaId: denunciaId.toString() }).catch(() => null);
+    if (!temp) return;
+
+    const channel = await client.channels.fetch(temp.channelId).catch(() => null);
+    const message = channel
+        ? await channel.messages.fetch(temp.messageId).catch(() => null)
+        : null;
+    if (message) await message.edit({ components: [] }).catch(() => {});
+    await FeedbackTemp.deleteOne({ _id: temp._id }).catch(() => {});
+}
+
 module.exports = {
     criarMenuFeedback,
     inserirFeedbackMenu,
     handleFeedbackMenu,
     handleFeedbackModal,
-    limparMenusOrfaos
+    limparMenusOrfaos,
+    removerFeedbackMenu
 };

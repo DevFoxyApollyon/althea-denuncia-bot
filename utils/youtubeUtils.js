@@ -1,6 +1,7 @@
-﻿const fetch = require('node-fetch');
+const fetch = require('node-fetch');
 const { EmbedBuilder } = require('discord.js');
 const dateUtils = require('./dateUtils');
+const { usuarioIsento } = require('./usuariosIsentos');
 
 const GIFS_YOUTUBE = {
   divulgacao: 'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzF2b3lld3FiM2h2dTBmYnk0NXlqYmZmcHZwNHhpY3BiNHE3YTAzZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/GpyS1lJXJYupG/giphy.gif',
@@ -10,7 +11,7 @@ const GIFS_YOUTUBE = {
 const TEMPO_AVISO_CANAL = 10_000;
 
 function extractYouTubeVideoId(url) {
-  const regex = /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([\w-]{11})/;
+  const regex = /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/|live\/))([\w-]{11})/;
   const match = url.match(regex);
   return match ? match[1] : null;
 }
@@ -158,6 +159,8 @@ async function handleHLDivulgacao(message, videoTitle) {
 }
 
 async function handleYoutubeDenuncia(message) {
+  if (await usuarioIsento(message.author.id)) return false;
+
   const isDenuncia = message.channel?.name?.toLowerCase().includes('denúncia');
   if (!isDenuncia || !message.content) return false;
 
@@ -173,7 +176,7 @@ async function handleYoutubeDenuncia(message) {
       await handleHLDivulgacao(message, title || 'Link inválido ou indevido');
       return true;
     }
-  } 
+  }
 
   return false;
 }

@@ -45,6 +45,25 @@ const denunciaSchema = new mongoose.Schema({
     type: String, 
     required: true 
   },
+  mensagens: [{
+    _id: false,
+    mensagemId: { type: String, required: true },
+    autorId: { type: String, required: true },
+    autorNome: { type: String, default: '' },
+    conteudo: { type: String, default: '' },
+    dataCriacao: { type: Date, required: true },
+    editadaEm: { type: Date, default: null },
+    anexos: [{
+      _id: false,
+      id: { type: String, default: '' },
+      nome: { type: String, default: '' },
+      url: { type: String, default: '' },
+      tipo: { type: String, default: '' },
+      tamanho: { type: Number, default: null }
+    }],
+    embeds: { type: mongoose.Schema.Types.Mixed, default: [] },
+    apagadaEm: { type: Date, default: null }
+  }],
   platform: { 
     type: String, 
     required: true, 
@@ -57,7 +76,7 @@ const denunciaSchema = new mongoose.Schema({
   status: { 
     type: String, 
     required: true, 
-    enum: ['pendente', 'aceita', 'recusada', 'analise'],
+    enum: ['pendente', 'reivindicacao', 'aceita', 'recusada', 'analise'],
     default: 'pendente'
   },
   dataCriacao: { 

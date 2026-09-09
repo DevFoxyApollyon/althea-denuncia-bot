@@ -7,9 +7,7 @@ const {
   handleDenunciaMobile,
   handleModalSubmit, 
   handleMyDenunciasButton,    
-  handleConsultaModalSubmit,  
-  handleDenunciaButtons,
-  handleDenunciaModals
+  handleConsultaModalSubmit
 } = require('../commands/denuncia');
 
 const {
@@ -17,29 +15,31 @@ const {
   handlePunishmentModal,
   handleClaimButton,
   handleAddPlayer,
-  handleAddPlayerModal
+  handleAddPlayerModal,
+  handleLogAceitarButton,
+  handleLogRecusarButton
 } = require('../Handlers/handlerStatusButton');
 
 const { handleExportButton } = require('../Handlers/exportDenuncia');
 
 const {
-  handleInputIdDenuncia,
-  handleModalIdParaCorrecaoDenuncia,
-  handleEditarDenunciaIdButton,
-  handleCorrecaoModalIdSubmit,
-  handleInputIdLogAceite,
-  handleModalLogMessageIdCorrecaoAceite,
-  handleEditarAceiteModal,
-  handleConfirmarCorrecaoAceite,
-  handleSalvarCorrecaoAceite
-} = require('../commands/correcao');
+  handleCorrigirDenunciaButton,
+  handleSalvarCorrigirDenuncia
+} = require('./corrigirHandler');
 
 const {
   createChannelsModal1,
   createChannelsModal2,
+  createChannelsModal3,
   createRolesModal1,
   createRolesModal2,
-  showConfig
+  createExemptUsersModal,
+  saveExemptUsers,
+  showConfig,
+  hasPermission,
+  cachePanelConfig,
+  getPanelConfig,
+  getPanelExemptUsers
 } = require('../commands/painel');
 
 const { handleStatusButtons } = require('../commands/status');
@@ -56,7 +56,7 @@ async function handlePanelModalSubmit(interaction) {
     if (!config) {
       config = new Config({
         guildId: interaction.guild.id,
-        channels: { pc: '', mobile: '', logs: '', log: '', analysis: '', topDaily: '' },
+        channels: { pc: '', mobile: '', logs: '', log: '', backup: '', armazem: '', registro: '', cloud: '', canalDenuncia: '', analysis: '', topDaily: '', databaseprovas: '' },
         roles: { permitido: '', pc: '', administrador: '', responsavel_admin: '' },
         updatedBy: interaction.user.tag
       });
@@ -70,8 +70,15 @@ async function handlePanelModalSubmit(interaction) {
         break;
       case 'channels_modal_2':
         config.channels.log = fields.getTextInputValue('log_admin_channel').trim();
+        config.channels.backup = fields.getTextInputValue('backup_channel').trim();
+        config.channels.armazem = fields.getTextInputValue('armazem_channel').trim();
         config.channels.analysis = fields.getTextInputValue('analysis_channel').trim();
         config.channels.topDaily = fields.getTextInputValue('top_daily_channel').trim();
+        break;
+      case 'channels_modal_3':
+        config.channels.registro = fields.getTextInputValue('registro_channel').trim();
+        config.channels.cloud = fields.getTextInputValue('cloud_channel').trim();
+        config.channels.canalDenuncia = fields.getTextInputValue('canal_denuncia_channel').trim();
         break;
       case 'roles_modal_1':
         config.roles.permitido = fields.getTextInputValue('permitido_role').trim();
@@ -88,6 +95,7 @@ async function handlePanelModalSubmit(interaction) {
     config.lastUpdated = new Date();
     config.updatedBy = interaction.user.tag;
     await config.save();
+    cachePanelConfig(interaction.guild.id, config);
 
     await interaction.editReply({ content: '✅ Configuração salva com sucesso!' });
 
@@ -98,6 +106,89 @@ async function handlePanelModalSubmit(interaction) {
     } else {
       await interaction.reply({ content: '❌ Erro ao salvar configurações.', ephemeral: true });
     }
+  }
+}
+
+async function handleGlobalExemptUsersSubmit(interaction) {
+  try {
+    if (!await hasPermission(interaction)) {
+      return interaction.reply({ content: '❌ Sem permissão.', flags: [64] });
+    }
+
+    await interaction.deferReply({ flags: 64 });
+    const users = await saveExemptUsers(interaction);
+    await interaction.editReply({
+      content: users.length
+        ? `✅ Lista global atualizada com **${users.length}** usuário(s) isento(s).`
+        : '✅ Lista global de usuários isentos foi esvaziada.'
+    });
+  } catch (error) {
+    console.error('Erro ao salvar usuários isentos:', error);
+    const errorMessage = error?.message?.includes('nenhum ID')
+      ? error.message
+      : '❌ Erro ao salvar usuários isentos. Verifique a conexão com o banco de dados.';
+    if (interaction.replied || interaction.deferred) {
+      await interaction.editReply({ content: errorMessage });
+    } else {
+      await interaction.reply({ content: errorMessage, flags: [64] });
+    }
+  }
+}
+
+async function handlePanelMenu(interaction) {
+  if (!await hasPermission(interaction)) {
+    return interaction.reply({ content: '❌ Sem permissão.', flags: [64] });
+  }
+
+  const cachedConfig = getPanelConfig(interaction.guild.id);
+  const [selectedOption, ...encodedValues] = interaction.values[0].split('|');
+  const encodedConfig = {
+    channels: {},
+    roles: {}
+  };
+
+  if (selectedOption === 'edit_channels_1') {
+    [encodedConfig.channels.pc, encodedConfig.channels.mobile, encodedConfig.channels.logs] = encodedValues;
+  } else if (selectedOption === 'edit_channels_2') {
+    [encodedConfig.channels.log, encodedConfig.channels.backup, encodedConfig.channels.armazem, encodedConfig.channels.analysis, encodedConfig.channels.topDaily] = encodedValues;
+  } else if (selectedOption === 'edit_channels_3') {
+    [encodedConfig.channels.registro, encodedConfig.channels.cloud, encodedConfig.channels.canalDenuncia] = encodedValues;
+  } else if (selectedOption === 'edit_roles_1') {
+    [encodedConfig.roles.permitido, encodedConfig.roles.pc] = encodedValues;
+  } else if (selectedOption === 'edit_roles_2') {
+    [encodedConfig.roles.administrador, encodedConfig.roles.responsavel_admin] = encodedValues;
+  }
+
+  const config = cachedConfig || encodedConfig;
+
+  switch (selectedOption) {
+    case 'view_config': {
+      await interaction.deferReply({ flags: [64] });
+      const config = await Config.findOne({ guildId: interaction.guild.id });
+      cachePanelConfig(interaction.guild.id, config);
+      await showConfig(interaction, config);
+      break;
+    }
+    case 'edit_exempt_users':
+      await interaction.showModal(createExemptUsersModal(getPanelExemptUsers(interaction.guild.id)));
+      break;
+    case 'edit_channels_1':
+      await interaction.showModal(createChannelsModal1(config));
+      break;
+    case 'edit_channels_2':
+      await interaction.showModal(createChannelsModal2(config));
+      break;
+    case 'edit_channels_3':
+      await interaction.showModal(createChannelsModal3(config));
+      break;
+    case 'edit_roles_1':
+      await interaction.showModal(createRolesModal1(config));
+      break;
+    case 'edit_roles_2':
+      await interaction.showModal(createRolesModal2(config));
+      break;
+    default:
+      await interaction.reply({ content: '❌ Opção do painel inválida.', flags: [64] });
   }
 }
 
@@ -129,6 +220,12 @@ async function interactionHandler(interaction) {
       return;
     }
 
+    // ======== MENU DO PAINEL ========
+    if (interaction.isStringSelectMenu() && interaction.customId === 'panel_menu') {
+      await handlePanelMenu(interaction);
+      return;
+    }
+
     // ======== FEEDBACK MODAL ========
     if (interaction.isModalSubmit() && interaction.customId.startsWith('feedback:modal:')) {
       try {
@@ -145,50 +242,26 @@ async function interactionHandler(interaction) {
     }
 
     // ======== CORREÇÃO ACEITE ========
-    if (interaction.isButton() && interaction.customId === 'abrir_input_id_log_aceite') {
-      await handleInputIdLogAceite(interaction);
+    if (interaction.isButton() && (interaction.customId.startsWith('log_aceitar_') || interaction.customId.startsWith('log_recusar_'))) {
+      const messageId = interaction.customId.replace(/^log_(?:aceitar|recusar)_/, '');
+      const denuncia = await Denuncia.findOne({ messageId, guildId: interaction.guild.id });
+      if (!denuncia) return interaction.reply({ content: '❌ Denúncia não encontrada.', flags: [64] });
+
+      if (interaction.customId.startsWith('log_aceitar_')) {
+        await handleLogAceitarButton(interaction, denuncia);
+      } else {
+        await handleLogRecusarButton(interaction, denuncia);
+      }
       return;
     }
 
-    if (interaction.type === InteractionType.ModalSubmit && interaction.customId === 'modal_logmessageid_para_correcao_aceite') {
-      await handleModalLogMessageIdCorrecaoAceite(interaction);
+    if (interaction.isButton() && interaction.customId === 'corrigir_denuncia_aceita') {
+      await handleCorrigirDenunciaButton(interaction);
       return;
     }
 
-    if (interaction.isButton() && interaction.customId.startsWith('salvar_correcao_aceite_')) {
-      await handleEditarAceiteModal(interaction);
-      return;
-    }
-
-    if (interaction.isButton() && interaction.customId.startsWith('confirmar_correcao_aceite_')) {
-      await handleConfirmarCorrecaoAceite(interaction);
-      return;
-    }
-
-    if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('salvar_correcao_aceite_')) {
-      await handleSalvarCorrecaoAceite(interaction);
-      return;
-    }
-
-    // ======== CORREÇÃO DENÚNCIA ========
-    if (interaction.isButton() && interaction.customId === 'abrir_input_id_denuncia') {
-      await handleInputIdDenuncia(interaction);
-      return;
-    }
-
-    if (interaction.type === InteractionType.ModalSubmit && interaction.customId === 'modal_id_para_correcao_denuncia') {
-      await handleModalIdParaCorrecaoDenuncia(interaction);
-      return;
-    }
-
-    if (interaction.isButton() && interaction.customId.startsWith('editar_denuncia_messageId_')) {
-      await handleEditarDenunciaIdButton(interaction);
-      return;
-    }
-
-    if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('correcao_modal_messageId_')) {
-      const messageId = interaction.customId.replace('correcao_modal_messageId_', '');
-      await handleCorrecaoModalIdSubmit(interaction, messageId);
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('corrigir_modal_aceite_')) {
+      await handleSalvarCorrigirDenuncia(interaction);
       return;
     }
 
@@ -262,6 +335,11 @@ async function interactionHandler(interaction) {
         case 'roles_modal_2':
           await handlePanelModalSubmit(interaction);
           break;
+
+        case 'global_exempt_users_modal':
+          await handleGlobalExemptUsersSubmit(interaction);
+          break;
+
       }
     }
 

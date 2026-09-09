@@ -44,6 +44,7 @@ async function repararContasComDiscordId(client) {
             if (!guild) {
                 await Usuarios.deleteOne({ _id: registro._id });
                 totalRemovidos++;
+                log.warn(`🗑️ [REPARO] Removido userId=${registro.userId}: servidor não encontrado.`);
                 continue;
             }
 
@@ -56,6 +57,7 @@ async function repararContasComDiscordId(client) {
             if (!auditLogs) {
                 await Usuarios.deleteOne({ _id: registro._id });
                 totalRemovidos++;
+                log.warn(`🗑️ [REPARO] Removido userId=${registro.userId}: não foi possível consultar o histórico.`);
                 continue;
             }
 
@@ -75,15 +77,17 @@ async function repararContasComDiscordId(client) {
                 if (!contaDoNick) {
                     await Usuarios.deleteOne({ _id: registro._id });
                     totalRemovidos++;
+                    log.warn(`🗑️ [REPARO] Removido userId=${registro.userId}: conta não encontrada no nickname.`);
                     await sleep(DELAY_ENTRE_ITENS_MS);
                     continue;
                 }
 
                 await Usuarios.updateOne(
                     { _id: registro._id },
-                    { $set: { conta: contaDoNick, updatedAt: new Date() } }
+                    { $set: { conta: contaDoNick, nickname: nickAtual, updatedAt: new Date() } }
                 );
                 totalReparados++;
+                log.success(`🔧 [REPARO] Reparado userId=${registro.userId}: conta=${contaDoNick}.`);
                 await sleep(DELAY_ENTRE_ITENS_MS);
                 continue;
             }
@@ -94,15 +98,17 @@ async function repararContasComDiscordId(client) {
             if (!contaExtraida) {
                 await Usuarios.deleteOne({ _id: registro._id });
                 totalRemovidos++;
+                log.warn(`🗑️ [REPARO] Removido userId=${registro.userId}: histórico sem conta válida.`);
                 await sleep(DELAY_ENTRE_ITENS_MS);
                 continue;
             }
 
             await Usuarios.updateOne(
                 { _id: registro._id },
-                { $set: { conta: contaExtraida, updatedAt: new Date() } }
+                { $set: { conta: contaExtraida, nickname: nickDoLog, updatedAt: new Date() } }
             );
             totalReparados++;
+            log.success(`🔧 [REPARO] Reparado userId=${registro.userId}: conta=${contaExtraida}.`);
         } catch (err) {
             log.error(`[REPARO] Erro ao reparar userId ${registro.userId}: ${err.message}`);
         }
@@ -259,7 +265,7 @@ async function verificarNicknames(client) {
 function iniciarPoller(client) {
     log.info(chalk.magenta(`Poller iniciado. Verificando a cada ${chalk.bold('5 minutos')}.`));
 
-    repararContasComDiscordId(client).then(() => {
+    return repararContasComDiscordId(client).then(() => {
         verificarNicknames(client);
         setInterval(() => verificarNicknames(client), INTERVALO_MS);
     });

@@ -1,6 +1,13 @@
-﻿const { EmbedBuilder, MessageFlags } = require('discord.js');
+﻿const { EmbedBuilder } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const dateUtils = require('../utils/dateUtils');
+
+const EMBED_FIELD_LIMIT = 1024;
+const STATUS_META = {
+    analise: { label: '🔎 Em Análise', color: '#FFA500', title: '📋 Denúncia em Análise' },
+    aceita: { label: '✅ Aceita', color: '#00FF00', title: '✅ Denúncia Aceita' },
+    recusada: { label: '❌ Recusada', color: '#FF0000', title: '❌ Denúncia Recusada' },
+};
 
 class LogManager {
     constructor(client, config) {
@@ -10,26 +17,94 @@ class LogManager {
 
     truncateText(text, maxLength = 1024) {
         if (!text) return 'Não informado';
-        return text.length > maxLength ? text.substring(0, maxLength - 3) + '...' : text;
+        const value = String(text);
+        return value.length > maxLength ? `${value.substring(0, maxLength - 3)}...` : value;
     }
 
     formatProvas(provas) {
         if (!provas) return 'Não informado';
-        const links = provas.split(/[,\n]/).filter(url => url.trim().startsWith('http'));
+        const links = String(provas).split(/[,\n]/).filter(url => url.trim().startsWith('http'));
         if (links.length === 0) return 'Não informado';
-        return links.map((url, index) => `🔗 [Evidência ${index + 1}](${url.trim()})`).join('\n');
+        return this.truncateText(
+            links.map((url, index) => `🔗 [Evidência ${index + 1}](${url.trim()})`).join('\n'),
+            EMBED_FIELD_LIMIT
+        );
     }
 
     getStatusEmoji(type) {
-        const statusMap = {
-            analise: '🔎 Em Análise',
-            aceita: '✅ Aceita',
-            recusada: '❌ Recusada'
-        };
-        return statusMap[type] || '❓ Desconhecido';
+        return STATUS_META[type]?.label || '❓ Desconhecido';
     }
 
-    async createLogEmbed(type, staffUser, threadId) {
+    getStatusMeta(type) {
+        return STATUS_META[type] || {
+            label: '❓ Desconhecido',
+            color: '#2f3136',
+            title: '📋 Registro de Denúncia'
+        };
+    }
+
+    formatHistory(historico = []) {
+        if (!historico.length) return null;
+
+        return this.truncateText(
+            historico
+                .slice(-3)
+                .reverse()
+                .map(item => `${dateUtils.getDiscordTimestamp(item.data, 'R')} - ${item.acao} por <@${item.staffId}>`)
+                .join('\n'),
+            EMBED_FIELD_LIMIT
+        );
+    }
+
+    createBaseEmbed(type, staffUser) {
+        const status = this.getStatusMeta(type);
+        const staffTag = staffUser?.tag || staffUser?.username || 'Sistema';
+
+        return new EmbedBuilder()
+            .setColor(status.color)
+            .setTitle(status.title)
+            .setTimestamp()
+            .setAuthor({
+                name: 'Sistema de Denúncias',
+                iconURL: this.client.user?.displayAvatarURL()
+            })
+            .setFooter({
+                text: `Staff: ${staffTag} • Brasília: ${dateUtils.getBrasiliaDateTime()}`,
+                iconURL: staffUser?.displayAvatarURL?.()
+            });
+    }
+
+    getDenunciaUrl(denuncia) {
+        if (!denuncia?.messageId || !this.config?.guildId || !denuncia.channelId) return null;
+        return `https://discord.com/channels/${this.config.guildId}/${denuncia.channelId}/${denuncia.messageId}`;
+    }
+
+    createDenunciaFields(type, denuncia, staffUser, actionSource = 'botão') {
+        const messageId = denuncia?.messageId || denuncia?._id || 'N/A';
+        const fields = [
+            { name: '👤 Responsável', value: `${staffUser || 'Sistema'}`, inline: true },
+            {
+                name: '⏱️ Criado por',
+                value: `<@${denuncia.criadoPor}> (${dateUtils.getDiscordTimestamp(denuncia.createdAt || denuncia.dataCriacao || new Date(), 'R')})`,
+                inline: false
+            },
+            { name: '🆔 Denúncia', value: `\`${String(messageId)}\``, inline: true }
+        ];
+
+        if (type === 'aceita') {
+            fields.push(
+                { name: '🎯 Acusado', value: this.truncateText(`\`${denuncia.acusadoId || denuncia.acusado || 'Não informado'}\``), inline: false }
+            );
+        } else {
+            fields.push(
+                { name: '🎯 Acusado', value: this.truncateText(`\`${denuncia.acusado || 'Não informado'}\``), inline: false }
+            );
+        }
+
+        return fields;
+    }
+
+    async createLogEmbed(type, staffUser, threadId, options = {}) {
         try {
             const denuncia = await Denuncia.findOne({ threadId }).lean();
 
@@ -38,64 +113,20 @@ class LogManager {
                 return null;
             }
 
-            const colorMap = { analise: '#FFA500', aceita: '#00FF00', recusada: '#FF0000' };
-            const titleMap = {
-                analise: '📋 Denúncia em Análise',
-                aceita: '✅ Denúncia Aceita',
-                recusada: '❌ Denúncia Recusada'
-            };
+            const actionSource = options.actionSource || 'botão';
+            const embed = this.createBaseEmbed(type, staffUser);
+            const denunciaUrl = this.getDenunciaUrl(denuncia);
+            if (denunciaUrl) embed.setURL(denunciaUrl);
+            embed.addFields(...this.createDenunciaFields(type, denuncia, staffUser, actionSource));
 
-            const embed = new EmbedBuilder()
-                .setColor(colorMap[type] || '#2f3136')
-                .setTitle(titleMap[type])
-                .setTimestamp()
-                .setAuthor({
-                    name: 'Sistema de Denúncias',
-                    iconURL: this.client.user.displayAvatarURL()
-                })
-                .setFooter({
-                    text: `Staff: ${staffUser.tag} • Brasília: ${dateUtils.getBrasiliaDateTime()}`,
-                    iconURL: staffUser.displayAvatarURL()
-                });
-
-            embed.addFields(
-                { name: '👤 Staff Responsável', value: `${staffUser}`, inline: false },
-                { name: '📊 Status Atual', value: this.getStatusEmoji(type), inline: false },
-                { name: '⏱️ Criado por', value: `<@${denuncia.criadoPor}> (${dateUtils.getDiscordTimestamp(denuncia.createdAt || new Date(), 'R')})`, inline: false },
-                { name: '💻 Plataforma', value: `\`${denuncia.platform || 'Não informada'}\``, inline: false }
-            );
-
-            if (type === 'aceita') {
-                embed.addFields(
-                    { name: '🎯 Acusado', value: `\`${denuncia.acusadoId || denuncia.acusado || 'Não informado'}\``, inline: false },
-                    { name: '⚖️ Motivo da Punição', value: this.truncateText(denuncia.motivoAceite), inline: false },
-                    { name: '📅 Data da Punição', value: denuncia.dataPunicao || 'Registrada agora', inline: false }
-                );
-            } else {
-                embed.addFields(
-                    { name: '🎯 Acusado', value: `\`${denuncia.acusado || 'Não informado'}\``, inline: false },
-                    { name: '📝 Motivo', value: this.truncateText(denuncia.motivo), inline: false }
-                );
-            }
-
-            const provasText = this.formatProvas(denuncia.provas);
-            const denunciaLink = denuncia.messageId 
-                ? `🔗 [Mensagem Original](https://discord.com/channels/${this.config.guildId}/${denuncia.channelId}/${denuncia.messageId})`
+            const denunciaLink = denunciaUrl
+                ? `🔗 [Abrir denúncia](${denunciaUrl})`
                 : 'Não disponível';
-            const provasComLink = provasText === 'Não informado' 
-                ? denunciaLink 
-                : `${denunciaLink}\n\n${provasText}`;
-            
-            embed.addFields({ name: '🔍 Provas/Evidências', value: provasComLink, inline: false });
- 
-            if (denuncia.historico?.length > 0) {
-                const hist = denuncia.historico
-                    .slice(-3) 
-                    .reverse()
-                    .map(h => `${dateUtils.getDiscordTimestamp(h.data, 'R')} - ${h.acao} por <@${h.staffId}>`)
-                    .join('\n');
-                embed.addFields({ name: '📜 Histórico Recente', value: hist, inline: false });
-            }
+
+            embed.addFields({ name: '🔗 Denúncia', value: this.truncateText(denunciaLink), inline: false });
+
+            const history = this.formatHistory(denuncia.historico);
+            if (history) embed.addFields({ name: '📜 Histórico Recente', value: history, inline: false });
 
             return embed;
         } catch (error) {

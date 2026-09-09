@@ -1,18 +1,19 @@
-﻿const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
+﻿const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
 const { LogManager } = require('./LogManager');
 const ModerationAction = require('../models/ModerationAction');
-const { getBrasiliaDate, formatTimeBR } = require('../utils/dateUtils');
+const { getBrasiliaDate, formatTimeBR, getBrasiliaDateTime } = require('../utils/dateUtils');
 const { Logger } = require('../utils/logger');
-const { inserirFeedbackMenu } = require('../utils/feedback');
+const { inserirFeedbackMenu, removerFeedbackMenu } = require('../utils/feedback');
 const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
+const { createCorrectionButtonRow } = require('./corrigirHandler');
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 const DM_IGNORED_CODES = [50007, 50278];
 
-const CLAIM_COOLDOWN_MS = 5 * 60 * 1000;
-const GUILD_COOLDOWN = '0';
+const CLAIM_COOLDOWN_MS = 6 * 60 * 1000;
+const GUILD_COOLDOWN = '817924556358156360';
 const _claimCooldowns = new Map();
 const _sendOnceLocks = new Set();
 
@@ -213,6 +214,23 @@ function createLogsMessage(type, user, data = {}) {
   }
 }
 
+function createLogActionRow(denunciaMessageId, disabled = false) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`log_aceitar_${denunciaMessageId}`)
+      .setLabel('Aceitar')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`log_recusar_${denunciaMessageId}`)
+      .setLabel('Recusar')
+      .setEmoji('❌')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(disabled)
+  );
+}
+
 function createAnalysisUpdateMessage(type, data = {}) {
   const denunciaData = data.denuncia || {};
   const link = data.messageUrl || '';
@@ -327,9 +345,12 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         const logsContent = createLogsMessage(newStatus, user, data);
         try {
           if (discordLogMessage) {
-            await discordLogMessage.edit(logsContent);
+            await discordLogMessage.edit({ content: logsContent, components: [createLogActionRow(data.denuncia?.messageId || data.messageUrl)] });
           } else {
-            discordLogMessage = await logsChannel.send(logsContent);
+            discordLogMessage = await logsChannel.send({
+              content: logsContent,
+              components: [createLogActionRow(data.denuncia?.messageId || data.messageUrl)]
+            });
           }
         } catch (logError) {
           log.error(`[${formatTimeBR(getBrasiliaDate())}] Erro ao enviar/editar mensagem de log`, logError);
@@ -343,7 +364,13 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         logChannelId: logsChannel ? logsChannel.id : null,
         denuncia: data.denuncia,
       });
-      await sendOnce(channel, statusMsgContent);
+      const statusMessage = await sendOnce(channel, statusMsgContent);
+      if (statusMessage) {
+        const correctionRow = createCorrectionButtonRow();
+        await statusMessage.edit({ content: statusMsgContent, components: [correctionRow] }).catch((error) =>
+          log.warn('Falha ao adicionar botão de correção à mensagem aceita', error?.message)
+        );
+      }
 
       if (discordAnalysisMessage) {
         const analysisUpdateContent = createAnalysisUpdateMessage('aceita', data);
@@ -366,7 +393,10 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         logChannelId: logsChannel ? logsChannel.id : null,
         denuncia: data.denuncia,
       });
-      await sendOnce(channel, statusMsgContent);
+      const sentStatusMessage = await sendOnce(channel, statusMsgContent);
+      if (sentStatusMessage) {
+        await sentStatusMessage.edit({ components: [] }).catch(() => {});
+      }
       if (discordLogMessage) {
         await discordLogMessage.delete().catch((e) => log.warn('Falha ao deletar mensagem de log', e));
         discordLogMessage = null;
@@ -705,7 +735,7 @@ async function handleAceitar(interaction, denuncia, messageUrl) {
   }
 }
 
-async function handleRecusar(interaction, denuncia, config, messageUrl, logsChannel) {
+async function handleRecusar(interaction, denuncia, config, messageUrl, logsChannel, actionSource = 'botão') {
   try {
     await safeDefer(interaction, true);
     await safeReplyOrEdit(interaction, { content: '⏳ Processando...' });
@@ -741,6 +771,14 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
       analysisMessageId: denuncia.analysisMessageId,
       denuncia,
     });
+    await removerFeedbackMenu(interaction.client, denuncia._id);
+
+    await Denuncia.updateOne({ _id: denuncia._id }, { $push: { historico: {
+      acao: actionSource === 'palavra-chave' ? 'recusa_automatica' : 'recusada',
+      staffId: interaction.user.id,
+      data: new Date(),
+      detalhes: { origem: actionSource }
+    } } });
 
     await registrarAcaoModerador(interaction.user.id, 'recusada', denuncia._id, interaction.guild.id);
     await updateDenunciaStatus(denuncia._id, {
@@ -754,7 +792,7 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
     });
 
     const logManager = new LogManager(interaction.client, config);
-    const logEmbed = await logManager.createLogEmbed('recusada', interaction.user, interaction.channel.id);
+    const logEmbed = await logManager.createLogEmbed('recusada', interaction.user, interaction.channel.id, { actionSource });
 
     if (config?.channels?.log) {
       const logChannel = interaction.client.channels.cache.get(config.channels.log);
@@ -768,16 +806,20 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
         if (denunciante) {
           const denunciaLink =
             messageUrl || `https://discord.com/channels/${interaction.guild.id}/${interaction.channel.id}`;
-          await denunciante.send(
-            `Sua denúncia foi recusada pela equipe.
-` +
-              `Link da denúncia: ${denunciaLink}
+          const recusaEmbed = new EmbedBuilder()
+            .setColor('#E74C3C')
+            .setTitle('❌ Denúncia recusada')
+            .setDescription('Sua denúncia foi analisada pela equipe e não foi aprovada.')
+            .addFields(
+              { name: '🎯 Acusado', value: `\`${denuncia.acusado || 'Não informado'}\``, inline: true },
+              { name: '📌 Status', value: 'Recusada', inline: true },
+              { name: '🔗 Acessar denúncia', value: `[Abrir tópico](${denunciaLink})`, inline: false },
+              { name: 'ℹ️ Próximos passos', value: 'Se você acredita que houve um erro, procure um responsável por denúncias para solicitar uma reanálise.', inline: false }
+            )
+            .setFooter({ text: 'Sistema de Denúncias • Brasil RolePlay' })
+            .setTimestamp();
 
-` +
-              `Se você acredita que sua denúncia foi analisada de forma errada, procure um responsável por denúncias no servidor.
-` +
-              `Denúncias podem ser reanalisadas por um responsável, caso haja justificativa.`
-          );
+          await denunciante.send({ embeds: [recusaEmbed] });
         }
       } else {
         log.warn('Não foi possível enviar DM: criadoPor da denúncia é inválido', { userId });
@@ -806,6 +848,86 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
       flags: [MessageFlags.Ephemeral],
     });
   }
+}
+
+async function handleRecusarPorMensagem(message, denuncia, config) {
+  const interaction = {
+    guild: message.guild,
+    channel: message.channel,
+    client: message.client,
+    user: message.author,
+    member: message.member,
+    message,
+    deferred: false,
+    replied: false,
+    isRepliable: () => true,
+    deferReply: async () => { interaction.deferred = true; },
+    editReply: async () => null,
+    reply: async () => null,
+  };
+
+  const logsChannel = config?.channels?.logs
+    ? message.guild.channels.cache.get(config.channels.logs)
+    : null;
+
+  await handleRecusar(interaction, denuncia, config, message.url, logsChannel, 'palavra-chave');
+}
+
+async function handleLogAceitarButton(interaction, denuncia) {
+  const config = await Config.findOne({ guildId: interaction.guild.id });
+  const isResponsavel = config?.roles?.responsavel_admin && interaction.member?.roles.cache.has(config.roles.responsavel_admin);
+
+  if (!isResponsavel) {
+    const cargo = config?.roles?.responsavel_admin ? `<@&${config.roles.responsavel_admin}>` : '`Responsável Admin não configurado`';
+    return interaction.reply({ content: `❌ Apenas o cargo ${cargo} pode usar estes botões.`, flags: [MessageFlags.Ephemeral] });
+  }
+
+  const confirmation = ` ||${getBrasiliaDateTime()}||`;
+  await interaction.message.edit({
+    content: `${interaction.message.content}${confirmation}`,
+    components: []
+  });
+  await interaction.reply({ content: '✅  confirmação aceita no canal de logs.', flags: [MessageFlags.Ephemeral] });
+}
+
+async function handleLogRecusarButton(interaction, denuncia) {
+  const config = await Config.findOne({ guildId: interaction.guild.id });
+  const isResponsavel = config?.roles?.responsavel_admin && interaction.member?.roles.cache.has(config.roles.responsavel_admin);
+
+  if (!isResponsavel) {
+    const cargo = config?.roles?.responsavel_admin ? `<@&${config.roles.responsavel_admin}>` : '`Responsável Admin não configurado`';
+    return interaction.reply({ content: `❌ Apenas o cargo ${cargo} pode usar estes botões.`, flags: [MessageFlags.Ephemeral] });
+  }
+
+  const topic = await interaction.guild.channels.fetch(denuncia.threadId).catch(() => null);
+  if (!topic) return interaction.reply({ content: '❌ Tópico da denúncia não encontrado.', flags: [MessageFlags.Ephemeral] });
+
+  const proxyInteraction = {
+    channel: topic,
+    user: interaction.user,
+    member: interaction.member,
+    client: interaction.client,
+    guild: interaction.guild,
+    message: interaction.message,
+    isRepliable: () => true,
+    deferred: false,
+    replied: false,
+    deferReply: async (payload) => {
+      proxyInteraction.deferred = true;
+      return interaction.deferReply(payload);
+    },
+    editReply: (payload) => interaction.editReply(payload),
+    reply: (payload) => interaction.reply(payload),
+  };
+
+  await handleRecusar(
+    proxyInteraction,
+    denuncia,
+    config,
+    `https://discord.com/channels/${interaction.guild.id}/${denuncia.channelId}/${denuncia.messageId}`,
+    interaction.channel,
+    'botão de log'
+  );
 }
 
 async function handlePunishmentModal(interaction) {
@@ -851,7 +973,7 @@ async function handlePunishmentModal(interaction) {
           const usuarioAceito = await require('../models/Usuario').findOne({
             guildId: interaction.guild.id,
             conta: id,
-          });
+          }).sort({ updatedAt: -1 });
           if (!usuarioAceito?.userId) {
             teveIdAusente = true;
             return null;
@@ -886,6 +1008,9 @@ async function handlePunishmentModal(interaction) {
     });
 
     await registrarAcaoModerador(interaction.user.id, 'aceita', denuncia._id, interaction.guild.id);
+
+    const acusadoUserIdsFinal = [...new Set(usuarioAceitoIds)];
+
     await updateDenunciaStatus(denuncia._id, {
       status: 'aceita',
       staffId: interaction.user.id,
@@ -894,9 +1019,11 @@ async function handlePunishmentModal(interaction) {
       motivoAceite: motivo,
       dataPunicao,
       logMessageId: logMessage?.logMessage ? logMessage.logMessage.id : denuncia.logMessageId || null,
-      acusadoUserIds: [...new Set(usuarioAceitoIds)],
+      acusadoUserIds: acusadoUserIdsFinal,
       restritoParticipacao: restritoParticipacaoAceita,
     });
+
+    registrarTopicoRestrito(denuncia.threadId, denuncia.criadoPor, acusadoUserIdsFinal, restritoParticipacaoAceita);
 
     const logManager = new LogManager(interaction.client, config);
     const logEmbed = await logManager.createLogEmbed('aceita', interaction.user, interaction.channel.id);
@@ -913,22 +1040,21 @@ async function handlePunishmentModal(interaction) {
         if (denunciante) {
           const denunciaLink =
             messageUrl || `https://discord.com/channels/${interaction.guild.id}/${interaction.channel.id}`;
-          await denunciante.send(
-            `Sua denúncia foi aceita pela equipe!
-` +
-              `Link da denúncia: ${denunciaLink}
-` +
-              `ID do acusado: ${acusadoId}
-` +
-              `Motivo: ${motivo}
-` +
-              `Data da punição: ${dataPunicao}
+          const aceiteEmbed = new EmbedBuilder()
+            .setColor('#2ECC71')
+            .setTitle('✅ Denúncia aceita')
+            .setDescription('Sua denúncia foi analisada e aceita pela equipe.')
+            .addFields(
+              { name: '🎯 ID do acusado', value: `\`${acusadoId}\``, inline: true },
+              { name: '📅 Data da punição', value: `\`${dataPunicao}\``, inline: true },
+              { name: '⚖️ Motivo da punição', value: motivo || 'Não informado', inline: false },
+              { name: '🔗 Acessar denúncia', value: `[Abrir tópico](${denunciaLink})`, inline: false },
+              { name: 'ℹ️ Reanálise', value: 'Caso discorde da decisão, procure um responsável por denúncias para solicitar uma reanálise.', inline: false }
+            )
+            .setFooter({ text: 'Sistema de Denúncias • Brasil RolePlay' })
+            .setTimestamp();
 
-` +
-              `Se você acredita que sua denúncia foi analisada de forma errada, procure um responsável por denúncias no servidor.
-` +
-              `Denúncias podem ser reanalisadas por um responsável, caso haja justificativa.`
-          );
+          await denunciante.send({ embeds: [aceiteEmbed] });
         }
       } else {
         log.warn('Não foi possível enviar DM: criadoPor da denúncia é inválido', { userId });
@@ -1107,52 +1233,10 @@ async function handleClaimButton(interaction) {
         return;
       }
 
-      if (!isResponsavelAdmin) {
-        const claimer = await interaction.client.users.fetch(claimedDenuncia.claimedBy).catch(() => null);
-        await safeReplyOrEdit(interaction, {
-          content: `❌ Esta denúncia já foi reivindicada por ${claimer ? claimer.tag : 'outro moderador'}.`,
-        });
-        return;
-      }
-
-      const forcedDenuncia = await Denuncia.findOneAndUpdate(
-        { threadId: interaction.channel.id },
-        {
-          $set: {
-            claimedBy: interaction.user.id,
-            claimedAt: new Date(),
-            status: 'reivindicacao',
-          },
-        },
-        { new: true, sort: { createdAt: -1 } }
-      );
-
-      if (!forcedDenuncia) {
-        await safeReplyOrEdit(interaction, {
-          content: '❌ Não foi possível reivindicar a denúncia. Tente novamente.',
-        });
-        return;
-      }
-
-      await registrarAcaoModerador(interaction.user.id, 'reivindicar', forcedDenuncia._id, interaction.guild.id);
-
-      const claimMessage = `📌 O administrador ${interaction.user} reivindicou esta denúncia e estará analisando.`;
-      await sendOnce(interaction.channel, claimMessage);
-
-      try {
-        await interaction.channel.setName(`📌│${interaction.channel.name.replace(/^(📌|❌|✅|🔎)│/, '')}`);
-      } catch (error) {
-        log.error('Erro ao atualizar nome do canal', error);
-      }
-
-      await safeReplyOrEdit(interaction, { content: '✅ Você reivindicou esta denúncia com sucesso!' });
-
-      try {
-        await atualizarStatusNaMensagem(interaction.client, forcedDenuncia, 'reivindicacao');
-      } catch (e) {
-        log.warn('Falha ao atualizar status na mensagem principal (reivindicacao forcada)', e?.message);
-      }
-
+      const claimer = await interaction.client.users.fetch(claimedDenuncia?.claimedBy).catch(() => null);
+      await safeReplyOrEdit(interaction, {
+        content: `❌ Esta denúncia já foi reivindicada por ${claimer ? claimer.tag : 'outro moderador'}.`,
+      });
       return;
     }
 
@@ -1300,7 +1384,7 @@ async function handleAddPlayerModal(interaction) {
       const usuario = await require('../models/Usuario').findOne({
         guildId: interaction.guild.id,
         $or: [{ conta: playerId }, { userId: playerId }],
-      });
+      }).sort({ updatedAt: -1 });
 
       if (usuario?.userId) {
         playerUserId = String(usuario.userId);
@@ -1379,4 +1463,7 @@ module.exports = {
   handleClaimButton,
   handleAddPlayer,
   handleAddPlayerModal,
+  handleRecusarPorMensagem,
+  handleLogAceitarButton,
+  handleLogRecusarButton,
 };
