@@ -312,6 +312,10 @@ async function interactionHandler(interaction) {
 
         case 'refresh_status':
         case 'detailed_status':
+        case 'status_ping_test':
+        case 'status_cache_clear':
+        case 'status_toggle_autorefresh':
+        case 'status_restart_confirm':
           await handleStatusButtons(interaction);
           break;
       }
