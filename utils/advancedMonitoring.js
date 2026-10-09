@@ -1,12 +1,8 @@
-﻿const { globalCache } = require('./smartCache');
-const chalk = require('chalk');
+const { globalCache } = require('./smartCache');
+const mongoose = require('mongoose');
+const { createLog } = require('./logger');
 
-const log = {
-    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
-};
+const log = createLog('MONITOR');
 
 class AdvancedMonitor {
   constructor() {
@@ -34,7 +30,8 @@ class AdvancedMonitor {
         cpu: {
           current: 0,
           average: 0
-        }
+        },
+        dbLatency: 0
       }
     };
 
@@ -134,7 +131,34 @@ class AdvancedMonitor {
     }
   }
 
+  // Latência real do banco principal (ping), usada pelo painel de status.
+  async measureDbLatency() {
+    try {
+      if (mongoose.connection.readyState !== 1) return this.metrics.system.dbLatency;
+      const inicio = Date.now();
+      await mongoose.connection.db.admin().ping();
+      this.metrics.system.dbLatency = Date.now() - inicio;
+    } catch {
+      this.metrics.system.dbLatency = -1;
+    }
+    return this.metrics.system.dbLatency;
+  }
+
+  getDbLatency() {
+    return this.metrics.system.dbLatency;
+  }
+
+  getTotals() {
+    const somar = (mapa) => [...mapa.values()].reduce((total, item) => total + item.total, 0);
+    return {
+      commands: somar(this.metrics.commands),
+      interactions: somar(this.metrics.interactions),
+      errors: this.metrics.errors.length
+    };
+  }
+
   collectSystemMetrics() {
+    this.measureDbLatency();
     const usage = process.memoryUsage();
     const memoryData = {
       timestamp: Date.now(),

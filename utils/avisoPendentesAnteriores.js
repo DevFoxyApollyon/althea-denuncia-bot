@@ -1,5 +1,5 @@
 const { MessageFlags } = require('discord.js');
-const Config = require('../models/Config');
+const { getConfig } = require('./configCache');
 const Denuncia = require('../models/Denuncia');
 const dateUtils = require('./dateUtils');
 const { usuarioIsento } = require('./usuariosIsentos');
@@ -71,9 +71,7 @@ async function bloquearReivindicacaoSeHouverPendentes(interaction) {
     let pendentes;
     try {
         if (!interaction.guild) return false;
-        const config = await Config.findOne({ guildId: interaction.guild.id })
-            .select('bloquearReivindicacaoComPendentes')
-            .lean();
+        const config = await getConfig(interaction.guild.id);
         if (config?.bloquearReivindicacaoComPendentes === false) return false;
 
         if (ISENTOS_PODEM_BURLAR && await usuarioIsento(interaction.user.id)) {

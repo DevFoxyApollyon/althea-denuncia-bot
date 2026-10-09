@@ -1,4 +1,5 @@
-﻿const chalk = require('chalk');
+const chalk = require('chalk');
+const { createLog } = require('../utils/logger');
 const Usuarios = require('../models/Usuario');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
 
@@ -6,12 +7,7 @@ const INTERVALO_MS       = 5 * 60 * 1000;
 const DELAY_ENTRE_ITENS_MS  = 300;
 const DELAY_ENTRE_GUILDS_MS = 500;
 
-const log = {
-    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[POLLER]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[POLLER]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[POLLER]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[POLLER]')} ${msg}`),
-};
+const log = createLog('POLLER');
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));

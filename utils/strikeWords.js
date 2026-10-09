@@ -1,4 +1,4 @@
-﻿const { EmbedBuilder, MessageReferenceType } = require('discord.js');
+const { EmbedBuilder, MessageReferenceType } = require('discord.js');
 const dateUtils = require('./dateUtils');
 const { usuarioIsento } = require('./usuariosIsentos');
 
@@ -200,6 +200,7 @@ function descricaoMensagemEncaminhada(message) {
 
 const REGEX_EMOJI_CUSTOM = /<a?:\w+:\d+>/;
 
+// eslint-disable-next-line no-misleading-character-class
 const REGEX_EMOJI_UNICODE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
 
 const REGEX_LINK_GIF = /(tenor\.com|giphy\.com|media\.tenor\.com)\/\S+|\.gif(\?\S*)?(\s|$)/i;

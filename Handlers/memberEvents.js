@@ -3,6 +3,9 @@ const Usuarios = require('../models/Usuario');
 const { syncUserOnNicknameChange } = require('../utils/userSyncAndNotify');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
 
+// BOT_ALVO_ID aceita vários IDs separados por vírgula (mesma regra do nicknamePoller).
+const BOT_ALVO_IDS = new Set((process.env.BOT_ALVO_ID || '').split(',').map(id => id.trim()).filter(Boolean));
+
 function registerMemberEvents(client, log) {
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
         try {
@@ -18,7 +21,7 @@ function registerMemberEvents(client, log) {
 
                 entry = auditLogs.entries.find(item =>
                     item.target?.id === newMember.user.id &&
-                    item.executor?.id === process.env.BOT_ALVO_ID &&
+                    BOT_ALVO_IDS.has(item.executor?.id) &&
                     Date.now() - item.createdTimestamp < 15000
                 );
 

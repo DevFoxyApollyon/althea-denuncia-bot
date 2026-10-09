@@ -1,4 +1,4 @@
-﻿const { 
+const { 
     EmbedBuilder, 
     ActionRowBuilder, 
     ButtonBuilder, 
@@ -11,9 +11,8 @@
 
 const { garantirAvisoNoTopo } = require('../Handlers/leiaAvisoHandler');
 const Denuncia = require('../models/Denuncia'); 
-const Config = require('../models/Config'); 
 const Usuario = require('../models/Usuario');
-const { getCachedConfig } = require('../utils/performance');
+const { getConfig: getCachedConfig } = require('../utils/configCache');
 const { handleExportButton } = require('../Handlers/exportDenuncia'); 
 const { handleClaimButton } = require('../Handlers/handlerStatusButton'); 
 const { notificarAcusadoPv } = require('../utils/userSyncAndNotify');
@@ -21,7 +20,7 @@ const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('
 const dateUtils = require('../utils/dateUtils');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
 const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
-const { serializarMensagem, buscarCanal } = require('../utils/denunciaMensagens');
+const { registrarMensagens, buscarCanal } = require('../utils/denunciaMensagens');
 const { alertarMotivoCritico } = require('../utils/alertaMotivoCritico');
 
 require('dotenv').config();
@@ -316,13 +315,34 @@ async function validarVideosHL(provas) {
 
 async function handleDenunciaCommand(message) {
     try {
-        const config = await getCachedConfig(message.guild.id, Config);
+        const config = await getCachedConfig(message.guild.id);
         const hasPerm = message.member.roles.cache.has(config.roles.responsavel_admin);
         
         if (!hasPerm && message.author.id !== SUPORTE_BOT_ID) return message.reply('❌ Sem permissão.');
         await atualizarMensagemDenuncia(message.client, message.guild, config);
 
     } catch (error) { console.error(error); }
+}
+
+async function handleDenunciaSlash(interaction) {
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+
+    try {
+        const config = await getCachedConfig(interaction.guild.id);
+        if (!config) return interaction.editReply('⚠️ Configure o servidor primeiro com `/painel`.');
+
+        const responsavelAdmin = config.roles?.responsavel_admin;
+        const hasPerm = Boolean(responsavelAdmin && interaction.member.roles.cache.has(responsavelAdmin));
+        if (!hasPerm && interaction.user.id !== SUPORTE_BOT_ID) return interaction.editReply('❌ Sem permissão.');
+
+        const mensagem = await atualizarMensagemDenuncia(interaction.client, interaction.guild, config);
+        return interaction.editReply(mensagem
+            ? `✅ Mensagem do sistema de denúncias atualizada em <#${mensagem.channelId}>.`
+            : '⚠️ O canal de denúncias não está configurado (ou o bot não tem acesso a ele). Ajuste em `/painel` > Canais externos.');
+    } catch (error) {
+        console.error('Erro no /denuncia:', error);
+        return interaction.editReply('❌ Não foi possível atualizar a mensagem de denúncias.').catch(() => {});
+    }
 }
 
 async function handleDenunciaSubmit(interaction, platform) {
@@ -355,7 +375,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         const username = interaction.user.username;
         const nickname = interaction.member?.nickname || null;
 
-        const config = await getCachedConfig(interaction.guild.id, Config);
+        const config = await getCachedConfig(interaction.guild.id);
 
         if (config?.manutencaoDenuncia) {
             return await interaction.editReply({
@@ -546,9 +566,13 @@ async function handleDenunciaSubmit(interaction, platform) {
             status: 'pendente',
             dataCriacao: dateUtils.getBrasiliaDate(),
             armazemThreadId: mirrorThreads.armazem || null,
-            registroThreadId: mirrorThreads.registro || null,
-            mensagens: [mainMessage, threadMessage, controlsMessage].map(serializarMensagem)
+            registroThreadId: mirrorThreads.registro || null
         }).save();
+
+        // Estas três foram enviadas antes de a denúncia existir no banco, então
+        // o evento messageCreate não as registrou.
+        await registrarMensagens(denunciaSalva, [mainMessage, threadMessage, controlsMessage])
+            .catch(error => console.warn('Não foi possível registrar as mensagens iniciais da denúncia:', error.message));
 
         registrarTopicoRestrito(thread.id, interaction.user.id, acusadoUserIds, restritoParticipacao);
 
@@ -725,7 +749,7 @@ async function handleDenunciaButtons(interaction, client) {
 }
 
 async function handleDenunciaPC(interaction) {
-    const config = await getCachedConfig(interaction.guild.id, Config);
+    const config = await getCachedConfig(interaction.guild.id);
     const roleRequired = config.roles.pc;
     if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
         return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia PC. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
@@ -734,7 +758,7 @@ async function handleDenunciaPC(interaction) {
 }
 
 async function handleDenunciaMobile(interaction) {
-    const config = await getCachedConfig(interaction.guild.id, Config);
+    const config = await getCachedConfig(interaction.guild.id);
     const roleRequired = config.roles.permitido;
     if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
         return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia Mobile. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
@@ -947,6 +971,7 @@ async function handleConsultaModalSubmit(interaction) {
 
 module.exports = {
     handleDenunciaCommand,
+    handleDenunciaSlash,
     handleDenunciaSubmit,
     handleDenunciaButtons,
     handleDenunciaPC,

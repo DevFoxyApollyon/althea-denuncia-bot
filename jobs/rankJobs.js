@@ -1,4 +1,4 @@
-﻿const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const cron = require('node-cron');
 const RankService = require('../services/rankService');
 const Config = require('../models/Config');
@@ -226,7 +226,38 @@ async function sendRankMessage(channel, embed, rankText, guild, config) {
     }
 }
 
+const COLECAO_ARQUIVO_RANKING = 'moderationactions_arquivo';
+
+// Roda no dia 1: copia as ações dos meses anteriores para a coleção de arquivo
+// e só então as remove. O ranking mensal já filtra por data, então nada depende
+// da remoção; se o arquivamento falhar, os dados ficam onde estão.
+async function arquivarAcoesDeMesesAnteriores() {
+    const agora = getBrasiliaDate();
+    const inicioDoMes = new Date(agora.getFullYear(), agora.getMonth(), 1, 0, 0, 0, 0);
+    const filtro = { timestamp: { $lt: inicioDoMes } };
+
+    const total = await ModerationAction.countDocuments(filtro);
+    if (total === 0) return 0;
+
+    await ModerationAction.aggregate([
+        { $match: filtro },
+        { $merge: { into: COLECAO_ARQUIVO_RANKING, on: '_id', whenMatched: 'keepExisting', whenNotMatched: 'insert' } }
+    ]);
+
+    const { deletedCount } = await ModerationAction.deleteMany(filtro);
+    return deletedCount;
+}
+
 function setupRankJobs(client) {
+    cron.schedule('5 0 1 * *', async () => {
+        try {
+            const arquivadas = await arquivarAcoesDeMesesAnteriores();
+            console.log(`[DATABASE] Reset mensal do ranking: ${arquivadas} ação(ões) movida(s) para ${COLECAO_ARQUIVO_RANKING}.`);
+        } catch (error) {
+            console.error('Erro no reset mensal do ranking (nada foi apagado):', error);
+        }
+    }, { timezone: 'America/Sao_Paulo' });
+
     cron.schedule('55 23 * * *', async () => {
         try {
             const now = getBrasiliaDate();

@@ -38,8 +38,8 @@ function findYouTubeLinks(text) {
 
 async function sendLog(message, motivo, videoTitle) {
   try {
-    const Config = require('../models/Config');
-    const configDoc = await Config.findOne({ guildId: message.guild.id });
+    const { getConfig } = require('./configCache');
+    const configDoc = await getConfig(message.guild.id);
 
     const logChannelId = configDoc?.channels?.log || configDoc?.channels?.logs || null;
 

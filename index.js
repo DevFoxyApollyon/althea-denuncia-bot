@@ -1,7 +1,13 @@
-﻿process.env.TZ = 'America/Sao_Paulo';
+process.env.TZ = 'America/Sao_Paulo';
 process.env.FORCE_COLOR = '3';
 console.log('\x1b[36m' + '═'.repeat(60) + '\x1b[0m');
 require('dotenv').config();
+
+const { log } = require('./utils/logger');
+const { validarEnv } = require('./utils/env');
+
+// Precisa rodar antes dos demais requires: os models abrem conexões ao carregar.
+if (!validarEnv(log)) process.exit(1);
 
 const { 
     Client, 
@@ -14,7 +20,8 @@ const chalk = require('chalk');
 const packageJson = require('./package.json');
 
 const commands = require('./utils/commands');
-const Config = require('./models/Config');
+const { getConfig } = require('./utils/configCache');
+const { registrarComandosSlash, registrarComandosNoServidor } = require('./commands/slash');
 const Strike = require('./models/Strike');
 const { advancedMonitor } = require('./utils/advancedMonitoring');
 const { setupRankJobs } = require('./jobs/rankJobs');
@@ -40,32 +47,6 @@ const client = new Client({
         messages: { interval: 3600, lifetime: 1800 }
     }
 });
-
-const log = {
-    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
-    system:  (msg) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} ${msg}`)
-};
-
-const configCache = new Map();
-const CONFIG_CACHE_LIMIT = 100;
-
-async function getConfig(guildId) {
-    if (configCache.has(guildId)) return configCache.get(guildId);
-
-    const config = await Config.findOne({ guildId });
-
-    if (configCache.size >= CONFIG_CACHE_LIMIT) {
-        const firstKey = configCache.keys().next().value;
-        configCache.delete(firstKey);
-    }
-
-    configCache.set(guildId, config);
-    setTimeout(() => configCache.delete(guildId), 5 * 60 * 1000);
-    return config;
-}
 
 registerMemberEvents(client, log);
 registerMessageEvents(client, { log, getConfig });
@@ -128,8 +109,10 @@ client.once('clientReady', async (readyClient) => {
     log.info(`${chalk.bold('Memória utilizada:')} ${chalk.green(memoryUsage)} MB`);
     log.info(`${chalk.bold('Uptime:')} ${chalk.green(uptime > 0 ? uptime + 'min' : '< 1min')}`);
 
-    const cmdList = Object.keys(commands).join(', ');
+    const cmdList = Object.keys(commands).map(nome => '!' + nome).join(', ');
     log.info(`${chalk.bold('Comandos carregados:')} ${chalk.green(cmdList)}`);
+
+    await registrarComandosSlash(readyClient, log);
 
     let totalMembers = 0;
     readyClient.guilds.cache.forEach(guild => {
@@ -170,17 +153,34 @@ client.once('clientReady', async (readyClient) => {
     });
 });
 
+client.on('guildCreate', guild => {
+    registrarComandosNoServidor(guild)
+        .catch(err => log.warn(`Não foi possível registrar os comandos de barra em ${guild.name}: ${err.message}`));
+});
+
 client.on('error', err => log.error('Discord API Error: ' + err.message));
 
 process.on('unhandledRejection', (reason) => {
     log.error('Rejeição não tratada: ' + (reason?.stack || reason));
+    advancedMonitor.recordError(reason instanceof Error ? reason : new Error(String(reason)), 'unhandledRejection');
 });
 
+// Depois de uma exceção não capturada o estado do processo não é confiável:
+// encerra com código de erro e deixa a hospedagem reiniciar o bot limpo.
 process.on('uncaughtException', (error) => {
-    log.error('ERRO CRÍTICO: ' + error.stack);
+    log.error('ERRO CRÍTICO (encerrando para reiniciar): ' + (error?.stack || error));
+    gracefulShutdown('uncaughtException', 1);
 });
 
-async function gracefulShutdown(signal) {
+let encerrando = false;
+
+async function gracefulShutdown(signal, exitCode = 0) {
+    if (encerrando) return;
+    encerrando = true;
+
+    // Se alguma conexão travar ao fechar, não deixa o processo pendurado.
+    setTimeout(() => process.exit(exitCode), 10_000).unref();
+
     log.warn(`Sinal ${signal} recebido. Encerrando bot com segurança...`);
     try {
         advancedMonitor.destroy();
@@ -193,7 +193,7 @@ async function gracefulShutdown(signal) {
     } catch (e) {
         log.error('Erro ao encerrar: ' + e.message);
     } finally {
-        process.exit(0);
+        process.exit(exitCode);
     }
 }
 

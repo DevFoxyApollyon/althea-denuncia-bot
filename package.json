@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node --expose-gc --max-old-space-size=512 index.js",
-    "dev": "nodemon --expose-gc --max-old-space-size=512 index.js"
+    "dev": "nodemon --expose-gc --max-old-space-size=512 index.js",
+    "lint": "eslint .",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -15,14 +17,17 @@
     "chalk": "^4.1.2",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
-    "googleapis": "^118.0.0",
-    "limiter": "^3.0.0",
     "mongoose": "^7.6.3",
     "node-cron": "^3.0.3",
     "node-fetch": "^2.6.7",
-    "nodemon": "^3.1.0",
     "ws": "^8.18.0"
   },
   "author": "Foxyapollyon",
-  "license": "MIT"
-}  
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "nodemon": "^3.1.14"
+  }
+}

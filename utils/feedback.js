@@ -1,4 +1,4 @@
-﻿const {
+const {
     ActionRowBuilder,
     StringSelectMenuBuilder,
     ModalBuilder,
@@ -7,14 +7,14 @@
     EmbedBuilder
 } = require('discord.js');
 
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const DenunciaModel = require('../models/Denuncia');
 
 // =========================
 // UTILITARIOS
 // =========================
 function gerarCodigoFeedback() {
-    return uuidv4().split('-')[0].toUpperCase();
+    return randomUUID().split('-')[0].toUpperCase();
 }
 
 function gerarEmojiNota(nota) {

@@ -1,6 +1,5 @@
-﻿const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } = require('discord.js');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
-const Config = require('../models/Config');
 const { LogManager } = require('./LogManager');
 const ModerationAction = require('../models/ModerationAction');
 const { getBrasiliaDate, formatTimeBR, getBrasiliaDateTime } = require('../utils/dateUtils');
@@ -9,13 +8,18 @@ const { inserirFeedbackMenu, removerFeedbackMenu } = require('../utils/feedback'
 const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
 const { createCorrectionButtonRow } = require('./corrigirHandler');
-const { getCachedConfig } = require('../utils/performance');
+const { getConfig: getCachedConfig } = require('../utils/configCache');
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 const DM_IGNORED_CODES = [50007, 50278];
 
 const CLAIM_COOLDOWN_MS = 6 * 60 * 1000;
-const GUILD_COOLDOWN = '817924556358156360';
-const _claimCooldowns = new Map();
+// Servidores onde o staff precisa esperar entre uma reivindicação e outra.
+// Configurável pelo .env (IDs separados por vírgula).
+const CLAIM_COOLDOWN_GUILD_IDS = new Set(
+  (process.env.CLAIM_COOLDOWN_GUILD_IDS ?? '817924556358156360')
+    .split(/[\s,;]+/)
+    .filter(Boolean)
+);
 const _sendOnceLocks = new Set();
 const _logButtonLocks = new Set();
 
@@ -510,7 +514,7 @@ async function handleStatusButton(interaction, status) {
     }
 
     try {
-      const config = await Config.findOne({ guildId: interaction.guild.id });
+      const config = await getCachedConfig(interaction.guild.id);
 
       const statusMap = {
         aceitar: 'aceita',
@@ -1041,7 +1045,7 @@ async function handlePunishmentModal(interaction) {
       });
     }
 
-    const config = await Config.findOne({ guildId: interaction.guild.id });
+    const config = await getCachedConfig(interaction.guild.id);
     const logsChannel = config?.channels?.logs
       ? interaction.client.channels.cache.get(config.channels.logs)
       : null;
@@ -1182,7 +1186,7 @@ async function handlePunishmentModal(interaction) {
 
 async function checkModPermission(interaction, isDeferred = false) {
   try {
-    const config = await Config.findOne({ guildId: interaction.guild.id });
+    const config = await getCachedConfig(interaction.guild.id);
     if (!config) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Configurações do servidor não encontradas.',
@@ -1259,18 +1263,26 @@ async function handleClaimButton(interaction) {
     const hasPermission = await checkModPermission(interaction, true);
     if (!hasPermission) return;
 
-    const config = await Config.findOne({ guildId: interaction.guild.id });
+    const config = await getCachedConfig(interaction.guild.id);
 
     const isResponsavelAdmin =
       config?.roles?.responsavel_admin &&
       interaction.member.roles.cache.has(config.roles.responsavel_admin);
 
-    if (!isResponsavelAdmin && interaction.guild?.id === GUILD_COOLDOWN) {
-      const lastClaim = _claimCooldowns.get(interaction.user.id);
-      if (lastClaim) {
-        const elapsed = Date.now() - lastClaim;
-        if (elapsed < CLAIM_COOLDOWN_MS) {
-          const remaining = Math.ceil((CLAIM_COOLDOWN_MS - elapsed) / 1000);
+    const temCooldown = !isResponsavelAdmin && CLAIM_COOLDOWN_GUILD_IDS.has(interaction.guild?.id);
+
+    // O cooldown é lido do banco (última reivindicação do staff), então continua
+    // valendo depois de um restart do bot.
+    if (temCooldown) {
+      const ultima = await Denuncia.findOne({
+        guildId: interaction.guild.id,
+        claimedBy: interaction.user.id,
+        claimedAt: { $gt: new Date(Date.now() - CLAIM_COOLDOWN_MS) },
+      }).sort({ claimedAt: -1 }).select('claimedAt').lean();
+
+      if (ultima?.claimedAt) {
+        const remaining = Math.ceil((CLAIM_COOLDOWN_MS - (Date.now() - new Date(ultima.claimedAt).getTime())) / 1000);
+        if (remaining > 0) {
           const minutes = Math.floor(remaining / 60);
           const seconds = remaining % 60;
           const tempoRestante = minutes > 0
@@ -1323,11 +1335,6 @@ async function handleClaimButton(interaction) {
       return;
     }
 
-    if (!isResponsavelAdmin && interaction.guild?.id === GUILD_COOLDOWN) {
-      _claimCooldowns.set(interaction.user.id, Date.now());
-      setTimeout(() => _claimCooldowns.delete(interaction.user.id), CLAIM_COOLDOWN_MS);
-    }
-
     await registrarAcaoModerador(interaction.user.id, 'reivindicar', denuncia._id, interaction.guild.id);
 
     const claimMessage = `📌 O administrador ${interaction.user} reivindicou esta denúncia e estará analisando.`;
@@ -1359,7 +1366,7 @@ async function handleAddPlayer(interaction) {
   try {
     if (!interaction.isRepliable()) return;
 
-    const config = await Config.findOne({ guildId: interaction.guild.id });
+    const config = await getCachedConfig(interaction.guild.id);
     if (!config) {
       await safeReplyOrEdit(interaction, {
         content: '❌ Configurações do servidor não encontradas.',
@@ -1433,7 +1440,7 @@ async function handleAddPlayerModal(interaction) {
     await safeDefer(interaction, true);
     await safeReplyOrEdit(interaction, { content: '⏳ Processando...' });
 
-    const config = await Config.findOne({ guildId: interaction.guild.id });
+    const config = await getCachedConfig(interaction.guild.id);
     if (!config) {
       return await safeReplyOrEdit(interaction, {
         content: '❌ Configurações do servidor não encontradas.',

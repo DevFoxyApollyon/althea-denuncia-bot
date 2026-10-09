@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 const { getBrasiliaDate } = require('../utils/dateUtils');
 
 const denunciaSchema = new mongoose.Schema({
@@ -207,9 +207,17 @@ denunciaSchema.pre('save', function(next) {
   next();
 });
 
-denunciaSchema.index({ status: 1 });
-denunciaSchema.index({ platform: 1 });
 denunciaSchema.index({ 'ultimaEdicao.data': 1 });
 denunciaSchema.index({ guildId: 1, createdAt: 1 });
+// Fila de pendências por servidor e auto-finalizador (status + data de criação).
+denunciaSchema.index({ guildId: 1, status: 1, dataCriacao: 1 });
+denunciaSchema.index({ status: 1, dataCriacao: 1 });
+// Jobs de aviso/análise automática de reivindicações.
+denunciaSchema.index({ status: 1, claimedAt: 1 });
+// Cooldown de reivindicação por staff.
+denunciaSchema.index({ guildId: 1, claimedBy: 1, claimedAt: -1 });
+// "Minhas denúncias" e limite de denúncias recentes contra o mesmo acusado.
+denunciaSchema.index({ criadoPor: 1, dataCriacao: -1 });
+denunciaSchema.index({ guildId: 1, acusado: 1, dataCriacao: -1 });
 
 module.exports = mongoose.model('Denuncia', denunciaSchema);

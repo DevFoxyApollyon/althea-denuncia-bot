@@ -1,5 +1,5 @@
-﻿const { EmbedBuilder, AttachmentBuilder, AuditLogEvent } = require('discord.js');
-const Config = require('../models/Config');
+const { EmbedBuilder, AttachmentBuilder, AuditLogEvent } = require('discord.js');
+const { getConfig } = require('../utils/configCache');
 const { getBrasiliaDate, formatTimeBR, formatDateBR } = require('../utils/dateUtils');
 
 const MAX_FILE_SIZE_MB = 50;
@@ -310,7 +310,7 @@ async function handleDeletedMessage(message) {
     const isBotRemoval = message.author.bot && message.author.id === message.client?.user?.id;
     if (isBotRemoval) return;
 
-    const config = await Config.findOne({ guildId: message.guild.id }).catch(() => null);
+    const config = await getConfig(message.guild.id).catch(() => null);
     if (!config) return;
 
     const { pc: pcChannelId, mobile: mobileChannelId, log: logChannelId } = config.channels ?? {};
@@ -404,7 +404,7 @@ async function notifyUncacheable(partialMessage) {
     try {
         if (!partialMessage.guild) return;
 
-        const config = await Config.findOne({ guildId: partialMessage.guild.id }).catch(() => null);
+        const config = await getConfig(partialMessage.guild.id).catch(() => null);
         if (!config?.channels?.log) return;
 
         const { pc: pcChannelId, mobile: mobileChannelId } = config.channels ?? {};

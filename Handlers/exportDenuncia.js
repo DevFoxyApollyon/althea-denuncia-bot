@@ -1,6 +1,6 @@
-﻿const { AttachmentBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { AttachmentBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
-const Config = require('../models/Config');
+const { getConfig } = require('../utils/configCache');
 const archiver = require('archiver');
 const fetch = require('node-fetch');
 const { PassThrough } = require('stream');
@@ -478,7 +478,7 @@ async function handleExportButton(interaction) {
     }
 
     const guild = interaction.guild;
-    const config = await Config.findOne({ guildId: guild.id });
+    const config = await getConfig(guild.id);
 
     if (!config) {
       return interaction.editReply({

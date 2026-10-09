@@ -1,4 +1,4 @@
-﻿const {
+const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -10,7 +10,7 @@
 
 const RankService = require('../services/rankService');
 const Denuncia = require('../models/Denuncia');
-const Config = require('../models/Config');
+const { getConfig } = require('../utils/configCache');
 const { getBrasiliaDate, formatDateBR } = require('../utils/dateUtils');
 
 /* ------------------------------------------------------------------ */
@@ -76,16 +76,14 @@ function resolvePeriod(arg) {
   return key || 'month';
 }
 
-async function canUse(message) {
-  const config = await Config.findOne({ guildId: message.guild.id })
-    .select('roles.administrador roles.responsavel_admin')
-    .lean();
+async function canUse({ guild, member }) {
+  const config = await getConfig(guild.id);
   const roleIds = [
     config?.roles?.administrador,
     config?.roles?.responsavel_admin
   ].filter(Boolean);
 
-  return roleIds.some((roleId) => message.member?.roles.cache.has(roleId));
+  return roleIds.some((roleId) => member?.roles.cache.has(roleId));
 }
 
 function onCooldown(userId) {
@@ -370,45 +368,39 @@ function buildTxt(data, guildName) {
 /* Comando                                                             */
 /* ------------------------------------------------------------------ */
 
-async function handleRankCommand(message) {
-  if (!message?.guild) return;
-
-  const quiet = { allowedMentions: { repliedUser: false } };
+// ctx abstrai a origem do comando (!rank ou /rank):
+//   negar(texto)    -> resposta de erro
+//   enviar(texto)   -> envia a mensagem do ranking e devolve a Message
+//   editar(payload) -> edita a mensagem do ranking
+//   apagar()        -> remove a mensagem do ranking
+async function executarRank(ctx) {
+  const { guild, userId } = ctx;
 
   try {
-    if (!await canUse(message)) {
-      return message.reply({
-        content: '❌ Apenas os cargos Administrador e Responsável Admin podem acessar o ranking.',
-        ...quiet
-      });
+    if (!await canUse(ctx)) {
+      return ctx.negar('❌ Apenas os cargos Administrador e Responsável Admin podem acessar o ranking.');
     }
   } catch (err) {
     console.error('[RANK] Erro ao verificar permissões:', err);
-    return message.reply({
-      content: '❌ Não foi possível verificar sua permissão para acessar o ranking.',
-      ...quiet
-    });
+    return ctx.negar('❌ Não foi possível verificar sua permissão para acessar o ranking.');
   }
 
-  const wait = onCooldown(message.author.id);
+  const wait = onCooldown(userId);
   if (wait) {
-    return message.reply({ content: `⏳ Aguarde **${wait}s** para usar o ranking novamente.`, ...quiet });
+    return ctx.negar(`⏳ Aguarde **${wait}s** para usar o ranking novamente.`);
   }
 
-  let type = resolvePeriod((message.content.trim().split(/\s+/)[1] || '').toLowerCase());
+  let type = PERIODS[ctx.periodo] ? ctx.periodo : 'month';
   let page = 0;
   let data;
 
-  const loadingMsg = await message.reply({
-    content: `⏳ Gerando ranking **${PERIODS[type].label.toLowerCase()}**...`,
-    ...quiet
-  });
+  const rankMsg = await ctx.enviar(`⏳ Gerando ranking **${PERIODS[type].label.toLowerCase()}**...`);
 
   try {
-    data = await loadRank(message.guild, type);
+    data = await loadRank(guild, type);
   } catch (err) {
     console.error('[RANK] Erro ao gerar ranking:', err);
-    return loadingMsg.edit('❌ Erro ao gerar ranking. Tente novamente em instantes.').catch(() => null);
+    return ctx.editar({ content: '❌ Erro ao gerar ranking. Tente novamente em instantes.' }).catch(() => null);
   }
 
   const expiresAt = Date.now() + CONFIG.lifetimeMs;
@@ -420,12 +412,12 @@ async function handleRankCommand(message) {
     components: buildComponents(type, page, totalPages())
   });
 
-  await loadingMsg.edit(view());
+  await ctx.editar(view());
 
-  const collector = loadingMsg.createMessageComponentCollector({ time: CONFIG.lifetimeMs });
+  const collector = rankMsg.createMessageComponentCollector({ time: CONFIG.lifetimeMs });
 
   collector.on('collect', async (i) => {
-    if (i.user.id !== message.author.id) {
+    if (i.user.id !== userId) {
       return i.reply({
         content: '❌ Apenas quem usou o comando pode interagir.',
         flags: MessageFlags.Ephemeral
@@ -436,7 +428,7 @@ async function handleRankCommand(message) {
       switch (i.customId) {
         case 'rank_export':
           return await i.reply({
-            files: [buildTxt(data, message.guild.name)],
+            files: [buildTxt(data, guild.name)],
             flags: MessageFlags.Ephemeral
           });
 
@@ -444,7 +436,7 @@ async function handleRankCommand(message) {
           await i.deferUpdate();
           type = i.values[0];
           page = 0;
-          data = await loadRank(message.guild, type);
+          data = await loadRank(guild, type);
           return await i.editReply(view());
 
         case 'rank_prev':
@@ -466,8 +458,42 @@ async function handleRankCommand(message) {
   });
 
   collector.on('end', () => {
-    loadingMsg.delete().catch(() => null);
+    ctx.apagar().catch(() => null);
   });
 }
 
-module.exports = { handleRankCommand };
+async function handleRankCommand(message) {
+  if (!message?.guild) return;
+
+  const quiet = { allowedMentions: { repliedUser: false } };
+  let rankMsg = null;
+
+  return executarRank({
+    guild: message.guild,
+    member: message.member,
+    userId: message.author.id,
+    periodo: resolvePeriod((message.content.trim().split(/\s+/)[1] || '').toLowerCase()),
+    negar: (content) => message.reply({ content, ...quiet }),
+    enviar: async (content) => (rankMsg = await message.reply({ content, ...quiet })),
+    editar: (payload) => rankMsg.edit(payload),
+    apagar: () => rankMsg.delete()
+  });
+}
+
+async function handleRankSlash(interaction) {
+  return executarRank({
+    guild: interaction.guild,
+    member: interaction.member,
+    userId: interaction.user.id,
+    periodo: interaction.options.getString('periodo') || 'month',
+    negar: (content) => interaction.reply({ content, flags: MessageFlags.Ephemeral }),
+    enviar: async (content) => {
+      await interaction.reply({ content });
+      return interaction.fetchReply();
+    },
+    editar: (payload) => interaction.editReply(payload),
+    apagar: () => interaction.deleteReply()
+  });
+}
+
+module.exports = { handleRankCommand, handleRankSlash };

@@ -1,4 +1,5 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
+const { globalCache } = require('../utils/smartCache');
 
 const configSchema = new mongoose.Schema({
   guildId: { 
@@ -42,6 +43,19 @@ const configSchema = new mongoose.Schema({
 configSchema.pre('save', function(next) {
   this.lastUpdated = Date.now();
   next();
+});
+
+// Mantém o cache de utils/configCache.js coerente com o banco.
+function invalidarCache(guildId) {
+  if (guildId) globalCache.delete(`config:${guildId}`);
+}
+
+configSchema.post('save', function(doc) {
+  invalidarCache(doc?.guildId);
+});
+
+configSchema.post(['findOneAndUpdate', 'updateOne', 'deleteOne', 'findOneAndDelete'], function() {
+  invalidarCache(this.getQuery?.()?.guildId);
 });
 
 module.exports = mongoose.model('Config', configSchema);

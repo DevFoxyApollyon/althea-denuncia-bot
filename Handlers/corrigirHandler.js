@@ -9,8 +9,7 @@ const {
   MessageFlags
 } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
-const Config = require('../models/Config');
-const { getCachedConfig, getCachedDenuncia, invalidateCache } = require('../utils/performance');
+const { getConfig: getCachedConfig } = require('../utils/configCache');
 
 const CORRIGIR_MODAL_PREFIX = 'corrigir_modal_aceite_';
 const RESPONSE_DELETE_DELAY_MS = 5 * 1000;
@@ -84,7 +83,7 @@ async function respondAndDelete(interaction, payload) {
 }
 
 async function handleCorrigirDenunciaButton(interaction) {
-  const config = await getCachedConfig(interaction.guild.id, Config);
+  const config = await getCachedConfig(interaction.guild.id);
 
   if (!await isResponsavelAdmin(interaction, config)) {
     return respondAndDelete(interaction, { content: getPermissionError(config) });
@@ -112,7 +111,7 @@ async function handleCorrigirDenunciaButton(interaction) {
 
 async function handleSalvarCorrigirDenuncia(interaction) {
   const messageId = getMessageId(interaction.customId);
-  const config = await getCachedConfig(interaction.guild.id, Config);
+  const config = await getCachedConfig(interaction.guild.id);
 
   if (!await isResponsavelAdmin(interaction, config)) {
     return respondAndDelete(interaction, { content: getPermissionError(config) });
@@ -132,7 +131,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
   try {
-    const denuncia = await getCachedDenuncia({ messageId }, Denuncia);
+    const denuncia = await Denuncia.findOne({ messageId });
 
     if (!denuncia || denuncia.status !== 'aceita') {
       return respondAndDelete(interaction, {
@@ -160,7 +159,6 @@ async function handleSalvarCorrigirDenuncia(interaction) {
     });
 
     await denuncia.save();
-    invalidateCache('denuncia', denuncia._id);
 
     let logEdited = false;
     let topicEdited = false;

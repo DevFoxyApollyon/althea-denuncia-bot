@@ -1,4 +1,4 @@
-﻿// painel.js
+// painel.js
 const { 
   EmbedBuilder, 
   ActionRowBuilder, 
@@ -9,6 +9,7 @@ const {
   PermissionFlagsBits
 } = require('discord.js');
 const Config = require('../models/Config');
+const { getConfig } = require('../utils/configCache');
 const { getUsuariosIsentos, salvarUsuariosIsentos, normalizarIds } = require('../utils/usuariosIsentos');
 require('dotenv').config();
  
@@ -49,7 +50,7 @@ async function hasPermission(interaction, currentConfig) {
   if (!guildId || !membro?.roles?.cache) return false;
 
   const config = currentConfig === undefined
-    ? getPanelConfig(guildId) || await Config.findOne({ guildId }).select('roles.responsavel_admin').lean()
+    ? getPanelConfig(guildId) || await getConfig(guildId)
     : currentConfig;
   const responsavelAdminId = config?.roles?.responsavel_admin;
   return Boolean(responsavelAdminId && membro.roles.cache.has(responsavelAdminId));
@@ -458,9 +459,11 @@ async function createPanelSelectMenu(interaction, currentConfig = null) {
   );
 }
 
-async function handlePainelCommand(message) {
+// "message" pode ser a Message do !painel ou a interação do /painel: as duas
+// têm guild, member e user/author, que é tudo o que o painel consulta.
+async function abrirPainel(message, { negar, enviar }) {
   if (!message?.guild) return;
-  if (!await hasPermission(message)) return message.reply({ content: '❌ Sem permissão.', flags: [64] });
+  if (!await hasPermission(message)) return negar('❌ Sem permissão.');
 
   try {
     const [config, exemptUsers] = await Promise.all([
@@ -532,12 +535,33 @@ async function handlePainelCommand(message) {
     .setTimestamp()
     .setFooter({ text: 'Painel temporário • expira em 5 minutos' });
 
-    const reply = await message.reply({ embeds: [embed], components: [menu], flags: [64] });
+    const reply = await enviar({ embeds: [embed], components: [menu] });
     setTimeout(() => reply.delete().catch(() => {}), MESSAGE_TIMEOUT);
   } catch (error) {
     console.error('[Painel] Falha ao montar/enviar painel:', error?.stack || error);
-    await message.reply({ content: '❌ Não foi possível abrir o painel. Verifique os logs do bot.', flags: [64] }).catch(() => {});
+    await negar('❌ Não foi possível abrir o painel. Verifique os logs do bot.').catch(() => {});
   }
+}
+
+async function handlePainelCommand(message) {
+  return abrirPainel(message, {
+    negar: (content) => message.reply({ content }),
+    enviar: (payload) => message.reply(payload)
+  });
+}
+
+// O painel não é efêmero: os menus editam a própria mensagem do painel
+// (interaction.message.edit), o que o Discord não permite em mensagens efêmeras.
+async function handlePainelSlash(interaction) {
+  return abrirPainel(interaction, {
+    negar: (content) => (interaction.replied || interaction.deferred
+      ? interaction.followUp({ content, flags: [64] })
+      : interaction.reply({ content, flags: [64] })),
+    enviar: async (payload) => {
+      await interaction.reply(payload);
+      return interaction.fetchReply();
+    }
+  });
 }
 
 async function showConfig(interaction, currentConfig = null) {
@@ -580,6 +604,7 @@ async function showConfig(interaction, currentConfig = null) {
 
 module.exports = {
   handlePainelCommand,
+  handlePainelSlash,
   showConfig,
   saveChannels1,
   saveChannels2,

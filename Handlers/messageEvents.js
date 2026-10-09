@@ -1,4 +1,10 @@
-const { serializarMensagem, buscarCanal } = require('../utils/denunciaMensagens');
+const {
+    buscarCanal,
+    registrarMensagens,
+    registrarEspelho,
+    atualizarMensagemEditada,
+    marcarMensagemApagada
+} = require('../utils/denunciaMensagens');
 const {
     contemPalavraProibida,
     contemMarcacaoAdmin,
@@ -83,22 +89,18 @@ function registerMessageEvents(client, { log, getConfig }) {
     client.on('messageCreate', async message => {
         if (!message.guild) return;
 
-        if (message.channel.isThread?.()) {
-            await Denuncia.updateOne(
-                { guildId: message.guild.id, threadId: message.channel.id },
-                { $push: { mensagens: serializarMensagem(message) } }
-            ).catch(error => log.warn('Não foi possível registrar mensagem da denúncia: ' + error.message));
-        }
-
         const config = await getConfig(message.guild.id) ?? {};
 
         if (message.channel.isThread?.()) {
             const denuncia = await Denuncia.findOne({
                 guildId: message.guild.id,
                 threadId: message.channel.id,
-            }).select('messageId armazemThreadId registroThreadId').lean();
+            }).select('guildId threadId messageId armazemThreadId registroThreadId dataExpiracao').lean();
 
             if (denuncia) {
+                await registrarMensagens(denuncia, message)
+                    .catch(error => log.warn('Não foi possível registrar mensagem da denúncia: ' + error.message));
+
                 const mirrorThreadIds = [denuncia.armazemThreadId, denuncia.registroThreadId].filter(Boolean);
                 const payload = criarPayloadEspelho(message);
 
@@ -114,10 +116,7 @@ function registerMessageEvents(client, { log, getConfig }) {
                     });
                     if (mensagemEspelho) {
                         await enviarAnexosEspelho(threadEspelho, message, log);
-                        await Denuncia.updateOne(
-                            { _id: denuncia._id, 'mensagens.mensagemId': message.id },
-                            { $push: { 'mensagens.$.espelhos': { threadId: mirrorThreadId, messageId: mensagemEspelho.id } } }
-                        ).catch(error => log.warn(`Não foi possível salvar vínculo do espelho: ${error.message}`));
+                        await registrarEspelho(denuncia, message.id, { threadId: mirrorThreadId, messageId: mensagemEspelho.id }).catch(error => log.warn(`Não foi possível salvar vínculo do espelho: ${error.message}`));
                     }
                 }
             }
@@ -215,6 +214,7 @@ function registerMessageEvents(client, { log, getConfig }) {
             }
         } catch (error) {
             log.error(`Erro no comando !${commandName}: ${error.message}`);
+            advancedMonitor.recordError(error, `command:${commandName}`);
         }
     });
 
@@ -224,35 +224,16 @@ function registerMessageEvents(client, { log, getConfig }) {
             const mensagemAtualizada = newMessage.partial
                 ? await newMessage.fetch().catch(() => newMessage)
                 : newMessage;
-            const anexos = Array.from(mensagemAtualizada.attachments?.values?.() || []);
-            const updateResult = await Denuncia.updateOne(
-                { guildId: newMessage.guild.id, threadId: newMessage.channel.id, 'mensagens.mensagemId': newMessage.id },
-                { $set: {
-                    'mensagens.$.conteudo': mensagemAtualizada.content || '',
-                    'mensagens.$.editadaEm': new Date(),
-                    'mensagens.$.anexos': anexos.map(attachment => ({
-                        id: attachment.id,
-                        nome: attachment.name || '',
-                        url: attachment.url || '',
-                        tipo: attachment.contentType || '',
-                        tamanho: attachment.size ?? null,
-                    })),
-                    'mensagens.$.embeds': (mensagemAtualizada.embeds || []).map(embed =>
-                        typeof embed.toJSON === 'function' ? embed.toJSON() : embed
-                    )
-                } }
-            ).catch(error => log.warn('Não foi possível atualizar mensagem da denúncia: ' + error.message));
+            const espelhos = await atualizarMensagemEditada(newMessage.guild.id, newMessage.channel.id, mensagemAtualizada)
+                .catch(error => {
+                    log.warn('Não foi possível atualizar mensagem da denúncia: ' + error.message);
+                    return null;
+                });
 
-            if (updateResult?.matchedCount) {
-                const denuncia = await Denuncia.findOne({
-                    guildId: newMessage.guild.id,
-                    threadId: newMessage.channel.id,
-                    'mensagens.mensagemId': newMessage.id,
-                }).select('mensagens').lean();
-                const mensagem = denuncia?.mensagens?.find(item => item.mensagemId === newMessage.id);
+            if (espelhos) {
                 const payload = criarPayloadEspelho(mensagemAtualizada);
 
-                for (const espelho of mensagem?.espelhos || []) {
+                for (const espelho of espelhos) {
                     const threadEspelho = await buscarCanal(client, espelho.threadId);
                     if (!threadEspelho?.isTextBased?.()) continue;
                     const mensagemEspelho = await threadEspelho.messages.fetch(espelho.messageId).catch(() => null);
@@ -271,10 +252,7 @@ function registerMessageEvents(client, { log, getConfig }) {
     client.on('messageDelete', async message => {
         try {
             if (message.guild && message.channel.isThread?.()) {
-                await Denuncia.updateOne(
-                    { guildId: message.guild.id, threadId: message.channel.id, 'mensagens.mensagemId': message.id },
-                    { $set: { 'mensagens.$.apagadaEm': new Date() } }
-                ).catch(error => log.warn('Não foi possível marcar mensagem apagada da denúncia: ' + error.message));
+                await marcarMensagemApagada(message.guild.id, message.channel.id, message.id).catch(error => log.warn('Não foi possível marcar mensagem apagada da denúncia: ' + error.message));
             }
             await handleDeletedMessage(message);
         } catch (error) {

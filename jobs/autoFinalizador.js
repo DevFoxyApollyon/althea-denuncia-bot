@@ -1,4 +1,4 @@
-﻿const chalk = require('chalk');
+const chalk = require('chalk');
 const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
@@ -1100,7 +1100,7 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
         }
         return !houveErroCritico;
     } catch (error) {
-        log.error(`Erro ao finalizar ${denuncia._id}: ${error.message}`, meta);
+        log.error(`Erro ao finalizar ${denuncia._id}: ${error.message}`, { guildName, denunciaId: String(denuncia._id) });
         return false;
     }
 }
@@ -1117,7 +1117,7 @@ async function verificarEFinalizarDenuncias(client, signal = null) {
     const dataLimite = calcularDataLimite();
     const denuncias  = await Denuncia.find({
         dataCriacao: { $lte: dataLimite },
-        guildId:     { $exists: true, $ne: null, $ne: '' },
+        guildId:     { $exists: true, $nin: [null, ''] },
         status:      { $in: STATUS_FINALIZAVEIS },
     })
     .sort({ dataCriacao: 1 })

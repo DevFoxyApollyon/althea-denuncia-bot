@@ -1,4 +1,5 @@
-﻿const { getBrasiliaDate, formatTimeBR } = require('./dateUtils');
+const chalk = require('chalk');
+const { getBrasiliaDate, formatTimeBR } = require('./dateUtils');
 
 function safeStringify(obj, maxLen = 800) {
   try {
@@ -64,4 +65,19 @@ class Logger {
   }
 }
 
-module.exports = { Logger };
+// Log colorido de console usado no boot, nos jobs e nos eventos.
+// Sem tag, o rótulo é o próprio nível ([INFO], [ERRO]...); com tag, o nome do módulo.
+function createLog(tag) {
+  const label = (nivel) => chalk.gray(`[${tag || nivel}]`);
+  return {
+    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${label('INFO')} ${msg}`),
+    success: (msg) => console.log(`${chalk.green('✔')} ${label('SUCESSO')} ${msg}`),
+    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${label('AVISO')} ${msg}`),
+    error:   (msg) => console.log(`${chalk.red('✖')} ${label('ERRO')} ${msg}`),
+    system:  (msg) => console.log(`${chalk.magenta('⚙')} ${label('SISTEMA')} ${msg}`)
+  };
+}
+
+const log = createLog();
+
+module.exports = { Logger, createLog, log };

@@ -1,6 +1,6 @@
 const Denuncia = require('../models/Denuncia');
 const { EmbedBuilder } = require('discord.js');
-const { getCachedConfig } = require('../utils/performance');
+const { getConfig: getCachedConfig } = require('../utils/configCache');
 const { getBrasiliaDate } = require('../utils/dateUtils');
 const { processarAnaliseAutomatica } = require('../Handlers/handlerStatusButton');
 
