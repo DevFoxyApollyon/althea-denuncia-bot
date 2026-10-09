@@ -19,7 +19,7 @@ Projeto criado para **uso real em produção**, com foco em **estabilidade, orga
 
 | Versão | Stack | Tecnologias |
 |--------|-------|-------------|
-| **v3.1.0** | **Node.js** (>= 18) | **discord.js v14**, **MongoDB**, **Mongoose**, **release** |
+| **v3.2.4** | **Node.js** (>= 18) | **discord.js v14**, **MongoDB**, **Mongoose**, **release** |
 
 ---
 
@@ -156,6 +156,29 @@ Tratamento completo de erros comuns do Discord:
 - Timeouts e erros 5xx
 - Proteção contra cliques duplicados
 - Logs centralizados
+
+---
+
+## ⌨️ Comandos
+
+Os comandos de barra são registrados automaticamente em cada servidor quando o bot inicia.
+Os comandos com `!` continuam funcionando.
+
+| Barra | Prefixo | Quem pode usar | O que faz |
+|-------|---------|----------------|-----------|
+| `/painel` | `!painel` | Administrador do servidor ou Responsável Admin | Abre o painel de configuração |
+| `/denuncia` | `!denuncia` | Responsável Admin | Publica/atualiza a mensagem de abertura de denúncias |
+| `/rank [periodo]` | `!rank [mensal\|semanal\|hoje]` | Administrador e Responsável Admin | Ranking de atendimento da staff |
+| `/status` | `!status` | Administrador do servidor | Diagnóstico do bot |
+
+---
+
+## 🧪 Desenvolvimento
+
+```bash
+npm run lint   # ESLint
+npm test       # testes (node:test) — não acessam o banco nem o Discord
+```
 
 ---
 

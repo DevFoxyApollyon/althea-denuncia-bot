@@ -1,8 +1,32 @@
-﻿# 📋 Changelog
+# 📋 Changelog
 
 Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 Este projeto segue o padrão de versionamento semântico (SemVer).
+
+---
+
+## [Não lançado]
+### ✨ Novidades
+- Comandos de barra `/rank`, `/painel`, `/status` e `/denuncia` (os comandos com `!` continuam funcionando).
+- ESLint (`npm run lint`) e testes automatizados (`npm test`).
+
+### 🔧 Correções
+- O reset mensal do ranking agora move as ações antigas para `moderationactions_arquivo` em vez de apagar tudo.
+- O cooldown de reivindicação passa a valer mesmo depois de um restart do bot.
+- O painel de status mostrava latência do banco, comandos e erros sempre zerados.
+- Sincronização de nickname com mais de um ID em `BOT_ALVO_ID`.
+- Datas do model `Denuncia` eram trocadas pelo horário atual ao serem gravadas.
+- Erro escondido no auto-finalizador quando a finalização de uma denúncia falhava.
+- `uuid` era usado sem estar declarado no `package.json`.
+
+### 🧱 Estrutura
+- Cache único de configurações (`utils/configCache.js`), invalidado automaticamente ao salvar.
+- Mensagens dos tópicos gravadas na coleção `DenunciaMensagem` (denúncias antigas continuam sendo lidas do formato anterior).
+- Novos índices em `Denuncia` e índice único `{ guildId, userId }` em `Usuario`.
+- Validação de todas as variáveis do `.env` na inicialização.
+- `handlerStatusButton.js` dividido em `Handlers/statusDenuncia/`.
+- Removidos módulos sem uso e as dependências `googleapis`, `limiter` e `uuid`.
 
 ---
 

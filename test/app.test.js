@@ -8,11 +8,15 @@ const { fecharConexoes } = require('./helpers/env');
 const RAIZ = path.join(__dirname, '..');
 const PASTAS = ['utils', 'models', 'services', 'Handlers', 'commands', 'jobs'];
 
-const arquivos = PASTAS.flatMap(pasta =>
-  fs.readdirSync(path.join(RAIZ, pasta))
-    .filter(nome => nome.endsWith('.js'))
-    .map(nome => path.join(pasta, nome))
-);
+function listarJs(pasta) {
+  return fs.readdirSync(path.join(RAIZ, pasta), { withFileTypes: true }).flatMap(item => {
+    const caminho = path.join(pasta, item.name);
+    if (item.isDirectory()) return listarJs(caminho);
+    return item.name.endsWith('.js') ? [caminho] : [];
+  });
+}
+
+const arquivos = PASTAS.flatMap(listarJs);
 
 const ler = (arquivo) => fs.readFileSync(path.join(RAIZ, arquivo), 'utf8');
 
