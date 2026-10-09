@@ -6,48 +6,26 @@ require('dotenv').config();
 const { 
     Client, 
     GatewayIntentBits, 
-    MessageFlags, 
     ActivityType,
-    Collection,
     version: discordVersion
 } = require('discord.js');
 const mongoose = require('mongoose');
 const chalk = require('chalk'); 
 const packageJson = require('./package.json');
 
-const interactionHandler = require('./Handlers/interactionHandler');
-const { handleDeletedMessage } = require('./Handlers/messageDeleteHandler');
 const commands = require('./utils/commands');
 const Config = require('./models/Config');
-const Denuncia = require('./models/Denuncia');
-const {
-    contemPalavraProibida,
-    contemMarcacaoAdmin,
-    contemLinkProibido,
-    contemEmojiFigurinhaOuGif,
-    ehMensagemEncaminhada,
-    processaStrike,
-    processaStrikeLink,
-    processaStrikeEmoji,
-    verificaEdicao,
-    podeFalarSemBloqueio
-} = require('./utils/strikeWords');
 const Strike = require('./models/Strike');
-const { handleYoutubeDenuncia } = require('./utils/youtubeUtils');
 const { advancedMonitor } = require('./utils/advancedMonitoring');
 const { setupRankJobs } = require('./jobs/rankJobs');
 const secondaryConnection = require('./utils/secondaryDb');
-const { syncUserOnNicknameChange } = require('./utils/userSyncAndNotify');
 const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 const { iniciarPoller } = require('./jobs/nicknamePoller');
 const { iniciarLimpezaContasDuplicadas } = require('./jobs/Limparcontasduplicadas');
-const Usuarios = require('./models/Usuario');
-const { limparMenusOrfaos } = require('./utils/feedback');
-const { extrairContaDoNickname } = require('./utils/nickUtils');
-const { usuarioAutorizadoNoTopico } = require('./utils/restricaoTopicos');
-const { usuarioIsento } = require('./utils/usuariosIsentos');
-const { handleRecusarPorMensagem } = require('./Handlers/handlerStatusButton');
-const { serializarMensagem, buscarCanal } = require('./utils/denunciaMensagens');
+const { iniciarAvisoReivindicacao } = require('./jobs/avisoReivindicacao');
+const { registerMemberEvents } = require('./Handlers/memberEvents');
+const { registerMessageEvents } = require('./Handlers/messageEvents');
+const { registerInteractionEvents } = require('./Handlers/interactionEvents');
 
 const client = new Client({
     intents: [
@@ -89,80 +67,9 @@ async function getConfig(guildId) {
     return config;
 }
 
-client.on('guildMemberUpdate', async (oldMember, newMember) => {
-    try {
-        await syncUserOnNicknameChange(oldMember, newMember);
-
-        if (oldMember.nickname === newMember.nickname) return;
-
-        let entry = null;
-        for (let tentativa = 0; tentativa < 3; tentativa++) {
-            await new Promise(r => setTimeout(r, 1000 * (tentativa + 1)));
-
-            const auditLogs = await newMember.guild.fetchAuditLogs({ limit: 5, type: 24 });
-
-            entry = auditLogs.entries.find(e =>
-                e.target?.id === newMember.user.id &&
-                e.executor?.id === process.env.BOT_ALVO_ID &&
-                Date.now() - e.createdTimestamp < 15000
-            );
-
-            if (entry) break;
-        }
-
-        if (!entry) return;
-
-        const nickAtual     = newMember.nickname || newMember.user.username;
-        const contaExtraida = extrairContaDoNickname(nickAtual);
-
-        const setPayload = {
-            username:  newMember.user.username,
-            nickname:  newMember.nickname,
-            updatedAt: new Date(),
-        };
-        if (contaExtraida) setPayload.conta = contaExtraida;
-
-        await Usuarios.findOneAndUpdate(
-            { guildId: newMember.guild.id, userId: newMember.user.id },
-            { $set: setPayload },
-            { upsert: true, new: true }
-        );
-
-        log.success(
-            `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} — nickname registrado: ` +
-            `${chalk.red(oldMember.nickname ?? 'nenhum')} ${chalk.gray('→')} ${chalk.green(newMember.nickname ?? 'nenhum')}` +
-            (contaExtraida ? chalk.gray(` | conta: ${contaExtraida}`) : '') +
-            chalk.gray(` | ${newMember.guild.name}`)
-        );
-
-    } catch (e) {
-        if (e.code === 50278) return;
-        log.warn('Erro ao sincronizar nickname: ' + e.message);
-    }
-});
-
-client.on('guildMemberAdd', async (member) => {
-    try {
-        const usuario = await Usuarios.findOne({
-            guildId: member.guild.id,
-            userId:  member.user.id,
-        });
-
-        if (!usuario?.nickname) return;
-
-        await member.setNickname(usuario.nickname, 'Nickname restaurado automaticamente');
-
-        log.success(
-            `${chalk.white(member.user.username)} ${chalk.gray(`(${member.user.id})`)} — nickname restaurado: ${chalk.green(usuario.nickname)} ${chalk.gray(`| ${member.guild.name}`)}`
-        );
-    } catch (e) {
-        if (e.code === 50013) {
-            log.warn(`Sem permissão para restaurar nickname de ${member.user.username} em ${member.guild.name}`);
-            return;
-        }
-        log.error(`Erro ao restaurar nickname: ${e.message}`);
-    }
-});
+registerMemberEvents(client, log);
+registerMessageEvents(client, { log, getConfig });
+registerInteractionEvents(client, log);
 
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
@@ -246,12 +153,12 @@ client.once('clientReady', async (readyClient) => {
 
     setTimeout(async () => {
         iniciarLimpezaContasDuplicadas();
-        await limparMenusOrfaos(client).catch(err => log.error('limparMenusOrfaos: ' + err.message));
         await iniciarPoller(client);
         console.log(chalk.cyan.bold('═'.repeat(60) + '\n'));
     }, 15_000);
 
     iniciarAutoFinalizador(client);
+    iniciarAvisoReivindicacao(client);
 
     readyClient.user.setPresence({
         activities: [{
@@ -261,216 +168,6 @@ client.once('clientReady', async (readyClient) => {
         }],
         status: 'online'
     });
-});
-
-client.on('messageCreate', async (message) => {
-    if (!message.guild) return;
-
-    if (message.channel.isThread?.()) {
-        await Denuncia.updateOne(
-            { guildId: message.guild.id, threadId: message.channel.id },
-            { $push: { mensagens: serializarMensagem(message) } }
-        ).catch(error => log.warn('Não foi possível registrar mensagem da denúncia: ' + error.message));
-    }
-
-    if (message.author.bot) return;
-
-    const config = await getConfig(message.guild.id) ?? {};
-
-    if (message.channel.isThread?.() && message.attachments.size > 0 && config.channels?.databaseprovas) {
-        const denuncia = await Denuncia.findOne({
-            guildId: message.guild.id,
-            threadId: message.channel.id,
-        }).select('_id messageId');
-        const canalProvas = await buscarCanal(client, config.channels.databaseprovas);
-
-        if (denuncia && canalProvas?.isTextBased?.()) {
-            const anexos = Array.from(message.attachments.values());
-            const copia = await canalProvas.send({
-                content: [
-                    `🗃️ **Provas arquivadas**`,
-                    `Denúncia: \`${denuncia.messageId}\``,
-                    `Autor: <@${message.author.id}>`,
-                    `Origem: ${message.url}`,
-                ].join('\n'),
-                files: anexos.map(attachment => ({
-                    attachment: attachment.url,
-                    name: attachment.name || `prova-${attachment.id}`,
-                })),
-                allowedMentions: { parse: [] },
-            }).catch(error => {
-                log.warn('Não foi possível salvar prova no canal databaseprovas: ' + error.message);
-                return null;
-            });
-
-            if (copia) {
-                const anexosSalvos = Array.from(copia.attachments.values()).map(attachment => ({
-                    id: attachment.id,
-                    nome: attachment.name || '',
-                    url: attachment.url || '',
-                    tipo: attachment.contentType || '',
-                    tamanho: attachment.size ?? null,
-                }));
-                await Denuncia.updateOne(
-                    { _id: denuncia._id, 'mensagens.mensagemId': message.id },
-                    { $set: { 'mensagens.$.anexos': anexosSalvos } }
-                ).catch(error => log.warn('Não foi possível registrar URLs das provas arquivadas: ' + error.message));
-            }
-        }
-    }
-
-    if (
-        message.channel.isThread?.() &&
-        ['recusado', 'recusada'].includes(message.content.trim().toLowerCase())
-    ) {
-        const responsavelAdmin = config.roles?.responsavel_admin;
-        const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
-        const podeRecusar = await usuarioIsento(message.author.id) ||
-            Boolean(responsavelAdmin && member?.roles.cache.has(responsavelAdmin));
-
-        if (podeRecusar) {
-            const denuncia = await Denuncia.findOne({
-                guildId: message.guild.id,
-                threadId: message.channel.id,
-                status: { $nin: ['aceita', 'recusada'] }
-            });
-
-            if (denuncia) {
-                await handleRecusarPorMensagem(message, denuncia, config).catch((error) => {
-                    log.error('Erro ao recusar denúncia por palavra-chave: ' + error.message);
-                });
-                await message.delete().catch(() => {});
-                return;
-            }
-        }
-    }
-
-    const semBloqueio = await podeFalarSemBloqueio(message, config);
-
-    if (!semBloqueio && message.channel.isThread?.()) {
-        const parentId = message.channel.parentId;
-        const ehTopicoDenuncia = parentId && (parentId === config?.channels?.pc || parentId === config?.channels?.mobile);
-
-        if (ehTopicoDenuncia) {
-            const ehAdministrador = config?.roles?.administrador
-                ? message.member?.roles.cache.has(config.roles.administrador)
-                : false;
-            const ehResponsavelAdmin = config?.roles?.responsavel_admin
-                ? message.member?.roles.cache.has(config.roles.responsavel_admin)
-                : false;
-            const ehStaff = ehAdministrador || ehResponsavelAdmin;
-
-            if (!ehStaff) {
-                const autorizado = await usuarioAutorizadoNoTopico(message.channel.id, message.author.id);
-                if (!autorizado) {
-                    await message.delete().catch(() => {});
-                    const aviso = await message.channel.send({
-                        content: `<@${message.author.id}> Este tópico é restrito ao denunciante e ao(s) acusado(s). Sua mensagem foi removida.`,
-                    }).catch(() => null);
-                    if (aviso) setTimeout(() => aviso.delete().catch(() => {}), 5000);
-                    return;
-                }
-            }
-        }
-    }
-
-        if (!semBloqueio && (contemLinkProibido(message.content) || ehMensagemEncaminhada(message))) {
-        await processaStrikeLink(message, Strike, config);
-        return;
-    }
-
-        if (!semBloqueio && contemEmojiFigurinhaOuGif(message)) {
-        await processaStrikeEmoji(message, Strike, config);
-        return;
-    }
-
-        if (!semBloqueio && (contemPalavraProibida(message.content) || await contemMarcacaoAdmin(message, config))) {
-        await processaStrike(message, Strike, config);
-        return;
-    }
-
-    if (await handleYoutubeDenuncia(message)) return;
-
-    if (!message.content.startsWith('!')) return;
-
-    const args = message.content.slice(1).trim().split(/ +/);
-    const commandName = args.shift().toLowerCase();
-    const commandFn = commands[commandName];
-
-    if (!commandFn) return;
-
-    try {
-        const startTime = Date.now();
-        await commandFn(message, args);
-
-        const duration = Date.now() - startTime;
-        if (advancedMonitor?.recordCommand) {
-            advancedMonitor.recordCommand(commandName, duration, true, message.author.id);
-        }
-    } catch (error) {
-        log.error(`Erro no comando !${commandName}: ${error.message}`);
-    }
-});
-
-client.on('messageUpdate', async (oldMessage, newMessage) => {
-    if (!newMessage.guild) return;
-    if (newMessage.channel.isThread?.()) {
-        await Denuncia.updateOne(
-            { guildId: newMessage.guild.id, threadId: newMessage.channel.id, 'mensagens.mensagemId': newMessage.id },
-            { $set: {
-                'mensagens.$.conteudo': newMessage.content || '',
-                'mensagens.$.editadaEm': new Date(),
-                'mensagens.$.embeds': (newMessage.embeds || []).map(embed =>
-                    typeof embed.toJSON === 'function' ? embed.toJSON() : embed
-                )
-            } }
-        ).catch(error => log.warn('Não foi possível atualizar mensagem da denúncia: ' + error.message));
-    }
-    const config = await getConfig(newMessage.guild.id) ?? {};
-    await verificaEdicao(oldMessage, newMessage, Strike, config);
-});
-
-client.on('interactionCreate', async (interaction) => {
-    try {
-        const startTime = Date.now();
-        await interactionHandler(interaction);
-
-        if (advancedMonitor?.recordInteraction) {
-            const duration = Date.now() - startTime;
-            const type = interaction.isButton() ? 'BUTTON' : interaction.isModalSubmit() ? 'MODAL' : 'SELECT';
-            advancedMonitor.recordInteraction(type, duration, true);
-        }
-    } catch (error) {
-        if (error.code === 50278) return;
-        if (error.code === 10062) return;
-
-        log.error(`Erro na interação (${interaction?.customId ?? 'desconhecido'}): ${error.message}`);
-
-        try {
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: '❌ Erro interno.', flags: [MessageFlags.Ephemeral] });
-            }
-        } catch (_) {}
-    }
-});
-
-client.on('messageDelete', async (msg) => {
-
-    if (msg.guild) {
-        const config = await Config.findOne({ guildId: msg.guild.id });
-    }
-
-    try {
-        if (msg.guild && msg.channel.isThread?.()) {
-            await Denuncia.updateOne(
-                { guildId: msg.guild.id, threadId: msg.channel.id, 'mensagens.mensagemId': msg.id },
-                { $set: { 'mensagens.$.apagadaEm': new Date() } }
-            ).catch(error => log.warn('Não foi possível marcar mensagem apagada da denúncia: ' + error.message));
-        }
-        await handleDeletedMessage(msg);
-    } catch (e) {
-        log.error('messageDelete: ' + e.message);
-    }
 });
 
 client.on('error', err => log.error('Discord API Error: ' + err.message));

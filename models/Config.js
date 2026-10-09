@@ -17,11 +17,10 @@ const configSchema = new mongoose.Schema({
     cloud: { type: String, required: false, default: '' },
     canalDenuncia: { type: String, required: false, default: '' },
     analysis: { type: String, required: false, default: '' },
-    topDaily: { type: String, required: false, default: '' },
-    databaseprovas: { type: String, required: false, default: '' } 
+    topDaily: { type: String, required: false, default: '' }
   },
   manutencaoDenuncia: { type: Boolean, default: false },
-  manutencaoDenuncia: { type: Boolean, default: false },
+  bloquearReivindicacaoComPendentes: { type: Boolean, default: true },
   roles: {
     permitido: { type: String, required: false, default: '' },
     pc: { type: String, required: false, default: '' },

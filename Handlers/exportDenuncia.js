@@ -83,9 +83,12 @@ async function fetchAllThreadMessages(thread) {
   const all = [];
   let lastId = undefined;
 
+  thread.messages.cache.clear();
+
   while (true) {
     const batch = await thread.messages.fetch({
       limit: 100,
+      cache: false,
       ...(lastId ? { before: lastId } : {}),
     });
 
@@ -484,9 +487,16 @@ async function handleExportButton(interaction) {
       });
     }
 
-    const cloudChannelId = config.channels?.cloud || config.channels?.backup || config.channels?.log;
-    const logsChannel = await buscarCanal(interaction.client, cloudChannelId);
-    const maxUploadBytes = getGuildUploadLimitBytes(logsChannel?.guild || guild);
+    const logChannelIds = [...new Set([
+      config.channels?.cloud,
+      config.channels?.backup,
+    ].filter(Boolean))];
+    const logsChannels = (await Promise.all(logChannelIds.map(channelId => buscarCanal(interaction.client, channelId))))
+      .filter(channel => channel?.isTextBased?.());
+    const logsChannel = logsChannels[0] || null;
+    const maxUploadBytes = logsChannels.length
+      ? Math.min(...logsChannels.map(channel => getGuildUploadLimitBytes(channel.guild || guild)))
+      : getGuildUploadLimitBytes(guild);
 
     const requiredRoleId = config.roles?.responsavel_admin;
     if (!requiredRoleId || !interaction.member.roles.cache.has(requiredRoleId)) {
@@ -684,27 +694,32 @@ async function handleExportButton(interaction) {
 
     let logMessage = null;
 
-    if (logsChannel) {
+    if (logsChannels.length > 0) {
       const initialZipBatch = zipAttachments.slice(0, EXPORT_CONSTANTS.FILES_PER_MESSAGE);
 
-      logMessage = await logsChannel.send({
-        content: `**[ARQUIVAMENTO - PROVAS PERMANENTES: PARTE 1 DE ${totalLogBatches}]**`,
-        embeds: [logEmbed],
-        files: initialZipBatch,
-      });
-
-      for (let i = EXPORT_CONSTANTS.FILES_PER_MESSAGE; i < zipAttachments.length; i += EXPORT_CONSTANTS.FILES_PER_MESSAGE) {
-        const nextBatch = zipAttachments.slice(i, i + EXPORT_CONSTANTS.FILES_PER_MESSAGE);
-        await logsChannel.send({
-          content: `**[ARQUIVAMENTO - PROVAS PERMANENTES: PARTE ${Math.floor(i / EXPORT_CONSTANTS.FILES_PER_MESSAGE) + 2} DE ${totalLogBatches}]**`,
-          files: nextBatch,
+      let previewMessage = null;
+      for (const channel of logsChannels) {
+        const channelLogMessage = await channel.send({
+          content: `**[ARQUIVAMENTO - PROVAS PERMANENTES: PARTE 1 DE ${totalLogBatches}]**`,
+          embeds: [logEmbed],
+          files: initialZipBatch,
         });
-      }
+        if (!logMessage) logMessage = channelLogMessage;
 
-      const previewMessage = await logsChannel.send({
-        content: `**[PRÉ-VISUALIZAÇÃO]** ${thread.name} - Arquivo HTML solto.`,
-        files: [htmlAttachment],
-      });
+        for (let i = EXPORT_CONSTANTS.FILES_PER_MESSAGE; i < zipAttachments.length; i += EXPORT_CONSTANTS.FILES_PER_MESSAGE) {
+          const nextBatch = zipAttachments.slice(i, i + EXPORT_CONSTANTS.FILES_PER_MESSAGE);
+          await channel.send({
+            content: `**[ARQUIVAMENTO - PROVAS PERMANENTES: PARTE ${Math.floor(i / EXPORT_CONSTANTS.FILES_PER_MESSAGE) + 2} DE ${totalLogBatches}]**`,
+            files: nextBatch,
+          });
+        }
+
+        const sentPreview = await channel.send({
+          content: `**[PRÉ-VISUALIZAÇÃO]** ${thread.name} - Arquivo HTML solto.`,
+          files: [htmlAttachment],
+        });
+        if (!previewMessage) previewMessage = sentPreview;
+      }
 
       const previewLink = previewMessage.url;
 

@@ -21,6 +21,8 @@ const denunciaSchema = new mongoose.Schema({
     required: true,
     index: true 
   },
+  armazemThreadId: { type: String, default: null, index: true },
+  registroThreadId: { type: String, default: null, index: true },
   denunciante: { 
     type: String, 
     required: true 
@@ -62,6 +64,11 @@ const denunciaSchema = new mongoose.Schema({
       tamanho: { type: Number, default: null }
     }],
     embeds: { type: mongoose.Schema.Types.Mixed, default: [] },
+    espelhos: [{
+      _id: false,
+      threadId: { type: String, required: true },
+      messageId: { type: String, required: true }
+    }],
     apagadaEm: { type: Date, default: null }
   }],
   platform: { 
@@ -147,6 +154,34 @@ const denunciaSchema = new mongoose.Schema({
     default: null
   },
   claimedAt: {
+    type: Date,
+    default: null,
+    set: (v) => v ? getBrasiliaDate(v) : v
+  },
+  claimedReminderSentAt: {
+    type: Date,
+    default: null,
+    set: (v) => v ? getBrasiliaDate(v) : v
+  },
+  claimedWarningMessageId: {
+    type: String,
+    default: null
+  },
+  claimedWarningExpiresAt: {
+    type: Date,
+    default: null,
+    set: (v) => v ? getBrasiliaDate(v) : v
+  },
+  autoAnalysisAt: {
+    type: Date,
+    default: null,
+    set: (v) => v ? getBrasiliaDate(v) : v
+  },
+  autoAnalysisMessageId: {
+    type: String,
+    default: null
+  },
+  autoAnalysisExpiresAt: {
     type: Date,
     default: null,
     set: (v) => v ? getBrasiliaDate(v) : v

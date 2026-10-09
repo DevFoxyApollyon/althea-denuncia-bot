@@ -269,8 +269,9 @@ function calcularDataLimite() {
 async function fetchAllThreadMessages(thread) {
     const all = [];
     let lastId;
+    thread.messages.cache.clear();
     while (true) {
-        const batch = await thread.messages.fetch({ limit: 100, ...(lastId ? { before: lastId } : {}) });
+        const batch = await thread.messages.fetch({ limit: 100, cache: false, ...(lastId ? { before: lastId } : {}) });
         if (!batch || batch.size === 0) break;
         const values = Array.from(batch.values());
         all.push(...values);
@@ -349,7 +350,6 @@ async function enviarParteComSplit(items, meta, ctx) {
     if (items.length === 0) return;
 
     let buf = await buildZipBuffer(items);
-    for (const item of items) item.content = null;
 
     ctx.contador.valor++;
     const numeroParte = ctx.contador.valor;
@@ -360,17 +360,19 @@ async function enviarParteComSplit(items, meta, ctx) {
     });
 
     try {
-        const sent = await comRetry(
-            () => ctx.logsChannel.send({ content: partLabel, files: [zipAttachment] }),
-            {
-                label: `enviar parte ${numeroParte} do ZIP`,
-                meta,
-                
-                
-                isRetryable: err => !isErroEntidadeGrandeDemais(err),
+        for (const logsChannel of ctx.logsChannels) {
+            const sent = await comRetry(
+                () => logsChannel.send({ content: partLabel, files: [zipAttachment] }),
+                {
+                    label: `enviar parte ${numeroParte} do ZIP`,
+                    meta,
+                    isRetryable: err => !isErroEntidadeGrandeDemais(err),
+                }
+            );
+            if (!ctx.estado.logMessages.has(logsChannel.id)) {
+                ctx.estado.logMessages.set(logsChannel.id, sent);
             }
-        );
-        if (!ctx.estado.logMessage) ctx.estado.logMessage = sent;
+        }
         ctx.estado.partsEnviadas++;
     } catch (err) {
         if (isErroEntidadeGrandeDemais(err) && items.length > 1) {
@@ -403,6 +405,7 @@ async function enviarParteComSplit(items, meta, ctx) {
         ctx.estado.houveErroCritico = true;
     }
 
+    for (const item of items) item.content = null;
     zipAttachment.attachment = null;
     zipAttachment = null;
     buf = null;
@@ -602,8 +605,11 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
         
         
         
-        const cloudChannelId = config?.channels?.cloud || config?.channels?.backup || config?.channels?.log;
-        if (!cloudChannelId) {
+        const logChannelIds = [...new Set([
+            config?.channels?.cloud,
+            config?.channels?.backup,
+        ].filter(Boolean))];
+        if (logChannelIds.length === 0) {
             log.error(
                 `Canal de log não configurado para este servidor — denúncia será finalizada SEM exportação de anexos. ` +
             `Configure "channels.cloud" nas configurações do servidor para habilitar a exportação completa.`,
@@ -622,13 +628,12 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
             return false;
         }
 
-        const cloudChannel = await buscarCanal(client, cloudChannelId);
-        if (!cloudChannel?.isTextBased?.()) {
-            log.error(`Canal Cloud não encontrado ou sem suporte a texto: ${cloudChannelId}`, meta);
+        const logsChannels = (await Promise.all(logChannelIds.map(channelId => buscarCanal(client, channelId))))
+            .filter(channel => channel?.isTextBased?.());
+        if (logsChannels.length === 0) {
+            log.error(`Nenhum canal de arquivamento encontrado: ${logChannelIds.join(', ')}`, meta);
             return false;
         }
-
-        const maxUploadBytes = getGuildUploadLimitBytes(cloudChannel.guild || guild);
 
         const [thread, channel] = await Promise.all([
             denuncia.threadId
@@ -716,8 +721,6 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
             const executorTag  = 'Sistema Automatico';
             const baseFileName = safeFileName(`denuncia_${denuncia.messageId}_${denuncia.acusado}`);
             const statusMeta   = makeStatusMeta(denuncia.status);
-            const logsChannel  = cloudChannel;
-
             let zipHtmlContent = await generateHtmlString(
                 thread, denuncia, executorTag, true,
                 sortedMessages, avatarNameByUserId, attachmentNameByUrl, membersMap
@@ -735,23 +738,31 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
             
             
             
-            const contadorPartes = { valor: 0 };
-            const estadoEnvio    = { logMessage: null, partsEnviadas: 0, houveErroCritico: false };
+            const estadoEnvio = { logMessages: new Map(), partsEnviadas: 0, houveErroCritico: false };
+            const channelBatchers = logsChannels.map((logsChannel) => {
+                const contadorPartes = { valor: 0 };
+                const maxUploadBytes = getGuildUploadLimitBytes(logsChannel.guild || guild);
+                const batcher = new ZipBatcher(maxUploadBytes, async (items) => {
+                    await enviarParteComSplit(items, meta, {
+                        logsChannels: [logsChannel],
+                        baseFileName,
+                        contador: contadorPartes,
+                        estado: estadoEnvio,
+                    });
+                }, meta);
+                return { logsChannel, maxUploadBytes, batcher };
+            });
 
-            const batcher = new ZipBatcher(maxUploadBytes, async (items) => {
-                if (!logsChannel) return;
-                await enviarParteComSplit(items, meta, {
-                    logsChannel,
-                    baseFileName,
-                    contador: contadorPartes,
-                    estado: estadoEnvio,
-                });
-            }, meta);
-
-            await batcher.add(`${baseFileName}.html`, Buffer.from(zipHtmlContent, 'utf8'));
+            const htmlBuffer = Buffer.from(zipHtmlContent, 'utf8');
+            for (const { batcher } of channelBatchers) {
+                await batcher.add(`${baseFileName}.html`, htmlBuffer);
+            }
             zipHtmlContent = null;
 
             let downloadedBytes  = 0;
+            const anexosNaoArquivadosPorCanal = new Map(
+                channelBatchers.map(({ logsChannel }) => [logsChannel.id, []])
+            );
             for (const msg of sortedMessages) {
                 if (signal?.aborted) { log.warn('Download de anexos abortado: timeout global do ciclo', meta); break; }
                 if (downloadedBytes >= EXPORT.MAX_TOTAL_DOWNLOAD_BYTES) break;
@@ -761,16 +772,29 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                     try {
                         const bytesRestantes = EXPORT.MAX_TOTAL_DOWNLOAD_BYTES - downloadedBytes;
                         
-                        const limiteEfetivo  = Math.min(EXPORT.MAX_SINGLE_DOWNLOAD_BYTES, maxUploadBytes, bytesRestantes);
+                        const limiteEfetivo  = Math.min(EXPORT.MAX_SINGLE_DOWNLOAD_BYTES, bytesRestantes);
                         const resultado = await fetchBufferComTimeout(attachment.url, EXPORT.FETCH_TIMEOUT_MS, signal, limiteEfetivo);
                         if (!resultado.ok) {
-                            if (resultado.tooLarge) log.warn(`Anexo descartado por exceder o limite de tamanho: ${attachment.url}`, meta);
+                            if (resultado.tooLarge) {
+                                const anexoGrande = { nome: attachment.name || 'arquivo', url: attachment.url };
+                                for (const { logsChannel } of channelBatchers) {
+                                    anexosNaoArquivadosPorCanal.get(logsChannel.id).push(anexoGrande);
+                                }
+                                log.warn(`Anexo preservado como link por exceder o limite de tamanho: ${attachment.url}`, meta);
+                            }
                             continue;
                         }
                         let buf = resultado.buffer;
                         downloadedBytes += buf.length;
+                        const anexo = { nome: attachment.name || 'arquivo', url: attachment.url };
+                        for (const { logsChannel, maxUploadBytes, batcher } of channelBatchers) {
+                            if (buf.length > maxUploadBytes) {
+                                anexosNaoArquivadosPorCanal.get(logsChannel.id).push(anexo);
+                                continue;
+                            }
+                            await batcher.add(`anexos/${attachmentNameByUrl.get(attachment.url)}`, buf);
+                        }
                         anexosBaixados++;
-                        await batcher.add(`anexos/${attachmentNameByUrl.get(attachment.url)}`, buf);
                         buf = null;
                     } catch (err) {
                         log.warn(`Falha ao baixar attachment: ${err.message}`, meta);
@@ -789,7 +813,11 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                     let buf = resultado.buffer;
                     downloadedBytes += buf.length;
                     avataresBaixados++;
-                    await batcher.add(`anexos/${avatarName}`, buf);
+                    for (const { batcher, maxUploadBytes } of channelBatchers) {
+                        if (buf.length <= maxUploadBytes) {
+                            await batcher.add(`anexos/${avatarName}`, buf);
+                        }
+                    }
                     buf = null;
                     client.users.cache.delete(uid);
                 } catch (err) {
@@ -804,7 +832,43 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
             );
             logMemoria(`pós-download ${denuncia._id}`);
 
-            await batcher.finalize();
+            for (const { logsChannel, batcher } of channelBatchers) {
+                const anexosNaoArquivados = anexosNaoArquivadosPorCanal.get(logsChannel.id);
+                if (anexosNaoArquivados.length > 0) {
+                    const linksAnexos = [
+                        `Anexos grandes não incluídos no ZIP da denúncia ${denuncia.messageId}`,
+                        'Os arquivos abaixo excederam o limite deste canal e foram preservados pelos links originais:',
+                        '',
+                        ...anexosNaoArquivados.flatMap((anexo, index) => [
+                            `${index + 1}. ${anexo.nome}`,
+                            anexo.url,
+                            '',
+                        ]),
+                    ].join('\n');
+                    await batcher.add(
+                        `${baseFileName}_ANEXOS_GRANDES.txt`,
+                        Buffer.from(linksAnexos, 'utf8')
+                    );
+                }
+            }
+
+            for (const { batcher } of channelBatchers) {
+                await batcher.finalize();
+            }
+
+            for (const { logsChannel } of channelBatchers) {
+                const anexosNaoArquivados = anexosNaoArquivadosPorCanal.get(logsChannel.id);
+                if (anexosNaoArquivados.length > 0) {
+                    const linksAnexos = anexosNaoArquivados
+                        .map(anexo => `📎 **${anexo.nome}**\n${anexo.url}`)
+                        .join('\n\n');
+                    await logsChannel.send({
+                        content: `⚠️ **Anexos grandes não incluídos no ZIP deste canal**\nOs arquivos abaixo excedem o limite de upload e foram preservados como links:\n\n${linksAnexos}`,
+                        allowedMentions: { parse: [] },
+                    }).catch(error => log.warn(`Falha ao enviar links de anexos grandes: ${error.message}`, meta));
+                }
+            }
+
             houveErroCritico = houveErroCritico || estadoEnvio.houveErroCritico;
 
             duracaoProcessamento = Date.now() - processStart;
@@ -821,7 +885,7 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
 
             await runGcComLog('pós-batcher', meta);
 
-            if (logsChannel && estadoEnvio.logMessage) {
+            if (estadoEnvio.logMessages.size > 0) {
                 try {
                     const denunciaMsgLink = `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`;
                     const threadLink      = denuncia.threadId
@@ -869,18 +933,29 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                         })
                         .setTimestamp();
 
-                    await comRetry(() => estadoEnvio.logMessage.edit({ embeds: [logEmbed] }), { label: 'editar embed de log', meta });
+                    for (const [channelId, logMessage] of estadoEnvio.logMessages) {
+                        try {
+                            await comRetry(
+                                () => logMessage.edit({ embeds: [logEmbed] }),
+                                { label: `editar embed de log (${channelId})`, meta: { ...meta, channelId } }
+                            );
+                        } catch (err) {
+                            log.error(`Falha ao editar embed no canal ${channelId}: ${err.message}`, { ...meta, channelId });
+                        }
+                    }
                 } catch (err) {
                     log.error(`Falha ao editar embed de log: ${err.message}`, meta);
                 }
             }
 
-            if (logsChannel) {
+            if (logsChannels.length > 0) {
                 try {
-                    await logsChannel.send({
-                        content: `**[PRÉ-VISUALIZAÇÃO]** ${thread.name} — Denúncia \`${denuncia._id}\` (Status: \`${statusMeta.label}\`)`,
-                        files:   [htmlAttachment],
-                    });
+                    for (const logsChannel of logsChannels) {
+                        await logsChannel.send({
+                            content: `**[PRÉ-VISUALIZAÇÃO]** ${thread.name} — Denúncia \`${denuncia._id}\` (Status: \`${statusMeta.label}\`)`,
+                            files:   [htmlAttachment],
+                        });
+                    }
                 } catch (err) {
                     log.warn(`Falha ao enviar preview: ${err.message}`, meta);
                 }
@@ -948,16 +1023,17 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
 
             if (guild) guild.channels.cache.delete(thread.id);
 
-            if (estadoEnvio.logMessage) {
+            const logMessage = estadoEnvio.logMessages.values().next().value;
+            if (logMessage) {
                 try {
                     await Denuncia.findByIdAndUpdate(denuncia._id, {
-                        logMessageId: estadoEnvio.logMessage.id,
+                        logMessageId: logMessage.id,
                         $push: {
                             historico: {
                                 acao:      'FINALIZADA_AUTOMATICAMENTE',
                                 staffId:   'sistema',
                                 data:      new Date(),
-                                detalhes:  { messageLink: estadoEnvio.logMessage.url },
+                                detalhes:  { messageLink: logMessage.url },
                             },
                         },
                     });

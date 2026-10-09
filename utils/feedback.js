@@ -8,13 +8,7 @@
 } = require('discord.js');
 
 const { v4: uuidv4 } = require('uuid');
-const FeedbackTemp = require('../models/FeedbackTemp');
-
-const DELAY_ENTRE_ITENS_MS = 250;
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
+const DenunciaModel = require('../models/Denuncia');
 
 // =========================
 // UTILITARIOS
@@ -49,39 +43,6 @@ function gerarEstrelasNota(nota) {
     const cheias = '\u2B50'.repeat(n);
     const vazias  = '\u25E6'.repeat(10 - n);
     return cheias + vazias;
-}
-
-async function limparMenusOrfaos(client) {
-    try {
-        const pendentes = await FeedbackTemp.find({});
-
-        if (pendentes.length === 0) return;
-
-        const canaisCache = new Map();
-
-        for (const entry of pendentes) {
-            try {
-                let channel = canaisCache.get(entry.channelId);
-                if (channel === undefined) {
-                    channel = await client.channels.fetch(entry.channelId).catch(() => null);
-                    canaisCache.set(entry.channelId, channel);
-                }
-
-                if (channel) {
-                    const msg = await channel.messages.fetch(entry.messageId).catch(() => null);
-                    if (msg) await msg.delete().catch(() => {});
-                }
-
-                await FeedbackTemp.deleteOne({ _id: entry._id });
-            } catch (err) {
-                console.error(`[FeedbackTemp] Erro ao limpar orfao ${entry.denunciaId}:`, err.message);
-            }
-            await sleep(DELAY_ENTRE_ITENS_MS);
-        }
-
-    } catch (err) {
-        console.error('[FeedbackTemp] Erro ao buscar menus orfaos:', err.message);
-    }
 }
 
 // =========================
@@ -295,20 +256,7 @@ async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
             console.error('[Feedback] Falha ao enviar DM para o staff:', dmResult.reason);
 
         await Denuncia.updateOne({ _id: denunciaId }, { $set: { feedbackEnviado: true } });
-
-        try {
-            const temp = await FeedbackTemp.findOne({ denunciaId: denunciaId.toString() });
-            if (temp) {
-                const channel = await interaction.client.channels.fetch(temp.channelId).catch(() => null);
-                if (channel) {
-                    const msg = await channel.messages.fetch(temp.messageId).catch(() => null);
-                    if (msg) await msg.edit({ components: [] }).catch(() => {});
-                }
-                await FeedbackTemp.deleteOne({ denunciaId: denunciaId.toString() });
-            }
-        } catch (err) {
-            console.error('[Feedback] Erro ao deletar menu:', err.message);
-        }
+        await removerFeedbackMenu(interaction.client, denunciaId);
 
         const n      = Number(nota);
         const emoji  = gerarEmojiNota(n);
@@ -358,42 +306,39 @@ async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
 // =========================
 async function inserirFeedbackMenu(client, denuncia) {
     try {
-        if (!denuncia.channelId || !denuncia.messageId) {
-            console.error('[Feedback] channelId/messageId nao definido na denuncia.');
+        if (!denuncia.threadId) {
+            console.error('[Feedback] threadId nao definido na denuncia.');
             return;
         }
 
-        let channel = client.channels.cache.get(denuncia.channelId);
+        let thread = client.channels.cache.get(denuncia.threadId);
 
-        if (!channel) {
-            channel = await client.channels.fetch(denuncia.channelId).catch(() => null);
+        if (!thread) {
+            thread = await client.channels.fetch(denuncia.threadId).catch(() => null);
         }
 
-        if (!channel) {
-            console.error(`[Feedback] Canal da denuncia nao encontrado: ${denuncia.channelId}`);
-            return;
-        }
-
-        const message = await channel.messages.fetch(denuncia.messageId).catch(() => null);
-        if (!message) {
-            console.error(`[Feedback] Mensagem principal nao encontrada: ${denuncia.messageId}`);
+        if (!thread?.isThread?.() || !thread.isTextBased?.()) {
+            console.error(`[Feedback] Tópico da denúncia não encontrado: ${denuncia.threadId}`);
             return;
         }
 
         const menu = criarMenuFeedback(denuncia._id);
-
-        await message.edit({ components: [menu] });
-
-        await FeedbackTemp.findOneAndUpdate(
-            { denunciaId: denuncia._id.toString() },
-            {
-                denunciaId: denuncia._id.toString(),
-                messageId: message.id,
-                channelId: channel.id,
-                criadoEm: new Date()
-            },
-            { upsert: true, new: true }
+        const mensagens = await thread.messages.fetch({ limit: 50 }).catch(() => null);
+        const menuExistente = mensagens?.find(message =>
+            message.author?.id === client.user.id &&
+            message.components?.some(row => row.components?.some(component =>
+                component.customId === `feedback:select:${denuncia._id}`
+            ))
         );
+
+        if (menuExistente) {
+            await menuExistente.edit({ components: [menu] });
+        } else {
+            await thread.send({
+                content: '⭐ **Avalie o atendimento da sua denúncia:**',
+                components: [menu],
+            });
+        }
 
     } catch (err) {
         console.error('[Feedback] Erro ao inserir menu de feedback:', err.message);
@@ -401,15 +346,18 @@ async function inserirFeedbackMenu(client, denuncia) {
 }
 
 async function removerFeedbackMenu(client, denunciaId) {
-    const temp = await FeedbackTemp.findOne({ denunciaId: denunciaId.toString() }).catch(() => null);
-    if (!temp) return;
+    const denuncia = await DenunciaModel.findById(denunciaId).select('threadId').lean().catch(() => null);
+    if (!denuncia) return;
 
-    const channel = await client.channels.fetch(temp.channelId).catch(() => null);
-    const message = channel
-        ? await channel.messages.fetch(temp.messageId).catch(() => null)
-        : null;
-    if (message) await message.edit({ components: [] }).catch(() => {});
-    await FeedbackTemp.deleteOne({ _id: temp._id }).catch(() => {});
+    const thread = await client.channels.fetch(denuncia.threadId).catch(() => null);
+    if (!thread?.isTextBased?.()) return;
+
+    const mensagens = await thread.messages.fetch({ limit: 50 }).catch(() => null);
+    const menuId = `feedback:select:${denunciaId}`;
+    for (const message of mensagens?.values?.() || []) {
+        const temMenu = message.components?.some(row => row.components?.some(component => component.customId === menuId));
+        if (temMenu) await message.delete().catch(() => {});
+    }
 }
 
 module.exports = {
@@ -417,6 +365,5 @@ module.exports = {
     inserirFeedbackMenu,
     handleFeedbackMenu,
     handleFeedbackModal,
-    limparMenusOrfaos,
     removerFeedbackMenu
 };

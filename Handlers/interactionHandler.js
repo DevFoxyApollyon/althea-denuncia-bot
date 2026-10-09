@@ -32,16 +32,18 @@ const {
   createChannelsModal1,
   createChannelsModal2,
   createChannelsModal3,
-  createChannelsModal4,
   createRolesModal1,
   createRolesModal2,
   createExemptUsersModal,
+  atualizarPainelMensagem,
+  atualizarPainelCategoria,
   saveExemptUsers,
   showConfig,
   hasPermission,
   cachePanelConfig,
   getPanelConfig,
-  getPanelExemptUsers
+  getPanelExemptUsers,
+  bloqueioPendentesAtivo
 } = require('../commands/painel');
 
 const { handleStatusButtons } = require('../commands/status');
@@ -58,7 +60,7 @@ async function handlePanelModalSubmit(interaction) {
     if (!config) {
       config = new Config({
         guildId: interaction.guild.id,
-        channels: { pc: '', mobile: '', logs: '', log: '', backup: '', armazem: '', registro: '', cloud: '', canalDenuncia: '', analysis: '', topDaily: '', databaseprovas: '' },
+        channels: { pc: '', mobile: '', logs: '', log: '', backup: '', armazem: '', registro: '', cloud: '', canalDenuncia: '', analysis: '', topDaily: '' },
         roles: { permitido: '', pc: '', administrador: '', responsavel_admin: '' },
         updatedBy: interaction.user.tag
       });
@@ -82,9 +84,6 @@ async function handlePanelModalSubmit(interaction) {
         config.channels.cloud = fields.getTextInputValue('cloud_channel').trim();
         config.channels.canalDenuncia = fields.getTextInputValue('canal_denuncia_channel').trim();
         break;
-      case 'channels_modal_4':
-        config.channels.databaseprovas = fields.getTextInputValue('databaseprovas_channel').trim();
-        break;
       case 'roles_modal_1':
         config.roles.permitido = fields.getTextInputValue('permitido_role').trim();
         config.roles.pc = fields.getTextInputValue('pc_role').trim();
@@ -101,6 +100,7 @@ async function handlePanelModalSubmit(interaction) {
     config.updatedBy = interaction.user.tag;
     await config.save();
     cachePanelConfig(interaction.guild.id, config);
+    await atualizarPainelMensagem(interaction, config);
 
     await interaction.editReply({ content: '✅ Configuração salva com sucesso!' });
 
@@ -122,6 +122,9 @@ async function handleGlobalExemptUsersSubmit(interaction) {
 
     await interaction.deferReply({ flags: 64 });
     const users = await saveExemptUsers(interaction);
+    const config = await Config.findOne({ guildId: interaction.guild.id });
+    cachePanelConfig(interaction.guild.id, config);
+    await atualizarPainelMensagem(interaction, config);
     await interaction.editReply({
       content: users.length
         ? `✅ Lista global atualizada com **${users.length}** usuário(s) isento(s).`
@@ -141,11 +144,12 @@ async function handleGlobalExemptUsersSubmit(interaction) {
 }
 
 async function handlePanelMenu(interaction) {
-  if (!await hasPermission(interaction)) {
+  const cachedConfig = getPanelConfig(interaction.guild.id);
+  const storedConfig = cachedConfig || await Config.findOne({ guildId: interaction.guild.id }).catch(() => null);
+  if (!await hasPermission(interaction, storedConfig)) {
     return interaction.reply({ content: '❌ Sem permissão.', flags: [64] });
   }
 
-  const cachedConfig = getPanelConfig(interaction.guild.id);
   const [selectedOption, ...encodedValues] = interaction.values[0].split('|');
   const encodedConfig = {
     channels: {},
@@ -158,19 +162,19 @@ async function handlePanelMenu(interaction) {
     [encodedConfig.channels.log, encodedConfig.channels.backup, encodedConfig.channels.armazem, encodedConfig.channels.analysis, encodedConfig.channels.topDaily] = encodedValues;
   } else if (selectedOption === 'edit_channels_3') {
     [encodedConfig.channels.registro, encodedConfig.channels.cloud, encodedConfig.channels.canalDenuncia] = encodedValues;
-  } else if (selectedOption === 'edit_channels_4') {
-    [encodedConfig.channels.databaseprovas] = encodedValues;
   } else if (selectedOption === 'edit_roles_1') {
     [encodedConfig.roles.permitido, encodedConfig.roles.pc] = encodedValues;
   } else if (selectedOption === 'edit_roles_2') {
     [encodedConfig.roles.administrador, encodedConfig.roles.responsavel_admin] = encodedValues;
   }
 
-  const config = cachedConfig || encodedConfig;
+  const config = storedConfig || cachedConfig || encodedConfig;
+  if (storedConfig) cachePanelConfig(interaction.guild.id, storedConfig);
 
   switch (selectedOption) {
     case 'toggle_maintenance': {
       const manutencaoDenuncia = !Boolean(config?.manutencaoDenuncia);
+      await interaction.deferUpdate();
       const configAtualizada = await Config.findOneAndUpdate(
         { guildId: interaction.guild.id },
         { $set: { manutencaoDenuncia, lastUpdated: new Date(), updatedBy: interaction.user.tag } },
@@ -179,41 +183,64 @@ async function handlePanelMenu(interaction) {
       invalidateCache('config', interaction.guild.id);
       cachePanelConfig(interaction.guild.id, configAtualizada);
       await atualizarMensagemDenuncia(interaction.client, interaction.guild, configAtualizada);
-      await interaction.reply({
+      await atualizarPainelMensagem(interaction, configAtualizada);
+      await interaction.followUp({
         content: manutencaoDenuncia
           ? '🛠️ Modo manutenção ativado. Novos envios foram bloqueados.'
           : '✅ Modo manutenção desativado. Os botões foram restaurados.',
         flags: [64]
-      });
+      }).catch(() => {});
+      break;
+    }
+    case 'toggle_pending_claim_block': {
+      const bloquearReivindicacaoComPendentes = !bloqueioPendentesAtivo(config);
+      await interaction.deferUpdate();
+      const configAtualizada = await Config.findOneAndUpdate(
+        { guildId: interaction.guild.id },
+        { $set: { bloquearReivindicacaoComPendentes, lastUpdated: new Date(), updatedBy: interaction.user.tag } },
+        { new: true, upsert: true }
+      );
+      invalidateCache('config', interaction.guild.id);
+      cachePanelConfig(interaction.guild.id, configAtualizada);
+      await atualizarPainelMensagem(interaction, configAtualizada);
+      await interaction.followUp({
+        content: bloquearReivindicacaoComPendentes
+          ? '✅ O bloqueio de reivindicação por pendências anteriores foi ativado neste servidor.'
+          : '⚪ O bloqueio de reivindicação por pendências anteriores foi desativado neste servidor.',
+        flags: [64]
+      }).catch(() => {});
       break;
     }
     case 'view_config': {
-      await interaction.deferReply({ flags: [64] });
+      await interaction.deferUpdate();
       const config = await Config.findOne({ guildId: interaction.guild.id });
       cachePanelConfig(interaction.guild.id, config);
-      await showConfig(interaction, config);
+      await atualizarPainelMensagem(interaction, config);
       break;
     }
     case 'edit_exempt_users':
       await interaction.showModal(createExemptUsersModal(getPanelExemptUsers(interaction.guild.id)));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     case 'edit_channels_1':
       await interaction.showModal(createChannelsModal1(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     case 'edit_channels_2':
       await interaction.showModal(createChannelsModal2(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     case 'edit_channels_3':
       await interaction.showModal(createChannelsModal3(config));
-      break;
-    case 'edit_channels_4':
-      await interaction.showModal(createChannelsModal4(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     case 'edit_roles_1':
       await interaction.showModal(createRolesModal1(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     case 'edit_roles_2':
       await interaction.showModal(createRolesModal2(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     default:
       await interaction.reply({ content: '❌ Opção do painel inválida.', flags: [64] });
@@ -229,21 +256,12 @@ async function interactionHandler(interaction) {
     // ======== FEEDBACK SELECT MENU ========
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('feedback:select:')) {
       try {
-        const denunciaId = interaction.customId.replace('feedback:select:', '');
-        const denuncia = await Denuncia.findById(denunciaId);
-
-        if (!denuncia) {
-          return interaction.reply({ content: '❌ Denúncia não encontrada.', ephemeral: true });
-        }
-
-        await handleFeedbackMenu(interaction, denuncia);
+        await handleFeedbackMenu(interaction);
       } catch (err) {
         console.error('Erro no feedback select:', err);
-        if (interaction.replied || interaction.deferred) {
-          await interaction.editReply({ content: '❌ Erro ao processar feedback.' });
-        } else {
-          await interaction.reply({ content: '❌ Erro ao processar feedback.', ephemeral: true });
-        }
+        if (err?.code === 10062) return;
+        if (interaction.replied || interaction.deferred) await interaction.editReply({ content: '❌ Erro ao processar feedback.' }).catch(() => {});
+        else await interaction.reply({ content: '❌ Erro ao processar feedback.', flags: [64] }).catch(() => {});
       }
       return;
     }
@@ -271,9 +289,16 @@ async function interactionHandler(interaction) {
 
     // ======== CORREÇÃO ACEITE ========
     if (interaction.isButton() && (interaction.customId.startsWith('log_aceitar_') || interaction.customId.startsWith('log_recusar_'))) {
+      try {
+        await interaction.deferReply({ flags: [64] });
+      } catch (error) {
+        if (error?.code === 10062) return;
+        throw error;
+      }
+
       const messageId = interaction.customId.replace(/^log_(?:aceitar|recusar)_/, '');
       const denuncia = await Denuncia.findOne({ messageId, guildId: interaction.guild.id });
-      if (!denuncia) return interaction.reply({ content: '❌ Denúncia não encontrada.', flags: [64] });
+      if (!denuncia) return interaction.editReply({ content: '❌ Denúncia não encontrada.' });
 
       if (interaction.customId.startsWith('log_aceitar_')) {
         await handleLogAceitarButton(interaction, denuncia);
@@ -364,7 +389,6 @@ async function interactionHandler(interaction) {
         case 'channels_modal_1':
         case 'channels_modal_2':
         case 'channels_modal_3':
-        case 'channels_modal_4':
         case 'roles_modal_1':
         case 'roles_modal_2':
           await handlePanelModalSubmit(interaction);
@@ -378,10 +402,11 @@ async function interactionHandler(interaction) {
     }
 
   } catch (error) {
+    if (error?.code === 10062) return;
     console.error('❌ Erro na interação:', error);
 
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: '❌ Ocorreu um erro.', ephemeral: true });
+      await interaction.reply({ content: '❌ Ocorreu um erro.', flags: [64] }).catch(() => {});
     }
   }
 }

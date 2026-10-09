@@ -221,16 +221,12 @@ denuncia_[id].zip
 
 ## 9️⃣ Ranking de Staff
 
-### `!rank` (Ranking Mensal)
-- Conta ações no último mês
+### `!rank` (Ranking Principal)
+- Conta ações por período selecionado
 - Exibe top 10 moderadores
 - Base: `ModerationAction` collection
 
-### `!semana` (Ranking Semanal)
-- Conta ações na última semana
-- Mesmo formato do mensal
-
-**Handler:** `commands/rank.js` e `commands/semana.js`  
+**Handler:** `commands/rank.js`  
 **Service:** `services/rankService.js`
 
 ---

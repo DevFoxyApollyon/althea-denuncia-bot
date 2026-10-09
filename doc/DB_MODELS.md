@@ -10,10 +10,13 @@
 
 Collection responsável por **configurar o bot por servidor**.
 
+`bloquearReivindicacaoComPendentes` é ativado por padrão e pode ser ligado ou desligado individualmente no painel de cada servidor.
+
 ### Campos principais:
 ```javascript
 {
   guildId: String,           // ID do servidor Discord
+  bloquearReivindicacaoComPendentes: Boolean, // Bloqueia reivindicações enquanto houver denúncias anteriores pendentes
   roles: {
     administrador: String,   // ID do cargo admin
     responsavel_admin: String // ID do cargo responsável
@@ -79,8 +82,7 @@ Collection que registra **ações de moderação** para ranking.
 ```
 
 **Usado em:**
-- `!rank` — ranking mensal
-- `!semana` — ranking semanal
+- `!rank` — ranking principal
 - `rankService.js` — lógica de cálculo
 
 ---

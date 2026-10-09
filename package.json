@@ -1,6 +1,6 @@
 {
   "name": "althea-denuncia-bot",
-  "version": "3.2.3",
+  "version": "3.2.4",
   "description": "ALTHEA — Bot Discord para gestão de denúncia, moderação, automações e arquivamento de logs.",
   "main": "index.js",
   "scripts": {
@@ -20,7 +20,8 @@
     "mongoose": "^7.6.3",
     "node-cron": "^3.0.3",
     "node-fetch": "^2.6.7",
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "ws": "^8.18.0"
   },
   "author": "Foxyapollyon",
   "license": "MIT"

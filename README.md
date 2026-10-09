@@ -116,8 +116,7 @@ Disponíveis tanto no painel de denúncias quanto dentro do tópico:
 ### 📊 Ranking de Staff
 Baseado em ações reais registradas no banco:
 
-- `!rank` → ranking mensal
-- `!semana` → ranking semanal
+- `!rank` → ranking principal
 - Usa a collection `ModerationAction`
 - Pode rodar automaticamente via `jobs/rankJobs.js`
 
@@ -195,8 +194,7 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 │   ├── painel.js
 │   ├── correcao.js
 │   ├── status.js
-│   ├── rank.js
-│   └── semana.js
+│   └── rank.js
 │
 ├── doc/
 │   ├── BUTTONS.md

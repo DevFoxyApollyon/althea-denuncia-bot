@@ -9,6 +9,7 @@ const { inserirFeedbackMenu, removerFeedbackMenu } = require('../utils/feedback'
 const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
 const { createCorrectionButtonRow } = require('./corrigirHandler');
+const { getCachedConfig } = require('../utils/performance');
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 const DM_IGNORED_CODES = [50007, 50278];
 
@@ -16,6 +17,7 @@ const CLAIM_COOLDOWN_MS = 6 * 60 * 1000;
 const GUILD_COOLDOWN = '817924556358156360';
 const _claimCooldowns = new Map();
 const _sendOnceLocks = new Set();
+const _logButtonLocks = new Set();
 
 async function safeDefer(interaction, ephemeral = true) {
   try {
@@ -661,13 +663,51 @@ async function handleAnalise(interaction, denuncia, config, messageUrl, logsChan
     } catch (e) {
       log.warn('Falha ao atualizar status na mensagem principal (analise)', e?.message);
     }
+    return true;
   } catch (error) {
     log.error('Erro ao manejar análise', error);
     await safeReplyOrEdit(interaction, {
       content: '❌ Ocorreu um erro ao marcar a denúncia como em análise.',
       flags: [MessageFlags.Ephemeral],
     });
+    return false;
   }
+}
+
+async function processarAnaliseAutomatica(client, denuncia, config) {
+  const topic = await client.channels.fetch(denuncia.threadId).catch(() => null);
+  const guild = client.guilds.cache.get(denuncia.guildId);
+  if (!topic || !guild) return false;
+
+  const staff = await client.users.fetch(denuncia.claimedBy).catch(() => null) || {
+    id: denuncia.claimedBy,
+    tag: denuncia.claimedBy,
+    username: denuncia.claimedBy,
+    toString: () => `<@${denuncia.claimedBy}>`,
+  };
+  const logsChannel = config?.channels?.logs
+    ? client.channels.cache.get(config.channels.logs)
+    : null;
+  const proxyInteraction = {
+    client,
+    guild,
+    channel: topic,
+    user: staff,
+    message: { url: `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}` },
+    deferred: true,
+    replied: false,
+    isRepliable: () => true,
+    deferReply: async () => {},
+    editReply: async () => null,
+  };
+
+  return handleAnalise(
+    proxyInteraction,
+    denuncia,
+    config,
+    proxyInteraction.message.url,
+    logsChannel
+  );
 }
 
 let denunciasMap = new Map();
@@ -873,34 +913,74 @@ async function handleRecusarPorMensagem(message, denuncia, config) {
   await handleRecusar(interaction, denuncia, config, message.url, logsChannel, 'palavra-chave');
 }
 
-async function handleLogAceitarButton(interaction, denuncia) {
-  const config = await Config.findOne({ guildId: interaction.guild.id });
-  const isResponsavel = config?.roles?.responsavel_admin && interaction.member?.roles.cache.has(config.roles.responsavel_admin);
+async function validarResponsavelAdminLog(interaction) {
+  const config = await getCachedConfig(interaction.guild.id);
+  const roleId = config?.roles?.responsavel_admin;
+  const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  const autorizado = Boolean(roleId && member?.roles?.cache?.has(roleId));
 
-  if (!isResponsavel) {
-    const cargo = config?.roles?.responsavel_admin ? `<@&${config.roles.responsavel_admin}>` : '`Responsável Admin não configurado`';
-    return interaction.reply({ content: `❌ Apenas o cargo ${cargo} pode usar estes botões.`, flags: [MessageFlags.Ephemeral] });
+  if (!autorizado) {
+    const cargo = roleId ? `<@&${roleId}>` : '`Responsável Admin não configurado`';
+    const payload = { content: `❌ Apenas o cargo ${cargo} pode usar estes botões.` };
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(payload).catch(() => {});
+    } else {
+      await interaction.reply({ ...payload, flags: [MessageFlags.Ephemeral] }).catch(() => {});
+    }
+    return null;
   }
 
-  const confirmation = ` ||${getBrasiliaDateTime()}||`;
-  await interaction.message.edit({
-    content: `${interaction.message.content}${confirmation}`,
-    components: []
-  });
-  await interaction.reply({ content: '✅  confirmação aceita no canal de logs.', flags: [MessageFlags.Ephemeral] });
+  return config;
+}
+
+async function handleLogAceitarButton(interaction, denuncia) {
+  const lockKey = interaction.message.id;
+  if (_logButtonLocks.has(lockKey)) {
+    await interaction.editReply({ content: '⏳ Esta confirmação já está sendo processada.' }).catch(() => {});
+    return;
+  }
+  _logButtonLocks.add(lockKey);
+
+  try {
+    const config = await validarResponsavelAdminLog(interaction);
+    if (!config) return;
+
+    if (!interaction.message.components?.some((row) => row.components?.length)) {
+      await interaction.editReply({ content: 'ℹ️ Esta confirmação já foi processada.' }).catch(() => {});
+      return;
+    }
+
+    const confirmation = ` ||${getBrasiliaDateTime()}|| por ${interaction.user}`;
+    await interaction.message.edit({
+      content: `${interaction.message.content}${confirmation}`,
+      components: []
+    });
+    await interaction.editReply({ content: '✅ Cadeia staff aceita' }).catch(() => {});
+    setTimeout(() => {
+      interaction.deleteReply().catch((error) => {
+        if (error?.code !== 10008 && error?.code !== 10062) {
+          log.warn('Não foi possível remover a confirmação ephemeral', error?.message);
+        }
+      });
+    }, 5000);
+  } catch (error) {
+    if (error?.code === 10008) {
+      await interaction.editReply({ content: '⚠️ A mensagem de confirmação não existe mais.' }).catch(() => {});
+      return;
+    }
+    log.error('Erro ao confirmar aceite no canal de logs', error);
+    await interaction.editReply({ content: '❌ Não foi possível atualizar a confirmação no canal de logs.' }).catch(() => {});
+  } finally {
+    _logButtonLocks.delete(lockKey);
+  }
 }
 
 async function handleLogRecusarButton(interaction, denuncia) {
-  const config = await Config.findOne({ guildId: interaction.guild.id });
-  const isResponsavel = config?.roles?.responsavel_admin && interaction.member?.roles.cache.has(config.roles.responsavel_admin);
-
-  if (!isResponsavel) {
-    const cargo = config?.roles?.responsavel_admin ? `<@&${config.roles.responsavel_admin}>` : '`Responsável Admin não configurado`';
-    return interaction.reply({ content: `❌ Apenas o cargo ${cargo} pode usar estes botões.`, flags: [MessageFlags.Ephemeral] });
-  }
+  const config = await validarResponsavelAdminLog(interaction);
+  if (!config) return;
 
   const topic = await interaction.guild.channels.fetch(denuncia.threadId).catch(() => null);
-  if (!topic) return interaction.reply({ content: '❌ Tópico da denúncia não encontrado.', flags: [MessageFlags.Ephemeral] });
+  if (!topic) return interaction.editReply({ content: '❌ Tópico da denúncia não encontrado.' });
 
   const proxyInteraction = {
     channel: topic,
@@ -910,11 +990,14 @@ async function handleLogRecusarButton(interaction, denuncia) {
     guild: interaction.guild,
     message: interaction.message,
     isRepliable: () => true,
-    deferred: false,
+    deferred: true,
     replied: false,
     deferReply: async (payload) => {
-      proxyInteraction.deferred = true;
-      return interaction.deferReply(payload);
+      if (!interaction.deferred && !interaction.replied) {
+        proxyInteraction.deferred = true;
+        return interaction.deferReply(payload);
+      }
+      return null;
     },
     editReply: (payload) => interaction.editReply(payload),
     reply: (payload) => interaction.reply(payload),
@@ -1466,4 +1549,5 @@ module.exports = {
   handleRecusarPorMensagem,
   handleLogAceitarButton,
   handleLogRecusarButton,
+  processarAnaliseAutomatica,
 };

@@ -15,11 +15,10 @@ const { getCachedConfig, getCachedDenuncia, invalidateCache } = require('../util
 const CORRIGIR_MODAL_PREFIX = 'corrigir_modal_aceite_';
 const RESPONSE_DELETE_DELAY_MS = 5 * 1000;
 
-function isResponsavelAdmin(interaction, config) {
-  return Boolean(
-    config?.roles?.responsavel_admin &&
-    interaction.member?.roles?.cache.has(config.roles.responsavel_admin)
-  );
+async function isResponsavelAdmin(interaction, config) {
+  const roleId = config?.roles?.responsavel_admin;
+  const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  return Boolean(roleId && member?.roles?.cache?.has(roleId));
 }
 
 function getPermissionError(config) {
@@ -87,7 +86,7 @@ async function respondAndDelete(interaction, payload) {
 async function handleCorrigirDenunciaButton(interaction) {
   const config = await getCachedConfig(interaction.guild.id, Config);
 
-  if (!isResponsavelAdmin(interaction, config)) {
+  if (!await isResponsavelAdmin(interaction, config)) {
     return respondAndDelete(interaction, { content: getPermissionError(config) });
   }
 
@@ -115,7 +114,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
   const messageId = getMessageId(interaction.customId);
   const config = await getCachedConfig(interaction.guild.id, Config);
 
-  if (!isResponsavelAdmin(interaction, config)) {
+  if (!await isResponsavelAdmin(interaction, config)) {
     return respondAndDelete(interaction, { content: getPermissionError(config) });
   }
 

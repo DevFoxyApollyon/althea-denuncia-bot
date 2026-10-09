@@ -39,6 +39,19 @@ async function podeFalarSemBloqueio(message, config) {
   return false;
 }
 
+function estaEmCanalDeDenuncia(message, config) {
+  if (!message?.channel || !config?.channels) return false;
+
+  const canaisDenuncia = [config.channels.pc, config.channels.mobile].filter(Boolean);
+  if (canaisDenuncia.includes(message.channel.id)) return true;
+
+  return Boolean(
+    message.channel.isThread?.() &&
+    message.channel.parentId &&
+    canaisDenuncia.includes(message.channel.parentId)
+  );
+}
+
 const PALAVRAS_PROIBIDAS = [
   'animal', 'anta', 'arrombada', 'arrombado', 'chorão', 'mds', 'mds',
   'babaca', 'besta', 'bobalhão', 'bobalhona', 'bocó', 'bosta', 'burra', 'burrice', 'burro',
@@ -245,14 +258,7 @@ function motivoEmojiFigurinhaOuGif(message) {
 
 async function processaStrike(message, Strike, config) {
   try {
-    const canaisRegistrados = [config?.channels?.pc, config?.channels?.mobile].filter(Boolean);
-    let canalPrincipalId = message.channel.id;
-
-    if (message.channel.isThread?.() && message.channel.parentId) {
-      canalPrincipalId = message.channel.parentId;
-    }
-
-    if (!canaisRegistrados.includes(canalPrincipalId)) return;
+    if (!estaEmCanalDeDenuncia(message, config)) return;
 
     let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
     if (!strike) {
@@ -370,14 +376,7 @@ async function processaStrike(message, Strike, config) {
 
 async function processaStrikeLink(message, Strike, config) {
   try {
-    const canaisRegistrados = [config?.channels?.pc, config?.channels?.mobile].filter(Boolean);
-    let canalPrincipalId = message.channel.id;
-
-    if (message.channel.isThread?.() && message.channel.parentId) {
-      canalPrincipalId = message.channel.parentId;
-    }
-
-    if (!canaisRegistrados.includes(canalPrincipalId)) return;
+    if (!estaEmCanalDeDenuncia(message, config)) return;
 
     let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
     if (!strike) {
@@ -506,14 +505,7 @@ async function processaStrikeLink(message, Strike, config) {
 
 async function processaStrikeEmoji(message, Strike, config) {
   try {
-    const canaisRegistrados = [config?.channels?.pc, config?.channels?.mobile].filter(Boolean);
-    let canalPrincipalId = message.channel.id;
-
-    if (message.channel.isThread?.() && message.channel.parentId) {
-      canalPrincipalId = message.channel.parentId;
-    }
-
-    if (!canaisRegistrados.includes(canalPrincipalId)) return;
+    if (!estaEmCanalDeDenuncia(message, config)) return;
 
     let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
     if (!strike) {
