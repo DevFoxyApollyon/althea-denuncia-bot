@@ -6,6 +6,14 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.3.1] - 2026-10-10
+### 🔧 Correções
+- O bot para de enviar mensagens diretas quando o Discord limita (erro 340002) ou coloca o bot em quarentena (erro 20026), em vez de insistir e piorar o bloqueio.
+- Os avisos por DM não essenciais (mensagem nova no tópico, denúncia reivindicada e punição ao acusado) passam a vir desligados; para ligar, defina `DM_AVISOS_EXTRAS=1`.
+- O aviso de falha de DM para a staff mostra o motivo real informado pelo Discord.
+
+---
+
 ## [3.3.0] - 2026-10-10
 ### ✨ Novidades
 **Portal web (site)**

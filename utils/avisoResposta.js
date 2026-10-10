@@ -2,6 +2,8 @@
 // no tópico da denúncia. Cada pessoa recebe no máximo um aviso a cada 10
 // minutos por tópico, para uma conversa movimentada não virar spam.
 
+const { dmPausada, registrarErroDeDM, avisosExtrasLigados } = require('./dmSegura');
+
 const INTERVALO_MS = 10 * 60 * 1000;
 const CABECALHO_DO_SITE = /^(?:📎 \*\*Enviado pelo site\*\* por|Enviado por) <@!?(\d{15,21})>/;
 const ultimoAviso = new Map();
@@ -22,6 +24,8 @@ function autorReal(message) {
 }
 
 async function avisarAcusadosDaResposta(client, denuncia, message) {
+  // Aviso opcional: não insiste enquanto o Discord estiver limitando as DMs do bot.
+  if (!avisosExtrasLigados() || dmPausada()) return 0;
   const autorId = autorReal(message);
   if (!autorId) return 0;
 
@@ -41,7 +45,12 @@ async function avisarAcusadosDaResposta(client, denuncia, message) {
     if (!podeAvisar(userId, denuncia.threadId)) continue;
     const usuario = await client.users.fetch(userId).catch(() => null);
     // DM fechada (50007) é comum e não é erro.
-    if (await usuario?.send(texto).then(() => true).catch(() => false)) enviados++;
+    const enviou = await usuario?.send(texto).then(() => true).catch((erro) => {
+      registrarErroDeDM(erro);
+      return false;
+    });
+    if (enviou) enviados++;
+    if (dmPausada()) break;
   }
   return enviados;
 }

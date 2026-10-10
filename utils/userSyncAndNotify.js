@@ -1,6 +1,7 @@
 ﻿// utils/userSyncAndNotify.js
 
 const Usuario = require('../models/Usuario');
+const { CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM } = require('./dmSegura');
 
 async function syncUserOnNicknameChange(oldMember, newMember) {
     try {
@@ -32,6 +33,8 @@ async function syncUserOnNicknameChange(oldMember, newMember) {
 }
 
 async function notificarAcusadoPv(client, guildId, acusadoId, mensagem) {
+    // Durante um bloqueio de DMs pelo Discord, o bot não insiste.
+    if (dmPausada()) return false;
     try {
         // Busca por userId OU conta (número ou userId)
         const usuario = await Usuario.findOne({
@@ -48,7 +51,8 @@ async function notificarAcusadoPv(client, guildId, acusadoId, mensagem) {
         await user.send(mensagem);
         return true;
     } catch (e) {
-        if (e.code !== 50007 && e.code !== 50001) {
+        registrarErroDeDM(e);
+        if (e.code !== 50001 && !CODIGOS_ESPERADOS.includes(e.code)) {
             console.warn('Não foi possível notificar acusado no PV:', e.message);
         }
         return false;

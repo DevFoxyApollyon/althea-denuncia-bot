@@ -6,6 +6,7 @@ const { getConfig: getCachedConfig } = require('../../utils/configCache');
 const { safeDefer, safeReplyOrEdit, sendOnce } = require('./mensagensStatus');
 const { checkModPermission, registrarAcaoModerador } = require('./acoesStatus');
 const { sincronizarBotoes } = require('./botoesStatus');
+const { CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM, avisosExtrasLigados } = require('../../utils/dmSegura');
 const { Logger } = require('../../utils/logger');
 
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
@@ -118,7 +119,7 @@ async function handleClaimButton(interaction) {
       log.warn('Falha ao atualizar status na mensagem principal (reivindicacao)', e?.message);
     }
     // O denunciante é avisado por mensagem direta de que alguém pegou o caso.
-    if (/^\d{15,21}$/.test(String(denuncia.criadoPor || '')) && denuncia.criadoPor !== interaction.user.id) {
+    if (avisosExtrasLigados() && !dmPausada() && /^\d{15,21}$/.test(String(denuncia.criadoPor || '')) && denuncia.criadoPor !== interaction.user.id) {
       try {
         const denunciante = await interaction.client.users.fetch(denuncia.criadoPor);
         const siteUrl = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
@@ -137,8 +138,9 @@ async function handleClaimButton(interaction) {
             .setTimestamp()]
         });
       } catch (dmError) {
-        // DM fechada (50007) é comum e não é erro.
-        if (dmError?.code !== 50007) log.warn('Não foi possível avisar o denunciante da reivindicação', dmError?.message);
+        // DM fechada ou limitada pelo Discord é esperado e não é erro do bot.
+        registrarErroDeDM(dmError);
+        if (!CODIGOS_ESPERADOS.includes(dmError?.code)) log.warn('Não foi possível avisar o denunciante da reivindicação', dmError?.message);
       }
     }
 

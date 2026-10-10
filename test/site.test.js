@@ -286,3 +286,26 @@ test('botões da denúncia: o que já foi feito fica desativado', async () => {
   // Repetir a mesma situação não edita a mensagem de novo.
   assert.equal(await sincronizarBotoes(null, 'recusada', mensagem), false);
 });
+
+test('DMs: depois do limite do Discord (340002) os avisos opcionais pausam por uma hora', () => {
+  const { dmPausada, registrarErroDeDM, motivoDaFalha, CODIGOS_ESPERADOS } = require('../utils/dmSegura');
+  const agora = 5_000_000;
+  assert.equal(registrarErroDeDM({ code: 50007 }, agora), false, 'DM fechada não pausa nada');
+  assert.equal(dmPausada(agora), false);
+
+  assert.equal(registrarErroDeDM({ code: 340002 }, agora), true);
+  assert.equal(dmPausada(agora + 59 * 60 * 1000), true);
+  assert.equal(dmPausada(agora + 61 * 60 * 1000), false);
+
+  assert.ok(CODIGOS_ESPERADOS.includes(340002));
+  assert.match(motivoDaFalha({ code: 340002 }), /limitou/);
+  assert.match(motivoDaFalha({ code: 50007 }), /desativou as DMs/);
+
+  // Quarentena (20026): pausa mais longa, e os avisos extras ficam desligados por padrão.
+  const { avisosExtrasLigados } = require('../utils/dmSegura');
+  assert.equal(registrarErroDeDM({ code: 20026 }, agora), true);
+  assert.equal(dmPausada(agora + 5 * 60 * 60 * 1000), true);
+  assert.equal(dmPausada(agora + 7 * 60 * 60 * 1000), false);
+  delete process.env.DM_AVISOS_EXTRAS;
+  assert.equal(avisosExtrasLigados(), false);
+});

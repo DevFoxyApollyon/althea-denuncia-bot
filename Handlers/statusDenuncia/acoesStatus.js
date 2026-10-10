@@ -20,7 +20,7 @@ const { Logger } = require('../../utils/logger');
 
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 
-const DM_IGNORED_CODES = [50007, 50278];
+const { CODIGOS_ESPERADOS: DM_IGNORED_CODES, dmPausada, registrarErroDeDM, avisosExtrasLigados } = require('../../utils/dmSegura');
 const _logButtonLocks = new Set();
 
 async function updateDenunciaStatus(denunciaId, {
@@ -443,7 +443,9 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
 
     try {
       const userId = denuncia.criadoPor;
-      if (userId && typeof userId === 'string' && userId !== 'null' && userId !== 'undefined') {
+      if (dmPausada()) {
+        // O Discord bloqueou as DMs do bot: não insiste.
+      } else if (userId && typeof userId === 'string' && userId !== 'null' && userId !== 'undefined') {
         const denunciante = await interaction.client.users.fetch(userId);
         if (denunciante) {
           const denunciaLink =
@@ -467,6 +469,7 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
         log.warn('Não foi possível enviar DM: criadoPor da denúncia é inválido', { userId });
       }
     } catch (dmError) {
+      registrarErroDeDM(dmError);
       if (!DM_IGNORED_CODES.includes(dmError?.code)) {
         log.error('Erro ao enviar DM para o denunciante', dmError);
       }
@@ -721,7 +724,9 @@ async function handlePunishmentModal(interaction) {
 
     try {
       const userId = denuncia.criadoPor;
-      if (userId && typeof userId === 'string' && userId !== 'null' && userId !== 'undefined') {
+      if (dmPausada()) {
+        // O Discord bloqueou as DMs do bot: não insiste.
+      } else if (userId && typeof userId === 'string' && userId !== 'null' && userId !== 'undefined') {
         const denunciante = await interaction.client.users.fetch(userId);
         if (denunciante) {
           const denunciaLink =
@@ -746,6 +751,7 @@ async function handlePunishmentModal(interaction) {
         log.warn('Não foi possível enviar DM: criadoPor da denúncia é inválido', { userId });
       }
     } catch (dmError) {
+      registrarErroDeDM(dmError);
       if (!DM_IGNORED_CODES.includes(dmError?.code)) {
         log.error('Erro ao enviar DM para o denunciante', dmError);
       }
@@ -754,6 +760,7 @@ async function handlePunishmentModal(interaction) {
     // O acusado identificado também é avisado por mensagem direta: a menção no
     // canal pode aparecer como "usuário desconhecido" e passar despercebida.
     for (const acusadoUserId of acusadoUserIdsFinal) {
+      if (!avisosExtrasLigados() || dmPausada()) break;
       if (!/^\d{15,21}$/.test(String(acusadoUserId)) || acusadoUserId === denuncia.criadoPor) continue;
       try {
         const acusado = await interaction.client.users.fetch(acusadoUserId);
@@ -774,6 +781,7 @@ async function handlePunishmentModal(interaction) {
             .setTimestamp()]
         });
       } catch (dmError) {
+        registrarErroDeDM(dmError);
         if (!DM_IGNORED_CODES.includes(dmError?.code)) log.error('Erro ao enviar DM para o acusado', dmError);
       }
     }

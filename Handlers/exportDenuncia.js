@@ -1,4 +1,5 @@
 const { AttachmentBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM, motivoDaFalha } = require('../utils/dmSegura');
 const Denuncia = require('../models/Denuncia');
 const { getConfig } = require('../utils/configCache');
 const fetch = require('node-fetch');
@@ -697,7 +698,7 @@ async function handleExportButton(interaction) {
     }
 
     const denunciante = await interaction.client.users.fetch(String(denuncia.criadoPor)).catch(() => null);
-    if (denunciante) {
+    if (denunciante && !dmPausada()) {
       const dmEmbed = new EmbedBuilder()
           .setColor(statusMeta.color)
           .setTitle(`📢 Denúncia Arquivada - Status: ${statusLabel}`)
@@ -717,13 +718,14 @@ async function handleExportButton(interaction) {
         // Quando o problema é o anexo (arquivo grande demais para mensagem
         // direta, por exemplo), o aviso vai sem ele em vez de não ir.
         let avisado = false;
-        if (dmError.code !== 50007) {
+        const limitado = registrarErroDeDM(dmError);
+        if (!limitado && !CODIGOS_ESPERADOS.includes(dmError.code)) {
           console.error(`Erro ao enviar a DM de arquivamento (código ${dmError.code ?? 'sem código'}): ${dmError.message}`);
           avisado = await denunciante.send({ embeds: [dmEmbed] }).then(() => true).catch(() => false);
         }
         if (!avisado) {
           await interaction.followUp({
-            content: `⚠️ Aviso: Não foi possível enviar a DM para o denunciante. Motivo: **${dmError.code === 50007 ? 'O usuário bloqueou o bot ou desativou as DMs.' : `Erro do Discord (${dmError.code ?? dmError.message}).`}** O staff tem acesso total aos arquivos no canal de logs.`,
+            content: `⚠️ Aviso: Não foi possível enviar a DM para o denunciante. Motivo: **${motivoDaFalha(dmError)}** O staff tem acesso total aos arquivos no canal de logs.`,
             flags: MessageFlags.Ephemeral,
           });
         }
