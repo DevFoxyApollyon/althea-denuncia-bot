@@ -1,6 +1,6 @@
 const { getConfig } = require('../utils/configCache');
 
-const CACHE_SERVIDORES_MS = 10 * 1000;
+const CACHE_SERVIDORES_MS = 60 * 1000;
 const servidoresPorUsuario = new Map();
 
 function papeisDoMembro(member, config) {
@@ -23,16 +23,17 @@ async function servidoresDoUsuario(client, userId) {
   const emCache = servidoresPorUsuario.get(userId);
   if (emCache && Date.now() - emCache.em < CACHE_SERVIDORES_MS) return emCache.lista;
 
-  const lista = [];
-  for (const guild of client.guilds.cache.values()) {
+  // Todos os servidores ao mesmo tempo. O membro vem da memória do bot quando
+  // já está lá (o Discord a mantém atualizada); só vai ao Discord quando falta.
+  const lista = (await Promise.all([...client.guilds.cache.values()].map(async (guild) => {
     const config = await getConfig(guild.id).catch(() => null);
-    if (!config) continue;
+    if (!config) return null;
 
-    const member = await guild.members.fetch({ user: userId, force: true }).catch(() => null);
-    if (!member) continue;
+    const member = guild.members.cache.get(userId) || await guild.members.fetch({ user: userId }).catch(() => null);
+    if (!member) return null;
 
-    lista.push({ guild, member, config, papeis: papeisDoMembro(member, config) });
-  }
+    return { guild, member, config, papeis: papeisDoMembro(member, config) };
+  }))).filter(Boolean);
 
   servidoresPorUsuario.set(userId, { em: Date.now(), lista });
   return lista;

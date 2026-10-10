@@ -15,7 +15,6 @@ const {
     ActivityType,
     version: discordVersion
 } = require('discord.js');
-const mongoose = require('mongoose');
 const chalk = require('chalk'); 
 const packageJson = require('./package.json');
 
@@ -24,7 +23,9 @@ const { getConfig } = require('./utils/configCache');
 const { registrarComandosSlash, registrarComandosNoServidor } = require('./commands/slash');
 const { advancedMonitor } = require('./utils/advancedMonitoring');
 const { setupRankJobs } = require('./jobs/rankJobs');
-const secondaryConnection = require('./utils/secondaryDb');
+const { primaryConnection, secondaryConnection } = require('./utils/persistencia');
+const { prepararRetencaoNoBanco } = require('./utils/retencaoDados');
+const Config = require('./models/Config');
 const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 const { iniciarPoller } = require('./jobs/nicknamePoller');
 const { iniciarLimpezaContasDuplicadas } = require('./jobs/Limparcontasduplicadas');
@@ -54,18 +55,27 @@ registerMemberEvents(client, log);
 registerMessageEvents(client, { log, getConfig });
 registerInteractionEvents(client, log);
 
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => {
-        log.success('Database principal conectada.');
-
+Promise.all([primaryConnection.asPromise(), secondaryConnection.asPromise()])
+    .then(async () => {
+        log.success('Bancos principal e secundário conectados.');
         client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
+
+        // Os prazos de cada coleção (ver utils/retencaoDados.js) são aplicados em
+        // segundo plano: percorrer os dois bancos leva tempo e o bot não precisa
+        // esperar por isso para ficar online.
+        (async () => {
+            await prepararRetencaoNoBanco(primaryConnection.db);
+            await prepararRetencaoNoBanco(secondaryConnection.db);
+            await Config.createIndexes();
+            log.success('Prazos de cada coleção aplicados; configurações e cadastros são permanentes.');
+        })().catch(err => log.error('Não foi possível aplicar os prazos do banco: ' + err.message));
     })
     .catch((err) => {
         log.error('Erro Database: ' + err.message);
         process.exit(1);
     });
 
-client.once('ready', async (readyClient) => {
+client.once('clientReady', async (readyClient) => {
     log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.username)}`);
 
     log.info(`${chalk.bold('Versão do Bot:')} ${chalk.green(packageJson.version)}`);
@@ -161,9 +171,11 @@ async function gracefulShutdown(signal, exitCode = 0) {
         servidorDoSite?.close();
         advancedMonitor.destroy();
         client.destroy();
-        await mongoose.connection.close();
         if (secondaryConnection.readyState === 1) {
             await secondaryConnection.close();
+        }
+        if (primaryConnection.readyState === 1) {
+            await primaryConnection.close();
         }
         log.success('Bot encerrado com sucesso.');
     } catch (e) {

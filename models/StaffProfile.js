@@ -1,4 +1,5 @@
-const { Schema, model } = require('mongoose');
+const { Schema } = require('mongoose');
+const persistencia = require('../utils/persistencia');
 
 const staffProfileSchema = new Schema(
   {
@@ -31,4 +32,4 @@ staffProfileSchema.statics.registrarFeedback = function (guildId, userId, nota) 
   );
 };
 
-module.exports = model('StaffProfile', staffProfileSchema);
+module.exports = persistencia.modelPermanente('StaffProfile', staffProfileSchema);

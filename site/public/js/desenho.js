@@ -17,8 +17,25 @@ import { telaRanking } from './ranking.js';
 import { telaAuditoria, telaVisaoGeral } from './responsavel.js';
 import { rotaAtual } from './rotas.js';
 import { telaSugestoes } from './sugestoes.js';
-import { lerPreferencia } from './tema.js';
+import { telaTeste, telaTesteAdmin } from './teste.js';
+import { lerPreferencia, salvarPreferencia } from './tema.js';
 import { api, avisar, el, nomeDoSite, papeisAtuais } from './util.js';
+
+// Aviso de cookies: o site só usa os essenciais, então basta informar uma vez.
+function avisoDeCookies() {
+  if (lerPreferencia('althea-cookies')) return null;
+  return el('div', { class: 'aviso-cookies', role: 'region', 'aria-label': 'Aviso sobre cookies' },
+    el('p', null, 'Este site usa só os cookies necessários para manter você conectado. Não há publicidade nem rastreamento. ',
+      el('a', { href: '/cookies.html' }, 'Política de cookies'), ' e ', el('a', { href: '/privacidade.html' }, 'de privacidade'), '.'),
+    el('button', {
+      class: 'primario',
+      type: 'button',
+      onclick: () => {
+        salvarPreferencia('althea-cookies', '1');
+        desenhar();
+      }
+    }, 'Entendi'));
+}
 
 export function desenhar() {
   // Preserva o foco, o cursor e a rolagem do que estava na tela.
@@ -46,6 +63,8 @@ export function desenhar() {
               : rota.tipo === 'identificar' ? telaIdentificar()
               : rota.tipo === 'chat' ? telaChat()
               : rota.tipo === 'home' ? telaHome()
+              : rota.tipo === 'teste' && papeisAtuais().staff ? telaTeste()
+              : rota.tipo === 'teste-admin' && papeisAtuais().responsavel ? telaTesteAdmin()
               : rota.tipo === 'jogador' && papeisAtuais().staff ? telaJogador()
               : rota.tipo === 'config' && papeisAtuais().responsavel ? telaConfig()
               : rota.tipo === 'geral' && papeisAtuais().responsavel ? telaVisaoGeral()
@@ -53,9 +72,9 @@ export function desenhar() {
     conteudo = el('div', { class: `aplicativo area-${rota.tipo === 'home' ? 'neutra' : estado.area}` }, barraSuperior(), menuLateral(), principal);
   }
 
-  document.title = `${estado.usuario ? nomeDoSite() : estado.site.nome} — Denúncias`;
+  document.title = `${estado.usuario ? nomeDoSite() : estado.site.nome} - Denúncias`;
   raiz.className = '';
-  raiz.replaceChildren(conteudo);
+  raiz.replaceChildren(...[conteudo, avisoDeCookies()].filter(Boolean));
 
   const caso = raiz.querySelector('.caso');
   if (caso && estado.detalhe) caso.dataset.id = estado.detalhe.denuncia.id;

@@ -21,18 +21,25 @@ const AVATAR = { size: 64, extension: 'webp' };
 
 // Nome e foto de cada pessoa como aparecem no servidor (apelido e avatar do Discord).
 async function resolverPessoas(client, guild, ids) {
+  const unicos = [...new Set(ids)].filter(id => /^\d{15,21}$/.test(String(id || ''))).slice(0, 60);
+
+  // Quem o bot ainda não tem em memória é buscado de uma vez só.
+  const faltando = unicos.filter(id => !guild.members.cache.has(id));
+  const buscados = faltando.length ? await guild.members.fetch({ user: faltando }).catch(() => null) : null;
+
   const pessoas = {};
-  for (const id of [...new Set(ids)].filter(Boolean).slice(0, 60)) {
-    const membro = guild.members.cache.get(id) || await guild.members.fetch(id).catch(() => null);
+  await Promise.all(unicos.map(async (id) => {
+    const membro = guild.members.cache.get(id) || buscados?.get(id);
     if (membro) {
       // Cor do cargo mais alto, como o Discord pinta o nome (preto = sem cor).
       const cor = membro.displayHexColor && membro.displayHexColor !== '#000000' ? membro.displayHexColor : null;
       pessoas[id] = { nome: membro.displayName, avatar: membro.displayAvatarURL?.(AVATAR) || null, cor };
-      continue;
+      return;
     }
-    const usuario = await client.users.fetch(id).catch(() => null);
+    // Não está mais no servidor: mostra o nome da conta.
+    const usuario = client.users.cache.get(id) || await client.users.fetch(id).catch(() => null);
     if (usuario) pessoas[id] = { nome: usuario.globalName || usuario.username, avatar: usuario.displayAvatarURL?.(AVATAR) || null };
-  }
+  }));
   return pessoas;
 }
 

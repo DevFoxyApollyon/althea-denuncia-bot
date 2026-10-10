@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelSecundarioPermanente } = require('../utils/persistencia');
 
 // Um registro por navegador ou aparelho que aceitou receber notificações do site.
 const inscricaoPushSchema = new mongoose.Schema({
@@ -11,4 +12,4 @@ const inscricaoPushSchema = new mongoose.Schema({
   criadaEm: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('InscricaoPush', inscricaoPushSchema);
+module.exports = modelSecundarioPermanente('InscricaoPush', inscricaoPushSchema);

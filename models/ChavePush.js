@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelSecundarioPermanente } = require('../utils/persistencia');
 
 // Par de chaves (VAPID) que identifica o site para os serviços de notificação
 // dos navegadores. É criado sozinho na primeira vez e fica no banco, para
@@ -9,4 +10,4 @@ const chavePushSchema = new mongoose.Schema({
   privada: { type: String, required: true }
 });
 
-module.exports = mongoose.model('ChavePush', chavePushSchema);
+module.exports = modelSecundarioPermanente('ChavePush', chavePushSchema);

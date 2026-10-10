@@ -1,12 +1,14 @@
 // Chat do servidor: uma sala para os membros. A staff pode apagar mensagens.
 import { conversaNoFim, executar, rolarConversaParaOFim } from './acoes.js';
 import { anexo } from './caso.js';
+import { abasDoChat, acoesDaMensagem, barraDaSala, listaDeOnline, barraDeResposta, blocoDeSinalizadas, citacao, reacoesDaMensagem, sincronizarMusica } from './chatSala.js';
 import { desenhar } from './desenho.js';
 import { CHAVE_CHAT, estado, raiz } from './estado.js';
 import { blocoAviso } from './navegacao.js';
 import { rotaAtual } from './rotas.js';
+import { tocar } from './sons.js';
 import { lerPreferencia, salvarPreferencia } from './tema.js';
-import { api, avatar, avisar, el, enviarJson, formatarData, formatoDia, formatoHora, icone, nomeColorido, nomeDoSite, rico } from './util.js';
+import { api, avatar, avisar, el, enviarJson, formatarData, formatoDia, formatoHora, icone, nomeColorido, rico } from './util.js';
 
 const LIMITE_TEXTO = 500;
 const semAcento = (texto) => String(texto || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
@@ -67,17 +69,24 @@ export async function carregarChat({ silencioso = false } = {}) {
   const primeira = !estado.chat;
   const noFim = conversaNoFim();
   try {
-    const dados = await api(`/api/chat?${new URLSearchParams({ guildId })}`);
+    const dados = await api(`/api/chat?${new URLSearchParams({ guildId, canal: estado.canalChat })}`);
     if (rotaAtual().tipo !== 'chat' || estado.guildId !== guildId) return;
     // Ao abrir, guarda até onde a pessoa tinha lido: é ali que entra a linha
     // "Novas mensagens". Enquanto ela está com o chat na tela, tudo conta como lido.
     if (primeira) estado.chatLidaAte = lidaAteDoChat();
+    const ultimaAntes = estado.chat?.mensagens.at(-1)?.id;
     estado.chat = dados;
+    sincronizarMusica(dados.musica, dados.pessoas);
+    // Som para mensagem nova de outra pessoa (diferente quando marcam você).
+    const ultima = dados.mensagens.at(-1);
+    if (!primeira && ultima && ultima.id !== ultimaAntes && ultima.autorId !== estado.usuario.id) {
+      tocar(ultima.todos || ultima.mencoes?.includes(estado.usuario.id) ? 'mencao' : 'receber');
+    }
     if (!document.hidden) guardarPosicao({ lidaAte: new Date().toISOString() });
     estado.chatNovas = { total: 0, mencoes: 0 };
   } catch (erro) {
     if (silencioso) return;
-    estado.chat = { mensagens: [], pessoas: {}, podeApagar: false };
+    estado.chat = { mensagens: [], pessoas: {}, podeApagar: false, sala: { modoLentoSeg: 0, fechado: false }, online: [], emojis: [], sinalizadas: 0 };
     avisar('erro', erro.message);
   }
   desenhar();
@@ -96,8 +105,12 @@ function pessoasDoChat() {
 function atualizarSugestoes(campo) {
   const antes = campo.value.slice(0, campo.selectionStart ?? campo.value.length);
   const termo = /(?:^|\s)@([^\s@]{1,30})$/.exec(antes)?.[1];
+  // A staff pode marcar o servidor inteiro com @all.
+  const todos = estado.chat?.podeApagar && termo && ['all', 'todos'].some(palavra => palavra.startsWith(semAcento(termo)))
+    ? [{ id: 'all', nome: 'all' }]
+    : [];
   const sugestoes = termo
-    ? pessoasDoChat().filter(pessoa => semAcento(pessoa.nome).includes(semAcento(termo))).slice(0, 6)
+    ? [...todos, ...pessoasDoChat().filter(pessoa => semAcento(pessoa.nome).includes(semAcento(termo))).slice(0, 6)]
     : [];
   const mudou = sugestoes.map(pessoa => pessoa.id).join() !== estado.sugestoesChat.map(pessoa => pessoa.id).join();
   estado.sugestoesChat = sugestoes;
@@ -109,7 +122,7 @@ function marcar(pessoa) {
   const cursor = campo.selectionStart ?? campo.value.length;
   const antes = campo.value.slice(0, cursor).replace(/@[^\s@]{1,30}$/, `@${pessoa.nome} `);
   estado.textoChat = antes + campo.value.slice(cursor);
-  estado.mencoesChat[pessoa.nome] = pessoa.id;
+  if (pessoa.id !== 'all') estado.mencoesChat[pessoa.nome] = pessoa.id;
   estado.sugestoesChat = [];
   guardarPosicao({ texto: estado.textoChat });
   desenhar();
@@ -120,8 +133,14 @@ function marcar(pessoa) {
 
 // Troca cada "@Nome" escolhido na lista pelo formato que identifica a pessoa.
 function textoComMencoes(texto) {
-  const nomes = Object.keys(estado.mencoesChat).sort((a, b) => b.length - a.length);
-  return nomes.reduce((atual, nome) => atual.split(`@${nome}`).join(`<@${estado.mencoesChat[nome]}>`), texto);
+  // Vale tanto para quem clicou na sugestão quanto para quem digitou o nome
+  // inteiro de alguém que está no chat. Nomes mais longos primeiro.
+  const conhecidos = { ...Object.fromEntries(pessoasDoChat().map(pessoa => [pessoa.nome, pessoa.id])), ...estado.mencoesChat };
+  const nomes = Object.keys(conhecidos).filter(nome => /^\d{15,21}$/.test(conhecidos[nome])).sort((a, b) => b.length - a.length);
+  return nomes.reduce((atual, nome) => {
+    const padrao = new RegExp(`@${nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`, 'gi');
+    return atual.replace(padrao, `<@${conhecidos[nome]}>`);
+  }, texto);
 }
 
 async function enviar(formulario) {
@@ -131,14 +150,16 @@ async function enviar(formulario) {
   await executar(formulario.querySelector('button[type="submit"]'), async () => {
     if (arquivo) {
       // O arquivo vai como corpo da requisição; nome e texto, em cabeçalhos.
-      await api(`/api/chat/arquivos?${new URLSearchParams({ guildId: estado.guildId })}`, {
+      await api(`/api/chat/arquivos?${new URLSearchParams({ guildId: estado.guildId, canal: estado.canalChat })}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream', 'X-Arquivo-Nome': encodeURIComponent(arquivo.name), 'X-Mensagem': encodeURIComponent(texto) },
         body: arquivo
       });
     } else {
-      await enviarJson('/api/chat', { guildId: estado.guildId, texto });
+      await enviarJson('/api/chat', { guildId: estado.guildId, texto, canal: estado.canalChat, respostaA: estado.respostaChat?.id });
     }
+    tocar('enviar');
+    estado.respostaChat = null;
     estado.textoChat = '';
     estado.mencoesChat = {};
     estado.sugestoesChat = [];
@@ -261,10 +282,13 @@ async function desbanir(botao, usuarioId) {
   });
 }
 
-function mensagemDoChat(item, { pessoas, podeApagar }) {
+function mensagemDoChat(item, chat, continuacao = false) {
+  const { pessoas, podeApagar } = chat;
   const pessoa = pessoas[item.autorId];
   const nome = pessoa?.nome || item.autorNome || 'Membro';
   const propria = item.autorId === estado.usuario.id;
+
+  const hora = el('time', { datetime: item.criadaEm, title: formatarData(item.criadaEm) }, formatoHora.format(new Date(item.criadaEm)));
 
   // Para a staff, clicar na mensagem abre a moderação (links, vídeos e
   // imagens dentro dela continuam funcionando normalmente).
@@ -274,29 +298,29 @@ function mensagemDoChat(item, { pessoas, podeApagar }) {
   });
 
   return el('article', {
-    class: `mensagem${propria ? ' propria' : ''}${podeApagar ? ' moderavel' : ''}${item.mencoes?.includes(estado.usuario.id) ? ' mencionado' : ''}`,
+    class: `mensagem${continuacao ? ' continuacao' : ''}${propria ? ' propria' : ''}${podeApagar ? ' moderavel' : ''}${item.todos || item.mencoes?.includes(estado.usuario.id) ? ' mencionado' : ''}`,
     'data-id': item.id,
-    title: podeApagar ? 'Clique para moderar: apagar, castigo, banir ou fixar' : null,
     onclick: aoClicar
   },
-    avatar({ id: item.autorId, nome, url: pessoa?.avatar, classe: 'media' }),
+    continuacao
+      ? el('span', { class: 'mensagem-hora' }, hora)
+      : avatar({ id: item.autorId, nome, url: pessoa?.avatar, classe: 'media' }),
     el('div', { class: 'mensagem-corpo' },
-      el('header', null,
+      !continuacao && el('header', null,
         nomeColorido(nome, pessoa?.cor),
-        propria && el('span', { class: 'marcador voce' }, 'você'),
-        el('time', { datetime: item.criadaEm, title: formatarData(item.criadaEm) }, formatoHora.format(new Date(item.criadaEm)))),
+        hora,
+        item.todos && el('span', { class: 'marcador todos' }, '@all')),
+      citacao(item),
       item.texto && el('div', { class: 'texto-livre' }, rico(item.texto, { pessoas, cargos: {}, canais: {} })),
-      item.anexo && el('div', { class: 'anexos' }, anexo(item.anexo))),
-    podeApagar && el('button', {
-      class: 'so-icone chat-apagar',
-      type: 'button',
-      'aria-label': `Moderar a mensagem de ${nome}`,
-      title: 'Moderar: apagar, castigo ou banir',
-      onclick: (evento) => {
-        evento.stopPropagation();
-        moderar(evento.currentTarget, item, nome);
-      }
-    }, icone('escudo')));
+      item.anexo && el('div', { class: 'anexos' }, anexo(item.anexo)),
+      reacoesDaMensagem(item, chat.emojis || [])),
+    acoesDaMensagem(item, nome, {
+      propria,
+      podeModerar: podeApagar,
+      aoModerar: (botao) => moderar(botao, item, nome),
+      prazoApagarMin: chat.prazoApagarMin,
+      banido: Boolean(chat.banido)
+    }));
 }
 
 export function telaChat() {
@@ -304,6 +328,7 @@ export function telaChat() {
   const nos = [];
   let diaAnterior = '';
   let linhaDeNovas = false;
+  let anterior = null;
   for (const item of chat?.mensagens || []) {
     const dia = formatoDia.format(new Date(item.criadaEm));
     if (dia !== diaAnterior) nos.push(el('div', { class: 'conversa-dia' }, dia));
@@ -313,7 +338,12 @@ export function telaChat() {
       linhaDeNovas = true;
       nos.push(el('div', { class: 'conversa-dia novas', role: 'separator' }, 'Novas mensagens'));
     }
-    nos.push(mensagemDoChat(item, chat));
+    // Junta com a anterior quando é a mesma pessoa, em menos de 7 minutos,
+    // sem nada no meio (troca de dia, linha de novas, resposta ou @all).
+    const junta = anterior && nos.at(-1)?.classList.contains('mensagem') && anterior.autorId === item.autorId
+      && !item.resposta && !item.todos && new Date(item.criadaEm) - new Date(anterior.criadaEm) < 7 * 60 * 1000;
+    nos.push(mensagemDoChat(item, chat, Boolean(junta)));
+    anterior = item;
   }
 
   const formulario = el('form', {
@@ -324,6 +354,7 @@ export function telaChat() {
     }
   },
   el('div', { class: 'compositor' },
+    barraDeResposta(),
     estado.arquivoChat && el('div', { class: 'compositor-arquivo' },
       icone('clipe'),
       el('span', null, estado.arquivoChat.name),
@@ -353,7 +384,7 @@ export function telaChat() {
         type: 'text',
         id: 'texto-chat',
         'aria-label': 'Mensagem para o chat',
-        placeholder: 'Escreva para o servidor. Use @ para marcar alguém',
+        placeholder: estado.canalChat === 'avisos' ? 'Escrever um aviso' : 'Conversar em #conversa',
         maxlength: String(LIMITE_TEXTO),
         autocomplete: 'off',
         value: estado.textoChat,
@@ -363,16 +394,14 @@ export function telaChat() {
           atualizarSugestoes(evento.target);
         }
       }),
-      el('button', { class: 'primario compositor-enviar', type: 'submit' }, icone('enviar'), 'Enviar'))));
+      el('button', { class: 'so-icone compositor-enviar', type: 'submit', 'aria-label': 'Enviar', title: 'Enviar (Enter)' }, icone('enviar')))));
 
   return el('main', { class: 'principal' },
     el('div', { class: 'chat' },
-      el('header', { class: 'config-topo' },
-        el('div', null,
-          el('h1', null, 'Chat do servidor'),
-          el('p', { class: 'sub' }, `Conversa entre os membros de ${nomeDoSite()}. Denúncias e provas continuam em cada caso, não aqui.`))),
       blocoAviso(),
+      el('div', { class: 'chat-corpo' },
       el('section', { class: 'cartao chat-cartao' },
+        barraDaSala(chat, abasDoChat()),
         chat?.fixada && el('div', { class: 'chat-fixada' },
           icone('alerta'),
           el('div', null,
@@ -381,16 +410,24 @@ export function telaChat() {
           chat.podeApagar && el('button', { class: 'ver-tudo', type: 'button', onclick: (evento) => desafixar(evento.currentTarget) }, 'Desafixar')),
         el('div', { class: 'conversa chat-conversa', tabindex: '0', onscroll: chat ? guardarRolagem : null, 'aria-label': 'Mensagens do chat', 'aria-busy': chat ? null : 'true' },
           !chat
-            ? el('p', { class: 'sub' }, 'Carregando o chat…')
+            ? el('div', { class: 'carregador', role: 'status', 'aria-label': 'Carregando o chat' }, el('span'), el('span'), el('span'))
             : nos.length
               ? nos
-              : el('div', { class: 'vazio' }, el('h3', null, 'Ninguém escreveu ainda'), el('p', null, 'Mande a primeira mensagem para o servidor.'))),
+              : el('div', { class: 'vazio' },
+                el('h3', null, estado.canalChat === 'avisos' ? 'Nenhum aviso ainda' : 'Ninguém escreveu ainda'),
+                el('p', null, estado.canalChat === 'avisos' ? 'Os avisos da staff aparecem aqui.' : 'Mande a primeira mensagem para o servidor.'))),
         chat?.banido
           ? el('p', { class: 'encerrado' }, icone('cadeado'), chat.banido.expiraEm
             ? `Você está de castigo no chat até ${formatarData(chat.banido.expiraEm)}.${chat.banido.motivo ? ` Motivo: ${chat.banido.motivo}.` : ''} Ainda pode ler as mensagens.`
             : `Você foi banido do chat deste servidor pela staff.${chat.banido.motivo ? ` Motivo: ${chat.banido.motivo}.` : ''} Ainda pode ler as mensagens.`)
-          : formulario,
-        chat?.podeApagar && el('p', { class: 'dica chat-dica' }, 'Como staff, clique em uma mensagem para apagar, dar castigo, banir ou fixar no topo. Tudo vai para a auditoria.')),
+          : chat && !chat.podeApagar && estado.canalChat === 'avisos'
+            ? el('p', { class: 'encerrado' }, icone('cadeado'), 'Nesta aba só a staff escreve. Para conversar, volte para a aba Conversa.')
+            : chat && !chat.podeApagar && chat.sala.fechado
+              ? el('p', { class: 'encerrado' }, icone('cadeado'), 'O chat está fechado pela staff no momento. Você ainda pode ler as mensagens.')
+              : formulario),
+      listaDeOnline(chat)),
+
+      blocoDeSinalizadas(chat),
 
       chat?.banidos?.length > 0 && el('section', { class: 'cartao' },
         el('h2', null, `Castigos e banimentos do chat (${chat.banidos.length})`),

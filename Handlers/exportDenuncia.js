@@ -698,8 +698,7 @@ async function handleExportButton(interaction) {
 
     const denunciante = await interaction.client.users.fetch(String(denuncia.criadoPor)).catch(() => null);
     if (denunciante) {
-      try {
-        const dmEmbed = new EmbedBuilder()
+      const dmEmbed = new EmbedBuilder()
           .setColor(statusMeta.color)
           .setTitle(`📢 Denúncia Arquivada - Status: ${statusLabel}`)
           .setDescription(`Sua denúncia sobre **${denuncia.acusado}** no servidor **${guild.name}** foi finalizada pela equipe de moderação.`)
@@ -709,15 +708,25 @@ async function handleExportButton(interaction) {
           )
           .setTimestamp();
 
+      try {
         await denunciante.send({
           embeds: [dmEmbed],
           files: [htmlAttachment],
         });
       } catch (dmError) {
-        await interaction.followUp({
-          content: `⚠️ Aviso: Não foi possível enviar a DM para o denunciante. Motivo: **${dmError.code === 50007 ? 'O usuário bloqueou o bot ou desativou as DMs.' : 'Erro de conexão/API.'}** O staff tem acesso total aos arquivos no canal de logs.`,
-          flags: MessageFlags.Ephemeral,
-        });
+        // Quando o problema é o anexo (arquivo grande demais para mensagem
+        // direta, por exemplo), o aviso vai sem ele em vez de não ir.
+        let avisado = false;
+        if (dmError.code !== 50007) {
+          console.error(`Erro ao enviar a DM de arquivamento (código ${dmError.code ?? 'sem código'}): ${dmError.message}`);
+          avisado = await denunciante.send({ embeds: [dmEmbed] }).then(() => true).catch(() => false);
+        }
+        if (!avisado) {
+          await interaction.followUp({
+            content: `⚠️ Aviso: Não foi possível enviar a DM para o denunciante. Motivo: **${dmError.code === 50007 ? 'O usuário bloqueou o bot ou desativou as DMs.' : `Erro do Discord (${dmError.code ?? dmError.message}).`}** O staff tem acesso total aos arquivos no canal de logs.`,
+            flags: MessageFlags.Ephemeral,
+          });
+        }
       }
     }
 

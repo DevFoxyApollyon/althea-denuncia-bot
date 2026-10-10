@@ -13,6 +13,8 @@ export function rotaAtual() {
   if (tipo === 'config') return { tipo: 'config' };
   if (tipo === 'chat') return { tipo: 'chat' };
   if (tipo === 'home') return { tipo: 'home' };
+  if (tipo === 'teste') return { tipo: 'teste' };
+  if (tipo === 'teste-admin') return { tipo: 'teste-admin' };
   if (tipo === 'jogador') return { tipo: 'jogador', id: id ? decodeURIComponent(id) : '' };
   if (tipo === 'auditoria') return { tipo: 'auditoria' };
   return { tipo: 'inicio' };

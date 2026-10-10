@@ -2,7 +2,8 @@
 
 # 📗 Modelos do Banco de Dados (MongoDB)
 
-> **📝 v3.1.0:** Estrutura principal mantida e documentada para a release 3.1 do ALTHEA, com refinamentos de estabilidade, automação e monitoramento.
+> O model `Config` usa `MONGODB_URI` (banco principal); os demais models usam
+> `SECONDARY_DB_URI`. Consulte a seção de retenção antes de publicar esta alteração.
 
 ---
  
@@ -147,7 +148,7 @@ antes da mudança continuam com o array embutido e são lidas dele.
   anexos: [{ id, nome, url, tipo, tamanho }],
   embeds: Array,
   espelhos: [{ threadId, messageId }],
-  expiraEm: Date             // mesma data de expiração da denúncia (TTL)
+  expiraEm: Date             // prazo funcional; a retenção geral usa dataRetencaoAte
 }
 ```
 
@@ -199,6 +200,26 @@ Denuncia (1) ──→ (1) FeedbackTemp
 ## 🧹 Limpeza de Dados
 
 As collections são criadas automaticamente na primeira execução.
+
+Todos os documentos têm `dataRetencaoAte` e expiram seis meses após a migração
+(para dados já existentes) ou após a criação (para dados novos). Isso inclui
+configurações, usuários, denúncias, auditorias e dados do site. Os anexos GridFS
+do chat são eliminados pelo bucket para remover também seus chunks.
+
+Antes do primeiro deploy com esta mudança, mantenha o bot desligado e rode:
+
+```bash
+npm run db:migrar
+npm run db:migrar -- --aplicar
+```
+
+A primeira execução só simula e detecta conflitos. A segunda copia as
+collections (exceto `configs`) e índices não TTL, verifica os dados no destino e
+preserva a origem sem apagá-la. A collection `configs` continua no banco
+principal (`MONGODB_URI`); mantenha essa variável configurada na hospedagem.
+Só inicie a nova versão depois de confirmar a mensagem de verificação da
+migração. O MongoDB pode demorar até cerca de um minuto para remover documentos vencidos.
+O MongoDB pode demorar até cerca de um minuto para remover documentos vencidos.
 
 Para resetar:
 ```bash

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { model } = require('../utils/persistencia');
 const { getBrasiliaDate } = require('../utils/dateUtils');
 const { avisarMudanca, avisarStatus } = require('../utils/eventosDenuncia');
 
@@ -99,7 +100,7 @@ const denunciaSchema = new mongoose.Schema({
       date.setDate(date.getDate() + 45);
       return date;
     },
-    index: { expires: 0 }
+    index: true
   },
   punicao: { 
     type: String 
@@ -245,4 +246,4 @@ denunciaSchema.post('findOneAndUpdate', function(doc) {
   avisarStatus({ ...(doc.toObject?.() || doc), ...(alteracao.$set || {}), status });
 });
 
-module.exports = mongoose.model('Denuncia', denunciaSchema);
+module.exports = model('Denuncia', denunciaSchema);

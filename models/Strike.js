@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { model } = require('../utils/persistencia');
 
 const StrikeSchema = new mongoose.Schema({
   userId: { type: String, required: true, index: true },
@@ -38,8 +39,7 @@ StrikeSchema.methods.cleanOldStrikesEmoji = function() {
   this.strikesEmoji = this.strikesEmoji.filter(s => (now - s.timestamp.getTime()) < 24 * 60 * 60 * 1000);
 };
 
-// Registro sem strike novo há 24 horas é apagado pelo próprio MongoDB.
-// (Os strikes antigos de quem continua ativo saem pelos métodos cleanOld* acima.)
+// O registro some 24 horas depois da última vez em que foi atualizado.
 StrikeSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 24 * 60 * 60 });
 
-module.exports = mongoose.model('Strike', StrikeSchema);
+module.exports = model('Strike', StrikeSchema);

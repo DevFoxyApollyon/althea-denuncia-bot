@@ -1,28 +1,23 @@
 // Painel inicial: saudação, números, tabela de casos e coluna de apoio.
 import { finalizarDenuncia } from './acoes.js';
-import { abrirArea, abrirVista, carregarLista, casosDaVista, casosVisiveis } from './dados.js';
+import { carregarLista, casosDaVista, casosVisiveis } from './dados.js';
 import { desenhar } from './desenho.js';
-import { EM_ANDAMENTO, FILTROS, ROTULOS_STATUS, VISTAS, estado } from './estado.js';
+import { EM_ANDAMENTO, FILTROS, VISTAS, estado } from './estado.js';
 import { blocoAviso } from './navegacao.js';
 import { lerVistos, temNovidade } from './novidades.js';
 import { ir } from './rotas.js';
 import {
   areaDaEquipe,
-  avatar,
   el,
   formatarData,
-  fotoDoUsuario,
   icone,
-  nomeDoSite,
-  nomeDoUsuario,
   numeroDoCaso,
   papeisAtuais,
   podeAbrir,
   selo,
   seloSla,
   servidorAtual,
-  slaDe,
-  tempoRelativo
+  slaDe
 } from './util.js';
 
 export function cartaoNumero({ rotulo, valor, nomeIcone, tom, filtro }) {
@@ -100,7 +95,10 @@ export function tabelaDeCasos() {
       el('h3', null, 'Nada com esse filtro'),
       el('p', null, 'Mude a busca ou o status para ver outros casos.'));
   } else {
-    corpo = el('div', { class: 'tabela', role: 'list' }, visiveis.map(denuncia =>
+    corpo = el('div', { class: 'tabela', role: 'list' },
+      el('div', { class: 'tabela-colunas', 'aria-hidden': 'true' },
+        el('span', null, 'Caso'), el('span', null, 'Motivo'), el('span', null, 'Envolvidos'), el('span', null, 'Situação'), el('span')),
+      visiveis.map(denuncia =>
       el('div', { class: `linha${denuncia.prioridade === 'alta' && denuncia.aberta ? ' alta' : ''}`, role: 'listitem' },
         el('button', { class: 'linha-abrir', type: 'button', onclick: () => ir(`#/d/${denuncia.id}`) },
           el('span', { class: 'celula caso-ref' },
@@ -113,7 +111,7 @@ export function tabelaDeCasos() {
               el('strong', null, denuncia.motivo,
                 denuncia.prioridade === 'alta' && el('span', { class: 'prioridade' }, 'Alta prioridade')),
               el('span', { class: 'linha-detalhes' }, el('span', { class: `categoria-chip${denuncia.categoria === 'Outros' ? ' outros' : ''}` }, denuncia.categoria),
-              [estado.vista === 'admin' && denuncia.guildNome, denuncia.platform].filter(Boolean).join(', ')))),
+              denuncia.platform))),
           el('span', { class: 'celula caso-acusado' },
             icone('usuario'),
             el('span', { class: 'celula-texto' },
@@ -131,8 +129,7 @@ export function tabelaDeCasos() {
   return el('section', { class: 'cartao cartao-tabela' },
     el('header', { class: 'cartao-cabecalho' },
       el('div', null,
-        el('h2', null, vista.titulo),
-        el('p', { class: 'sub' }, vista.descricao)),
+        el('h1', null, vista.titulo)),
       estado.vista === 'minhas' && podeAbrir() && el('button', { class: 'primario', type: 'button', onclick: () => ir('#/nova') },
         icone('mais'), 'Nova denúncia')),
     casos.length > 1 && el('div', { class: 'tabela-ferramentas' },
@@ -204,64 +201,13 @@ export function tabelaDeCasos() {
   );
 }
 
-export function colunaDeApoio() {
-  const staff = areaDaEquipe();
-  const papeis = papeisAtuais();
-  const recentes = [...casosDaVista()].sort((a, b) => new Date(b.dataCriacao) - new Date(a.dataCriacao)).slice(0, 3);
-
-  const acao = ({ titulo, texto, nomeIcone, tom, aoClicar }) => el('button', { class: `acao-rapida ${tom}`, type: 'button', onclick: aoClicar },
-    el('span', { class: 'acao-icone' }, icone(nomeIcone)),
-    el('span', { class: 'acao-texto' }, el('strong', null, titulo), el('span', null, texto)));
-
-  return el('aside', { class: 'apoio' },
-    el('section', { class: 'cartao' },
-      el('h2', null, 'Ações rápidas'),
-      el('div', { class: 'acoes-rapidas' },
-        !staff && podeAbrir() && acao({ titulo: 'Fazer uma denúncia', texto: 'Relate uma irregularidade no servidor', nomeIcone: 'alerta', tom: 'recusada', aoClicar: () => ir('#/nova') }),
-        !staff && papeis.staff && acao({ titulo: 'Ir para o painel da staff', texto: 'Fila e casos em atendimento', nomeIcone: 'escudo', tom: 'reivindicacao', aoClicar: () => abrirArea('staff') }),
-        staff && estado.vista !== 'fila' && acao({ titulo: 'Ver a fila', texto: 'Denúncias aguardando atendimento', nomeIcone: 'caixa', tom: 'analise', aoClicar: () => abrirVista('fila') }),
-        staff && estado.vista !== 'atendimentos' && acao({ titulo: 'Meus atendimentos', texto: 'Casos que você reivindicou', nomeIcone: 'escudo', tom: 'reivindicacao', aoClicar: () => abrirVista('atendimentos') }),
-        staff && acao({ titulo: 'Área do jogador', texto: 'Suas próprias denúncias', nomeIcone: 'usuario', tom: 'neutro', aoClicar: () => abrirArea('jogador') }))),
-
-    recentes.length > 0 && el('section', { class: 'cartao' },
-      el('h2', null, 'Mais recentes'),
-      el('ol', { class: 'atividade' }, recentes.map(denuncia => el('li', { class: denuncia.status },
-        el('button', { type: 'button', onclick: () => ir(`#/d/${denuncia.id}`) },
-          el('strong', null, `Denúncia ${numeroDoCaso(denuncia.id)}`),
-          el('span', { title: formatarData(denuncia.dataCriacao) }, tempoRelativo(denuncia.dataCriacao)),
-          el('span', { class: 'atividade-status' }, ROTULOS_STATUS[denuncia.status])))))),
-
-    el('section', { class: 'cartao dica-cartao' },
-      el('span', { class: 'numero-icone analise' }, icone('lampada')),
-      el('div', null,
-        el('h2', null, 'Dica'),
-        el('p', null, staff
-          ? 'Reivindique antes de analisar: assim o denunciante vê quem está cuidando do caso.'
-          : 'Envie o máximo de provas (vídeos, prints e descrições) para agilizar a análise.')))
-  );
-}
 
 export function telaPainel() {
-  const staff = areaDaEquipe();
-  const primeiroNome = nomeDoUsuario().split(/\s+/)[0];
-
   return el('main', { class: 'principal' },
-    el('div', { class: 'painel-grade' },
-      el('div', { class: 'painel-conteudo' },
-        el('section', { class: 'boas-vindas' },
-          avatar({ id: estado.usuario.id, nome: nomeDoUsuario(), url: fotoDoUsuario(), classe: 'grande' }),
-          el('div', { class: 'boas-vindas-texto' },
-            el('p', { class: 'boas-vindas-sobre' }, staff ? 'Painel da staff' : `Olá, ${primeiroNome}`),
-            el('h1', null, nomeDoSite()),
-            el('p', null, staff
-              ? 'Reivindique um caso da fila para começar a análise.'
-              : 'Abra casos, envie provas e acompanhe cada decisão por aqui.')),
-          el('img', { class: 'boas-vindas-logo', src: '/logo.png', alt: '' })),
-        blocoAviso(),
-        servidorAtual()?.manutencao && el('div', { class: 'aviso manutencao', role: 'status' },
-          el('span', null, 'O sistema de denúncias está em manutenção. Novas denúncias estão pausadas; as abertas continuam preservadas.')),
-        el('div', { class: 'numeros' }, numerosDoPainel()),
-        tabelaDeCasos()),
-      colunaDeApoio())
-  );
+    el('div', { class: 'painel' },
+      blocoAviso(),
+      servidorAtual()?.manutencao && el('div', { class: 'aviso manutencao', role: 'status' },
+        el('span', null, 'O sistema de denúncias está em manutenção. Novas denúncias estão pausadas; as abertas continuam preservadas.')),
+      el('div', { class: 'numeros resumo' }, numerosDoPainel()),
+      tabelaDeCasos()));
 }

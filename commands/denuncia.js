@@ -520,17 +520,6 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         registrarTopicoRestrito(thread.id, interaction.user.id, acusadoUserIds, restritoParticipacao);
 
-        // Com o site ligado, o tópico ganha um atalho direto para o caso.
-        const siteUrl = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
-        if (siteUrl) {
-            await thread.send({
-                content: '🔗 Acompanhe esta denúncia pelo site.',
-                components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setLabel('Acompanhar pelo site').setStyle(ButtonStyle.Link).setURL(`${siteUrl}/#/d/${denunciaSalva._id}`)
-                )]
-            }).catch(error => console.warn('Não foi possível enviar o atalho do site:', error.message));
-        }
-
         denunciaCooldowns.set(interaction.user.id, Date.now());
 
         await interaction.editReply({
@@ -703,22 +692,66 @@ async function handleDenunciaButtons(interaction, client) {
     } catch (error) { console.error(error); }
 }
 
-async function handleDenunciaPC(interaction) {
-    const config = await getCachedConfig(interaction.guild.id);
-    const roleRequired = config.roles.pc;
-    if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
-        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia PC. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
+async function interactionHasRole(interaction, roleId) {
+    const roles = interaction.member?.roles;
+    if (roles?.cache?.has) return roles.cache.has(roleId);
+    if (Array.isArray(roles)) return roles.includes(roleId);
+
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    return member.roles.cache.has(roleId);
+}
+
+async function handleDenunciaPorPlataforma(interaction, platform, configRole) {
+    if (!interaction.guild) {
+        return interaction.reply({
+            content: '❌ Este botão só pode ser usado em um servidor.',
+            flags: [MessageFlags.Ephemeral]
+        });
     }
-    await openDenunciaModal(interaction, 'PC');
+
+    const config = await getCachedConfig(interaction.guild.id);
+    if (!config) {
+        return interaction.reply({
+            content: '⚠️ Este servidor ainda não tem configuração salva. Configure-o pelo `/painel` ou migre a configuração existente para o banco secundário.',
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    const roleRequired = config?.roles?.[configRole];
+    if (!roleRequired) {
+        return interaction.reply({
+            content: `⚠️ O cargo permitido para denúncias ${platform} não está configurado. Ajuste-o pelo \`/painel\`.`,
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    let hasRole;
+    try {
+        hasRole = await interactionHasRole(interaction, roleRequired);
+    } catch (error) {
+        console.error(`Erro ao verificar o cargo para denúncia ${platform}:`, error);
+        return interaction.reply({
+            content: '❌ Não foi possível verificar seu cargo. Tente novamente.',
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    if (!hasRole) {
+        return interaction.reply({
+            content: `❌ Você não tem permissão para usar o botão de denúncia ${platform}. É necessário o cargo <@&${roleRequired}>.`,
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    await openDenunciaModal(interaction, platform);
+}
+
+async function handleDenunciaPC(interaction) {
+    await handleDenunciaPorPlataforma(interaction, 'PC', 'pc');
 }
 
 async function handleDenunciaMobile(interaction) {
-    const config = await getCachedConfig(interaction.guild.id);
-    const roleRequired = config.roles.permitido;
-    if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
-        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia Mobile. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
-    }
-    await openDenunciaModal(interaction, 'Mobile');
+    await handleDenunciaPorPlataforma(interaction, 'Mobile', 'permitido');
 }
 
 async function buscarContaComTimeout(guildId, userId, timeoutMs = 1500) {
@@ -931,6 +964,7 @@ module.exports = {
     handleDenunciaButtons,
     handleDenunciaPC,
     handleDenunciaMobile,
+    interactionHasRole,
     handleModalSubmit,
     handleMyDenunciasButton,
     handleConsultaModalSubmit,

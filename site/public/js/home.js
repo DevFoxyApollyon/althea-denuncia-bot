@@ -5,7 +5,7 @@ import { estado } from './estado.js';
 import { blocoAviso } from './navegacao.js';
 import { novidadesDoJogador } from './novidades.js';
 import { ir } from './rotas.js';
-import { avatar, el, fotoDoUsuario, icone, iniciais, nomeDoSite, nomeDoUsuario, papeisAtuais, podeAbrir } from './util.js';
+import { el, icone, iniciais, nomeDoSite, nomeDoUsuario, papeisAtuais, podeAbrir } from './util.js';
 
 const papelEm = (papeis) => (papeis.responsavel ? 'Responsável' : papeis.staff ? 'Staff' : 'Jogador');
 
@@ -38,15 +38,8 @@ export function telaHome() {
 
   return el('main', { class: 'principal' },
     el('div', { class: 'home' },
-      el('section', { class: 'boas-vindas' },
-        avatar({ id: estado.usuario.id, nome: nomeDoUsuario(), url: fotoDoUsuario(), classe: 'grande' }),
-        el('div', { class: 'boas-vindas-texto' },
-          el('p', { class: 'boas-vindas-sobre' }, `Olá, ${nomeDoUsuario().split(/\s+/)[0]}`),
-          el('h1', null, 'Portal de denúncias'),
-          el('p', null, estado.servidores.length > 1
-            ? 'Escolha em qual servidor você quer entrar. Para trocar depois, clique na logo.'
-            : 'Você pode voltar aqui a qualquer momento clicando na logo.')),
-        el('img', { class: 'boas-vindas-logo', src: '/logo.png', alt: '' })),
+      el('header', { class: 'pagina-titulo' },
+        el('h1', null, `Olá, ${nomeDoUsuario().split(/\s+/)[0]}`)),
       blocoAviso(),
 
       el('section', { class: 'cartao' },

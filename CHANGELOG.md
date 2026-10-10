@@ -6,12 +6,33 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
-## [Não lançado]
+## [3.3.0] - 2026-10-10
 ### ✨ Novidades
+**Portal web (site)**
+- Site de denúncias com login pelo Discord: abrir denúncia, enviar provas (com prévia e progresso), acompanhar o caso em tempo real e avaliar o atendimento.
+- Áreas separadas para jogador, staff e responsável, com escolha de servidor ao clicar na logo.
+- Painel da staff: fila por prioridade e prazo (SLA), ações do caso, notas internas, respostas prontas e perfil do jogador com reincidência.
+- Painel do responsável: visão geral, números, ranking (mesmos dados do `/rank`), auditoria e configurações de categorias, prazos e respostas prontas.
+- Teste da staff: o responsável monta o teste (vídeo do YouTube, perguntas e alternativas) e a staff responde pelo site; a correção é feita no servidor.
+- Chat por servidor: abas de conversa e avisos, respostas, reações, menções (`@nome` e `@all`), envio de imagem, áudio e vídeo, aviso fixado, música (YouTube/Spotify), lista de quem está online e sons.
+- Moderação do chat: apagar mensagem, castigo com tempo e motivo, banimento, modo lento, chat fechado, castigo automático por flood e fila de mensagens sinalizadas, tudo registrado na auditoria.
+- Notificações do navegador (Web Push) para novidades nos casos e menções no chat.
+- Categorias das denúncias reconhecidas pelo motivo (39 categorias em grupos), alerta de denúncia duplicada e rascunho salvo.
+- Denúncias abertas: quem é acusado pode se identificar pelo site.
+- Páginas de termos de serviço, política de privacidade e política de cookies, com aviso de cookies.
+
+**Bot**
+- Os botões da denúncia acompanham a situação: o que já foi feito (reivindicar, analisar, aceitar, recusar) fica desativado, também quando a ação vem do site.
+- O denunciante recebe mensagem direta quando a denúncia é reivindicada; o acusado identificado recebe quando ela é aceita e quando há mensagem nova no tópico.
+- Se a mensagem direta de arquivamento falhar por causa do anexo, o aviso é reenviado sem ele e o erro real fica no log.
 - Comandos de barra `/rank`, `/painel`, `/status` e `/denuncia` (os comandos com `!` continuam funcionando).
 - ESLint (`npm run lint`) e testes automatizados (`npm test`).
 
 ### 🔧 Correções
+- Lista do responsável mostrava as denúncias de todos os servidores em vez de só o servidor escolhido.
+- A nota de avaliação do atendimento não era gravada.
+- O bot esperava a preparação dos bancos para entrar no Discord; agora entra logo e aplica os prazos em segundo plano.
+- O site consultava o Discord a cada requisição para saber os cargos; passa a usar a memória do bot, com cache de 1 minuto.
 - O reset mensal do ranking agora move as ações antigas para `moderationactions_arquivo` em vez de apagar tudo.
 - O cooldown de reivindicação passa a valer mesmo depois de um restart do bot.
 - O painel de status mostrava latência do banco, comandos e erros sempre zerados.
@@ -21,6 +42,11 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 - `uuid` era usado sem estar declarado no `package.json`.
 
 ### 🧱 Estrutura
+- Regras de retenção por coleção em `utils/retencaoDados.js`: configurações e cadastros são permanentes; denúncias e suas mensagens duram 45 dias, ações da staff 30 dias, acessos 15 dias, strikes 24 horas e o restante 6 meses.
+- `utils/persistencia.js` define em qual banco cada modelo fica: tudo no principal, exceto vínculo Discord/ID do jogo, notificações e sugestões (secundário).
+- `npm run bancos` lista o conteúdo dos dois bancos (somente leitura) e `npm run pacote` gera o zip para a SquareCloud.
+- Segurança do site: sessão assinada, verificação de origem, política de conteúdo (CSP) sem scripts embutidos, limites de requisição e validação do conteúdo dos arquivos enviados.
+- Nova dependência: `web-push`.
 - Cache único de configurações (`utils/configCache.js`), invalidado automaticamente ao salvar.
 - Mensagens dos tópicos gravadas na coleção `DenunciaMensagem` (denúncias antigas continuam sendo lidas do formato anterior).
 - Novos índices em `Denuncia` e índice único `{ guildId, userId }` em `Usuario`.

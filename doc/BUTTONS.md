@@ -60,6 +60,7 @@ Disponíveis após criar uma denúncia.
 ### 🔎 `analisar`
 **Função:** Marcar denúncia como em análise  
 **Permissão:** Role `responsavel_admin`
+**Comportamento:** Após marcar, o botão fica desativado e novas tentativas são recusadas.
 
 ### ✅ `aceitar_denuncia`
 **Função:** Aceitar denúncia (abre modal de punição)  

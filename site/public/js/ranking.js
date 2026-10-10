@@ -37,7 +37,7 @@ export function telaRanking() {
           cartaoNumero({ rotulo: 'Denúncias hoje', valor: estado.ranking.hoje?.total ?? 0, nomeIcone: 'documento', tom: 'reivindicacao' }),
           cartaoNumero({ rotulo: 'Pendentes hoje', valor: estado.ranking.hoje?.pendentes ?? 0, nomeIcone: 'relogio', tom: 'analise' }),
           cartaoNumero({ rotulo: 'Aceitas no período', valor: estado.ranking.totais.aceitas, nomeIcone: 'visto', tom: 'aceita' }),
-          cartaoNumero({ rotulo: 'Nota média', valor: estado.ranking.qualidade ? `${estado.ranking.qualidade.media.toFixed(1)}/10` : '—', nomeIcone: 'trofeu', tom: 'recusada' })),
+          cartaoNumero({ rotulo: 'Nota média', valor: estado.ranking.qualidade ? `${estado.ranking.qualidade.media.toFixed(1)}/10` : 'sem dados', nomeIcone: 'trofeu', tom: 'recusada' })),
         !lista
           ? el('div', { class: 'tabela', 'aria-busy': 'true' }, [0, 1, 2].map(() => el('div', { class: 'linha esqueleto' }, el('span'), el('span'), el('span'))))
           : !lista.length

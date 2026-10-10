@@ -180,6 +180,17 @@ npm run lint   # ESLint
 npm test       # testes (node:test) — não acessam o banco nem o Discord
 ```
 
+### Migração do banco secundário e retenção
+
+As configurações dos servidores (`Config`) usam `MONGODB_URI`; os demais models
+usam `SECONDARY_DB_URI`. Com o bot parado, execute `npm run db:migrar` para
+simular a cópia e detectar conflitos. Se o resultado estiver correto, execute
+`npm run db:migrar -- --aplicar`. A origem não é apagada e serve como cópia de
+segurança. A collection `configs` não é copiada: as configurações permanecem no
+banco principal. Os registros existentes no secundário recebem seis meses de
+prazo a partir da migração; dados novos também expiram seis meses após a criação.
+As configurações no principal também têm retenção de seis meses.
+
 ---
 
 ## 🧠 Tecnologias Utilizadas

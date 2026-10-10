@@ -9,7 +9,7 @@ export const CHAVE_RASCUNHO = 'althea-rascunho-denuncia';
 export const CHAVE_CHAT = 'althea-chat';
 export const CHAVE_SERVIDOR = 'althea-servidor';
 // Telas que não são uma lista de casos.
-export const ROTAS_PROPRIAS = ['ranking', 'numeros', 'sugestoes', 'geral', 'auditoria', 'identificar', 'config', 'jogador', 'chat', 'home'];
+export const ROTAS_PROPRIAS = ['ranking', 'numeros', 'sugestoes', 'geral', 'auditoria', 'identificar', 'config', 'jogador', 'chat', 'home', 'teste', 'teste-admin'];
 export const ROTULOS_ACAO = { reivindicacao: 'Reivindicou', analise: 'Colocou em análise', aceita: 'Aceitou', recusada: 'Recusou' };
 export const PERIODOS = { hoje: 'Hoje', semana: 'Semana', mes: 'Mês' };
 export const ROTULOS_STATUS = {
@@ -35,7 +35,7 @@ export const VISTAS = {
   atendimentos: { area: 'staff', escopo: 'minhas', titulo: 'Meus atendimentos', menu: 'Meus atendimentos', icone: 'escudo',
     descricao: 'Casos que você reivindicou.' },
   admin: { area: 'admin', escopo: 'admin', titulo: 'Todas as denúncias', menu: 'Todas as denúncias', icone: 'grade',
-    descricao: 'Todos os casos dos servidores em que você tem o cargo responsável.' }
+    descricao: 'Todos os casos deste servidor, dos mais novos para os mais antigos.' }
 };
 export const FILTROS = {
   todos: { rotulo: 'Todas', status: null },
@@ -90,6 +90,14 @@ export const estado = {
   textoChat: '',
   arquivoChat: null,
   chatLidaAte: null,
+  canalChat: 'geral',
+  respostaChat: null,
+  reagindoChat: null,
+  sinalizadasChat: null,
+  gerirChat: false,
+  teste: null,
+  respostasTeste: {},
+  testeAdmin: null,
   chatNovas: { total: 0, mencoes: 0 },
   sugestoesChat: [],
   mencoesChat: {},

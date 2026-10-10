@@ -41,6 +41,15 @@ import {
   videoDoYoutube
 } from './util.js';
 
+function travarPaisagem() {
+  if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(() => {});
+}
+
+document.addEventListener('fullscreenchange', () => {
+  if (document.fullscreenElement) travarPaisagem();
+  else screen.orientation?.unlock?.();
+});
+
 export function andamento(denuncia) {
   const atual = ETAPA_DO_STATUS[denuncia.status] ?? 0;
   return el('ol', { class: `andamento ${denuncia.status}`, 'aria-label': 'Andamento do caso' },
@@ -78,7 +87,31 @@ export function anexo(item) {
     video.muted = false;
     video.defaultMuted = false;
     video.volume = 1;
-    return video;
+    const moldura = el('div', { class: 'video-anexo' }, video,
+      el('button', {
+        class: 'video-tela-cheia',
+        type: 'button',
+        onclick: async () => {
+          try {
+            if (moldura.requestFullscreen) {
+              await moldura.requestFullscreen();
+            } else if (video.webkitEnterFullscreen) {
+              video.webkitEnterFullscreen();
+            } else {
+              window.open(item.url, '_blank', 'noopener');
+            }
+          } catch {
+            if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+            else window.open(item.url, '_blank', 'noopener');
+          }
+        }
+      }, 'Tela cheia'));
+
+    video.addEventListener('webkitbeginfullscreen', () => {
+      travarPaisagem();
+    });
+    video.addEventListener('webkitendfullscreen', () => screen.orientation?.unlock?.());
+    return moldura;
   }
   if (item.tipo.startsWith('audio/') || ['mp3', 'm4a', 'ogg', 'opus', 'wav'].includes(extensao)) {
     return el('audio', {
@@ -264,20 +297,40 @@ export function painelStaff(denuncia, podeFinalizar) {
     return el('section', { class: 'cartao' }, el('h2', null, 'Aceitar denúncia'), formulario);
   }
 
+  // Mesma regra dos botões no Discord: o que já foi feito fica desativado, e
+  // depois de reivindicada só quem reivindicou (ou o responsável) decide.
+  const { pessoas = {}, papeis = {} } = estado.detalhe;
+  const travados = {
+    reivindicacao: ['reivindicar'],
+    analise: ['reivindicar', 'analisar'],
+    aceita: ['reivindicar', 'aceitar'],
+    recusada: ['reivindicar', 'recusar']
+  }[denuncia.status] || [];
+  const deOutro = Boolean(denuncia.claimedBy) && denuncia.claimedBy !== estado.usuario.id && !papeis.responsavel;
+  const desativado = (acao) => travados.includes(acao) || (deOutro && acao !== 'reivindicar');
+  const dono = pessoas[denuncia.claimedBy]?.nome || denuncia.responsavel || 'outro staff';
+
   const botao = (rotulo, classe, acao) => el('button', {
     class: classe,
     type: 'button',
+    disabled: desativado(acao),
     onclick: (evento) => acaoStaff(evento.currentTarget, { acao })
   }, rotulo);
 
   return el('section', { class: 'cartao' },
     el('h2', null, 'Ações da staff'),
+    denuncia.claimedBy && el('p', { class: 'sub acoes-dono' }, denuncia.claimedBy === estado.usuario.id
+      ? 'Você reivindicou esta denúncia.'
+      : deOutro
+        ? `Reivindicada por ${dono}. Só quem reivindicou ou o responsável pode analisar e decidir.`
+        : `Reivindicada por ${dono}.`),
     el('div', { class: 'acoes-grade' },
       botao('Reivindicar', '', 'reivindicar'),
       botao('Analisar', '', 'analisar'),
       el('button', {
         class: 'ok',
         type: 'button',
+        disabled: desativado('aceitar'),
         onclick: () => {
           estado.aceitando = true;
           desenhar();

@@ -1,7 +1,7 @@
 const OBRIGATORIAS = {
   DISCORD_TOKEN: 'token do bot (Discord Developer Portal > Bot)',
-  MONGODB_URI: 'URI do banco principal (denúncias, configs, ranking)',
-  SECONDARY_DB_URI: 'URI do banco secundário (usuários/contas)'
+  MONGODB_URI: 'URI do banco principal (configurações dos servidores)',
+  SECONDARY_DB_URI: 'URI do banco secundário (dados restantes do bot e do site)'
 };
 
 const OPCIONAIS = {

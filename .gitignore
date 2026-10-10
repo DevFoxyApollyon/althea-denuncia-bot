@@ -7,3 +7,6 @@ squarecloud.app
 
 # Pacote da hospedagem: contém o .env
 *.zip
+
+# Cópia antiga do projeto (não faz parte do repositório)
+tttt/

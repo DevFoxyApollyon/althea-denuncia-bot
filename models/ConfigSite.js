@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelPermanente } = require('../utils/persistencia');
 
 // Categorias, prazos de SLA e respostas prontas definidos pelo responsável no
 // site, por servidor. Sem documento, valem os padrões de site/categorias.js.
@@ -23,4 +24,4 @@ const configSiteSchema = new mongoose.Schema({
   atualizadoPor: { type: String, default: null }
 }, { timestamps: true });
 
-module.exports = mongoose.model('ConfigSite', configSiteSchema);
+module.exports = modelPermanente('ConfigSite', configSiteSchema);

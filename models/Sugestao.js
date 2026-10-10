@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Sugestões que os jogadores enviam pelo site para a administração do servidor.
 const sugestaoSchema = new mongoose.Schema({
@@ -15,4 +16,4 @@ const sugestaoSchema = new mongoose.Schema({
 sugestaoSchema.index({ guildId: 1, criadaEm: -1 });
 sugestaoSchema.index({ guildId: 1, autorId: 1, criadaEm: -1 });
 
-module.exports = mongoose.model('Sugestao', sugestaoSchema);
+module.exports = modelSecundario('Sugestao', sugestaoSchema);

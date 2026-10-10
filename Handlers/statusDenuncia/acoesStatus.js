@@ -1,5 +1,6 @@
 // Mudanças de status da denúncia: analisar, aceitar, recusar e punição.
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { sincronizarBotoes } = require('./botoesStatus');
 const Denuncia = require('../../models/Denuncia');
 const ModerationAction = require('../../models/ModerationAction');
 const { LogManager } = require('../LogManager');
@@ -129,21 +130,18 @@ async function handleStatusButton(interaction, status) {
 
       if (denuncia.status === normalizedStatus) {
         if (normalizedStatus === 'analise') {
-          const isClaimer = denuncia.claimedBy === interaction.user.id;
-          if (!isClaimer && !isResponsavelAdmin) {
-            await safeReplyOrEdit(interaction, {
-              content: '❌ Apenas quem reivindicou ou responsáveis admin podem colocar em análise.',
-              flags: [MessageFlags.Ephemeral],
-            });
-            return;
-          }
-        } else {
           await safeReplyOrEdit(interaction, {
-            content: `❌ Esta denúncia já está ${statusConfig[status]?.message.toLowerCase() || normalizedStatus}.`,
+            content: '❌ Esta denúncia já está em análise.',
             flags: [MessageFlags.Ephemeral],
           });
           return;
         }
+
+        await safeReplyOrEdit(interaction, {
+          content: `❌ Esta denúncia já está ${statusConfig[status]?.message.toLowerCase() || normalizedStatus}.`,
+          flags: [MessageFlags.Ephemeral],
+        });
+        return;
       }
 
       const hasAdminRole =
@@ -266,6 +264,7 @@ async function handleAnalise(interaction, denuncia, config, messageUrl, logsChan
     } catch (e) {
       log.warn('Falha ao atualizar status na mensagem principal (analise)', e?.message);
     }
+    await sincronizarBotoes(interaction.channel, 'analise', interaction.message);
     return true;
   } catch (error) {
     log.error('Erro ao manejar análise', error);
@@ -484,6 +483,7 @@ async function handleRecusar(interaction, denuncia, config, messageUrl, logsChan
     } catch (e) {
       log.warn('Falha ao atualizar status na mensagem principal (recusada)', e?.message);
     }
+    await sincronizarBotoes(interaction.channel, 'recusada', interaction.message);
   } catch (error) {
     log.error('Erro ao manejar recusa', error);
     await safeReplyOrEdit(interaction, {
@@ -751,9 +751,37 @@ async function handlePunishmentModal(interaction) {
       }
     }
 
+    // O acusado identificado também é avisado por mensagem direta: a menção no
+    // canal pode aparecer como "usuário desconhecido" e passar despercebida.
+    for (const acusadoUserId of acusadoUserIdsFinal) {
+      if (!/^\d{15,21}$/.test(String(acusadoUserId)) || acusadoUserId === denuncia.criadoPor) continue;
+      try {
+        const acusado = await interaction.client.users.fetch(acusadoUserId);
+        const denunciaLink = messageUrl || `https://discord.com/channels/${interaction.guild.id}/${interaction.channel.id}`;
+        await acusado.send({
+          embeds: [new EmbedBuilder()
+            .setColor('#E74C3C')
+            .setTitle('⚠️ Você foi punido em uma denúncia')
+            .setDescription(`Uma denúncia contra você em **${interaction.guild.name}** foi analisada e aceita pela equipe.`)
+            .addFields(
+              { name: '🎯 ID da conta', value: `\`${acusadoId}\``, inline: true },
+              { name: '📅 Data da punição', value: `\`${dataPunicao}\``, inline: true },
+              { name: '⚖️ Motivo da punição', value: motivo || 'Não informado', inline: false },
+              { name: '🔗 Acessar denúncia', value: `[Abrir tópico](${denunciaLink})`, inline: false },
+              { name: 'ℹ️ Reanálise', value: 'Caso discorde da decisão, procure um responsável por denúncias para solicitar uma reanálise.', inline: false }
+            )
+            .setFooter({ text: 'Sistema de Denúncias • Brasil RolePlay' })
+            .setTimestamp()]
+        });
+      } catch (dmError) {
+        if (!DM_IGNORED_CODES.includes(dmError?.code)) log.error('Erro ao enviar DM para o acusado', dmError);
+      }
+    }
+
     await safeReplyOrEdit(interaction, {
       content: `${statusConfig.aceitar.emoji} Denúncia aceita com sucesso!`,
     });
+    await sincronizarBotoes(interaction.channel, 'aceita', interaction.message);
 
     await sendReanaliseNotice(interaction.channel);
 

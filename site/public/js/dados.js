@@ -1,6 +1,8 @@
 // Carregamento das listas, do caso aberto e das demais telas; tempo real.
 import { conversaNoFim, rolarConversaParaOFim } from './acoes.js';
 import { carregarChat, carregarNovasDoChat } from './chat.js';
+import { sincronizarMusica } from './chatSala.js';
+import { carregarTeste, carregarTesteAdmin } from './teste.js';
 import { carregarConfigDoSite } from './config.js';
 import { desenhar } from './desenho.js';
 import { CHAVE_AREA, CHAVE_SERVIDOR, FILTROS, INTERVALO_ATUALIZACAO_MS, VISTAS, estado, raiz } from './estado.js';
@@ -168,9 +170,14 @@ export async function aoMudarRota() {
     if (rota.tipo === 'identificar') carregarNaoIdentificadas();
     if (rota.tipo === 'config') carregarConfigDoSite();
     if (rota.tipo === 'jogador') carregarJogador(rota.id);
+    if (rota.tipo === 'teste') carregarTeste();
+    if (rota.tipo === 'teste-admin') carregarTesteAdmin();
     if (rota.tipo === 'chat') {
       estado.chat = null;
       estado.arquivoChat = null;
+      estado.respostaChat = null;
+      estado.reagindoChat = null;
+      estado.sinalizadasChat = null;
       carregarChat();
       conectarChat();
     }
@@ -286,6 +293,8 @@ export function entrarNoServidor(guildId) {
   estado.guildId = guildId;
   estado.listas = { minhas: [], fila: [], admin: [] };
   estado.chat = null;
+  estado.canalChat = 'geral';
+  sincronizarMusica(null);
   estado.jogador = null;
   estado.configSite = null;
   salvarPreferencia(CHAVE_SERVIDOR, guildId);

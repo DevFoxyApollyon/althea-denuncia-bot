@@ -9,11 +9,8 @@ import {
   avatar,
   el,
   formatarData,
-  fotoDoUsuario,
   icone,
   nomeColorido,
-  nomeDoSite,
-  nomeDoUsuario,
   numeroDoCaso,
   seloSla,
   slaDe,
@@ -45,7 +42,8 @@ function linhaDoChat(item, pessoas) {
     banimento: `baniu ${alvo} do chat`,
     remocao: `removeu a punição de ${alvo}`,
     fixar: `fixou no topo uma mensagem de ${alvo}`,
-    desafixar: 'tirou o aviso fixado do chat'
+    desafixar: 'tirou o aviso fixado do chat',
+    config: 'mudou as regras do chat'
   }[item.acao] || item.acao;
 
   return el('li', null,
@@ -121,13 +119,8 @@ export function telaVisaoGeral() {
 
   return el('main', { class: 'principal' },
     el('div', { class: 'geral' },
-      el('section', { class: 'boas-vindas' },
-        avatar({ id: estado.usuario.id, nome: nomeDoUsuario(), url: fotoDoUsuario(), classe: 'grande' }),
-        el('div', { class: 'boas-vindas-texto' },
-          el('p', { class: 'boas-vindas-sobre' }, 'Painel do responsável'),
-          el('h1', null, nomeDoSite()),
-          el('p', null, 'Tudo o que acontece nas denúncias do servidor: volume, prazos, equipe e sugestões.')),
-        el('img', { class: 'boas-vindas-logo', src: '/logo.png', alt: '' })),
+      el('header', { class: 'pagina-titulo' },
+        el('h1', null, 'Visão geral')),
       blocoAviso(),
 
       el('div', { class: 'numeros' },
@@ -136,7 +129,7 @@ export function telaVisaoGeral() {
         cartaoNumero({ rotulo: 'Fora do prazo', valor: fila.filter(denuncia => slaDe(denuncia)?.classe === 'estourado').length, nomeIcone: 'relogio', tom: 'recusada' }),
         cartaoNumero({ rotulo: 'SLA cumprido', valor: porcento(numeros?.slaCumprido), nomeIcone: 'alerta', tom: 'aceita' }),
         cartaoNumero({ rotulo: 'Taxa de denúncias aceitas', valor: porcento(numeros?.taxaDeAceite), nomeIcone: 'visto', tom: 'aceita' }),
-        cartaoNumero({ rotulo: 'Nota média', valor: numeros?.notaMedia ? `${numeros.notaMedia.toFixed(1)}/10` : '—', nomeIcone: 'estrela', tom: 'analise' })),
+        cartaoNumero({ rotulo: 'Nota média', valor: numeros?.notaMedia ? `${numeros.notaMedia.toFixed(1)}/10` : 'sem dados', nomeIcone: 'estrela', tom: 'analise' })),
 
       el('div', { class: 'geral-grade' },
         bloco('Precisa de atenção', verTudo('Abrir a fila', () => abrirVista('fila')),

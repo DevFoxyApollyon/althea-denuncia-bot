@@ -9,7 +9,6 @@ import { ativarPush, blocoDoPush, desativarPush } from './push.js';
 import { ir, rotaAtual } from './rotas.js';
 import { alternarTema, temaAtual } from './tema.js';
 import {
-  areaDaEquipe,
   avatar,
   el,
   fotoDoUsuario,
@@ -218,6 +217,7 @@ export function menuLateral() {
       itemDeRota('Perfil do jogador', 'usuario', 'jogador'),
       itemDeRota('Auditoria', 'olho', 'auditoria'),
       itemDeRota('Configurações', 'ajustes', 'config'),
+      itemDeRota('Teste da staff', 'nota', 'teste-admin'),
       itemDoChat(),
       itemDeRota('Sugestões', 'lampada', 'sugestoes')
     ]
@@ -227,6 +227,7 @@ export function menuLateral() {
         itemDaVista('atendimentos'),
         itemDeRota('Perfil do jogador', 'usuario', 'jogador'),
         itemDeRota('Ranking', 'trofeu', 'ranking'),
+        itemDeRota('Teste', 'nota', 'teste'),
         itemDoChat()
       ]
       : [
@@ -248,10 +249,7 @@ export function menuLateral() {
     el('div', { class: 'menu-itens' }, itens),
 
     el('div', { class: 'menu-rodape' },
-      el('img', { src: '/logo.png', alt: '' }),
-      el('p', null, areaDaEquipe()
-        ? 'Cada decisão fica registrada no tópico e no log da staff.'
-        : 'Denuncie com provas e ajude a manter o RP limpo e justo.'))
+      el('p', { class: 'politicas' }, el('a', { href: '/termos.html' }, 'Termos'), el('a', { href: '/privacidade.html' }, 'Privacidade'), el('a', { href: '/cookies.html' }, 'Cookies')))
   );
 }
 

@@ -1,10 +1,11 @@
 // Botão "Reivindicar".
-const { MessageFlags } = require('discord.js');
+const { MessageFlags, EmbedBuilder } = require('discord.js');
 const Denuncia = require('../../models/Denuncia');
 const { atualizarStatusNaMensagem } = require('../../utils/atualizarStatus');
 const { getConfig: getCachedConfig } = require('../../utils/configCache');
 const { safeDefer, safeReplyOrEdit, sendOnce } = require('./mensagensStatus');
 const { checkModPermission, registrarAcaoModerador } = require('./acoesStatus');
+const { sincronizarBotoes } = require('./botoesStatus');
 const { Logger } = require('../../utils/logger');
 
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
@@ -116,6 +117,33 @@ async function handleClaimButton(interaction) {
     } catch (e) {
       log.warn('Falha ao atualizar status na mensagem principal (reivindicacao)', e?.message);
     }
+    // O denunciante é avisado por mensagem direta de que alguém pegou o caso.
+    if (/^\d{15,21}$/.test(String(denuncia.criadoPor || '')) && denuncia.criadoPor !== interaction.user.id) {
+      try {
+        const denunciante = await interaction.client.users.fetch(denuncia.criadoPor);
+        const siteUrl = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
+        const campos = [
+          { name: '🎯 ID do acusado', value: `\`${denuncia.acusado}\``, inline: true },
+          { name: '🔗 Tópico no Discord', value: `[Abrir tópico](https://discord.com/channels/${denuncia.guildId}/${denuncia.threadId})`, inline: false }
+        ];
+        if (siteUrl) campos.push({ name: '🌐 Acompanhar pelo site', value: `${siteUrl}/#/d/${denuncia._id}`, inline: false });
+        await denunciante.send({
+          embeds: [new EmbedBuilder()
+            .setColor('#3498DB')
+            .setTitle('📌 Sua denúncia foi reivindicada')
+            .setDescription(`Um administrador de **${interaction.guild.name}** assumiu a sua denúncia e vai analisar as provas.`)
+            .addFields(campos)
+            .setFooter({ text: 'Sistema de Denúncias • Brasil RolePlay' })
+            .setTimestamp()]
+        });
+      } catch (dmError) {
+        // DM fechada (50007) é comum e não é erro.
+        if (dmError?.code !== 50007) log.warn('Não foi possível avisar o denunciante da reivindicação', dmError?.message);
+      }
+    }
+
+    // Reivindicada: o botão fica desativado para os outros staffs.
+    await sincronizarBotoes(interaction.channel, 'reivindicacao', interaction.message);
   } catch (error) {
     log.error('Erro ao reivindicar denúncia', error);
     await safeReplyOrEdit(interaction, {

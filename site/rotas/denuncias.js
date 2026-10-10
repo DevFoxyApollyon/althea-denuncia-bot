@@ -91,8 +91,12 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
       );
       if (!autorizados.length) throw new ErroHttp(403, 'A visão administrativa exige o cargo responsável em pelo menos um servidor.');
 
-      nomesServidores = new Map(autorizados.map(({ guild }) => [guild.id, guild.name]));
-      filtro = { guildId: { $in: autorizados.map(({ guild }) => guild.id) } };
+      // A lista do responsável é a do servidor escolhido no site, não a soma de todos.
+      const escolhido = autorizados.find(({ guild }) => guild.id === String(req.query.guildId || ''));
+      if (!escolhido) throw new ErroHttp(403, 'Você não tem o cargo responsável neste servidor.');
+
+      nomesServidores = new Map([[escolhido.guild.id, escolhido.guild.name]]);
+      filtro = { guildId: escolhido.guild.id };
       const solicitada = Number.parseInt(String(req.query.pagina || '1'), 10);
       pagina = Number.isInteger(solicitada) && solicitada > 0 ? solicitada : 1;
       total = await Denuncia.countDocuments(filtro);

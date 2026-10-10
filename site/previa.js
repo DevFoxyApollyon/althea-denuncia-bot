@@ -51,7 +51,7 @@ const mensagens = [
 const app = express();
 app.use((req, res, next) => {
   // Mesma política do site real, para a prévia acusar o que ela bloquearia.
-  res.set('Content-Security-Policy', "default-src 'self'; img-src 'self' https://cdn.discordapp.com https://i.ytimg.com data: blob:; media-src 'self' blob:; frame-src https://www.youtube-nocookie.com; style-src 'self'; script-src 'self'; worker-src 'self'");
+  res.set('Content-Security-Policy', "default-src 'self'; img-src 'self' https://cdn.discordapp.com https://i.ytimg.com data: blob:; media-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://open.spotify.com; style-src 'self'; script-src 'self'; worker-src 'self'");
   next();
 });
 
@@ -126,6 +126,32 @@ app.get('/api/nao-identificadas', (req, res) => res.json({ minhaConta: '1187', d
 app.get('/api/duplicadas', (req, res) => res.json(String(req.query.acusado || '').includes('2471')
   ? { total: 1, suas: 1, categorias: ['Anti-RP'] }
   : { total: 0, suas: 0, categorias: [] }));
+let testeDaStaff = {
+  titulo: 'Teste de admissão da staff', instrucoes: 'Assista ao vídeo inteiro antes de responder. Você pode refazer o teste.', video: 'jNQXAC9IVRw', notaMinima: 70,
+  perguntas: [
+    { id: 'aaaa0001', texto: 'Um jogador atira em outro sem nenhuma interação antes. Qual é a infração?', opcoes: ['VDM', 'RDM', 'Metagaming', 'Combat log'], correta: 1 },
+    { id: 'aaaa0002', texto: 'O que fazer antes de analisar uma denúncia da fila?', opcoes: ['Reivindicar o caso', 'Recusar direto', 'Pedir para outro staff'], correta: 0 },
+    { id: 'aaaa0003', texto: 'Prova em vídeo com 5 segundos, sem contexto. O que fazer?', opcoes: ['Aceitar', 'Pedir o vídeo completo', 'Banir o denunciante'], correta: 1 }
+  ]
+};
+let ultimaDoTeste = null;
+const resultadosDoTeste = [{ usuarioId: '200', acertos: 3, total: 3, aprovado: true, erradas: [], em: horas(30), tentativas: 2 }, { usuarioId: '300', acertos: 1, total: 3, aprovado: false, erradas: ['aaaa0001', 'aaaa0003'], em: horas(5), tentativas: 1 }];
+app.get('/api/teste', (req, res) => res.json({ configurado: true, ...testeDaStaff, perguntas: testeDaStaff.perguntas.map(({ id, texto, opcoes }) => ({ id, texto, opcoes })), ultima: ultimaDoTeste }));
+app.post('/api/teste/respostas', express.json(), (req, res) => {
+  const erradas = testeDaStaff.perguntas.filter(p => Number(req.body?.respostas?.[p.id]) !== p.correta).map(p => p.id);
+  const total = testeDaStaff.perguntas.length;
+  ultimaDoTeste = { acertos: total - erradas.length, total, erradas, aprovado: ((total - erradas.length) / total) * 100 >= testeDaStaff.notaMinima, em: new Date().toISOString() };
+  res.status(201).json({ ok: true, resultado: ultimaDoTeste });
+});
+app.get('/api/teste/admin', (req, res) => res.json({ teste: testeDaStaff, resultados: resultadosDoTeste, pessoas }));
+app.post('/api/teste/admin', express.json(), (req, res) => {
+  // Na prévia não há validação completa: só guarda o que veio, trocando o link pelo identificador do vídeo.
+  const enviado = req.body?.teste || {};
+  if (!enviado.perguntas?.length) return res.status(400).json({ erro: 'Adicione pelo menos uma pergunta.' });
+  testeDaStaff = { ...enviado, video: /([A-Za-z0-9_-]{11})(?:[?&]|$)/.exec(String(enviado.video || ''))?.[1] || '', perguntas: enviado.perguntas.map((p, i) => ({ id: p.id || `nova${i}`, ...p })) };
+  res.json({ ok: true, mensagem: 'Teste salvo (prévia).', teste: testeDaStaff });
+});
+
 app.get('/api/config-site', (req, res) => res.json({ config: configVisivel('1'), padrao: PADRAO }));
 app.post('/api/config-site', express.json(), (req, res) => res.json({ ok: true, mensagem: 'Configurações salvas (prévia, nada foi gravado).', config: configVisivel('1') }));
 
@@ -153,7 +179,8 @@ app.get('/api/jogadores/:conta', (req, res) => res.json({
 }));
 
 const chat = [
-  { id: 'c1', autorId: '300', autorNome: 'Bruno Vidal 2471', texto: 'Alguém sabe se o evento de corrida de sábado está confirmado?', criadaEm: horas(3) },
+  { id: 'a1', autorId: '200', autorNome: 'Lucas Prado', canal: 'avisos', texto: 'Manutenção do servidor hoje às 23h. O chat continua aberto.', criadaEm: horas(5) },
+  { id: 'c1', autorId: '300', autorNome: 'Bruno Vidal 2471', texto: 'Alguém sabe se o evento de corrida de sábado está confirmado?', reacoes: { '👍': ['200', '300'] }, criadaEm: horas(3) },
   { id: 'c2', autorId: '200', autorNome: 'Lucas Prado', texto: 'Confirmado, às 20h. Detalhes em https://discord.com/channels/1/2', criadaEm: horas(2.9) },
   { id: 'c3', autorId: '100', autorNome: 'Rafael Monteiro', texto: 'Boa, vou participar.', criadaEm: horas(0.2) },
   { id: 'c4', autorId: '200', autorNome: 'Lucas Prado', texto: '<@100> você vai de qual carro?', mencoes: ['100'], criadaEm: horas(0.1) }
@@ -162,9 +189,45 @@ app.get('/api/chat/eventos', (req, res) => {
   res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
   res.flushHeaders();
 });
-app.get('/api/chat', (req, res) => res.json({ mensagens: chat, pessoas, banido: null, banidos, fixada, limiteArquivoMb: 20, podeApagar: !req.get('Referer')?.includes('jogador') }));
+const sala = { modoLentoSeg: 0, fechado: false };
+let musica = null;
+const sinalizadas = [{ id: 'z1', mensagemId: 'c1', autorId: '300', trecho: 'Alguém sabe se o evento de corrida de sábado está confirmado?', por: '200', motivo: 'Fora do assunto', em: horas(1) }];
+const doCanal = (canal) => chat.filter(item => (item.canal || 'geral') === canal).map(item => ({ mencoes: [], todos: false, resposta: null, canal: 'geral', ...item,
+  reacoes: Object.entries(item.reacoes || {}).filter(([, usuarios]) => usuarios.length).map(([emoji, usuarios]) => ({ emoji, total: usuarios.length, minha: usuarios.includes('100') })) }));
+app.post('/api/chat/:id/reacoes', express.json(), (req, res) => {
+  const mensagem = chat.find(item => item.id === req.params.id);
+  mensagem.reacoes ||= {};
+  const usuarios = mensagem.reacoes[req.body.emoji] ||= [];
+  if (usuarios.includes('100')) usuarios.splice(usuarios.indexOf('100'), 1); else usuarios.push('100');
+  res.json({ ok: true });
+});
+app.post('/api/chat/:id/sinalizar', express.json(), (req, res) => res.status(201).json({ ok: true, mensagem: 'Mensagem enviada para a staff analisar.' }));
+app.get('/api/chat/sinalizacoes', (req, res) => res.json({ sinalizacoes: sinalizadas, pessoas }));
+app.post('/api/chat/sinalizacoes/:id/resolver', express.json(), (req, res) => {
+  sinalizadas.splice(sinalizadas.findIndex(item => item.id === req.params.id), 1);
+  res.json({ ok: true });
+});
+app.post('/api/chat/config', express.json(), (req, res) => {
+  Object.assign(sala, req.body.modoLentoSeg !== undefined ? { modoLentoSeg: req.body.modoLentoSeg } : {}, req.body.fechado !== undefined ? { fechado: req.body.fechado } : {});
+  res.json({ ok: true, mensagem: 'Chat atualizado (prévia).' });
+});
+app.post('/api/chat/musica', express.json(), (req, res) => {
+  const id = /(?:v=|youtu\.be\/)([\w-]{11})/.exec(String(req.body?.url || ''))?.[1];
+  if (!id) return res.status(400).json({ erro: 'Cole um link do YouTube ou do Spotify (música, álbum ou playlist).' });
+  musica = { tipo: 'youtube', ref: id, por: '100', em: new Date().toISOString() };
+  res.status(201).json({ ok: true });
+});
+app.delete('/api/chat/musica', (req, res) => {
+  musica = null;
+  res.json({ ok: true });
+});
+app.get('/api/chat', (req, res) => res.json({ mensagens: doCanal(req.query.canal === 'avisos' ? 'avisos' : 'geral'), canal: req.query.canal === 'avisos' ? 'avisos' : 'geral', sala, musica,
+  online: [{ id: '100', nome: 'Rafael Monteiro 1187', staff: true }, { id: '200', nome: '『Mod』 Lucas Prado 259', staff: true }, { id: '300', nome: 'Bruno Vidal 2471', staff: false }],
+  emojis: ['👍', '❤️', '😂', '😮', '✅', '❌'], modosLentos: [0, 5, 10, 30, 60, 300], sinalizadas: sinalizadas.length, prazoApagarMin: 5, pessoas, banido: null, banidos, fixada, limiteArquivoMb: 20, podeApagar: !req.get('Referer')?.includes('jogador') }));
 app.post('/api/chat', express.json(), (req, res) => {
-  chat.push({ id: `c${chat.length + 1}`, autorId: '100', autorNome: 'Rafael Monteiro', texto: String(req.body?.texto || ''), mencoes: [], criadaEm: new Date().toISOString() });
+  chat.push({ id: `c${chat.length + 1}`, autorId: '100', autorNome: 'Rafael Monteiro', texto: String(req.body?.texto || ''), canal: req.body?.canal === 'avisos' ? 'avisos' : 'geral',
+    resposta: chat.filter(item => item.id === req.body?.respostaA).map(item => ({ id: item.id, autorId: item.autorId, autorNome: item.autorNome, trecho: item.texto.slice(0, 120) }))[0] || null,
+    mencoes: [], todos: /(^|\s)@(all|todos)(?![\w])/i.test(String(req.body?.texto || '')), criadaEm: new Date().toISOString() });
   res.status(201).json({ ok: true });
 });
 app.post('/api/chat/arquivos', express.raw({ type: () => true, limit: '21mb' }), (req, res) => {

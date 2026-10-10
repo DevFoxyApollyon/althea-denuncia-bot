@@ -90,7 +90,7 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
         "default-src 'self'",
         "img-src 'self' https://cdn.discordapp.com https://media.discordapp.net https://i.ytimg.com data: blob:",
         // Vídeos do YouTube tocam dentro da conversa, pelo domínio sem cookies.
-        "frame-src https://www.youtube-nocookie.com",
+        "frame-src https://www.youtube-nocookie.com https://open.spotify.com",
         // blob: é a prévia local do arquivo escolhido, antes do envio.
         "media-src 'self' https://cdn.discordapp.com https://media.discordapp.net blob:",
         "style-src 'self'",
