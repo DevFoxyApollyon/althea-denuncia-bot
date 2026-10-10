@@ -152,6 +152,18 @@ app.post('/api/teste/admin', express.json(), (req, res) => {
   res.json({ ok: true, mensagem: 'Teste salvo (prévia).', teste: testeDaStaff });
 });
 
+const avisosDoSite = [{ id: 'av1', texto: 'Manutenção do servidor hoje às 23h. As denúncias voltam em seguida.', tipo: 'atencao', criadoEm: horas(2), expiraEm: null, por: 'Rafael Monteiro 1187' }];
+app.get('/api/avisos', (req, res) => res.json({ avisos: avisosDoSite }));
+app.post('/api/avisos', express.json(), (req, res) => {
+  const horasNoAr = Number(req.body?.horas || 0);
+  avisosDoSite.unshift({ id: `av${Date.now()}`, texto: String(req.body?.texto || ''), tipo: req.body?.tipo || 'info', criadoEm: new Date().toISOString(), expiraEm: horasNoAr ? new Date(Date.now() + horasNoAr * 3600000).toISOString() : null, por: 'Rafael Monteiro 1187' });
+  res.status(201).json({ ok: true, mensagem: 'Aviso publicado (prévia).' });
+});
+app.delete('/api/avisos/:id', (req, res) => {
+  avisosDoSite.splice(avisosDoSite.findIndex(item => item.id === req.params.id), 1);
+  res.json({ ok: true });
+});
+
 app.get('/api/config-site', (req, res) => res.json({ config: configVisivel('1'), padrao: PADRAO }));
 app.post('/api/config-site', express.json(), (req, res) => res.json({ ok: true, mensagem: 'Configurações salvas (prévia, nada foi gravado).', config: configVisivel('1') }));
 

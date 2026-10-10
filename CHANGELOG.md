@@ -6,6 +6,14 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.4.0] - 2026-10-10
+### ✨ Novidades
+- Avisos do responsável: publica um aviso (informação, atenção ou urgente, com prazo opcional) que aparece no topo do site para todos os membros do servidor.
+- Menu lateral organizado em grupos (Equipe, Comunidade, Ajustes, Ferramentas).
+- Links de termos de serviço, privacidade e cookies também no menu da conta, para ficarem à mão no celular.
+
+---
+
 ## [3.3.2] - 2026-10-10
 ### ✨ Novidades
 - Versão para celular: barra de abas fixa no rodapé, topo compacto, chat em tela cheia e botões maiores para o toque.

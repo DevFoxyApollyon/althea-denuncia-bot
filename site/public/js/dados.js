@@ -1,5 +1,6 @@
 // Carregamento das listas, do caso aberto e das demais telas; tempo real.
 import { conversaNoFim, rolarConversaParaOFim } from './acoes.js';
+import { carregarAvisos } from './avisos.js';
 import { carregarChat, carregarNovasDoChat } from './chat.js';
 import { sincronizarMusica } from './chatSala.js';
 import { carregarTeste, carregarTesteAdmin } from './teste.js';
@@ -70,6 +71,7 @@ export function carregarArea() {
     ? ['fila', 'minhas', ...(estado.visaoAdmin ? ['admin'] : [])]
     : ['minhas'];
   carregarNovasDoChat();
+  carregarAvisos();
   return Promise.all(escopos.map(carregarLista));
 }
 
@@ -140,7 +142,10 @@ export function agendarAtualizacao() {
     if (rota.tipo === 'detalhe') carregarDetalhe(rota.id, { silencioso: true });
     else if (rota.tipo === 'inicio') carregarArea();
     else if (rota.tipo === 'chat') carregarChat({ silencioso: true });
-    else carregarNovasDoChat();
+    else {
+      carregarNovasDoChat();
+      carregarAvisos();
+    }
   }, INTERVALO_ATUALIZACAO_MS * 3);
 }
 
@@ -170,6 +175,7 @@ export async function aoMudarRota() {
     if (rota.tipo === 'identificar') carregarNaoIdentificadas();
     if (rota.tipo === 'config') carregarConfigDoSite();
     if (rota.tipo === 'jogador') carregarJogador(rota.id);
+    if (rota.tipo === 'avisos') carregarAvisos();
     if (rota.tipo === 'teste') carregarTeste();
     if (rota.tipo === 'teste-admin') carregarTesteAdmin();
     if (rota.tipo === 'chat') {

@@ -1,5 +1,6 @@
 // Monta a tela e inicia o site.
 import { telaIdentificar } from './abertas.js';
+import { faixaDeAvisos, telaAvisos } from './avisos.js';
 import { telaDetalhe } from './caso.js';
 import { telaChat } from './chat.js';
 import { telaConfig } from './config.js';
@@ -65,10 +66,13 @@ export function desenhar() {
               : rota.tipo === 'home' ? telaHome()
               : rota.tipo === 'teste' && papeisAtuais().staff ? telaTeste()
               : rota.tipo === 'teste-admin' && papeisAtuais().responsavel ? telaTesteAdmin()
+              : rota.tipo === 'avisos' && papeisAtuais().responsavel ? telaAvisos()
               : rota.tipo === 'jogador' && papeisAtuais().staff ? telaJogador()
               : rota.tipo === 'config' && papeisAtuais().responsavel ? telaConfig()
               : rota.tipo === 'geral' && papeisAtuais().responsavel ? telaVisaoGeral()
                 : rota.tipo === 'auditoria' && papeisAtuais().responsavel ? telaAuditoria() : telaPainel();
+    const faixa = rota.tipo !== 'avisos' && faixaDeAvisos();
+    if (faixa) principal.prepend(faixa);
     conteudo = el('div', { class: `aplicativo area-${rota.tipo === 'home' ? 'neutra' : estado.area}` }, barraSuperior(), menuLateral(), principal);
   }
 

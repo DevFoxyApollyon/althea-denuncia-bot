@@ -339,3 +339,15 @@ test('site: cada versão serve JS e CSS num endereço próprio, guardado por mui
     servidor.close();
   }
 });
+
+test('avisos do responsável: valida texto, tipo e duração', () => {
+  const { validarAviso } = require('../site/rotas/avisos');
+  const agora = 1_000_000;
+  assert.deepEqual(validarAviso({ texto: '  Manutenção às 23h  ', tipo: 'urgente', horas: 6 }, agora),
+    { texto: 'Manutenção às 23h', tipo: 'urgente', expiraEm: new Date(agora + 6 * 3600000) });
+  assert.equal(validarAviso({ texto: 'Evento sábado', tipo: 'qualquer' }, agora).tipo, 'info');
+  assert.equal(validarAviso({ texto: 'Evento sábado' }, agora).expiraEm, null, 'sem duração, fica até ser removido');
+  assert.throws(() => validarAviso({ texto: 'a' }), /Escreva o aviso/);
+  assert.throws(() => validarAviso({ texto: 'x'.repeat(401) }), /400 caracteres/);
+  assert.throws(() => validarAviso({ texto: 'Evento', horas: 5 }), /Duração inválida/);
+});

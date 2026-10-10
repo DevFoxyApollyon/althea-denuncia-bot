@@ -2109,3 +2109,39 @@ input[type="text"], input[type="search"], input[type="number"], select, textarea
   .chat-acoes .so-icone { width: 30px; min-height: 30px; }
   .chat-conversa .mensagem .mensagem-corpo header { padding-right: 96px; }
 }
+
+
+/* ==========================================================================
+   Menu em grupos, links das políticas e avisos do responsável
+   ========================================================================== */
+
+.menu-grupo { margin: 12px 0 2px; padding: 0 10px; color: var(--texto-3); font-size: 11.5px; font-weight: 600; }
+.menu-rodape .politicas { flex-wrap: wrap; gap: 4px 12px; }
+.perfil-politicas { justify-content: flex-start; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 2px 10px 6px; font-size: 13px; }
+.perfil-politicas a { color: var(--texto-2); }
+
+.avisos-do-site { display: grid; gap: 8px; max-width: 1180px; margin: 0 auto 16px; }
+.aviso-do-site { display: flex; align-items: flex-start; gap: 10px; padding: 10px 8px 10px 14px; border: 1px solid var(--linha); border-left: 3px solid var(--marca); border-radius: var(--raio); background: var(--superficie); }
+.aviso-do-site > .icone { flex: none; width: 16px; height: 16px; margin-top: 3px; color: var(--marca); }
+.aviso-do-site p { flex: 1; min-width: 0; font-size: 13.5px; }
+.aviso-do-site.atencao { border-left-color: var(--analise); }
+.aviso-do-site.atencao > .icone { color: var(--analise); }
+.aviso-do-site.urgente { border-left-color: var(--recusada); background: var(--recusada-fundo); }
+.aviso-do-site.urgente > .icone { color: var(--recusada); }
+.aviso-do-site .so-icone { width: 28px; min-height: 28px; }
+
+.avisos-tela { display: grid; gap: 16px; max-width: 760px; margin-inline: auto; }
+.avisos-tela > .sub { margin-top: -10px; }
+.avisos-opcoes { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; margin-top: 14px; }
+.avisos-opcoes .campo + .campo { margin-top: 0; }
+.avisos-lista { display: grid; gap: 8px; margin-top: 10px; }
+.avisos-lista li { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--linha); border-left: 3px solid var(--marca); border-radius: var(--raio); }
+.avisos-lista li.atencao { border-left-color: var(--analise); }
+.avisos-lista li.urgente { border-left-color: var(--recusada); }
+.avisos-lista li > div { min-width: 0; }
+.avisos-lista small { display: block; margin-top: 4px; color: var(--texto-3); font-size: 12px; }
+
+@media (max-width: 860px) {
+  .menu-grupo { display: none; }
+  .avisos-opcoes { grid-template-columns: 1fr; gap: 14px; }
+}

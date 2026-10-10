@@ -111,6 +111,12 @@ export function menuDoPerfil(papeis, claro) {
     estado.push === 'ativo' && item('Desativar notificações', 'sino', () => desativarPush().then(desenhar)),
     estado.push === 'bloqueado' && el('p', { class: 'sub' }, 'Notificações bloqueadas nas permissões do navegador.'),
 
+    el('p', { class: 'perfil-titulo' }, 'Sobre o site'),
+    el('p', { class: 'politicas perfil-politicas' },
+      el('a', { href: '/termos.html' }, 'Termos de serviço'),
+      el('a', { href: '/privacidade.html' }, 'Privacidade'),
+      el('a', { href: '/cookies.html' }, 'Cookies')),
+
     item('Sair da conta', 'sair', sair, 'perigo'));
 }
 
@@ -208,32 +214,42 @@ export function menuLateral() {
   // Mensagens que chegaram no chat desde a última leitura.
   const itemDoChat = () => itemDeRota(estado.chatNovas.mencoes ? 'Chat (marcaram você)' : 'Chat do servidor', 'balao', 'chat', estado.chatNovas.total);
 
+  // O menu é dividido em grupos, para cada coisa ter o seu lugar.
+  const grupo = (titulo) => el('p', { class: 'menu-grupo' }, titulo);
+
   const itens = estado.area === 'admin'
     ? [
       itemDeRota('Visão geral', 'casa', 'geral'),
       itemDaVista('admin'),
       itemDeRota('Números', 'grafico', 'numeros'),
-      itemDeRota('Ranking', 'trofeu', 'ranking'),
       itemDeRota('Perfil do jogador', 'usuario', 'jogador'),
-      itemDeRota('Auditoria', 'olho', 'auditoria'),
-      itemDeRota('Configurações', 'ajustes', 'config'),
+      grupo('Equipe'),
+      itemDeRota('Ranking', 'trofeu', 'ranking'),
       itemDeRota('Teste da staff', 'nota', 'teste-admin'),
+      itemDeRota('Auditoria', 'olho', 'auditoria'),
+      grupo('Comunidade'),
+      itemDeRota('Avisos', 'sino', 'avisos'),
       itemDoChat(),
-      itemDeRota('Sugestões', 'lampada', 'sugestoes')
+      itemDeRota('Sugestões', 'lampada', 'sugestoes'),
+      grupo('Ajustes'),
+      itemDeRota('Configurações', 'ajustes', 'config')
     ]
     : estado.area === 'staff'
       ? [
         itemDaVista('fila'),
         itemDaVista('atendimentos'),
+        grupo('Ferramentas'),
         itemDeRota('Perfil do jogador', 'usuario', 'jogador'),
         itemDeRota('Ranking', 'trofeu', 'ranking'),
         itemDeRota('Teste', 'nota', 'teste'),
+        grupo('Comunidade'),
         itemDoChat()
       ]
       : [
         itemDaVista('minhas'),
         podeAbrir() && item({ rotulo: 'Fazer denúncia', nomeIcone: 'alerta', ativo: rota.tipo === 'nova', aoClicar: () => ir('#/nova') }),
         itemDeRota('Denúncias abertas', 'busca', 'identificar'),
+        grupo('Comunidade'),
         itemDoChat(),
         itemDeRota('Sugestões', 'lampada', 'sugestoes')
       ];
