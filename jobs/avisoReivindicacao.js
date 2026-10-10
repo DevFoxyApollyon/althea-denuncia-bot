@@ -1,4 +1,5 @@
 const Denuncia = require('../models/Denuncia');
+const { CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM } = require('../utils/dmSegura');
 const { EmbedBuilder } = require('discord.js');
 const { getConfig: getCachedConfig } = require('../utils/configCache');
 const { getBrasiliaDate } = require('../utils/dateUtils');
@@ -192,9 +193,17 @@ async function verificarReivindicacoesSemAnalise(client) {
         logsChannel?.isTextBased?.()
           ? logsChannel.send({ embeds: [logEmbed] })
           : Promise.reject(new Error('Canal de logs indisponível')),
-        claimedStaff
-          ? claimedStaff.send({ embeds: [dmEmbed] })
-          : Promise.reject(new Error('Administrador reivindicante indisponível')),
+        // A DM é só um reforço do aviso que já vai no tópico e no canal de logs:
+        // enquanto o Discord estiver bloqueando as DMs do bot, ela é pulada.
+        !claimedStaff
+          ? Promise.reject(new Error('Administrador reivindicante indisponível'))
+          : dmPausada()
+            ? Promise.resolve(null)
+            : claimedStaff.send({ embeds: [dmEmbed] }).catch((erro) => {
+              registrarErroDeDM(erro);
+              if (CODIGOS_ESPERADOS.includes(erro?.code)) return null;
+              throw erro;
+            }),
       ]);
 
       const topicResult = results[0];

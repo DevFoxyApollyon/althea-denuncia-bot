@@ -20,9 +20,21 @@ function avisarStatus(denuncia) {
   if (denuncia?.threadId) eventos.emit('status', denuncia);
 }
 
+// Algo mudou nas denúncias de um servidor (nova, reivindicada, decidida...):
+// as listas abertas no site se atualizam na hora.
+function avisarServidor(guildId) {
+  if (guildId) eventos.emit(`servidor:${guildId}`);
+}
+
+function ouvirServidor(guildId, aoMudar) {
+  const canal = `servidor:${guildId}`;
+  eventos.on(canal, aoMudar);
+  return () => eventos.off(canal, aoMudar);
+}
+
 function ouvirStatus(aoMudar) {
   eventos.on('status', aoMudar);
   return () => eventos.off('status', aoMudar);
 }
 
-module.exports = { avisarMudanca, ouvirMudancas, avisarStatus, ouvirStatus };
+module.exports = { avisarMudanca, ouvirMudancas, avisarStatus, ouvirStatus, avisarServidor, ouvirServidor };

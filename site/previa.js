@@ -51,7 +51,7 @@ const mensagens = [
 const app = express();
 app.use((req, res, next) => {
   // Mesma política do site real, para a prévia acusar o que ela bloquearia.
-  res.set('Content-Security-Policy', "default-src 'self'; img-src 'self' https://cdn.discordapp.com https://i.ytimg.com data: blob:; media-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://open.spotify.com; style-src 'self'; script-src 'self'; worker-src 'self'");
+  res.set('Content-Security-Policy', "default-src 'self'; img-src 'self' https://cdn.discordapp.com https://i.ytimg.com data: blob:; media-src 'self' blob:; frame-src https://www.youtube-nocookie.com; style-src 'self'; script-src 'self'; worker-src 'self'");
   next();
 });
 
@@ -117,6 +117,11 @@ const sugestoes = [
 app.get('/api/sugestoes', (req, res) => res.json({ pessoas, sugestoes: req.query.escopo === 'staff' ? sugestoes : sugestoes.filter(s => s.autorId === '100') }));
 app.post('/api/sugestoes', (req, res) => res.status(201).json({ ok: true, mensagem: 'Sugestão enviada (prévia, nada foi salvo).' }));
 app.post('/api/sugestoes/:id/resposta', (req, res) => res.json({ ok: true, mensagem: 'Sugestão atualizada (prévia).' }));
+
+app.get('/api/eventos', (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
+  res.flushHeaders();
+});
 
 app.get('/api/nao-identificadas', (req, res) => res.json({ minhaConta: '1187', denuncias: [
   { id: denuncias[3].id, acusado: '1187', categoria: 'Hack', platform: 'Mobile', status: 'pendente', dataCriacao: horas(5), ehVoce: true },
@@ -202,7 +207,6 @@ app.get('/api/chat/eventos', (req, res) => {
   res.flushHeaders();
 });
 const sala = { modoLentoSeg: 0, fechado: false };
-let musica = null;
 const sinalizadas = [{ id: 'z1', mensagemId: 'c1', autorId: '300', trecho: 'Alguém sabe se o evento de corrida de sábado está confirmado?', por: '200', motivo: 'Fora do assunto', em: horas(1) }];
 const doCanal = (canal) => chat.filter(item => (item.canal || 'geral') === canal).map(item => ({ mencoes: [], todos: false, resposta: null, canal: 'geral', ...item,
   reacoes: Object.entries(item.reacoes || {}).filter(([, usuarios]) => usuarios.length).map(([emoji, usuarios]) => ({ emoji, total: usuarios.length, minha: usuarios.includes('100') })) }));
@@ -223,17 +227,7 @@ app.post('/api/chat/config', express.json(), (req, res) => {
   Object.assign(sala, req.body.modoLentoSeg !== undefined ? { modoLentoSeg: req.body.modoLentoSeg } : {}, req.body.fechado !== undefined ? { fechado: req.body.fechado } : {});
   res.json({ ok: true, mensagem: 'Chat atualizado (prévia).' });
 });
-app.post('/api/chat/musica', express.json(), (req, res) => {
-  const id = /(?:v=|youtu\.be\/)([\w-]{11})/.exec(String(req.body?.url || ''))?.[1];
-  if (!id) return res.status(400).json({ erro: 'Cole um link do YouTube ou do Spotify (música, álbum ou playlist).' });
-  musica = { tipo: 'youtube', ref: id, por: '100', em: new Date().toISOString() };
-  res.status(201).json({ ok: true });
-});
-app.delete('/api/chat/musica', (req, res) => {
-  musica = null;
-  res.json({ ok: true });
-});
-app.get('/api/chat', (req, res) => res.json({ mensagens: doCanal(req.query.canal === 'avisos' ? 'avisos' : 'geral'), canal: req.query.canal === 'avisos' ? 'avisos' : 'geral', sala, musica,
+app.get('/api/chat', (req, res) => res.json({ mensagens: doCanal(req.query.canal === 'avisos' ? 'avisos' : 'geral'), canal: req.query.canal === 'avisos' ? 'avisos' : 'geral', sala,
   online: [{ id: '100', nome: 'Rafael Monteiro 1187', staff: true }, { id: '200', nome: '『Mod』 Lucas Prado 259', staff: true }, { id: '300', nome: 'Bruno Vidal 2471', staff: false }],
   emojis: ['👍', '❤️', '😂', '😮', '✅', '❌'], modosLentos: [0, 5, 10, 30, 60, 300], sinalizadas: sinalizadas.length, prazoApagarMin: 5, pessoas, banido: null, banidos, fixada, limiteArquivoMb: 20, podeApagar: !req.get('Referer')?.includes('jogador') }));
 app.post('/api/chat', express.json(), (req, res) => {

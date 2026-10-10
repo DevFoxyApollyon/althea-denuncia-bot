@@ -2145,3 +2145,76 @@ input[type="text"], input[type="search"], input[type="number"], select, textarea
   .menu-grupo { display: none; }
   .avisos-opcoes { grid-template-columns: 1fr; gap: 14px; }
 }
+
+
+/* ==========================================================================
+   Celular: tudo maior e mais fácil de ler e de tocar
+   ========================================================================== */
+
+@media (max-width: 860px) {
+  body { font-size: 16px; }
+  .sub { font-size: 14.5px; }
+
+  /* topo */
+  .topo .marca-texto strong { font-size: 17px; }
+  .marca-logo { width: 38px; height: 38px; }
+  .topo > .areas button, .areas button { min-height: 42px; font-size: 15px; }
+  .topo-busca input { min-height: 44px; }
+
+  /* barra de abas: ícones e nomes maiores */
+  .menu-item, :root:not([data-tema="claro"]) .menu-item { flex: 1 0 76px; min-height: 64px; gap: 4px; font-size: 12px; }
+  .menu-item .icone { width: 24px; height: 24px; }
+  .menu-item > span:first-of-type { max-width: 84px; }
+  .menu-contagem { top: 6px; left: calc(50% + 8px); min-width: 18px; font-size: 11px; line-height: 18px; }
+  .principal { padding: 16px 14px calc(96px + env(safe-area-inset-bottom, 0px)); }
+  .aviso-cookies { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+
+  /* títulos, números e listas */
+  .pagina-titulo h1, .cartao-cabecalho h1, .caso-titulo h1, .nova h1, .config-topo h1, .teste > header h1 { font-size: 23px; }
+  .cartao > h2, .ficha .cartao > h2, .cartao-cabecalho h2, .teste-secao { font-size: 16.5px; }
+  .numeros .numero-texto strong { font-size: 26px; }
+  .numeros .numero-texto > span { font-size: 14px; }
+  .linha-abrir { padding: 14px; gap: 8px 10px; }
+  .celula strong, .caso-ref strong { font-size: 16px; }
+  .celula span span, .caso-ref > span, .celula .linha-detalhes, .categoria-chip, .celula .linha-detalhes .categoria-chip { font-size: 14px; }
+  .selo { font-size: 14.5px; }
+  .filtro { min-height: 40px; padding: 0 14px; font-size: 15px; }
+  .tabela-ferramentas label { font-size: 15px; }
+
+  /* botões e campos */
+  button, a.botao { min-height: 46px; padding: 0 16px; font-size: 15.5px; }
+  .so-icone { width: 44px; min-height: 44px; padding: 0; }
+  .so-icone .icone { width: 22px; height: 22px; }
+  input[type="text"], input[type="search"], input[type="number"], select, textarea { min-height: 46px; }
+  .campo label, .campo legend { font-size: 15px; }
+  .dica { font-size: 14px; }
+
+  /* chat: usa a tela inteira (sem busca nem seletor de área) e letra maior */
+  .rota-chat .topo > .topo-busca, .rota-chat .topo > .areas { display: none; }
+  .rota-chat .principal { padding: 8px 8px calc(72px + env(safe-area-inset-bottom, 0px)); }
+  .rota-chat .chat { gap: 10px; }
+  .chat-cartao { height: calc(100dvh - 148px - env(safe-area-inset-bottom, 0px)); min-height: 380px; }
+  .chat-abas button, :root:not([data-tema="claro"]) .chat-abas button { min-height: 50px; padding: 0 14px; font-size: 16.5px; }
+  .chat-online summary { font-size: 15px; }
+  .chat-conversa { padding: 10px 4px 16px; }
+  .chat-conversa .mensagem { grid-template-columns: 44px minmax(0, 1fr); gap: 10px; margin-top: 16px; }
+  .chat-conversa .mensagem .avatar.media { width: 42px; height: 42px; }
+  .chat-conversa .mensagem-corpo header strong { font-size: 16.5px; }
+  .chat-conversa .mensagem-corpo time { font-size: 13px; }
+  .chat-conversa .texto-livre { font-size: 16.5px; line-height: 1.45; }
+  .chat-fixada { font-size: 15px; }
+  .conversa-dia { font-size: 13.5px; }
+  .chat-acoes .so-icone { width: 38px; min-height: 38px; }
+  .chat-acoes .so-icone .icone { width: 19px; height: 19px; }
+  .chat-conversa .mensagem .mensagem-corpo header { padding-right: 118px; }
+  button.reacao { min-height: 34px; padding: 0 10px; font-size: 16px; }
+  .reacao-escolha button { width: 42px; min-height: 42px; font-size: 21px; }
+  .chat .compositor-linha { padding: 6px; }
+  .chat .compositor-linha input[type="text"] { min-height: 48px; font-size: 17px; }
+  .chat-sugestoes button { min-height: 38px; font-size: 15px; }
+
+  /* conversa do caso também maior */
+  .conversa .texto-livre { font-size: 16px; }
+  .mensagem-corpo header strong { font-size: 16px; }
+  .dado dt, .dado dd { font-size: 15px; }
+}

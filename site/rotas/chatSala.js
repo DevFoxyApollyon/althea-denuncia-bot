@@ -41,13 +41,12 @@ async function lerSala(guildId) {
   const sala = await ChatSala.findOne({ guildId }).lean().catch(() => null);
   return {
     modoLentoSeg: sala?.modoLentoSeg || 0,
-    fechado: Boolean(sala?.fechado),
-    musica: sala?.musica?.ref ? { tipo: sala.musica.tipo, ref: sala.musica.ref, por: sala.musica.por, em: sala.musica.em } : null
+    fechado: Boolean(sala?.fechado)
   };
 }
 
-// Aceita links do YouTube e do Spotify e devolve só o identificador: o site
-// nunca embute um endereço que veio pronto de quem digitou.
+// Lê um link de vídeo (usado no teste da staff) e devolve só o identificador:
+// o site nunca embute um endereço que veio pronto de quem digitou.
 function analisarMusica(link) {
   let url;
   try { url = new URL(String(link || '').trim()); } catch { return null; }
@@ -187,27 +186,6 @@ function registrarRotasDaSala(router, { client }) {
     res.json({ ok: true, mensagem: `${descricao}.` });
   }));
 
-  // Música do chat: a staff cola um link do YouTube ou do Spotify e o player aparece para todos.
-  router.post('/chat/musica', express.json({ limit: '4kb' }), assincrono(async (req, res) => {
-    const acesso = await exigirStaff(req, req.body?.guildId);
-    const musica = analisarMusica(req.body?.url);
-    if (!musica) throw new ErroHttp(400, 'Cole um link do YouTube ou do Spotify (música, álbum ou playlist).');
-
-    await ChatSala.updateOne(
-      { guildId: acesso.guild.id },
-      { $set: { musica: { ...musica, por: req.usuario.id, em: new Date() } } },
-      { upsert: true }
-    );
-    avisarMudanca(canalDoChat(acesso.guild.id));
-    res.status(201).json({ ok: true, mensagem: 'Música colocada no chat.' });
-  }));
-
-  router.delete('/chat/musica', assincrono(async (req, res) => {
-    const acesso = await exigirStaff(req, req.query.guildId);
-    await ChatSala.updateOne({ guildId: acesso.guild.id }, { $set: { musica: { tipo: '', ref: '', por: '', em: null } } });
-    avisarMudanca(canalDoChat(acesso.guild.id));
-    res.json({ ok: true, mensagem: 'Música retirada do chat.' });
-  }));
 }
 
 module.exports = { registrarRotasDaSala, lerSala, analisarMusica, serializarReacoes, entrarNaPresenca, quemEstaOnline, EMOJIS, MODOS_LENTOS_SEG };

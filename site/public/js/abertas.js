@@ -17,7 +17,7 @@ export function telaIdentificar() {
         el('header', { class: 'cartao-cabecalho' },
           el('div', null,
             el('h2', null, 'Denúncias abertas'),
-            el('p', { class: 'sub' }, 'Denúncias em andamento em que nem todos os acusados estão ligados a uma conta do Discord. Qualquer membro pode abrir e falar, como no tópico. Se o ID acusado for o seu, identifique-se.'))),
+            el('p', { class: 'sub' }, 'Denúncias dos últimos 45 dias, em qualquer situação, em que algum acusado ainda não está ligado a uma conta do Discord. Qualquer membro pode abrir e falar. Se o ID acusado for o seu, identifique-se.'))),
         dados && el('p', { class: `identidade${dados.minhaConta ? '' : ' sem-id'}` },
           icone('usuario'),
           dados.minhaConta
@@ -28,7 +28,7 @@ export function telaIdentificar() {
           ? el('div', { class: 'tabela', 'aria-busy': 'true' }, [0, 1, 2].map(() => el('div', { class: 'linha esqueleto' }, el('span'), el('span'), el('span'))))
           : !ordenada.length
             ? el('div', { class: 'vazio' }, el('h3', null, 'Nenhuma denúncia aberta'),
-              el('p', null, 'Todas as denúncias em andamento já têm os acusados identificados.'))
+              el('p', null, 'Todas as denúncias dos últimos 45 dias já têm os acusados identificados.'))
             : el('div', { class: 'tabela', role: 'list' }, ordenada.map(denuncia =>
               el('div', { class: `linha identificar${denuncia.ehVoce ? ' voce' : ''}`, role: 'listitem' },
                 el('span', { class: 'celula caso-ref' },
@@ -38,7 +38,7 @@ export function telaIdentificar() {
                   el('span', { class: 'plataforma' }, icone(denuncia.platform === 'Mobile' ? 'celular' : 'monitor')),
                   el('span', { class: 'celula-texto' },
                     el('strong', null, `Acusado ${denuncia.acusado}`),
-                    el('span', null, `${denuncia.motivo || denuncia.categoria}, ${denuncia.platform}`))),
+                    el('span', null, [denuncia.motivo || denuncia.categoria, denuncia.platform, denuncia.acusados > 1 && `${denuncia.identificados} de ${denuncia.acusados} identificados`].filter(Boolean).join(', ')))),
                 el('span', { class: 'celula caso-status' }, selo(denuncia.status)),
                 el('span', { class: 'identificar-acoes' },
                   denuncia.ehVoce && el('button', { class: 'primario', type: 'button', onclick: (evento) => identificarSe(evento.currentTarget, denuncia) }, 'Sou eu'),

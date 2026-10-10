@@ -8,7 +8,7 @@ const { garantirConfigDoSite } = require('./configSite');
 const { registrarRotasDeDenuncias } = require('./rotas/denuncias');
 const { registrarRotasDaStaff } = require('./rotas/staff');
 const { registrarRotasDeSugestoes } = require('./rotas/sugestoes');
-const { registrarRotasDeIdentificacao } = require('./rotas/identificacao');
+const { registrarRotasDeIdentificacao, faltaIdentificar } = require('./rotas/identificacao');
 const { registrarRotasDeJogadores } = require('./rotas/jogadores');
 const { registrarRotasDoChat } = require('./rotas/chat');
 const { registrarRotasDaSala } = require('./rotas/chatSala');
@@ -43,7 +43,7 @@ function criarRotas({ client }) {
     // Igual ao Discord: enquanto nem todos os acusados estão ligados a uma conta,
     // o tópico não é restrito e qualquer membro do servidor pode ver e falar.
     const relacao = acesso && (relacaoComDenuncia(denuncia, req.usuario.id, acesso.papeis)
-      || (denuncia.restritoParticipacao ? null : 'participante'));
+      || (denuncia.restritoParticipacao && !faltaIdentificar(denuncia) ? null : 'participante'));
     // 404 também para quem não tem acesso, para não revelar que a denúncia existe.
     if (!relacao) throw new ErroHttp(404, 'Denúncia não encontrada.');
 

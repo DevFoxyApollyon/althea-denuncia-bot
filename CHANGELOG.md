@@ -6,6 +6,21 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.5.0] - 2026-10-10
+### ✨ Novidades
+- A fila e as outras listas do site se atualizam na hora quando uma denúncia muda no Discord ou no site.
+- Denúncias abertas: mostra as dos últimos 45 dias em qualquer situação (pendente, reivindicada, em análise, aceita ou recusada) enquanto algum acusado não estiver ligado a uma conta do Discord, inclusive quando há mais acusados do que identificados.
+- Celular: letras, botões e abas maiores; o chat usa a tela inteira.
+
+### 🔧 Correções
+- O auto-finalizador e o aviso de reivindicação também param de enviar mensagens diretas enquanto o Discord bloqueia o bot.
+- Removido `utils/syncUsuarioNick.js`, sem uso e com importação inválida.
+
+### 🗑️ Removido
+- Música no chat (YouTube/Spotify) e os sons da interface.
+
+---
+
 ## [3.4.0] - 2026-10-10
 ### ✨ Novidades
 - Avisos do responsável: publica um aviso (informação, atenção ou urgente, com prazo opcional) que aparece no topo do site para todos os membros do servidor.

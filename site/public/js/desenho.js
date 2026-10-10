@@ -73,7 +73,7 @@ export function desenhar() {
                 : rota.tipo === 'auditoria' && papeisAtuais().responsavel ? telaAuditoria() : telaPainel();
     const faixa = rota.tipo !== 'avisos' && faixaDeAvisos();
     if (faixa) principal.prepend(faixa);
-    conteudo = el('div', { class: `aplicativo area-${rota.tipo === 'home' ? 'neutra' : estado.area}` }, barraSuperior(), menuLateral(), principal);
+    conteudo = el('div', { class: `aplicativo rota-${rota.tipo} area-${rota.tipo === 'home' ? 'neutra' : estado.area}` }, barraSuperior(), menuLateral(), principal);
   }
 
   document.title = `${estado.usuario ? nomeDoSite() : estado.site.nome} - Denúncias`;

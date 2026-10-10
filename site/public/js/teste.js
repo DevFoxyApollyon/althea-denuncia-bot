@@ -5,7 +5,6 @@ import { desenhar } from './desenho.js';
 import { estado } from './estado.js';
 import { blocoAviso } from './navegacao.js';
 import { rotaAtual } from './rotas.js';
-import { tocar } from './sons.js';
 import { api, avatar, avisar, el, enviarJson, formatarData, icone, nomeColorido, videoDoYoutube } from './util.js';
 
 const parametros = () => new URLSearchParams({ guildId: estado.guildId });
@@ -32,13 +31,11 @@ async function enviarTeste(botao) {
   const teste = estado.teste;
   const faltam = teste.perguntas.filter(pergunta => estado.respostasTeste[pergunta.id] === undefined).length;
   if (faltam) {
-    tocar('erro');
     avisar('erro', `Responda todas as perguntas. ${faltam === 1 ? 'Falta 1.' : `Faltam ${faltam}.`}`);
     return desenhar();
   }
   await executar(botao, async () => {
     const { resultado } = await enviarJson('/api/teste/respostas', { guildId: estado.guildId, respostas: estado.respostasTeste });
-    tocar(resultado.aprovado ? 'mencao' : 'apagar');
     estado.teste.ultima = resultado;
     estado.teste.refazendo = false;
     estado.respostasTeste = {};
@@ -102,7 +99,6 @@ export function telaTeste() {
                 checked: estado.respostasTeste[pergunta.id] === posicao,
                 // Marcar não redesenha a tela, para o vídeo não recomeçar.
                 onchange: () => {
-                  tocar('clique');
                   estado.respostasTeste[pergunta.id] = posicao;
                 }
               }),

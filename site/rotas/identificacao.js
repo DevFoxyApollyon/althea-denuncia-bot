@@ -13,7 +13,17 @@ const { acessoAoServidor } = require('../acesso');
 const { ErroHttp, assincrono } = require('./comum');
 
 const STATUS_EM_ANDAMENTO = ['pendente', 'reivindicacao', 'analise'];
+// A aba "Denúncias abertas" mostra o caso em qualquer situação (menos finalizado)
+// enquanto algum acusado não estiver ligado a uma conta do Discord.
+const STATUS_VISIVEIS = [...STATUS_EM_ANDAMENTO, 'aceita', 'recusada'];
+const JANELA_MS = 45 * 24 * 60 * 60 * 1000;
 const idsDoAcusado = (acusado) => String(acusado || '').split('+').map(id => id.trim().toLowerCase()).filter(Boolean);
+
+// Ainda há acusado sem conta do Discord ligada a esta denúncia?
+function faltaIdentificar(denuncia) {
+  const identificados = new Set(denuncia.acusadoUserIds || []).size;
+  return identificados < idsDoAcusado(denuncia.acusado).length;
+}
 
 function registrarRotasDeIdentificacao(router, { client, podeEscrever }) {
   router.get('/nao-identificadas', assincrono(async (req, res) => {
@@ -21,13 +31,16 @@ function registrarRotasDeIdentificacao(router, { client, podeEscrever }) {
     if (!acesso) throw new ErroHttp(403, 'Você não faz parte deste servidor.');
 
     const minhaConta = extrairContaDoNickname(acesso.member.nickname);
-    const denuncias = await Denuncia.find({
+    const denuncias = (await Denuncia.find({
       guildId: acesso.guild.id,
-      status: { $in: STATUS_EM_ANDAMENTO },
+      status: { $in: STATUS_VISIVEIS },
+      dataCriacao: { $gte: new Date(Date.now() - JANELA_MS) },
       criadoPor: { $ne: req.usuario.id },
-      restritoParticipacao: { $ne: true },
       acusadoUserIds: { $ne: req.usuario.id }
-    }).sort({ dataCriacao: -1 }).limit(100).select('acusado motivo platform status dataCriacao').lean();
+    }).sort({ dataCriacao: -1 }).limit(400).select('acusado acusadoUserIds restritoParticipacao motivo platform status dataCriacao').lean())
+      // Entra quem ainda tem acusado sem conta do Discord: nenhum identificado,
+      // ou menos identificados do que acusados (1 marcado e 2 denunciados, por exemplo).
+      .filter(denuncia => faltaIdentificar(denuncia)).slice(0, 150);
 
     res.json({
       minhaConta,
@@ -39,6 +52,8 @@ function registrarRotasDeIdentificacao(router, { client, podeEscrever }) {
         platform: denuncia.platform,
         status: denuncia.status,
         dataCriacao: denuncia.dataCriacao,
+        acusados: idsDoAcusado(denuncia.acusado).length,
+        identificados: (denuncia.acusadoUserIds || []).length,
         ehVoce: Boolean(minhaConta) && idsDoAcusado(denuncia.acusado).includes(String(minhaConta).toLowerCase())
       }))
     });
@@ -70,7 +85,7 @@ function registrarRotasDeIdentificacao(router, { client, podeEscrever }) {
     if (!mongoose.isValidObjectId(req.params.id)) throw new ErroHttp(404, 'Denúncia não encontrada.');
     const denuncia = await Denuncia.findById(req.params.id);
     const acesso = denuncia && await acessoAoServidor(client, req.usuario.id, denuncia.guildId);
-    if (!acesso || !STATUS_EM_ANDAMENTO.includes(denuncia.status)) throw new ErroHttp(404, 'Denúncia não encontrada.');
+    if (!acesso || !STATUS_VISIVEIS.includes(denuncia.status)) throw new ErroHttp(404, 'Denúncia não encontrada.');
     if (!podeEscrever(req.usuario.id)) throw new ErroHttp(429, 'Muitas ações em pouco tempo. Aguarde um minuto.');
     if (denuncia.criadoPor === req.usuario.id) throw new ErroHttp(400, 'Você é o denunciante deste caso.');
 
@@ -105,4 +120,4 @@ function registrarRotasDeIdentificacao(router, { client, podeEscrever }) {
   }));
 }
 
-module.exports = { registrarRotasDeIdentificacao, idsDoAcusado };
+module.exports = { registrarRotasDeIdentificacao, idsDoAcusado, faltaIdentificar };

@@ -9,7 +9,7 @@ const AcessoCaso = require('../../models/AcessoCaso');
 const { registrarFeedback } = require('../../utils/feedback');
 const { getConfig } = require('../../utils/configCache');
 const ModerationAction = require('../../models/ModerationAction');
-const { avisarMudanca, ouvirMudancas } = require('../../utils/eventosDenuncia');
+const { avisarMudanca, ouvirMudancas, ouvirServidor } = require('../../utils/eventosDenuncia');
 const { prioridadeDoMotivo, configVisivel } = require('../categorias');
 const { registrarMensagens } = require('../../utils/denunciaMensagens');
 const { contemPalavraProibida, contemLinkProibido } = require('../../utils/strikeWords');
@@ -421,6 +421,38 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
     if (!registrado) throw new ErroHttp(409, 'Você já avaliou esta denúncia.');
 
     res.status(201).json({ ok: true, mensagem: 'Avaliação enviada. Obrigado!' });
+  }));
+
+  // Tempo real das listas: avisa quando qualquer denúncia do servidor muda
+  // (aberta, reivindicada ou decidida, pelo Discord ou pelo site).
+  router.get('/eventos', assincrono(async (req, res) => {
+    const acesso = await acessoAoServidor(client, req.usuario.id, String(req.query.guildId || ''));
+    if (!acesso) throw new ErroHttp(403, 'Você não faz parte deste servidor.');
+    const abertas = conexoesPorUsuario.get(req.usuario.id) || 0;
+    if (abertas >= 6) throw new ErroHttp(429, 'Muitas abas abertas com o site. Feche algumas e tente de novo.');
+    conexoesPorUsuario.set(req.usuario.id, abertas + 1);
+
+    res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+    res.flushHeaders();
+
+    // Várias mudanças seguidas viram um aviso só.
+    let agendado = null;
+    const pararDeOuvir = ouvirServidor(acesso.guild.id, () => {
+      agendado ||= setTimeout(() => {
+        agendado = null;
+        res.write('event: lista\ndata: {}\n\n');
+      }, 800);
+    });
+    const pulso = setInterval(() => res.write(': ok\n\n'), 25 * 1000);
+
+    req.on('close', () => {
+      const restantes = (conexoesPorUsuario.get(req.usuario.id) || 1) - 1;
+      if (restantes > 0) conexoesPorUsuario.set(req.usuario.id, restantes);
+      else conexoesPorUsuario.delete(req.usuario.id);
+      clearInterval(pulso);
+      clearTimeout(agendado);
+      pararDeOuvir();
+    });
   }));
 
   // Tempo real: o navegador fica com esta conexão aberta e recarrega o caso

@@ -351,3 +351,11 @@ test('avisos do responsável: valida texto, tipo e duração', () => {
   assert.throws(() => validarAviso({ texto: 'x'.repeat(401) }), /400 caracteres/);
   assert.throws(() => validarAviso({ texto: 'Evento', horas: 5 }), /Duração inválida/);
 });
+
+test('denúncias abertas: entra quem ainda tem acusado sem conta do Discord', () => {
+  const { faltaIdentificar } = require('../site/rotas/identificacao');
+  assert.equal(faltaIdentificar({ acusado: '1039', acusadoUserIds: [] }), true, 'nenhum identificado');
+  assert.equal(faltaIdentificar({ acusado: '1039', acusadoUserIds: ['111111111111111111'] }), false);
+  assert.equal(faltaIdentificar({ acusado: '1039+2471', acusadoUserIds: ['111111111111111111'] }), true, '1 marcado e 2 denunciados');
+  assert.equal(faltaIdentificar({ acusado: '1039+2471', acusadoUserIds: ['111111111111111111', '222222222222222222'] }), false);
+});

@@ -2,7 +2,6 @@
 import { conversaNoFim, rolarConversaParaOFim } from './acoes.js';
 import { carregarAvisos } from './avisos.js';
 import { carregarChat, carregarNovasDoChat } from './chat.js';
-import { sincronizarMusica } from './chatSala.js';
 import { carregarTeste, carregarTesteAdmin } from './teste.js';
 import { carregarConfigDoSite } from './config.js';
 import { desenhar } from './desenho.js';
@@ -72,6 +71,7 @@ export function carregarArea() {
     : ['minhas'];
   carregarNovasDoChat();
   carregarAvisos();
+  ouvirListas();
   return Promise.all(escopos.map(carregarLista));
 }
 
@@ -130,6 +130,25 @@ export function desconectarEventos() {
   fluxo?.close();
   fluxo = null;
   estado.presenca = [];
+}
+
+// Tempo real das listas: quando uma denúncia do servidor muda (no Discord ou
+// no site), a fila e as outras listas se atualizam sozinhas.
+let fluxoDasListas = null;
+let servidorOuvido = null;
+
+export function ouvirListas() {
+  if (!('EventSource' in window) || servidorOuvido === estado.guildId) return;
+  fluxoDasListas?.close();
+  servidorOuvido = estado.guildId;
+  fluxoDasListas = new EventSource(`/api/eventos?${new URLSearchParams({ guildId: estado.guildId })}`);
+  fluxoDasListas.addEventListener('lista', () => {
+    const tipo = rotaAtual().tipo;
+    const digitando = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+    if (document.hidden || digitando || document.querySelector('dialog[open]')) return;
+    if (tipo === 'inicio') carregarArea();
+    else if (tipo === 'identificar') carregarNaoIdentificadas();
+  });
 }
 
 export function agendarAtualizacao() {
@@ -300,7 +319,6 @@ export function entrarNoServidor(guildId) {
   estado.listas = { minhas: [], fila: [], admin: [] };
   estado.chat = null;
   estado.canalChat = 'geral';
-  sincronizarMusica(null);
   estado.jogador = null;
   estado.configSite = null;
   salvarPreferencia(CHAVE_SERVIDOR, guildId);

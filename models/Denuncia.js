@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const { model } = require('../utils/persistencia');
 const { getBrasiliaDate } = require('../utils/dateUtils');
-const { avisarMudanca, avisarStatus } = require('../utils/eventosDenuncia');
+const { avisarMudanca, avisarStatus, avisarServidor } = require('../utils/eventosDenuncia');
 
 const denunciaSchema = new mongoose.Schema({
   guildId: { 
@@ -233,10 +233,12 @@ denunciaSchema.index({ guildId: 1, acusado: 1, dataCriacao: -1 });
 // Mudanças de status chegam ao site na hora (ver site/rotas.js, /eventos).
 denunciaSchema.post('save', function(doc) {
   avisarMudanca(doc?.threadId);
+  avisarServidor(doc?.guildId);
   if (this.$locals.statusMudou) avisarStatus(doc.toObject());
 });
 denunciaSchema.post('findOneAndUpdate', function(doc) {
   avisarMudanca(doc?.threadId);
+  avisarServidor(doc?.guildId);
   // O documento pode vir de antes ou de depois da alteração; o status novo é o do pedido.
   const alteracao = this.getUpdate() || {};
   const status = alteracao.$set?.status || alteracao.status;

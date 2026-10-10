@@ -1,12 +1,11 @@
 // Chat do servidor: uma sala para os membros. A staff pode apagar mensagens.
 import { conversaNoFim, executar, rolarConversaParaOFim } from './acoes.js';
 import { anexo } from './caso.js';
-import { abasDoChat, acoesDaMensagem, barraDaSala, listaDeOnline, barraDeResposta, blocoDeSinalizadas, citacao, reacoesDaMensagem, sincronizarMusica } from './chatSala.js';
+import { abasDoChat, acoesDaMensagem, barraDaSala, listaDeOnline, barraDeResposta, blocoDeSinalizadas, citacao, reacoesDaMensagem } from './chatSala.js';
 import { desenhar } from './desenho.js';
 import { CHAVE_CHAT, estado, raiz } from './estado.js';
 import { blocoAviso } from './navegacao.js';
 import { rotaAtual } from './rotas.js';
-import { tocar } from './sons.js';
 import { lerPreferencia, salvarPreferencia } from './tema.js';
 import { api, avatar, avisar, el, enviarJson, formatarData, formatoDia, formatoHora, icone, nomeColorido, rico } from './util.js';
 
@@ -74,14 +73,7 @@ export async function carregarChat({ silencioso = false } = {}) {
     // Ao abrir, guarda até onde a pessoa tinha lido: é ali que entra a linha
     // "Novas mensagens". Enquanto ela está com o chat na tela, tudo conta como lido.
     if (primeira) estado.chatLidaAte = lidaAteDoChat();
-    const ultimaAntes = estado.chat?.mensagens.at(-1)?.id;
     estado.chat = dados;
-    sincronizarMusica(dados.musica, dados.pessoas);
-    // Som para mensagem nova de outra pessoa (diferente quando marcam você).
-    const ultima = dados.mensagens.at(-1);
-    if (!primeira && ultima && ultima.id !== ultimaAntes && ultima.autorId !== estado.usuario.id) {
-      tocar(ultima.todos || ultima.mencoes?.includes(estado.usuario.id) ? 'mencao' : 'receber');
-    }
     if (!document.hidden) guardarPosicao({ lidaAte: new Date().toISOString() });
     estado.chatNovas = { total: 0, mencoes: 0 };
   } catch (erro) {
@@ -158,7 +150,6 @@ async function enviar(formulario) {
     } else {
       await enviarJson('/api/chat', { guildId: estado.guildId, texto, canal: estado.canalChat, respostaA: estado.respostaChat?.id });
     }
-    tocar('enviar');
     estado.respostaChat = null;
     estado.textoChat = '';
     estado.mencoesChat = {};

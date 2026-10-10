@@ -5,11 +5,8 @@ import { executar } from './acoes.js';
 import { carregarChat } from './chat.js';
 import { desenhar } from './desenho.js';
 import { estado } from './estado.js';
-import { alternarSom, somLigado, tocar } from './sons.js';
-import { lerPreferencia, salvarPreferencia } from './tema.js';
 import { api, avatar, avisar, el, enviarJson, formatarData, icone, nomeColorido } from './util.js';
 
-const CHAVE_MUSICA_OCULTA = 'althea-musica-oculta';
 const parametros = () => new URLSearchParams({ guildId: estado.guildId });
 const recarregar = () => carregarChat({ silencioso: true });
 
@@ -21,7 +18,6 @@ export function abasDoChat() {
     'aria-selected': String(estado.canalChat === canal),
     onclick: () => {
       if (estado.canalChat === canal) return;
-      tocar('clique');
       estado.canalChat = canal;
       estado.chat = null;
       estado.respostaChat = null;
@@ -53,36 +49,12 @@ function controlesDaStaff(chat) {
       class: chat.sala.fechado ? 'primario' : 'perigo',
       type: 'button',
       onclick: (evento) => mudar(evento.currentTarget, { fechado: !chat.sala.fechado })
-    }, icone('cadeado'), chat.sala.fechado ? 'Reabrir chat' : 'Fechar chat'),
-    el('form', {
-      class: 'chat-musica-form',
-      onsubmit: (evento) => {
-        evento.preventDefault();
-        const campo = evento.currentTarget.querySelector('input');
-        if (!campo.value.trim()) return;
-        executar(evento.currentTarget.querySelector('button'), async () => {
-          await enviarJson('/api/chat/musica', { guildId: estado.guildId, url: campo.value.trim() });
-          salvarPreferencia(CHAVE_MUSICA_OCULTA, '');
-          await recarregar();
-        });
-      }
-    },
-    el('input', { type: 'text', id: 'chat-musica-link', 'aria-label': 'Link da música', placeholder: 'Link do YouTube ou do Spotify' }),
-    el('button', { type: 'submit' }, icone('tocar'), 'Tocar para todos')),
-    chat.musica && el('button', {
-      type: 'button',
-      onclick: (evento) => executar(evento.currentTarget, async () => {
-        await api(`/api/chat/musica?${parametros()}`, { method: 'DELETE' });
-        await recarregar();
-      })
-    }, 'Parar música'));
+    }, icone('cadeado'), chat.sala.fechado ? 'Reabrir chat' : 'Fechar chat'));
 }
 
 export function barraDaSala(chat, abas) {
   if (!chat) return el('div', { class: 'chat-barra' }, abas);
   const online = chat.online || [];
-  const som = somLigado();
-  const oculta = chat.musica && lerPreferencia(CHAVE_MUSICA_OCULTA) === chaveDaMusica(chat.musica);
 
   return el('div', { class: 'chat-barra' },
     abas,
@@ -95,26 +67,6 @@ export function barraDaSala(chat, abas) {
         el('span', { class: 'ponto-online' }),
         el('span', null, pessoa.nome),
         pessoa.staff && el('span', { class: 'marcador' }, 'staff'))))),
-      oculta && el('button', {
-        class: 'ver-tudo',
-        type: 'button',
-        onclick: () => {
-          salvarPreferencia(CHAVE_MUSICA_OCULTA, '');
-          sincronizarMusica(chat.musica, chat.pessoas);
-          desenhar();
-        }
-      }, icone('tocar'), 'Mostrar música'),
-      el('button', {
-        class: 'so-icone',
-        type: 'button',
-        'aria-pressed': String(som),
-        'aria-label': som ? 'Desligar os sons do chat' : 'Ligar os sons do chat',
-        title: som ? 'Sons ligados' : 'Sons desligados',
-        onclick: () => {
-          alternarSom();
-          desenhar();
-        }
-      }, icone(som ? 'som' : 'mudo')),
       chat.podeApagar && el('button', {
         class: 'so-icone',
         type: 'button',
@@ -131,7 +83,6 @@ export function barraDaSala(chat, abas) {
 
 // ---------------------------------------------------------------- respostas
 export function responderA(item, nome) {
-  tocar('clique');
   estado.respostaChat = { id: item.id, autorNome: nome, trecho: (item.texto || '[arquivo]').slice(0, 120) };
   desenhar();
   document.getElementById('texto-chat')?.focus();
@@ -172,7 +123,6 @@ export function citacao(item) {
 
 // ---------------------------------------------------------------- reações
 async function reagir(botao, item, emoji) {
-  tocar('reagir');
   estado.reagindoChat = null;
   await executar(botao, async () => {
     await enviarJson(`/api/chat/${encodeURIComponent(item.id)}/reacoes`, { guildId: estado.guildId, emoji });
@@ -237,7 +187,6 @@ async function sinalizar(botao, item, nome) {
 }
 
 async function apagarPropria(botao, item) {
-  tocar('apagar');
   await executar(botao, async () => {
     await api(`/api/chat/${encodeURIComponent(item.id)}?${parametros()}`, { method: 'DELETE' });
     await recarregar();
@@ -261,7 +210,6 @@ export function acoesDaMensagem(item, nome, { propria, podeModerar, aoModerar, p
   return el('span', { class: 'chat-acoes' },
     !banido && botao('Responder', 'responder', () => responderA(item, nome)),
     !banido && botao('Reagir', 'sorriso', () => {
-      tocar('clique');
       estado.reagindoChat = estado.reagindoChat === item.id ? null : item.id;
       desenhar();
     }),
@@ -281,7 +229,6 @@ export function blocoDeSinalizadas(chat) {
   const dados = estado.sinalizadasChat;
   const resolver = (botao, id, apagar) => executar(botao, async () => {
     await enviarJson(`/api/chat/sinalizacoes/${encodeURIComponent(id)}/resolver`, { guildId: estado.guildId, apagar });
-    if (apagar) tocar('apagar');
     await carregarSinalizadas();
     await recarregar();
   });
@@ -298,47 +245,6 @@ export function blocoDeSinalizadas(chat) {
         el('span', { class: 'chat-sinalizadas-acoes' },
           el('button', { class: 'perigo', type: 'button', onclick: (evento) => resolver(evento.currentTarget, item.id, true) }, 'Apagar mensagem'),
           el('button', { type: 'button', onclick: (evento) => resolver(evento.currentTarget, item.id, false) }, 'Dispensar'))))));
-}
-
-// ---------------------------------------------------------------- música
-// O player fica fora da área que o site redesenha: se fosse recriado a cada
-// atualização do chat, a música pararia toda hora.
-let noDaMusica = null;
-let chaveAtual = null;
-const chaveDaMusica = (musica) => (musica ? `${musica.tipo}:${musica.ref}` : null);
-
-export function sincronizarMusica(musica, pessoas = {}) {
-  const chave = chaveDaMusica(musica);
-  const oculta = chave && lerPreferencia(CHAVE_MUSICA_OCULTA) === chave;
-  const desejada = oculta ? null : chave;
-  if (desejada === chaveAtual) return;
-
-  noDaMusica?.remove();
-  noDaMusica = null;
-  chaveAtual = desejada;
-  if (!desejada) return;
-
-  const endereco = musica.tipo === 'youtube'
-    ? `https://www.youtube-nocookie.com/embed/${musica.ref}?rel=0`
-    : `https://open.spotify.com/embed/${musica.ref}`;
-
-  noDaMusica = el('aside', { class: `radio ${musica.tipo}`, 'aria-label': 'Música do chat' },
-    el('header', null,
-      el('span', { class: 'radio-disco' }, icone('tocar')),
-      el('span', null, el('strong', null, 'Música do chat'), el('small', null, `Colocada por ${pessoas[musica.por]?.nome || 'staff'}. Aperte o play para ouvir.`)),
-      el('button', {
-        class: 'so-icone',
-        type: 'button',
-        'aria-label': 'Esconder a música',
-        title: 'Esconder (só para você)',
-        onclick: () => {
-          salvarPreferencia(CHAVE_MUSICA_OCULTA, chave);
-          sincronizarMusica(musica, pessoas);
-          desenhar();
-        }
-      }, icone('fechar'))),
-    el('iframe', { src: endereco, title: 'Player da música do chat', allow: 'autoplay; encrypted-media; picture-in-picture', loading: 'lazy' }));
-  document.body.append(noDaMusica);
 }
 
 // ---------------------------------------------------------------- quem está online

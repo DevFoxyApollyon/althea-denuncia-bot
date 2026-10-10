@@ -1,4 +1,5 @@
 const chalk = require('chalk');
+const { CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM } = require('../utils/dmSegura');
 const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
@@ -913,7 +914,8 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
             }
 
             const denunciante = await client.users.fetch(String(denuncia.criadoPor), { cache: false }).catch(() => null);
-            if (denunciante) {
+            // Enquanto o Discord estiver bloqueando as DMs do bot, não insiste.
+            if (denunciante && !dmPausada()) {
                 try {
                     const denunciaMsgLinkDm = `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`;
                     const threadLinkDm = denuncia.threadId
@@ -937,7 +939,8 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                         files: [htmlAttachment],
                     });
                 } catch (err) {
-                    log.warn(`Falha ao notificar denunciante: ${err.message}`, meta);
+                    registrarErroDeDM(err);
+                    if (!CODIGOS_ESPERADOS.includes(err?.code)) log.warn(`Falha ao notificar denunciante: ${err.message}`, meta);
                 }
                 client.users.cache.delete(String(denuncia.criadoPor));
             }

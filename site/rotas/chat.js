@@ -154,7 +154,6 @@ function registrarRotasDoChat(router, { client }) {
       mensagens: mensagens.map(item => serializar(item, acesso.guild.id, req.usuario.id)),
       canal,
       sala: { modoLentoSeg: sala.modoLentoSeg, fechado: sala.fechado },
-      musica: sala.musica,
       online,
       emojis: EMOJIS,
       modosLentos: MODOS_LENTOS_SEG,
@@ -163,7 +162,6 @@ function registrarRotasDoChat(router, { client }) {
       fixada: fixada ? { texto: fixada.texto, autorId: fixada.autorId, fixadaPor: fixada.fixadaPor, em: fixada.em } : null,
       pessoas: await resolverPessoas(client, acesso.guild, [
         ...(fixada ? [fixada.autorId, fixada.fixadaPor, ...extrairMencoes(fixada.texto).usuarios] : []),
-        sala.musica?.por,
         ...online.map(pessoa => pessoa.id),
         ...banimentos.flatMap(item => [item.usuarioId, item.banidoPor]),
         // Das mais novas para as mais antigas: se passar do limite, ficam as recentes.
