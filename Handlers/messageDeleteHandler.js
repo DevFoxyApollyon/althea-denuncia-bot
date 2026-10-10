@@ -1,15 +1,55 @@
-﻿// messageDeleteHandler.js
 const { EmbedBuilder, AttachmentBuilder, AuditLogEvent } = require('discord.js');
-const Config = require('../models/Config');
+const { getConfig } = require('../utils/configCache');
 const { getBrasiliaDate, formatTimeBR, formatDateBR } = require('../utils/dateUtils');
 
 const MAX_FILE_SIZE_MB = 50;
 const DOWNLOAD_TIMEOUT_MS = 5000;
+const INTENTIONAL_DELETES = new Set();
 const THREAD_CACHE = new Map();
 
 function truncate(str, max = 1024) {
-    if (!str) return '*Apenas mÃ­dia*';
+    if (!str) return '*Apenas mídia*';
     return str.length <= max ? str : str.slice(0, 1021) + '...';
+}
+
+function extractForwardMessageLink(message) {
+    if (!message) return null;
+
+    const ref = message.reference;
+    if (ref?.guildId && ref?.channelId && ref?.messageId) {
+        return `https://discord.com/channels/${ref.guildId}/${ref.channelId}/${ref.messageId}`;
+    }
+
+    if (message.messageSnapshots && message.messageSnapshots.size > 0) {
+        const snapshot = [...message.messageSnapshots.values()][0];
+        if (snapshot?.guildId && snapshot?.channelId && snapshot?.id) {
+            return `https://discord.com/channels/${snapshot.guildId}/${snapshot.channelId}/${snapshot.id}`;
+        }
+    }
+
+    return null;
+}
+
+function getDisplayMessageText(message) {
+    if (!message) return '*Apenas mídia*';
+    if (message.content && message.content.trim()) return message.content;
+
+    const forwardLink = extractForwardMessageLink(message);
+    if (forwardLink) return `[Mensagem encaminhada](${forwardLink})`;
+
+    return '*Apenas mídia*';
+}
+
+function extractUrls(text) {
+    if (!text) return [];
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const matches = text.match(urlRegex) || [];
+    return [...new Set(matches)];
+}
+
+function markForDeletion(messageId) {
+    INTENTIONAL_DELETES.add(messageId);
+    setTimeout(() => INTENTIONAL_DELETES.delete(messageId), 10000);
 }
 
 function buildContentFile(message, author, dateStr) {
@@ -19,7 +59,7 @@ function buildContentFile(message, author, dateStr) {
         `Data: ${dateStr}`,
         `ID da mensagem: ${message.id}`,
         '',
-        'â”€'.repeat(40),
+        '─'.repeat(40),
         '',
     ].join('\n');
 
@@ -88,7 +128,7 @@ async function processAttachments(attachmentsArray) {
     return { processed, failed };
 }
 
-async function sendToLogWithThread(logChannel, embed, attachments, threadName, authorId, isLong, contentFile) {
+async function sendToLogWithThread(logChannel, embed, attachments, threadName, authorId, channelContextId, isLong, contentFile) {
     const logMsg = await sendWithRetry(() =>
         logChannel.send({ embeds: [embed] })
     ).catch(err => {
@@ -102,46 +142,47 @@ async function sendToLogWithThread(logChannel, embed, attachments, threadName, a
     if (!precisaTópico) return;
 
     try {
+        const cacheKey = `${authorId}:${channelContextId}`;
         let thread = null;
-        const cachedThreadId = THREAD_CACHE.get(authorId);
+        const cachedThreadId = THREAD_CACHE.get(cacheKey);
 
         if (cachedThreadId) {
             thread = await logChannel.client.channels.fetch(cachedThreadId).catch(() => null);
             if (thread?.archived || thread?.locked) thread = null;
-            if (!thread) THREAD_CACHE.delete(authorId);
+            if (!thread) THREAD_CACHE.delete(cacheKey);
         }
 
         if (!thread) {
             thread = await logMsg.startThread({
                 name: threadName,
                 autoArchiveDuration: 10080,
-                reason: 'EvidÃªncias de deleÃ§Ã£o em denÃºncia',
+                reason: 'Evidências de deleção em denúncia',
             }).catch(() => null);
             if (!thread) return;
-            THREAD_CACHE.set(authorId, thread.id);
+            THREAD_CACHE.set(cacheKey, thread.id);
         } else {
             await thread.send({
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#2B2D31')
-                        .setDescription(`ðŸ”— Nova deleÃ§Ã£o â€” [ver no log](${logMsg.url})`),
+                        .setDescription(`🔗 Nova deleção — [ver no log](${logMsg.url})`),
                 ],
             });
         }
 
         if (isLong && contentFile) {
             await sendWithRetry(() =>
-                thread.send({ content: `ðŸ“„ **ConteÃºdo completo**:`, files: [contentFile] })
+                thread.send({ content: `📄 **Conteúdo completo**:`, files: [contentFile] })
             );
         }
 
         if (attachments.length > 0) {
             await sendWithRetry(() =>
-                thread.send({ content: `âœ… **MÃ­dia recuperada**:`, files: attachments })
+                thread.send({ content: `✅ **Mídia recuperada**:`, files: attachments })
             );
         }
     } catch (err) {
-        console.error('[messageDelete] Erro no tÃ³pico:', err.message);
+        console.error('[messageDelete] Erro no tópico:', err.message);
     }
 }
 
@@ -157,40 +198,50 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
 
     const attachmentsArray = Array.from(message.attachments.values());
     const { processed } = await processAttachments(attachmentsArray);
-
+ 
     const now = getBrasiliaDate();
     const timeStr = formatTimeBR(now);
     const dateStr = `${formatDateBR(now)} ${timeStr}`;
 
-    // Avisa no prÃ³prio tÃ³pico (sÃ³ embed, sem mÃ­dia)
     const warningEmbed = new EmbedBuilder()
         .setColor('#FF0000')
         .setAuthor({
             name: message.author?.username ?? 'Desconhecido',
             iconURL: message.author?.displayAvatarURL(),
         })
-        .setTitle('ðŸš¨ Tentativa de Apagar Prova')
+        .setTitle('🚨 Remoção de Conteúdo em Tópico de Denúncia')
         .setDescription(
-            `> â›” **Apagar mensagens neste tÃ³pico Ã© proibido.**\n` +
-            `> A mensagem foi recuperada e registrada no canal de log.`
+            `> ⛔ **Remover mensagens neste tópico é proibido.**\n` +
+            `> O conteúdo foi preservado e registrado no canal de log para auditoria.`
         )
         .addFields(
-            { name: 'ðŸ‘¤ Autor',     value: message.author ? `<@${message.author.id}>\n\`${message.author.id}\`` : 'Desconhecido', inline: true },
-            { name: 'â° Data/Hora', value: dateStr, inline: true },
-            { name: 'ðŸ“ ConteÃºdo',  value: truncate(message.content), inline: false },
-        )
-        .setFooter({ text: `ID: ${message.id} â€¢ ${timeStr}` })
-        .setTimestamp();
+            { name: '👤 Autor',     value: message.author ? `<@${message.author.id}>\n\`${message.author.id}\`` : 'Desconhecido', inline: true },
+            { name: '⏰ Data/Hora', value: dateStr, inline: true },
+        );
+
+    const fields = [];
+    const urls = extractUrls(message.content);
+    if (urls.length > 0) {
+        fields.push({ name: '🔗 Links', value: urls.map(url => `[Link](${url})`).join('\n'), inline: true });
+    }
+
+    fields.push({ name: '📝 Conteúdo', value: truncate(getDisplayMessageText(message)), inline: false });
+
+    warningEmbed.addFields(...fields);
+    warningEmbed.setFooter({ text: `ID: ${message.id} • ${timeStr}` });
+    warningEmbed.setTimestamp();
 
     const warningMsg = await sendWithRetry(() =>
         channel.send({ embeds: [warningEmbed] })
     ).catch(() => null);
 
     if (warningMsg && isDenunciaChild) {
-        setTimeout(() => warningMsg.delete().catch(() => null), 5000);
+        setTimeout(() => {
+            markForDeletion(warningMsg.id);
+            warningMsg.delete().catch(() => null);
+        }, 5000);
     }
 
-    // Loga no canal de log e cria tÃ³pico com a mÃ­dia lÃ¡
     const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
     if (logChannel) {
         const canalOrigem = isDenunciaChild ? channel.parentId : channel.id;
@@ -201,25 +252,37 @@ async function handleThreadDeletion(message, { logChannelId, pcChannelId, mobile
                 name: message.author?.username ?? 'Desconhecido',
                 iconURL: message.author?.displayAvatarURL(),
             })
-            .setTitle('ðŸš¨ Prova Apagada em TÃ³pico de DenÃºncia')
+            .setTitle('🚨 Conteúdo Removido em Tópico de Denúncia')
             .setDescription(
-                `Mensagem deletada em <#${channel.id}>\n` +
+                `Mensagem removida em <#${channel.id}>\n` +
                 `Canal pai: <#${channel.parentId}>`
             )
             .addFields(
-                { name: 'ðŸ‘¤ Autor',     value: message.author ? `<@${message.author.id}>\n\`${message.author.id}\`` : 'Desconhecido', inline: true },
-                { name: 'â° Data/Hora', value: dateStr, inline: true },
-                { name: 'ðŸ“Ž Anexos',    value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s) â€” ver tÃ³pico` : 'Nenhum', inline: true },
-                { name: 'ðŸ“ ConteÃºdo',  value: truncate(message.content), inline: false },
-            )
-            .setFooter({ text: `ID da mensagem: ${message.id} â€¢ ${timeStr}` })
-            .setTimestamp();
+                { name: '👤 Autor',     value: message.author ? `<@${message.author.id}>\n\`${message.author.id}\`` : 'Desconhecido', inline: true },
+                { name: '⏰ Data/Hora', value: dateStr, inline: true },
+            );
+
+        const logFields = [];
+        const logUrls = extractUrls(message.content);
+        if (logUrls.length > 0) {
+            logFields.push({ name: '🔗 Links', value: logUrls.map(url => `[Link](${url})`).join('\n'), inline: true });
+        }
+
+        logFields.push(
+            { name: '📎 Anexos',    value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s) — ver tópico` : 'Nenhum', inline: true },
+            { name: '📝 Conteúdo',  value: truncate(getDisplayMessageText(message)), inline: false },
+        );
+
+        logEmbed.addFields(...logFields);
+        logEmbed.setFooter({ text: `ID da mensagem: ${message.id} • ${timeStr}` });
+        logEmbed.setTimestamp();
 
         const isLong = (message.content?.length ?? 0) > 1024;
         const contentFile = isLong ? buildContentFile(message, message.author ?? { username: 'desconhecido', id: '0' }, dateStr) : null;
-        const threadName = `ðŸš¨ ${message.author?.username ?? 'desconhecido'} â€¢ canal ${canalOrigem}`;
+        const threadName = `🚨 ${message.author?.username ?? 'desconhecido'} • canal ${canalOrigem}`;
+        const channelContextId = channel.id;
 
-        await sendToLogWithThread(logChannel, logEmbed, processed, threadName, message.author?.id ?? '0', isLong, contentFile);
+        await sendToLogWithThread(logChannel, logEmbed, processed, threadName, message.author?.id ?? '0', channelContextId, isLong, contentFile);
     }
 
     return true;
@@ -238,14 +301,23 @@ async function handleDeletedMessage(message) {
     }
 
     if (!message.author) return;
-    if (message.author.bot) return;
 
-    const config = await Config.findOne({ guildId: message.guild.id }).catch(() => null);
+    if (INTENTIONAL_DELETES.has(message.id)) {
+        INTENTIONAL_DELETES.delete(message.id);
+        return;
+    }
+
+    const isBotRemoval = message.author.bot && message.author.id === message.client?.user?.id;
+    if (isBotRemoval) return;
+
+    const config = await getConfig(message.guild.id).catch(() => null);
     if (!config) return;
 
     const { pc: pcChannelId, mobile: mobileChannelId, log: logChannelId } = config.channels ?? {};
 
     if (!logChannelId) return;
+
+    if (message.author.bot && !isBotRemoval) return;
 
     const isThreadDeletion = await handleThreadDeletion(
         message,
@@ -275,52 +347,64 @@ async function handleDeletedMessage(message) {
 
     const isLong = (message.content?.length ?? 0) > 1024;
     const mentions = [...message.mentions.users.values()];
-    const canalTipo = message.channel.id === pcChannelId ? 'ðŸ’» PC' : 'ðŸ“± Mobile';
+    const canalTipo = message.channel.id === pcChannelId ? '💻 PC' : '📱 Mobile';
     const embedColor = isSelfDelete ? '#FF0000' : '#FF6600';
 
     const mainEmbed = new EmbedBuilder()
         .setColor(embedColor)
         .setAuthor({
-            name: `${message.author.username} â€¢ ${canalTipo}`,
+            name: `${message.author.username} • ${canalTipo}`,
             iconURL: message.author.displayAvatarURL(),
         })
-        .setTitle('ðŸ—‘ï¸ Mensagem Deletada em DenÃºncia')
-        .setDescription(`Canal: <#${message.channel.id}> â€¢ \`${message.channel.id}\``)
+        .setTitle('🗑️ Mensagem Deletada em Denúncia')
+        .setDescription(`Canal: <#${message.channel.id}> • \`${message.channel.id}\``)
         .addFields(
-            { name: 'ðŸ‘¤ Autor',        value: `<@${message.author.id}>\n\`${message.author.id}\``, inline: true },
-            { name: 'ðŸ—‘ï¸ Deletada por', value: isSelfDelete ? '**PrÃ³prio autor**' : `<@${deletedBy.id}>\n\`${deletedBy.id}\``, inline: true },
-            { name: 'â° Data/Hora',    value: dateStr, inline: true },
-            { name: 'ðŸ’¬ MenÃ§Ãµes',      value: mentions.length > 0 ? mentions.map(u => `<@${u.id}>`).join(', ') : 'Nenhuma', inline: true },
-            { name: 'ðŸ“Ž Anexos',       value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s)${processedAttachments.length > 0 ? ' â€” ver tÃ³pico' : ''}` : 'Nenhum', inline: true },
-            { name: 'â†©ï¸ Resposta a',   value: message.reference?.messageId ? `\`${message.reference.messageId}\`` : 'NÃ£o era resposta', inline: true },
-            {
-                name: isLong ? 'ðŸ“ ConteÃºdo (truncado â€” completo no tÃ³pico)' : 'ðŸ“ ConteÃºdo',
-                value: truncate(message.content),
-                inline: false,
-            },
-        )
-        .setFooter({ text: `ID: ${message.id} â€¢ ${timeStr}` })
+            { name: '👤 Autor',        value: `<@${message.author.id}>\n\`${message.author.id}\``, inline: true },
+            { name: '🗑️ Deletada por', value: isSelfDelete ? '**Próprio autor**' : `<@${deletedBy.id}>\n\`${deletedBy.id}\``, inline: true },
+            { name: '⏰ Data/Hora',    value: dateStr, inline: true },
+        );
+
+    const mainFields = [];
+    const mainUrls = extractUrls(message.content);
+    if (mainUrls.length > 0) {
+        mainFields.push({ name: '🔗 Links', value: mainUrls.map(url => `[Link](${url})`).join('\n'), inline: true });
+    }
+
+    mainFields.push(
+        { name: '💬 Menções',      value: mentions.length > 0 ? mentions.map(u => `<@${u.id}>`).join(', ') : 'Nenhuma', inline: true },
+        { name: '📎 Anexos',       value: attachmentsArray.length > 0 ? `${attachmentsArray.length} arquivo(s)${processedAttachments.length > 0 ? ' — ver tópico' : ''}` : 'Nenhum', inline: true },
+        { name: '↩️ Resposta a',   value: message.reference?.messageId ? `\`${message.reference.messageId}\`` : 'Não era resposta', inline: true },
+        {
+            name: isLong ? '📝 Conteúdo (truncado — completo no tópico)' : '📝 Conteúdo',
+            value: truncate(getDisplayMessageText(message)),
+            inline: false,
+        },
+    );
+
+    mainEmbed.addFields(...mainFields);
+    mainEmbed.setFooter({ text: `ID: ${message.id} • ${timeStr}` })
         .setTimestamp();
 
     if (failedAttachmentUrls.length > 0) {
         mainEmbed.addFields({
-            name: 'âš ï¸ Anexos nÃ£o recuperados',
-            value: failedAttachmentUrls.map(a => `â€¢ [${a.name}](${a.url})`).join('\n').slice(0, 1024),
+            name: '⚠️ Anexos não recuperados',
+            value: failedAttachmentUrls.map(a => `• [${a.name}](${a.url})`).join('\n').slice(0, 1024),
             inline: false,
         });
     }
 
-    const threadName = `ðŸ“ ${message.author.username} â€¢ canal ${message.channel.id}`;
+    const threadName = `📁 ${message.author.username} • canal ${message.channel.id}`;
     const contentFile = isLong ? buildContentFile(message, message.author, dateStr) : null;
+    const channelContextId = message.channel.id;
 
-    await sendToLogWithThread(logChannel, mainEmbed, processedAttachments, threadName, message.author.id, isLong, contentFile);
+    await sendToLogWithThread(logChannel, mainEmbed, processedAttachments, threadName, message.author.id, channelContextId, isLong, contentFile);
 }
 
 async function notifyUncacheable(partialMessage) {
     try {
         if (!partialMessage.guild) return;
 
-        const config = await Config.findOne({ guildId: partialMessage.guild.id }).catch(() => null);
+        const config = await getConfig(partialMessage.guild.id).catch(() => null);
         if (!config?.channels?.log) return;
 
         const { pc: pcChannelId, mobile: mobileChannelId } = config.channels ?? {};
@@ -336,22 +420,22 @@ async function notifyUncacheable(partialMessage) {
 
         const embed = new EmbedBuilder()
             .setColor('#555555')
-            .setTitle('ðŸ—‘ï¸ DeleÃ§Ã£o NÃ£o RecuperÃ¡vel')
+            .setTitle('🗑️ Deleção Não Recuperável')
             .setDescription(
                 `Mensagem deletada em <#${channelId}> fora do cache.\n` +
-                `*(enviada antes do Ãºltimo restart â€” conteÃºdo indisponÃ­vel)*`
+                `*(enviada antes do último restart — conteúdo indisponível)*`
             )
             .addFields(
-                { name: 'ðŸ†” ID da mensagem', value: `\`${partialMessage.id}\``, inline: true },
-                { name: 'ðŸ“ Canal',           value: channelId ? `<#${channelId}>` : 'N/A', inline: true },
+                { name: '🆔 ID da mensagem', value: `\`${partialMessage.id}\``, inline: true },
+                { name: '📍 Canal',           value: channelId ? `<#${channelId}>` : 'N/A', inline: true },
             )
-            .setFooter({ text: `Detectado Ã s ${timeStr}` })
+            .setFooter({ text: `Detectado às ${timeStr}` })
             .setTimestamp();
 
         await logChannel.send({ embeds: [embed] });
     } catch (err) {
-        console.error('[messageDelete] Erro ao notificar nÃ£o-cacheada:', err.message);
+        console.error('[messageDelete] Erro ao notificar não-cacheada:', err.message);
     }
 }
 
-module.exports = { handleDeletedMessage };
+module.exports = { handleDeletedMessage, markForDeletion };

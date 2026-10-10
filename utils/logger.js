@@ -1,18 +1,16 @@
-﻿// logger.js
-// utils/logger.js
+const chalk = require('chalk');
 const { getBrasiliaDate, formatTimeBR } = require('./dateUtils');
 
 function safeStringify(obj, maxLen = 800) {
   try {
     const str = JSON.stringify(obj, (key, value) => {
-      // Evita circular
       if (typeof value === 'bigint') return value.toString();
       return value;
     });
     if (str.length > maxLen) return str.slice(0, maxLen) + '... [TRUNCADO]';
     return str;
   } catch {
-    return '[Objeto nÃ£o serializÃ¡vel]';
+    return '[Objeto não serializável]';
   }
 }
 
@@ -47,7 +45,7 @@ class Logger {
   constructor({ tag = 'BOT', debug = false } = {}) {
     this.tag = tag;
     this.debugEnabled = debug;
-  }
+  } 
 
   info(message, extra) {
     console.log(buildMsg(nowPrefix(this.tag), message, extra));
@@ -67,4 +65,19 @@ class Logger {
   }
 }
 
-module.exports = { Logger };
+// Log colorido de console usado no boot, nos jobs e nos eventos.
+// Sem tag, o rótulo é o próprio nível ([INFO], [ERRO]...); com tag, o nome do módulo.
+function createLog(tag) {
+  const label = (nivel) => chalk.gray(`[${tag || nivel}]`);
+  return {
+    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${label('INFO')} ${msg}`),
+    success: (msg) => console.log(`${chalk.green('✔')} ${label('SUCESSO')} ${msg}`),
+    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${label('AVISO')} ${msg}`),
+    error:   (msg) => console.log(`${chalk.red('✖')} ${label('ERRO')} ${msg}`),
+    system:  (msg) => console.log(`${chalk.magenta('⚙')} ${label('SISTEMA')} ${msg}`)
+  };
+}
+
+const log = createLog();
+
+module.exports = { Logger, createLog, log };

@@ -19,7 +19,7 @@ Projeto criado para **uso real em produção**, com foco em **estabilidade, orga
 
 | Versão | Stack | Tecnologias |
 |--------|-------|-------------|
-| **v1.2.1** | **Node.js** (>= 18) | **discord.js v14**, **MongoDB**, **Mongoose**, **release** |
+| **v3.2.4** | **Node.js** (>= 18) | **discord.js v14**, **MongoDB**, **Mongoose**, **release** |
 
 ---
 
@@ -27,7 +27,7 @@ Projeto criado para **uso real em produção**, com foco em **estabilidade, orga
 
 ### 📌 Sistema de Denúncias
 - Criação de denúncias via **modal**
-- Separação por plataforma:
+- Separação por plataforma: 
   - 🖥️ PC
   - 📱 Mobile
 - Organização automática em **tópicos (threads)**
@@ -36,6 +36,30 @@ Projeto criado para **uso real em produção**, com foco em **estabilidade, orga
   - 🔎 Em análise
   - ✅ Aceita
   - ❌ Recusada
+- Finalização automática após prazo configurado
+- Arquivamento de histórico completo com exportação em HTML/ZIP
+
+---
+
+### 🔒 Tópicos Restritos e Controle de Acesso
+- Bloqueio de mensagens fora do escopo do denunciante e dos acusados
+- Proteção contra participação indevida em tópicos de denúncia
+- Registro e validação de autorização por usuário e thread
+
+---
+
+### 🧩 Sincronização de Nickname e Perfil
+- Atualização automática de nickname do usuário no MongoDB
+- Restauração automática do nickname ao entrar no servidor
+- Extração e persistência da conta associada ao apelido
+
+---
+
+### 🛡️ Monitoramento Automático
+- Detecção de links proibidos
+- Detecção de mensagens encaminhadas
+- Bloqueio de emojis figurinha/gif em contexto indevido
+- Verificação de marcação de admin e conteúdo sensível
 
 ---
 
@@ -92,8 +116,7 @@ Disponíveis tanto no painel de denúncias quanto dentro do tópico:
 ### 📊 Ranking de Staff
 Baseado em ações reais registradas no banco:
 
-- `!rank` → ranking mensal
-- `!semana` → ranking semanal
+- `!rank` → ranking principal
 - Usa a collection `ModerationAction`
 - Pode rodar automaticamente via `jobs/rankJobs.js`
 
@@ -108,10 +131,19 @@ Baseado em ações reais registradas no banco:
   - anexos (quando possível)
 - Gera:
   - HTML
-  - ZIP
+  - ZIP 
 - Envia o arquivo no Discord
 - **Tranca e arquiva o tópico automaticamente**
 - Encerra oficialmente a denúncia
+- Também pode ocorrer automaticamente por cronologia, pela rotina de finalização do ALTHEA
+
+---
+
+### 🤖 Automação da Rotina de Finalização
+- Verificação periódica de denúncias pendentes
+- Finalização automática de registros antigos
+- Encerramento seguro com logs de acompanhamento
+- Tratamento de timeouts e falhas por ciclo
 
 ---
 
@@ -124,6 +156,29 @@ Tratamento completo de erros comuns do Discord:
 - Timeouts e erros 5xx
 - Proteção contra cliques duplicados
 - Logs centralizados
+
+---
+
+## ⌨️ Comandos
+
+Os comandos de barra são registrados automaticamente em cada servidor quando o bot inicia.
+Os comandos com `!` continuam funcionando.
+
+| Barra | Prefixo | Quem pode usar | O que faz |
+|-------|---------|----------------|-----------|
+| `/painel` | `!painel` | Administrador do servidor ou Responsável Admin | Abre o painel de configuração |
+| `/denuncia` | `!denuncia` | Responsável Admin | Publica/atualiza a mensagem de abertura de denúncias |
+| `/rank [periodo]` | `!rank [mensal\|semanal\|hoje]` | Administrador e Responsável Admin | Ranking de atendimento da staff |
+| `/status` | `!status` | Administrador do servidor | Diagnóstico do bot |
+
+---
+
+## 🧪 Desenvolvimento
+
+```bash
+npm run lint   # ESLint
+npm test       # testes (node:test) — não acessam o banco nem o Discord
+```
 
 ---
 
@@ -162,8 +217,7 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 │   ├── painel.js
 │   ├── correcao.js
 │   ├── status.js
-│   ├── rank.js
-│   └── semana.js
+│   └── rank.js
 │
 ├── doc/
 │   ├── BUTTONS.md

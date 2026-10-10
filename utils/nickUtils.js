@@ -1,7 +1,6 @@
-﻿// nickUtils.js
-const SUPERSCRIPT_MAP = {
-    'â°':'0','Â¹':'1','Â²':'2','Â³':'3','â´':'4',
-    'âµ':'5','â¶':'6','â·':'7','â¸':'8','â¹':'9'
+﻿const SUPERSCRIPT_MAP = {
+    '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4',
+    '⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'
 };
 
 function normalizarNickname(nick) {
@@ -15,19 +14,16 @@ function extrairContaDoNickname(nickname) {
     if (!nickname) return null;
     const normalizado = normalizarNickname(nickname);
 
-    const matches = normalizado.match(/\d{3,}/g);
-    if (!matches || matches.length !== 1) return null;
+    const matches = [...normalizado.matchAll(/(?:^|(?<=\S)\s+)(\d+)(?![\p{L}\p{N}])/gu)];
+    if (!matches.length) return null;
 
-    const numero = matches[0];
+    const numero = matches[matches.length - 1][1];
     const idx = normalizado.lastIndexOf(numero);
+    const antes = normalizado.slice(0, idx).trim();
 
-    const antes = normalizado.slice(0, idx);
-    if (!antes.endsWith(' ')) return null;
-
-    const depois = normalizado.slice(idx + numero.length);
-    if (/[a-zA-Z]/i.test(depois)) return null;
+    if (!antes) return null;
 
     return numero;
 }
-
+ 
 module.exports = { extrairContaDoNickname, normalizarNickname };

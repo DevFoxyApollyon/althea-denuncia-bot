@@ -1,4 +1,4 @@
-﻿// painel.js
+// painel.js
 const { 
   EmbedBuilder, 
   ActionRowBuilder, 
@@ -9,15 +9,51 @@ const {
   PermissionFlagsBits
 } = require('discord.js');
 const Config = require('../models/Config');
+const { getConfig } = require('../utils/configCache');
+const { getUsuariosIsentos, salvarUsuariosIsentos, normalizarIds } = require('../utils/usuariosIsentos');
 require('dotenv').config();
-
+ 
 const MESSAGE_TIMEOUT = 5 * 60 * 1000; 
 const SUPORTE_BOT_ID = process.env.SUPORTE_BOT_ID;
+const panelConfigCache = new Map();
+const panelExemptUsersCache = new Map();
+
+function cachePanelConfig(guildId, config) {
+  if (!config) {
+    panelConfigCache.delete(guildId);
+    return;
+  }
+
+  panelConfigCache.set(guildId, config);
+}
+
+function getPanelConfig(guildId) {
+  return panelConfigCache.get(guildId) || null;
+}
+
+function cachePanelExemptUsers(guildId, userIds) {
+  panelExemptUsersCache.set(guildId, [...userIds]);
+}
+
+function getPanelExemptUsers(guildId) {
+  return panelExemptUsersCache.get(guildId) || [];
+}
 
 
-async function hasPermission(interaction) {
-  return interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
-         interaction.user.id === SUPORTE_BOT_ID;
+async function hasPermission(interaction, currentConfig) {
+  const membro = interaction.member;
+  const temPermissaoAdmin = membro?.permissions?.has?.(PermissionFlagsBits.Administrator) ?? false;
+  const usuarioId = interaction.user?.id || interaction.author?.id;
+  const guildId = interaction.guild?.id;
+
+  if (temPermissaoAdmin || (SUPORTE_BOT_ID && usuarioId === SUPORTE_BOT_ID)) return true;
+  if (!guildId || !membro?.roles?.cache) return false;
+
+  const config = currentConfig === undefined
+    ? getPanelConfig(guildId) || await getConfig(guildId)
+    : currentConfig;
+  const responsavelAdminId = config?.roles?.responsavel_admin;
+  return Boolean(responsavelAdminId && membro.roles.cache.has(responsavelAdminId));
 }
 
 function getCurrentUser(interaction) {
@@ -25,23 +61,38 @@ function getCurrentUser(interaction) {
 }
 
 function getChannelName(interaction, channelId) {
-  if (!channelId) return '`NÃ£o configurado`';
+  if (!channelId) return '`Não configurado`';
   const channel = interaction.guild.channels.cache.get(channelId);
-  return channel ? `<#${channelId}> \`${channelId}\`` : '`Canal nÃ£o encontrado`';
+  return channel ? `<#${channelId}> \`${channelId}\`` : '`Canal não encontrado`';
+}
+
+function getExternalChannelName(channelId) {
+  return channelId ? `<#${channelId}> \`${channelId}\`` : '`Não configurado`';
 }
 
 function getRoleName(interaction, roleId) {
-  if (!roleId) return '`NÃ£o configurado`';
-  const role = interaction.guild.roles.cache.get(roleId);
-  return role ? `<@&${roleId}> \`${roleId}\`` : '`Cargo nÃ£o encontrado`';
+  if (!roleId) return '`Não configurado`';
+  return `<@&${roleId}> \`${roleId}\``;
 }
 
 
 function createChannelsModal1(currentConfig = null) {
-  const modal = new ModalBuilder().setCustomId('channels_modal_1').setTitle('Configurar Canais (Parte 1)');
-  const pc = new TextInputBuilder().setCustomId('pc_channel').setLabel('Canal PC').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.channels?.pc || '');
-  const mobile = new TextInputBuilder().setCustomId('mobile_channel').setLabel('Canal Mobile').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.channels?.mobile || '');
-  const logs = new TextInputBuilder().setCustomId('logs_channel').setLabel('Canal Cadeia Staff').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.channels?.logs || '');
+  const modal = new ModalBuilder().setCustomId('channels_modal_1').setTitle('Canais principais | Parte 1');
+  const pc = new TextInputBuilder()
+    .setCustomId('pc_channel').setLabel('ID do canal de denúncias PC')
+    .setPlaceholder('Cole aqui o ID numérico do canal PC')
+    .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)
+    .setValue(currentConfig?.channels?.pc || '');
+  const mobile = new TextInputBuilder()
+    .setCustomId('mobile_channel').setLabel('ID do canal de denúncias Mobile')
+    .setPlaceholder('Cole aqui o ID numérico do canal Mobile')
+    .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)
+    .setValue(currentConfig?.channels?.mobile || '');
+  const logs = new TextInputBuilder()
+    .setCustomId('logs_channel').setLabel('ID da Cadeia Staff')
+    .setPlaceholder('Canal onde a equipe acompanha as denúncias')
+    .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)
+    .setValue(currentConfig?.channels?.logs || '');
 
   return modal.addComponents(
     new ActionRowBuilder().addComponents(pc),
@@ -51,22 +102,79 @@ function createChannelsModal1(currentConfig = null) {
 }
 
 function createChannelsModal2(currentConfig = null) {
-  const modal = new ModalBuilder().setCustomId('channels_modal_2').setTitle('Configurar Canais (Parte 2)');
-  const logAdmin = new TextInputBuilder().setCustomId('log_admin_channel').setLabel('Canal de Log AdministraÃ§Ã£o').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.log || '');
-  const analysis = new TextInputBuilder().setCustomId('analysis_channel').setLabel('Canal de AnÃ¡lise').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.analysis || '');
-  const topDaily = new TextInputBuilder().setCustomId('top_daily_channel').setLabel('Canal do Top DiÃ¡rio').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.channels?.topDaily || '');
+  const modal = new ModalBuilder().setCustomId('channels_modal_2').setTitle('Canais administrativos | Parte 2');
+  const logAdmin = new TextInputBuilder()
+    .setCustomId('log_admin_channel').setLabel('ID do log administrativo')
+    .setPlaceholder('Registros de ações e decisões da moderação')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.channels?.log || '');
+  const backup = new TextInputBuilder()
+    .setCustomId('backup_channel').setLabel('ID do canal de backup')
+    .setPlaceholder('Destino adicional para os arquivos arquivados')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.channels?.backup || '');
+  const armazem = new TextInputBuilder()
+    .setCustomId('armazem_channel').setLabel('ID do armazém de denúncias')
+    .setPlaceholder('Canal usado para armazenar cópias')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.channels?.armazem || '');
+  const analysis = new TextInputBuilder()
+    .setCustomId('analysis_channel').setLabel('ID do canal de análise')
+    .setPlaceholder('Canal onde denúncias em análise são publicadas')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.channels?.analysis || '');
+  const topDaily = new TextInputBuilder()
+    .setCustomId('top_daily_channel').setLabel('ID do canal Top Diário')
+    .setPlaceholder('Canal onde o ranking diário será enviado')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.channels?.topDaily || '');
 
   return modal.addComponents(
     new ActionRowBuilder().addComponents(logAdmin),
+    new ActionRowBuilder().addComponents(backup),
+    new ActionRowBuilder().addComponents(armazem),
     new ActionRowBuilder().addComponents(analysis),
     new ActionRowBuilder().addComponents(topDaily)
   );
 }
 
+function createChannelsModal3(currentConfig = null) {
+  const modal = new ModalBuilder().setCustomId('channels_modal_3').setTitle('Canais externos e espelhos');
+  const registro = new TextInputBuilder()
+    .setCustomId('registro_channel').setLabel('ID do canal externo de registro')
+    .setPlaceholder('Canal de registro em outro servidor')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.channels?.registro || '');
+  const cloud = new TextInputBuilder()
+    .setCustomId('cloud_channel').setLabel('ID do canal Cloud externo')
+    .setPlaceholder('Canal principal para arquivamento Cloud')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.channels?.cloud || '');
+  const canalDenuncia = new TextInputBuilder()
+    .setCustomId('canal_denuncia_channel').setLabel('ID do canal fixo de denúncias')
+    .setPlaceholder('Canal central para abrir novas denúncias')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.channels?.canalDenuncia || '');
+
+  return modal.addComponents(
+    new ActionRowBuilder().addComponents(registro),
+    new ActionRowBuilder().addComponents(cloud),
+    new ActionRowBuilder().addComponents(canalDenuncia)
+  );
+}
+
 function createRolesModal1(currentConfig = null) {
-  const modal = new ModalBuilder().setCustomId('roles_modal_1').setTitle('Configurar Cargos (Parte 1)');
-  const permitido = new TextInputBuilder().setCustomId('permitido_role').setLabel('Cargo Mobile').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.roles?.permitido || '');
-  const pc = new TextInputBuilder().setCustomId('pc_role').setLabel('Cargo PC').setStyle(TextInputStyle.Short).setRequired(true).setValue(currentConfig?.roles?.pc || '');
+  const modal = new ModalBuilder().setCustomId('roles_modal_1').setTitle('Cargos de acesso | Parte 1');
+  const permitido = new TextInputBuilder()
+    .setCustomId('permitido_role').setLabel('ID do cargo permitido Mobile')
+    .setPlaceholder('Cargo que pode abrir denúncias Mobile')
+    .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)
+    .setValue(currentConfig?.roles?.permitido || '');
+  const pc = new TextInputBuilder()
+    .setCustomId('pc_role').setLabel('ID do cargo permitido PC')
+    .setPlaceholder('Cargo que pode abrir denúncias PC')
+    .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)
+    .setValue(currentConfig?.roles?.pc || '');
 
   return modal.addComponents(
     new ActionRowBuilder().addComponents(permitido),
@@ -75,14 +183,50 @@ function createRolesModal1(currentConfig = null) {
 }
 
 function createRolesModal2(currentConfig = null) {
-  const modal = new ModalBuilder().setCustomId('roles_modal_2').setTitle('Configurar Cargos (Parte 2)');
-  const admin = new TextInputBuilder().setCustomId('admin_role').setLabel('Cargo Administrador').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.roles?.administrador || '');
-  const resp = new TextInputBuilder().setCustomId('resp_admin_role').setLabel('Cargo ResponsÃ¡vel Admin').setStyle(TextInputStyle.Short).setRequired(false).setValue(currentConfig?.roles?.responsavel_admin || '');
+  const modal = new ModalBuilder().setCustomId('roles_modal_2').setTitle('Cargos administrativos | Parte 2');
+  const admin = new TextInputBuilder()
+    .setCustomId('admin_role').setLabel('ID do cargo Administrador')
+    .setPlaceholder('Cargo para ações gerais de moderação')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.roles?.administrador || '');
+  const resp = new TextInputBuilder()
+    .setCustomId('resp_admin_role').setLabel('ID do cargo Responsável Admin')
+    .setPlaceholder('Cargo com permissão para finalizar denúncias')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.roles?.responsavel_admin || '');
 
   return modal.addComponents(
     new ActionRowBuilder().addComponents(admin),
     new ActionRowBuilder().addComponents(resp)
   );
+}
+
+function createExemptUsersModal(userIds = []) {
+  const modal = new ModalBuilder()
+    .setCustomId('global_exempt_users_modal')
+    .setTitle('Usuários isentos globalmente');
+  const usersInput = new TextInputBuilder()
+    .setCustomId('exempt_user_ids')
+    .setLabel('IDs Discord isentos, separados por vírgula')
+    .setPlaceholder('Ex.: 123456789012345678, 987654321098765432')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setMaxLength(4000)
+    .setValue(userIds.join(', '));
+
+  return modal.addComponents(new ActionRowBuilder().addComponents(usersInput));
+}
+
+async function saveExemptUsers(interaction) {
+  const rawIds = interaction.fields.getTextInputValue('exempt_user_ids');
+  const normalizedIds = normalizarIds(rawIds);
+  if (rawIds.trim() && normalizedIds.length === 0) {
+    throw new Error('nenhum ID Discord válido foi informado');
+  }
+
+  const config = await salvarUsuariosIsentos(normalizedIds, getCurrentUser(interaction));
+  cachePanelExemptUsers(interaction.guild.id, config.usuariosIsentos);
+  return config.usuariosIsentos;
 }
 
 
@@ -93,7 +237,7 @@ async function saveChannels1(interaction) {
   const logsId = fields.getTextInputValue('logs_channel');
 
   if (!guild.channels.cache.has(pcId) || !guild.channels.cache.has(mobileId) || !guild.channels.cache.has(logsId)) {
-    return interaction.reply({ content: 'âŒ Um ou mais IDs de canal nÃ£o existem neste servidor.', flags: [64] });
+    return interaction.reply({ content: '❌ Um ou mais IDs de canal não existem neste servidor.', flags: [64] });
   }
 
   await Config.findOneAndUpdate(
@@ -105,7 +249,7 @@ async function saveChannels1(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: 'âœ… Canais Principais atualizados!', flags: [64] });
+  return interaction.reply({ content: '✅ Canais Principais atualizados!', flags: [64] });
 }
 
 async function saveChannels2(interaction) {
@@ -117,13 +261,19 @@ async function saveChannels2(interaction) {
   await Config.findOneAndUpdate(
     { guildId: guild.id },
     { 
-      $set: { 'channels.log': logId, 'channels.analysis': analysisId, 'channels.topDaily': topDailyId },
+      $set: {
+        'channels.log': logId,
+        'channels.backup': fields.getTextInputValue('backup_channel').trim(),
+        'channels.armazem': fields.getTextInputValue('armazem_channel').trim(),
+        'channels.analysis': analysisId,
+        'channels.topDaily': topDailyId
+      },
       lastUpdated: new Date(), updatedBy: getCurrentUser(interaction)
     },
     { upsert: true }
   );
 
-  return interaction.reply({ content: 'âœ… Canais Administrativos atualizados!', flags: [64] });
+  return interaction.reply({ content: '✅ Canais Administrativos atualizados!', flags: [64] });
 }
 
 async function saveRoles1(interaction) {
@@ -132,7 +282,7 @@ async function saveRoles1(interaction) {
   const pcId = fields.getTextInputValue('pc_role');
 
   if (!guild.roles.cache.has(permitidoId) || !guild.roles.cache.has(pcId)) {
-    return interaction.reply({ content: 'âŒ Um ou mais IDs de cargo nÃ£o existem.', flags: [64] });
+    return interaction.reply({ content: '❌ Um ou mais IDs de cargo não existem.', flags: [64] });
   }
 
   await Config.findOneAndUpdate(
@@ -144,7 +294,7 @@ async function saveRoles1(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: 'âœ… Cargos Principais atualizados!', flags: [64] });
+  return interaction.reply({ content: '✅ Cargos Principais atualizados!', flags: [64] });
 }
 
 async function saveRoles2(interaction) {
@@ -161,81 +311,300 @@ async function saveRoles2(interaction) {
     { upsert: true }
   );
 
-  return interaction.reply({ content: 'âœ… Cargos Administrativos atualizados!', flags: [64] });
+  return interaction.reply({ content: '✅ Cargos Administrativos atualizados!', flags: [64] });
 }
 
 
-async function createPanelSelectMenu(interaction) {
+function encodePanelOption(baseValue, values = []) {
+  return [baseValue, ...values.map(value => value || '')].join('|');
+}
+
+function bloqueioPendentesAtivo(config) {
+  return config?.bloquearReivindicacaoComPendentes !== false;
+}
+
+function buildPanelEmbed(interaction, config, exemptUsers = []) {
+  const maintenance = Boolean(config?.manutencaoDenuncia);
+  const bloqueioAtivo = bloqueioPendentesAtivo(config);
+  return new EmbedBuilder()
+    .setColor(maintenance ? '#F0A500' : '#2B2D31')
+    .setTitle('⚙️ Painel de Configurações')
+    .setDescription([
+      'Gerencie os canais e cargos do sistema de denúncias.',
+      '',
+      maintenance ? '🛠️ **Status:** denúncias em manutenção' : '🟢 **Status:** denúncias disponíveis'
+    ].join('\n'))
+    .addFields(
+      {
+        name: '📌 Canais de entrada',
+        value: [
+          `🖥️ PC ${getChannelName(interaction, config?.channels?.pc)}`,
+          `📱 Mobile ${getChannelName(interaction, config?.channels?.mobile)}`,
+          `🧾 Cadeia Staff ${getChannelName(interaction, config?.channels?.logs)}`
+        ].join('\n'),
+        inline: true
+      },
+      {
+        name: '📦 Armazenamento e logs',
+        value: [
+          `💾 Backup ${getChannelName(interaction, config?.channels?.backup)}`,
+          `🗄️ Armazem ${getChannelName(interaction, config?.channels?.armazem)}`,
+          `📋 Log Admin ${getChannelName(interaction, config?.channels?.log)}`
+        ].join('\n'),
+        inline: true
+      },
+      {
+        name: '🌐 Canais externos',
+        value: [
+          `Registro ${getExternalChannelName(config?.channels?.registro)}`,
+          `Cloud ${getExternalChannelName(config?.channels?.cloud)}`,
+          `Canal de denúncias ${getExternalChannelName(config?.channels?.canalDenuncia)}`
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '👥 Cargos',
+        value: [
+          `📱 Mobile ${getRoleName(interaction, config?.roles?.permitido)}`,
+          `🖥️ PC ${getRoleName(interaction, config?.roles?.pc)}`,
+          `🧑‍💼 Administrador ${getRoleName(interaction, config?.roles?.administrador)}`,
+          `🧑‍🔧 Responsável ${getRoleName(interaction, config?.roles?.responsavel_admin)}`
+        ].join('\n'),
+        inline: true
+      },
+      {
+        name: '🛡️ Isenções',
+        value: `**${exemptUsers.length}** usuário(s) isento(s)`,
+        inline: true
+      },
+      {
+        name: '⏳ Pendências anteriores',
+        value: bloqueioAtivo ? '🟢 **Bloqueio ativado**' : '⚪ **Bloqueio desativado**',
+        inline: true
+      }
+    )
+    .setFooter({ text: 'Selecione uma categoria abaixo para editar' })
+    .setTimestamp();
+}
+
+async function atualizarPainelMensagem(interaction, config) {
+  if (!interaction.message?.edit) return;
+  const exemptUsers = getPanelExemptUsers(interaction.guild.id);
+  await interaction.message.edit({
+    embeds: [buildPanelEmbed(interaction, config, exemptUsers)],
+    components: [await createPanelSelectMenu(interaction, config)]
+  }).catch(() => {});
+}
+
+async function atualizarPainelCategoria(interaction, category, config) {
+  if (!interaction.message?.edit) return;
+  const exemptUsers = getPanelExemptUsers(interaction.guild.id);
+  const titles = {
+    edit_exempt_users: ['🛡️ Usuários isentos', `**${exemptUsers.length}** usuário(s) configurado(s)`, 'IDs salvos na lista global de isenções.'],
+    edit_channels_1: ['📌 Canais principais', [
+      `🖥️ PC: ${getChannelName(interaction, config?.channels?.pc)}`,
+      `📱 Mobile: ${getChannelName(interaction, config?.channels?.mobile)}`,
+      `🧾 Cadeia Staff: ${getChannelName(interaction, config?.channels?.logs)}`
+    ].join('\n'), 'Canais usados para receber as denúncias.'],
+    edit_channels_2: ['📦 Canais administrativos', [
+      `📋 Log Admin: ${getChannelName(interaction, config?.channels?.log)}`,
+      `💾 Backup: ${getChannelName(interaction, config?.channels?.backup)}`,
+      `🗄️ Armazem: ${getChannelName(interaction, config?.channels?.armazem)}`,
+      `🔎 Análise: ${getChannelName(interaction, config?.channels?.analysis)}`,
+      `🏆 Top Diário: ${getChannelName(interaction, config?.channels?.topDaily)}`
+    ].join('\n'), 'Canais locais de log, backup e análise.'],
+    edit_channels_3: ['🌐 Canais externos', [
+      `Registro: ${getExternalChannelName(config?.channels?.registro)}`,
+      `Cloud: ${getExternalChannelName(config?.channels?.cloud)}`,
+      `Canal de denúncias: ${getExternalChannelName(config?.channels?.canalDenuncia)}`
+    ].join('\n'), 'Canais externos usados para espelhamento e arquivamento.'],
+    edit_roles_1: ['👥 Cargos principais', [
+      `📱 Mobile: ${getRoleName(interaction, config?.roles?.permitido)}`,
+      `🖥️ PC: ${getRoleName(interaction, config?.roles?.pc)}`
+    ].join('\n'), 'Cargos necessários para abrir cada tipo de denúncia.'],
+    edit_roles_2: ['🧑‍💼 Cargos administrativos', [
+      `🧑‍💼 Administrador: ${getRoleName(interaction, config?.roles?.administrador)}`,
+      `🧑‍🔧 Responsável: ${getRoleName(interaction, config?.roles?.responsavel_admin)}`
+    ].join('\n'), 'Cargos usados nas ações administrativas.']
+  }[category] || ['⚙️ Configuração', 'Nenhuma categoria selecionada.', ''];
+
+  await interaction.message.edit({
+    embeds: [new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle(titles[0])
+      .setDescription(`${titles[1]}\n\n${titles[2]}\n\nEdite os dados no formulário que será aberto.`)
+      .setFooter({ text: 'Sistema Althea • Painel de configurações' })
+      .setTimestamp()],
+    components: [await createPanelSelectMenu(interaction, config)]
+  }).catch(() => {});
+}
+
+async function createPanelSelectMenu(interaction, currentConfig = null) {
+  const channels = currentConfig?.channels || {};
+  const roles = currentConfig?.roles || {};
   const options = [
-    { label: 'ðŸ“‹ Ver Todas as ConfiguraÃ§Ãµes', value: 'view_config', description: 'Status atual do servidor', emoji: 'ðŸ“‹' },
-    { label: 'ðŸ“º Canais Principais', value: 'edit_channels_1', description: 'PC, Mobile e Cadeia Staff', emoji: 'ðŸ–¥ï¸' },
-    { label: 'ðŸ“Š Canais Administrativos', value: 'edit_channels_2', description: 'Log Admin, AnÃ¡lise e Top DiÃ¡rio', emoji: 'ðŸ“Š' },
-    { label: 'ðŸ‘¥ Cargos Principais', value: 'edit_roles_1', description: 'Cargos Mobile e PC', emoji: 'ðŸ‘¥' },
-    { label: 'ðŸ‘‘ Cargos Administrativos', value: 'edit_roles_2', description: 'Admin e ResponsÃ¡vel Admin', emoji: 'ðŸ‘‘' }
+    { label: 'Ver configurações', value: 'view_config', description: 'Visualizar o estado atual do servidor', emoji: '📋' },
+    { label: 'Usuários isentos', value: 'edit_exempt_users', description: 'Lista global de usuários sem bloqueios', emoji: '🛡️' },
+    { label: 'Canais principais', value: 'edit_channels_1', description: 'PC, Mobile e Cadeia Staff', emoji: '📌' },
+    { label: 'Canais administrativos', value: 'edit_channels_2', description: 'Log, backup, armazém, análise e top diário', emoji: '🛠️' },
+    { label: 'Canais externos', value: 'edit_channels_3', description: 'Registro, cloud e canal fixo de denúncias', emoji: '🌐' },
+    { label: 'Manutenção de denúncias', value: 'toggle_maintenance', description: currentConfig?.manutencaoDenuncia ? 'Desativar manutenção' : 'Ativar manutenção', emoji: '🛠️' },
+    { label: 'Bloqueio de pendências anteriores', value: 'toggle_pending_claim_block', description: bloqueioPendentesAtivo(currentConfig) ? 'Desativar neste servidor' : 'Ativar neste servidor', emoji: '⏳' },
+    { label: 'Cargos principais', value: 'edit_roles_1', description: 'Cargos Mobile e PC', emoji: '👥' },
+    { label: 'Cargos administrativos', value: 'edit_roles_2', description: 'Administrador e responsável', emoji: '🧑‍💼' }
   ];
 
   return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId('panel_menu').setPlaceholder('âš™ï¸ Escolha uma categoria...').addOptions(options)
+    new StringSelectMenuBuilder().setCustomId('panel_menu').setPlaceholder('⚙️ Escolha uma categoria...').addOptions(options)
   );
 }
 
-async function handlePainelCommand(message) {
-  if (!await hasPermission(message)) return message.reply({ content: 'ðŸš« Sem permissÃ£o.', flags: [64] });
+// "message" pode ser a Message do !painel ou a interação do /painel: as duas
+// têm guild, member e user/author, que é tudo o que o painel consulta.
+async function abrirPainel(message, { negar, enviar }) {
+  if (!message?.guild) return;
+  if (!await hasPermission(message)) return negar('❌ Sem permissão.');
 
-  const config = await Config.findOne({ guildId: message.guild.id });
-  const menu = await createPanelSelectMenu(message);
+  try {
+    const [config, exemptUsers] = await Promise.all([
+      Config.findOne({ guildId: message.guild.id }),
+      getUsuariosIsentos()
+    ]);
+    const usuariosIsentos = Array.isArray(exemptUsers) ? exemptUsers : [];
+    cachePanelConfig(message.guild.id, config);
+    cachePanelExemptUsers(message.guild.id, usuariosIsentos);
+    const menu = await createPanelSelectMenu(message, config);
 
-  const embed = new EmbedBuilder()
-    .setColor('#5865F2')
-    .setTitle('âš™ï¸ Painel de ConfiguraÃ§Ãµes')
-    .setDescription([
-      '**ðŸ“º Canais:**',
-      `> ðŸ–¥ï¸ **PC:** ${getChannelName(message, config?.channels?.pc)}`,
-      `> ðŸ“± **Mobile:** ${getChannelName(message, config?.channels?.mobile)}`,
-      `> ðŸ“ **Cadeia Staff:** ${getChannelName(message, config?.channels?.logs)}`,
-      '',
-      '**ðŸ‘¥ Cargos:**',
-      `> ðŸ“± **Mobile:** ${getRoleName(message, config?.roles?.permitido)}`,
-      `> ðŸ–¥ï¸ **PC:** ${getRoleName(message, config?.roles?.pc)}`,
-      '',
-      'Escolha uma opÃ§Ã£o no menu abaixo para editar.'
-    ].join('\n'))
+    const embed = new EmbedBuilder()
+    .setColor('#2B2D31')
+    .setAuthor({ name: `${message.guild.name} • Central de Configuração`, iconURL: message.guild.iconURL() || undefined })
+    .setTitle('⚙️ Painel de Configurações')
+    .setDescription('Gerencie os canais e cargos usados pelo sistema de denúncias.\nUse o menu abaixo para consultar ou editar os registros salvos.')
+    .addFields(
+      {
+        name: '📌 Canais principais',
+        value: [
+          `🖥️ **PC** ${getChannelName(message, config?.channels?.pc)}`,
+          `📱 **Mobile** ${getChannelName(message, config?.channels?.mobile)}`,
+          `🧾 **Cadeia Staff** ${getChannelName(message, config?.channels?.logs)}`
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '🛠️ Canais administrativos',
+        value: [
+          `📋 **Log Admin** ${getChannelName(message, config?.channels?.log)}`,
+          `💾 **Backup** ${getChannelName(message, config?.channels?.backup)}`,
+          `🗄️ **Armazem** ${getChannelName(message, config?.channels?.armazem)}`,
+          `🌐 **Registro externo** ${getExternalChannelName(config?.channels?.registro)}`,
+          `☁️ **Cloud externo** ${getExternalChannelName(config?.channels?.cloud)}`,
+          `📣 **Canal de denúncias** ${getExternalChannelName(config?.channels?.canalDenuncia)}`,
+          `🔎 **Análise** ${getChannelName(message, config?.channels?.analysis)}`,
+          `🏆 **Top Diário** ${getChannelName(message, config?.channels?.topDaily)}`
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '👥 Cargos',
+        value: [
+          `📱 **Mobile** ${getRoleName(message, config?.roles?.permitido)}`,
+          `🖥️ **PC** ${getRoleName(message, config?.roles?.pc)}`,
+          `🧑‍💼 **Administrador** ${getRoleName(message, config?.roles?.administrador)}`,
+          `🧑‍🔧 **Responsável** ${getRoleName(message, config?.roles?.responsavel_admin)}`
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '🛡️ Isenções globais',
+        value: `**${usuariosIsentos.length}** usuário(s) isento(s) de filtros e restrições em todos os servidores.`,
+        inline: false
+      },
+      {
+        name: '🛠️ Estado do sistema',
+        value: config?.manutencaoDenuncia ? '🔴 **Denúncias em manutenção**' : '🟢 **Denúncias disponíveis**',
+        inline: false
+      },
+      {
+        name: '⏳ Pendências anteriores',
+        value: bloqueioPendentesAtivo(config)
+          ? '🟢 **Bloqueio ativado neste servidor**'
+          : '⚪ **Bloqueio desativado neste servidor**',
+        inline: false
+      },
+    )
     .setTimestamp()
-    .setFooter({ text: 'Esta mensagem expira em 5 minutos.' });
+    .setFooter({ text: 'Painel temporário • expira em 5 minutos' });
 
-  const reply = await message.reply({ embeds: [embed], components: [menu], flags: [64] });
-  setTimeout(() => reply.delete().catch(() => {}), MESSAGE_TIMEOUT);
+    const reply = await enviar({ embeds: [embed], components: [menu] });
+    setTimeout(() => reply.delete().catch(() => {}), MESSAGE_TIMEOUT);
+  } catch (error) {
+    console.error('[Painel] Falha ao montar/enviar painel:', error?.stack || error);
+    await negar('❌ Não foi possível abrir o painel. Verifique os logs do bot.').catch(() => {});
+  }
 }
 
-async function showConfig(interaction) {
-  const config = await Config.findOne({ guildId: interaction.guild.id });
-  if (!config) return interaction.reply({ content: 'âš ï¸ Configure o servidor primeiro.', flags: [64] });
+async function handlePainelCommand(message) {
+  return abrirPainel(message, {
+    negar: (content) => message.reply({ content }),
+    enviar: (payload) => message.reply(payload)
+  });
+}
+
+// O painel não é efêmero: os menus editam a própria mensagem do painel
+// (interaction.message.edit), o que o Discord não permite em mensagens efêmeras.
+async function handlePainelSlash(interaction) {
+  return abrirPainel(interaction, {
+    negar: (content) => (interaction.replied || interaction.deferred
+      ? interaction.followUp({ content, flags: [64] })
+      : interaction.reply({ content, flags: [64] })),
+    enviar: async (payload) => {
+      await interaction.reply(payload);
+      return interaction.fetchReply();
+    }
+  });
+}
+
+async function showConfig(interaction, currentConfig = null) {
+  const config = currentConfig || await Config.findOne({ guildId: interaction.guild.id });
+  const respond = interaction.deferred ? interaction.editReply.bind(interaction) : interaction.reply.bind(interaction);
+  if (!config) return respond({ content: '⚠️ Configure o servidor primeiro.' });
 
   const embed = new EmbedBuilder()
-    .setColor('#5865F2')
-    .setTitle('ðŸ› ï¸ ConfiguraÃ§Ãµes Atuais')
+    .setColor('#2B2D31')
+    .setTitle('📋 Configurações Atuais')
     .addFields(
-      { name: 'ðŸ“º Canais', value: [
-        `ðŸ–¥ï¸ PC: <#${config.channels.pc}>`,
-        `ðŸ“± Mobile: <#${config.channels.mobile}>`,
-        `ðŸ“ Cadeia: <#${config.channels.logs}>`,
-        `ðŸ“‹ Log Admin: <#${config.channels.log || 'N/A'}>`,
-        `ðŸ—‚ï¸ AnÃ¡lise: <#${config.channels.analysis || 'N/A'}>`,
-        `ðŸ“Š Top DiÃ¡rio: <#${config.channels.topDaily || 'N/A'}>`
+      { name: '📌 Canais principais', value: [
+        `🖥️ **PC** ${getChannelName(interaction, config.channels.pc)}`,
+        `📱 **Mobile** ${getChannelName(interaction, config.channels.mobile)}`,
+        `🧾 **Cadeia Staff** ${getChannelName(interaction, config.channels.logs)}`
       ].join('\n') },
-      { name: 'ðŸŽ­ Cargos', value: [
-        `ðŸ“± Mobile: <@&${config.roles.permitido}>`,
-        `ðŸ–¥ï¸ PC: <@&${config.roles.pc}>`,
-        `ðŸ‘‘ Admin: <@&${config.roles.administrador || 'N/A'}>`,
-        `ðŸ‘¤ Resp Admin: <@&${config.roles.responsavel_admin || 'N/A'}>`
-      ].join('\n') }
+      { name: '🛠️ Canais administrativos', value: [
+        `📋 **Log Admin** ${getChannelName(interaction, config.channels.log)}`,
+        `💾 **Backup** ${getChannelName(interaction, config.channels.backup)}`,
+        `🗄️ **Armazem** ${getChannelName(interaction, config.channels.armazem)}`,
+        `🌐 **Registro externo** ${getExternalChannelName(config.channels.registro)}`,
+        `☁️ **Cloud externo** ${getExternalChannelName(config.channels.cloud)}`,
+        `📣 **Canal de denúncias** ${getExternalChannelName(config.channels.canalDenuncia)}`,
+        `🔎 **Análise** ${getChannelName(interaction, config.channels.analysis)}`,
+        `🏆 **Top Diário** ${getChannelName(interaction, config.channels.topDaily)}`
+      ].join('\n') },
+      { name: '🎖️ Cargos', value: [
+        `📱 **Mobile** ${getRoleName(interaction, config.roles.permitido)}`,
+        `🖥️ **PC** ${getRoleName(interaction, config.roles.pc)}`,
+        `🧑‍💼 **Administrador** ${getRoleName(interaction, config.roles.administrador)}`,
+        `🧑‍🔧 **Responsável** ${getRoleName(interaction, config.roles.responsavel_admin)}`
+      ].join('\n') },
+      { name: '🛠️ Estado do sistema', value: config.manutencaoDenuncia ? '🔴 **Denúncias em manutenção**' : '🟢 **Denúncias disponíveis**' },
+      { name: '⏳ Pendências anteriores', value: bloqueioPendentesAtivo(config) ? '🟢 **Bloqueio ativado neste servidor**' : '⚪ **Bloqueio desativado neste servidor**' },
+      { name: '🕒 Auditoria', value: `Última atualização: <t:${Math.floor(new Date(config.lastUpdated || Date.now()).getTime() / 1000)}:R>\nResponsável: **${config.updatedBy || 'Sistema'}**` }
     );
 
-  await interaction.reply({ embeds: [embed], flags: [64] });
+  await respond({ embeds: [embed] });
 }
 
 module.exports = {
   handlePainelCommand,
+  handlePainelSlash,
   showConfig,
   saveChannels1,
   saveChannels2,
@@ -243,7 +612,17 @@ module.exports = {
   saveRoles2,
   createChannelsModal1,
   createChannelsModal2,
+  createChannelsModal3,
   createRolesModal1,
   createRolesModal2,
-  hasPermission
+  createExemptUsersModal,
+  saveExemptUsers,
+  hasPermission,
+  cachePanelConfig,
+  getPanelConfig,
+  atualizarPainelMensagem,
+  atualizarPainelCategoria,
+  bloqueioPendentesAtivo,
+  cachePanelExemptUsers,
+  getPanelExemptUsers
 };

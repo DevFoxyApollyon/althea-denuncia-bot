@@ -1,309 +1,499 @@
-﻿// rank.js
-// commands/rank.js  âœ… ATUALIZADO (sem opcode 8 / sem fetch geral de membros)
 const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
   AttachmentBuilder,
   MessageFlags
 } = require('discord.js');
 
 const RankService = require('../services/rankService');
 const Denuncia = require('../models/Denuncia');
+const { getConfig } = require('../utils/configCache');
 const { getBrasiliaDate, formatDateBR } = require('../utils/dateUtils');
 
-const ITEMS_PER_PAGE = 8;
+/* ------------------------------------------------------------------ */
+/* Configuração                                                        */
+/* ------------------------------------------------------------------ */
 
-// -------------------------
-// Helpers (anti rate-limit)
-// -------------------------
+const CONFIG = {
+  itemsPerPage: 6,
+  lifetimeMs: 600_000, // o ranking é apagado após 10 minutos
+  cooldownMs: 15_000,
+  cacheTtlMs: 60_000,
+  fetchChunkSize: 80,
+  fetchDelayMs: 800,
+  color: 0x2f3136,
+};
+
+const PERIODS = {
+  month: {
+    label: 'Mensal',
+    aliases: ['mensal', 'mes', 'mês', 'month'],
+    getDates() {
+      const now = getBrasiliaDate();
+      return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now };
+    }
+  },
+  week: {
+    label: 'Semanal',
+    aliases: ['semanal', 'semana', 'week'],
+    getDates() {
+      const now = getBrasiliaDate();
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      start.setDate(start.getDate() - ((now.getDay() + 6) % 7)); // segunda-feira
+      return { start, end: now };
+    }
+  },
+  day: {
+    label: 'Hoje',
+    aliases: ['hoje', 'dia', 'day'],
+    getDates() {
+      const now = getBrasiliaDate();
+      return { start: new Date(now.getFullYear(), now.getMonth(), now.getDate()), end: now };
+    }
+  }
+};
+
+const cache = new Map(); // `${guildId}:${type}` -> { at, data }
+const cooldowns = new Map(); // userId -> timestamp
+
+/* ------------------------------------------------------------------ */
+/* Utilitários                                                         */
+/* ------------------------------------------------------------------ */
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 function chunkArray(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+function resolvePeriod(arg) {
+  const key = Object.keys(PERIODS).find((k) => PERIODS[k].aliases.includes(arg));
+  return key || 'month';
 }
 
-/**
- * Busca somente os membros necessÃ¡rios (por IDs), evitando o Request Guild Members (opcode 8).
- * Isso usa REST e Ã© bem mais seguro do que guild.members.fetch() sem parÃ¢metros.
- */
-async function fetchMembersByIdsSafe(guild, ids) {
-  const uniqueIds = [...new Set(ids)].filter(Boolean);
+async function canUse({ guild, member }) {
+  const config = await getConfig(guild.id);
+  const roleIds = [
+    config?.roles?.administrador,
+    config?.roles?.responsavel_admin
+  ].filter(Boolean);
 
-  if (uniqueIds.length === 0) return;
+  return roleIds.some((roleId) => member?.roles.cache.has(roleId));
+}
 
-  // 50~80 Ã© um tamanho seguro (evita bursts grandes)
-  const chunks = chunkArray(uniqueIds, 80);
+function onCooldown(userId) {
+  const last = cooldowns.get(userId) || 0;
+  const remaining = CONFIG.cooldownMs - (Date.now() - last);
+  if (remaining > 0) return Math.ceil(remaining / 1000);
+  cooldowns.set(userId, Date.now());
+  return 0;
+}
 
-  for (const part of chunks) {
+// Mesmos critérios do sistema de feedback (ideal: mover para utils/feedbackUtils.js e importar nos dois).
+function emojiNota(n) {
+  if (n >= 9) return '🌟';
+  if (n >= 7) return '✅';
+  if (n >= 5) return '⚠️';
+  return '❌';
+}
+
+function labelNota(n) {
+  if (n >= 9) return 'Excelente';
+  if (n >= 7) return 'Bom';
+  if (n >= 5) return 'Regular';
+  if (n >= 3) return 'Ruim';
+  return 'Péssimo';
+}
+
+function formatQualidade(q) {
+  if (!q) return '⭐ *Sem avaliações no período*';
+  const plural = q.avaliacoes === 1 ? 'avaliação' : 'avaliações';
+  return `${emojiNota(q.media)} **${q.media.toFixed(1)}/10** · ${labelNota(q.media)} · ${q.avaliacoes} ${plural}`;
+}
+
+// Busca só quem ainda não está no cache, reduzindo requisições à API do Discord.
+async function fetchMissingMembers(guild, ids) {
+  const missing = [...new Set(ids)].filter((id) => id && !guild.members.cache.has(id));
+  for (const part of chunkArray(missing, CONFIG.fetchChunkSize)) {
     try {
-      // âœ… NÃƒO dispara opcode 8
-      await guild.members.fetch({ user: part, force: false });
+      await guild.members.fetch({ user: part });
     } catch (e) {
-      // NÃ£o quebra o comando por falha em 1 lote
       console.warn('[RANK] Falha ao buscar lote de membros:', e?.message || e);
     }
-    // delay curto pra aliviar REST se tiver muitos IDs
-    await sleep(800);
+    await sleep(CONFIG.fetchDelayMs);
   }
 }
 
-// -------------------------
-// Datas auxiliares
-// -------------------------
-function getMonthDates() {
-  const now = getBrasiliaDate();
-  return {
-    start: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0),
-    end: now
-  };
-}
+/* ------------------------------------------------------------------ */
+/* Dados                                                               */
+/* ------------------------------------------------------------------ */
 
-function getWeekDatesLocal() {
-  const now = getBrasiliaDate();
-  const day = now.getDay(); // 0 dom, 1 seg...
-  const diffToMonday = (day + 6) % 7;
-
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - diffToMonday);
-
-  return { start, end: now };
-}
-
-function getTodayDatesLocal() {
-  const now = getBrasiliaDate();
-  return {
-    start: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0),
-    end: now
-  };
-}
-
-// -------------------------
-// Stats do dia (denÃºncias)
-// -------------------------
 async function getDailyStats(guildId) {
+  const now = getBrasiliaDate();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const range = { guildId, createdAt: { $gte: start, $lt: end } };
+
   try {
-    const today = getBrasiliaDate();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-    const tomorrow = new Date(startOfDay);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const totalDenuncias = await Denuncia.countDocuments({
-      guildId,
-      createdAt: { $gte: startOfDay, $lt: tomorrow }
-    });
-
-    const totalReivindicadas = await Denuncia.countDocuments({
-      guildId,
-      createdAt: { $gte: startOfDay, $lt: tomorrow },
-      claimedBy: { $ne: null }
-    });
-
-    return {
-      total: totalDenuncias,
-      reivindicadas: totalReivindicadas,
-      pendentes: Math.max(0, totalDenuncias - totalReivindicadas)
-    };
-  } catch {
+    const [total, reivindicadas] = await Promise.all([
+      Denuncia.countDocuments(range),
+      Denuncia.countDocuments({ ...range, claimedBy: { $ne: null } })
+    ]);
+    return { total, reivindicadas, pendentes: Math.max(0, total - reivindicadas) };
+  } catch (err) {
+    console.error('[RANK] Erro ao buscar estatísticas diárias:', err);
     return { total: 0, reivindicadas: 0, pendentes: 0 };
   }
 }
 
-// -------------------------
-// Tabela do Embed
-// -------------------------
-function buildRankTable(actions) {
-  if (!actions.length) return 'Nenhuma aÃ§Ã£o registrada.';
+// Qualidade de atendimento = média das notas de feedback recebidas no período.
+async function getQualidadeStats(guildId, period) {
+  const vazio = { porStaff: new Map(), media: null, avaliacoes: 0 };
 
-  return actions
-    .map((mod, index) => {
-      const medal = index === 0 ? 'ðŸ¥‡' : index === 1 ? 'ðŸ¥ˆ' : index === 2 ? 'ðŸ¥‰' : 'â–«ï¸';
-      return `${medal} ${(index + 1).toString().padStart(2)}Âº ${mod.tag}
-ðŸ“Š Total: ${mod.total} | âœ… ${mod.aceitas} | âŒ ${mod.recusadas} | ðŸ”Ž ${mod.analises}
-ðŸ“ Reivindicadas: ${mod.reivindicacoes}
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€`;
-    })
-    .join('\n');
+  try {
+    const rows = await Denuncia.aggregate([
+      {
+        $match: {
+          guildId,
+          feedbackNota: { $ne: null },
+          feedbackStaffId: { $ne: null },
+          feedbackEm: { $gte: period.start, $lte: period.end }
+        }
+      },
+      {
+        $group: {
+          _id: '$feedbackStaffId',
+          media: { $avg: '$feedbackNota' },
+          avaliacoes: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const avaliacoes = rows.reduce((s, r) => s + r.avaliacoes, 0);
+    const soma = rows.reduce((s, r) => s + r.media * r.avaliacoes, 0);
+
+    return {
+      porStaff: new Map(rows.map((r) => [r._id, { media: r.media, avaliacoes: r.avaliacoes }])),
+      media: avaliacoes ? soma / avaliacoes : null,
+      avaliacoes
+    };
+  } catch (err) {
+    console.error('[RANK] Erro ao buscar qualidade de atendimento:', err);
+    return vazio;
+  }
 }
 
-// -------------------------
-// TXT Completo
-// -------------------------
-function generateRankTxt(actions, guildName, label, period, daily) {
+async function loadRank(guild, type) {
+  const key = `${guild.id}:${type}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CONFIG.cacheTtlMs) return hit.data;
+
+  const period = PERIODS[type].getDates();
+  const [rank, daily, qualidade] = await Promise.all([
+    RankService.getRankData(guild, type),
+    getDailyStats(guild.id),
+    getQualidadeStats(guild.id, period)
+  ]);
+
+  const raw = rank?.actions ?? [];
+  await fetchMissingMembers(guild, raw.map((a) => a.userId || a._id));
+
+  const actions = raw.map((a) => {
+    const userId = a.userId || a._id;
+    const member = guild.members.cache.get(userId);
+    return {
+      ...a,
+      userId,
+      plainTag: member?.user.username ?? `Ex-membro (${userId})`,
+      mention: member ? `<@${userId}>` : `~~<@${userId}>~~ *(saiu)*`,
+      aceitas: a.aceitas || 0,
+      recusadas: a.recusadas || 0,
+      analises: a.analises || 0,
+      reivindicacoes: a.reivindicacoes || 0,
+      qualidade: qualidade.porStaff.get(userId) ?? null
+    };
+  });
+
+  const totals = actions.reduce(
+    (acc, a) => {
+      acc.aceitas += a.aceitas;
+      acc.recusadas += a.recusadas;
+      acc.analises += a.analises;
+      acc.reivindicacoes += a.reivindicacoes;
+      return acc;
+    },
+    { aceitas: 0, recusadas: 0, analises: 0, reivindicacoes: 0 }
+  );
+
+  const data = { type, label: PERIODS[type].label, period, daily, qualidade, actions, totals };
+  cache.set(key, { at: Date.now(), data });
+  return data;
+}
+
+/* ------------------------------------------------------------------ */
+/* Apresentação                                                        */
+/* ------------------------------------------------------------------ */
+
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+// Um campo por moderador: cabeçalho com posição + nome, depois produção e qualidade.
+function buildRankFields(slice, offset) {
+  return slice.map((a, i) => {
+    const pos = offset + i;
+    return {
+      name: `${MEDALS[pos] || '▪️'} ${pos + 1}º • ${a.plainTag}`,
+      value:
+        `${a.mention}\n` +
+        `✅ **${a.aceitas}** aceitas · ❌ **${a.recusadas}** recusadas\n` +
+        `🔎 **${a.analises}** análises · 📌 **${a.reivindicacoes}** reivindicadas\n` +
+        formatQualidade(a.qualidade),
+      inline: false
+    };
+  });
+}
+
+function buildEmbed(data, page, totalPages, expiresAt) {
+  const { actions, totals, daily, qualidade, period, label } = data;
+  const offset = page * CONFIG.itemsPerPage;
+  const slice = actions.slice(offset, offset + CONFIG.itemsPerPage);
+
+  const decididas = totals.aceitas + totals.recusadas;
+  const taxa = decididas ? `${Math.round((totals.aceitas / decididas) * 100)}%` : '—';
+
+  const embed = new EmbedBuilder()
+    .setColor(CONFIG.color)
+    .setTitle(`🏆 Ranking ${label} • Staff`)
+    .setDescription(
+      `*Período: ${formatDateBR(period.start)} até ${formatDateBR(period.end)}*\n` +
+        `🕒 *Esta mensagem some <t:${Math.floor(expiresAt / 1000)}:R>*` +
+        (slice.length ? '' : '\n\n*Nenhuma ação registrada neste período.*')
+    )
+    .addFields(buildRankFields(slice, offset))
+    .addFields(
+      {
+        name: '📈 Resumo',
+        value: `✅ ${totals.aceitas} · ❌ ${totals.recusadas} · 🔎 ${totals.analises}\nAprovação: **${taxa}**`,
+        inline: true
+      },
+      {
+        name: '⭐ Qualidade geral',
+        value: qualidade.media
+          ? `${emojiNota(qualidade.media)} **${qualidade.media.toFixed(1)}/10**\n${qualidade.avaliacoes} avaliações`
+          : '*Sem avaliações*',
+        inline: true
+      },
+    )
+    .setFooter({ text: `Página ${page + 1} de ${totalPages} • ${actions.length} moderador(es)` })
+    .setTimestamp();
+
+  return embed;
+}
+
+function buildComponents(type, page, totalPages) {
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('rank_period')
+    .setPlaceholder('Trocar período')
+    .addOptions(
+      Object.entries(PERIODS).map(([key, p]) => ({
+        label: p.label,
+        value: key,
+        default: key === type
+      }))
+    );
+
+  const buttons = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('rank_prev')
+      .setEmoji('◀️')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page === 0),
+    new ButtonBuilder()
+      .setCustomId('rank_next')
+      .setEmoji('▶️')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page >= totalPages - 1),
+    new ButtonBuilder()
+      .setCustomId('rank_export')
+      .setLabel('Exportar TXT')
+      .setEmoji('📄')
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return [new ActionRowBuilder().addComponents(select), buttons];
+}
+
+function buildTxt(data, guildName) {
+  const { actions, totals, daily, qualidade, period, label } = data;
+  const q = (x) => (x ? `${x.media.toFixed(1)}/10 (${labelNota(x.media)}) - ${x.avaliacoes} avaliações` : 'Sem avaliações');
+
   const lines = [
-    `ðŸ† RANKING ${label.toUpperCase()} - ${guildName.toUpperCase()}`,
-    `PerÃ­odo: ${formatDateBR(period.start)} atÃ© ${formatDateBR(period.end)}`,
+    `RANKING ${label.toUpperCase()} - ${guildName.toUpperCase()}`,
+    `Período: ${formatDateBR(period.start)} até ${formatDateBR(period.end)}`,
     `Gerado em: ${formatDateBR(getBrasiliaDate())}`,
-    ``,
-    `--- ESTATÃSTICAS DE HOJE (DENÃšNCIAS) ---`,
-    `ðŸ“« DenÃºncias: ${daily.total}`,
-    `ðŸ“ Reivindicadas: ${daily.reivindicadas}`,
-    `ðŸ“Š Pendentes: ${daily.pendentes}`,
-    ``,
-    `--- RANKING INDIVIDUAL ---`,
-    `====================================================`
+    '',
+    '--- RESUMO ---',
+    `Aceitas: ${totals.aceitas} | Recusadas: ${totals.recusadas} | Análises: ${totals.analises}`,
+    `Qualidade geral: ${q(qualidade.media ? { media: qualidade.media, avaliacoes: qualidade.avaliacoes } : null)}`,
+    `Denúncias hoje: ${daily.total} | Reivindicadas: ${daily.reivindicadas} | Pendentes: ${daily.pendentes}`,
+    '',
+    '--- RANKING INDIVIDUAL ---',
+    '===================================================='
   ];
 
   actions.forEach((a, i) => {
     lines.push(
-      `${i + 1}Âº LUGAR: ${a.plainTag || a.userId}`,
+      `${i + 1}º LUGAR: ${a.plainTag}`,
       `ID: ${a.userId}`,
-      `Total: ${a.total}`,
-      `âœ… Aceitas: ${a.aceitas}`,
-      `âŒ Recusadas: ${a.recusadas}`,
-      `ðŸ”Ž AnÃ¡lises: ${a.analises}`,
-      `ðŸ“ ReivindicaÃ§Ãµes: ${a.reivindicacoes}`,
-      `----------------------------------------------------`
+      `Aceitas: ${a.aceitas}`,
+      `Recusadas: ${a.recusadas}`,
+      `Análises: ${a.analises}`,
+      `Reivindicações: ${a.reivindicacoes}`,
+      `Qualidade: ${q(a.qualidade)}`,
+      '===================================================='
     );
   });
 
-  return lines.join('\n');
+  return new AttachmentBuilder(Buffer.from(lines.join('\n'), 'utf8'), {
+    name: `ranking_${data.type}_${data.period.end.toISOString().slice(0, 10)}.txt`
+  });
 }
 
-// -------------------------
-// Comando !rank
-// -------------------------
-// PadrÃ£o: MENSAL
-// !rank
-// !rank mensal | mes
-// !rank semanal | semana
-// !rank hoje | dia
-async function handleRankCommand(message) {
-  let loadingMsg = null;
-  let page = 0;
+/* ------------------------------------------------------------------ */
+/* Comando                                                             */
+/* ------------------------------------------------------------------ */
+
+// ctx abstrai a origem do comando (!rank ou /rank):
+//   negar(texto)    -> resposta de erro
+//   enviar(texto)   -> envia a mensagem do ranking e devolve a Message
+//   editar(payload) -> edita a mensagem do ranking
+//   apagar()        -> remove a mensagem do ranking
+async function executarRank(ctx) {
+  const { guild, userId } = ctx;
 
   try {
-    if (!message?.guild) return;
+    if (!await canUse(ctx)) {
+      return ctx.negar('❌ Apenas os cargos Administrador e Responsável Admin podem acessar o ranking.');
+    }
+  } catch (err) {
+    console.error('[RANK] Erro ao verificar permissões:', err);
+    return ctx.negar('❌ Não foi possível verificar sua permissão para acessar o ranking.');
+  }
 
-    const args = message.content.trim().split(/\s+/).slice(1);
-    const arg = (args[0] || '').toLowerCase();
+  const wait = onCooldown(userId);
+  if (wait) {
+    return ctx.negar(`⏳ Aguarde **${wait}s** para usar o ranking novamente.`);
+  }
 
-    let type = 'month';
-    let label = 'Mensal';
-    let period = getMonthDates();
+  let type = PERIODS[ctx.periodo] ? ctx.periodo : 'month';
+  let page = 0;
+  let data;
 
-    if (arg === 'semanal' || arg === 'semana') {
-      type = 'week';
-      label = 'Semanal';
-      period = getWeekDatesLocal();
-    } else if (arg === 'hoje' || arg === 'dia') {
-      type = 'day';
-      label = 'Hoje';
-      period = getTodayDatesLocal();
+  const rankMsg = await ctx.enviar(`⏳ Gerando ranking **${PERIODS[type].label.toLowerCase()}**...`);
+
+  try {
+    data = await loadRank(guild, type);
+  } catch (err) {
+    console.error('[RANK] Erro ao gerar ranking:', err);
+    return ctx.editar({ content: '❌ Erro ao gerar ranking. Tente novamente em instantes.' }).catch(() => null);
+  }
+
+  const expiresAt = Date.now() + CONFIG.lifetimeMs;
+  const totalPages = () => Math.max(1, Math.ceil(data.actions.length / CONFIG.itemsPerPage));
+
+  const view = () => ({
+    content: '',
+    embeds: [buildEmbed(data, page, totalPages(), expiresAt)],
+    components: buildComponents(type, page, totalPages())
+  });
+
+  await ctx.editar(view());
+
+  const collector = rankMsg.createMessageComponentCollector({ time: CONFIG.lifetimeMs });
+
+  collector.on('collect', async (i) => {
+    if (i.user.id !== userId) {
+      return i.reply({
+        content: '❌ Apenas quem usou o comando pode interagir.',
+        flags: MessageFlags.Ephemeral
+      });
     }
 
-    loadingMsg = await message.reply(`ðŸ”„ Gerando ranking **${label.toLowerCase()}**...`);
+    try {
+      switch (i.customId) {
+        case 'rank_export':
+          return await i.reply({
+            files: [buildTxt(data, guild.name)],
+            flags: MessageFlags.Ephemeral
+          });
 
-    const { actions: rawActions } = await RankService.getRankData(message.guild, type);
+        case 'rank_period':
+          await i.deferUpdate();
+          type = i.values[0];
+          page = 0;
+          data = await loadRank(guild, type);
+          return await i.editReply(view());
 
-    if (!rawActions || rawActions.length === 0) {
-      return loadingMsg.edit(`âš ï¸ Nenhuma aÃ§Ã£o registrada (${label}).`);
-    }
+        case 'rank_prev':
+          page = Math.max(0, page - 1);
+          break;
 
-    // âœ… Anti-opcode-8: busca SOMENTE os membros do ranking (por IDs)
-    const idsToFetch = rawActions.map((a) => a.userId || a._id).filter(Boolean);
-    await fetchMembersByIdsSafe(message.guild, idsToFetch);
+        case 'rank_next':
+          page = Math.min(totalPages() - 1, page + 1);
+          break;
 
-    const dailyStats = await getDailyStats(message.guild.id);
-
-    // Normaliza e monta tags (agora o cache tem bem mais chances de ter os membros)
-    const actions = rawActions.map((a) => {
-      const userId = a.userId || a._id;
-      const member = message.guild.members.cache.get(userId);
-
-      return {
-        ...a,
-        userId,
-        plainTag: member ? member.user.username : `Desconhecido (${userId})`,
-        tag: member ? `<@${userId}> (${member.user.username})` : `<@${userId}>`,
-        aceitas: a.aceitas || 0,
-        recusadas: a.recusadas || 0,
-        analises: a.analises || 0,
-        reivindicacoes: a.reivindicacoes || 0
-      };
-    });
-
-    const totalPages = Math.max(1, Math.ceil(actions.length / ITEMS_PER_PAGE));
-
-    const txt = generateRankTxt(actions, message.guild.name, label, period, dailyStats);
-    const file = new AttachmentBuilder(Buffer.from(txt, 'utf8'), {
-      name: `ranking_${type}_${message.guild.id}.txt`
-    });
-
-    const createEmbed = (pageNum) => {
-      const start = pageNum * ITEMS_PER_PAGE;
-      const slice = actions.slice(start, start + ITEMS_PER_PAGE);
-
-      return new EmbedBuilder()
-        .setColor('#2F3136')
-        .setTitle(`ðŸ† Ranking ${label}`)
-        .setDescription(
-          `*PerÃ­odo: ${formatDateBR(period.start)} atÃ© ${formatDateBR(period.end)}*\n\n` +
-            `ðŸ“« **DenÃºncias Hoje:** ${dailyStats.total} | ðŸ“ **Reiv:** ${dailyStats.reivindicadas} | ðŸ“Š **Pend:** ${dailyStats.pendentes}\n\n` +
-            buildRankTable(slice)
-        )
-        .setFooter({ text: `PÃ¡gina ${pageNum + 1} de ${totalPages}` })
-        .setTimestamp();
-    };
-
-    const buttons = (pageNum) =>
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('prev')
-          .setLabel('Anterior')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(pageNum === 0),
-        new ButtonBuilder()
-          .setCustomId('next')
-          .setLabel('PrÃ³ximo')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(pageNum >= totalPages - 1)
-      );
-
-    await loadingMsg.edit({
-      content: `âœ… Ranking **${label.toLowerCase()}** pronto!`,
-      embeds: [createEmbed(0)],
-      components: totalPages > 1 ? [buttons(0)] : [],
-      files: [file]
-    });
-
-    if (totalPages <= 1) return;
-
-    const collector = loadingMsg.createMessageComponentCollector({ idle: 120000 });
-
-    collector.on('collect', async (i) => {
-      if (i.user.id !== message.author.id) {
-        return i.reply({ content: 'âŒ Apenas quem usou o comando.', flags: [MessageFlags.Ephemeral] });
+        default:
+          return;
       }
 
-      if (i.customId === 'prev') page--;
-      if (i.customId === 'next') page++;
+      await i.update(view());
+    } catch (err) {
+      console.error('[RANK] Erro na interação:', err);
+    }
+  });
 
-      page = Math.max(0, Math.min(page, totalPages - 1));
-      await i.update({ embeds: [createEmbed(page)], components: [buttons(page)] });
-    });
-
-    collector.on('end', async () => {
-      // opcional: desabilitar botÃµes quando expirar
-      if (!loadingMsg) return;
-      try {
-        const disabledRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('prev').setLabel('Anterior').setStyle(ButtonStyle.Secondary).setDisabled(true),
-          new ButtonBuilder().setCustomId('next').setLabel('PrÃ³ximo').setStyle(ButtonStyle.Secondary).setDisabled(true)
-        );
-        await loadingMsg.edit({ components: [disabledRow] }).catch(() => null);
-      } catch {}
-    });
-  } catch (err) {
-    console.error(err);
-    if (loadingMsg) loadingMsg.edit('âŒ Erro ao gerar ranking.');
-  }
+  collector.on('end', () => {
+    ctx.apagar().catch(() => null);
+  });
 }
 
-module.exports = { handleRankCommand };
+async function handleRankCommand(message) {
+  if (!message?.guild) return;
+
+  const quiet = { allowedMentions: { repliedUser: false } };
+  let rankMsg = null;
+
+  return executarRank({
+    guild: message.guild,
+    member: message.member,
+    userId: message.author.id,
+    periodo: resolvePeriod((message.content.trim().split(/\s+/)[1] || '').toLowerCase()),
+    negar: (content) => message.reply({ content, ...quiet }),
+    enviar: async (content) => (rankMsg = await message.reply({ content, ...quiet })),
+    editar: (payload) => rankMsg.edit(payload),
+    apagar: () => rankMsg.delete()
+  });
+}
+
+async function handleRankSlash(interaction) {
+  return executarRank({
+    guild: interaction.guild,
+    member: interaction.member,
+    userId: interaction.user.id,
+    periodo: interaction.options.getString('periodo') || 'month',
+    negar: (content) => interaction.reply({ content, flags: MessageFlags.Ephemeral }),
+    enviar: async (content) => {
+      await interaction.reply({ content });
+      return interaction.fetchReply();
+    },
+    editar: (payload) => interaction.editReply(payload),
+    apagar: () => interaction.deleteReply()
+  });
+}
+
+module.exports = { handleRankCommand, handleRankSlash, loadRank };

@@ -1,5 +1,5 @@
-﻿// Config.js
 const mongoose = require('mongoose');
+const { globalCache } = require('../utils/smartCache');
 
 const configSchema = new mongoose.Schema({
   guildId: { 
@@ -10,37 +10,27 @@ const configSchema = new mongoose.Schema({
   channels: {
     pc: { type: String, required: false, default: '' },
     mobile: { type: String, required: false, default: '' },
-    logs: { type: String, required: false, default: '' }, // Log de status (texto)
-    log: { type: String, required: false, default: '' },  // Log de auditoria (embed)
+    logs: { type: String, required: false, default: '' }, 
+    log: { type: String, required: false, default: '' }, 
+    backup: { type: String, required: false, default: '' },
+    armazem: { type: String, required: false, default: '' },
+    registro: { type: String, required: false, default: '' },
+    cloud: { type: String, required: false, default: '' },
+    canalDenuncia: { type: String, required: false, default: '' },
     analysis: { type: String, required: false, default: '' },
-    topDaily: { type: String, required: false, default: '' },
-    databaseprovas: { type: String, required: false, default: '' } 
+    topDaily: { type: String, required: false, default: '' }
   },
+  manutencaoDenuncia: { type: Boolean, default: false },
+  bloquearReivindicacaoComPendentes: { type: Boolean, default: true },
   roles: {
     permitido: { type: String, required: false, default: '' },
     pc: { type: String, required: false, default: '' },
     administrador: { type: String, required: false, default: '' },
     responsavel_admin: { type: String, required: false, default: '' }
   },
-  templates: {
-    denuncia_aceita: { 
-      type: String, 
-      required: false, 
-      default: 'âž¥ DenÃºncia aceita Acusado ({acusadoId}) tomarÃ¡ puniÃ§Ã£o por ({motivo}) Data {dataPunicao} Link: {messageUrl}' 
-    },
-    denuncia_analise: { 
-      type: String, 
-      required: false, 
-      default: 'ðŸ”Ž Esta denÃºncia estÃ¡ em anÃ¡lise por {user} Acusado: ({acusado}) Motivo: ({motivo}) Link: {messageUrl}' 
-    },
-    denuncia_recusada: { 
-      type: String, 
-      required: false, 
-      default: 'âŒ DenÃºncia recusada por {user}' 
-    }
-  },
+  
   lastUpdated: { 
-    type: Date, 
+    type: Date,  
     default: Date.now 
   },
   updatedBy: { 
@@ -53,6 +43,19 @@ const configSchema = new mongoose.Schema({
 configSchema.pre('save', function(next) {
   this.lastUpdated = Date.now();
   next();
+});
+
+// Mantém o cache de utils/configCache.js coerente com o banco.
+function invalidarCache(guildId) {
+  if (guildId) globalCache.delete(`config:${guildId}`);
+}
+
+configSchema.post('save', function(doc) {
+  invalidarCache(doc?.guildId);
+});
+
+configSchema.post(['findOneAndUpdate', 'updateOne', 'deleteOne', 'findOneAndDelete'], function() {
+  invalidarCache(this.getQuery?.()?.guildId);
 });
 
 module.exports = mongoose.model('Config', configSchema);

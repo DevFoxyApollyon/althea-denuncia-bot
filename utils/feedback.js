@@ -1,4 +1,3 @@
-﻿// feedback.js
 const {
     ActionRowBuilder,
     StringSelectMenuBuilder,
@@ -8,21 +7,22 @@ const {
     EmbedBuilder
 } = require('discord.js');
 
-const { v4: uuidv4 } = require('uuid');
-const FeedbackTemp = require('../models/FeedbackTemp');
+const { randomUUID } = require('crypto');
+const DenunciaModel = require('../models/Denuncia');
+const StaffProfile = require('../models/StaffProfile');
 
 // =========================
 // UTILITARIOS
 // =========================
 function gerarCodigoFeedback() {
-    return uuidv4().split('-')[0].toUpperCase();
+    return randomUUID().split('-')[0].toUpperCase();
 }
 
 function gerarEmojiNota(nota) {
-    if (nota >= 9) return '\uD83C\uDF1F';  // ðŸŒŸ
-    if (nota >= 7) return '\u2705';         // âœ…
-    if (nota >= 5) return '\u26A0\uFE0F';  // âš ï¸
-    return '\u274C';                        // âŒ
+    if (nota >= 9) return '\uD83C\uDF1F';  
+    if (nota >= 7) return '\u2705';        
+    if (nota >= 5) return '\u26A0\uFE0F';  
+    return '\u274C';                        
 }
 
 function gerarCorNota(nota) {
@@ -44,39 +44,6 @@ function gerarEstrelasNota(nota) {
     const cheias = '\u2B50'.repeat(n);
     const vazias  = '\u25E6'.repeat(10 - n);
     return cheias + vazias;
-}
-
-// =========================
-// LIMPAR MENUS ORFAOS
-// Chame isso no startup do bot (index.js)
-// =========================
-async function limparMenusOrfaos(client) {
-    try {
-        const pendentes = await FeedbackTemp.find({});
-
-        if (pendentes.length === 0) return;
-
-        //console.log(`[FeedbackTemp] ${pendentes.length} menu(s) orfao(s) encontrado(s). Limpando...`);
-
-        for (const entry of pendentes) {
-            try {
-                const channel = await client.channels.fetch(entry.channelId).catch(() => null);
-
-                if (channel) {
-                    const msg = await channel.messages.fetch(entry.messageId).catch(() => null);
-                    if (msg) await msg.delete().catch(() => {});
-                }
-
-                await FeedbackTemp.deleteOne({ _id: entry._id });
-                //console.log(`[FeedbackTemp] Orfao removido: denunciaId=${entry.denunciaId}`);
-            } catch (err) {
-                console.error(`[FeedbackTemp] Erro ao limpar orfao ${entry.denunciaId}:`, err.message);
-            }
-        }
-
-    } catch (err) {
-        console.error('[FeedbackTemp] Erro ao buscar menus orfaos:', err.message);
-    }
 }
 
 // =========================
@@ -149,7 +116,7 @@ async function enviarFeedbackStaff(client, staffId, data) {
 }
 
 // =========================
-// MONTAR EMBED â€” DESIGN PROFISSIONAL
+// MONTAR EMBED — DESIGN PROFISSIONAL
 // =========================
 function criarEmbedFeedback(data, isDM = false) {
     const nota     = Number(data.nota);
@@ -219,13 +186,6 @@ function criarEmbedFeedback(data, isDM = false) {
         .setTimestamp();
 }
 
-// =========================
-// SELECT MENU -> ABRE MODAL
-// CORRIGIDO: Nenhuma query ao banco aqui.
-// showModal deve ser chamado imediatamente,
-// pois o token da interacao expira em 3 segundos.
-// As validacoes foram movidas para handleFeedbackModal.
-// =========================
 async function handleFeedbackMenu(interaction) {
     const denunciaId = interaction.customId.split(':')[2];
     const nota = interaction.values[0];
@@ -250,9 +210,51 @@ async function handleFeedbackMenu(interaction) {
 
 // =========================
 // MODAL SUBMIT
-// Validacoes de permissao e estado feitas aqui,
-// onde temos deferReply e janela de 15 minutos.
 // =========================
+// Grava a avaliação e avisa a staff. Devolve null se a denúncia já tinha sido
+// avaliada (a marcação é atômica: duas avaliações simultâneas não passam).
+async function registrarFeedback(client, denuncia, { nota, comentario }, config) {
+    const n = Number(nota);
+    const staffId = denuncia.staffId || denuncia.claimedBy || null;
+
+    const marcada = await DenunciaModel.findOneAndUpdate(
+        { _id: denuncia._id, feedbackEnviado: { $ne: true } },
+        { $set: {
+            feedbackEnviado: true,
+            feedbackNota: n,
+            feedbackComentario: comentario || '',
+            feedbackStaffId: staffId,
+            feedbackEm: new Date()
+        } },
+        { new: true }
+    );
+    if (!marcada) return null;
+
+    if (staffId) {
+        await StaffProfile.registrarFeedback(denuncia.guildId, staffId, n)
+            .catch(err => console.error('[Feedback] Falha ao atualizar o perfil do staff:', err));
+    }
+
+    const codigo = gerarCodigoFeedback();
+    const threadUrl = `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`;
+    const feedbackData = { nota: n, comentario, denuncianteId: denuncia.criadoPor, staffId, codigo, threadUrl };
+
+    const [canalResult, dmResult] = await Promise.allSettled([
+        enviarFeedbackCanais(client, config || { channels: { log: null } }, feedbackData),
+        enviarFeedbackStaff(client, staffId, feedbackData)
+    ]);
+
+    if (canalResult.status === 'rejected')
+        console.error('[Feedback] Falha ao enviar no canal de log:', canalResult.reason);
+
+    if (dmResult.status === 'rejected')
+        console.error('[Feedback] Falha ao enviar DM para o staff:', dmResult.reason);
+
+    await removerFeedbackMenu(client, String(denuncia._id)).catch(() => {});
+
+    return { codigo, nota: n };
+}
+
 async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
     try {
         await interaction.deferReply({ flags: 64 });
@@ -266,7 +268,6 @@ async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
             return interaction.editReply({ content: '\u274C Den\u00FAncia n\u00E3o encontrada.' });
         }
 
-        // Validacoes movidas do handleFeedbackMenu para ca
         if (denuncia.feedbackEnviado) {
             return interaction.editReply({ content: '\u274C Voc\u00EA j\u00E1 avaliou esta den\u00FAncia.' });
         }
@@ -275,45 +276,12 @@ async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
             return interaction.editReply({ content: '\u274C Apenas o denunciante pode enviar feedback.' });
         }
 
-        const codigo = gerarCodigoFeedback();
-
-        let config = await getCachedConfig(interaction.guild.id);
-        if (!config) {
-            console.warn('[Feedback] Config nao encontrada, usando fallback.');
-            config = { channels: { log: null } };
+        const config = await getCachedConfig(interaction.guild.id);
+        const registrado = await registrarFeedback(interaction.client, denuncia, { nota, comentario }, config);
+        if (!registrado) {
+            return interaction.editReply({ content: '\u274C Voc\u00EA j\u00E1 avaliou esta den\u00FAncia.' });
         }
-
-        const threadUrl = `https://discord.com/channels/${interaction.guild.id}/${denuncia.channelId}/${denuncia.messageId}`;
-        const staffId   = denuncia.staffId || denuncia.reivindicadoPor || null;
-
-        const feedbackData = { nota, comentario, denuncianteId: denuncia.criadoPor, staffId, codigo, threadUrl };
-
-        const [canalResult, dmResult] = await Promise.allSettled([
-            enviarFeedbackCanais(interaction.client, config, feedbackData),
-            enviarFeedbackStaff(interaction.client, staffId, feedbackData)
-        ]);
-
-        if (canalResult.status === 'rejected')
-            console.error('[Feedback] Falha ao enviar no canal de log:', canalResult.reason);
-
-        if (dmResult.status === 'rejected')
-            console.error('[Feedback] Falha ao enviar DM para o staff:', dmResult.reason);
-
-        await Denuncia.updateOne({ _id: denunciaId }, { $set: { feedbackEnviado: true } });
-
-        try {
-            const temp = await FeedbackTemp.findOne({ denunciaId: denunciaId.toString() });
-            if (temp) {
-                const channel = await interaction.client.channels.fetch(temp.channelId).catch(() => null);
-                if (channel) {
-                    const msg = await channel.messages.fetch(temp.messageId).catch(() => null);
-                    if (msg) await msg.delete().catch(() => {});
-                }
-                await FeedbackTemp.deleteOne({ denunciaId: denunciaId.toString() });
-            }
-        } catch (err) {
-            console.error('[Feedback] Erro ao deletar menu:', err.message);
-        }
+        const { codigo } = registrado;
 
         const n      = Number(nota);
         const emoji  = gerarEmojiNota(n);
@@ -374,39 +342,54 @@ async function inserirFeedbackMenu(client, denuncia) {
             thread = await client.channels.fetch(denuncia.threadId).catch(() => null);
         }
 
-        if (!thread) {
-            console.error(`[Feedback] Thread nao encontrada ou foi deletada: ${denuncia.threadId}`);
+        if (!thread?.isThread?.() || !thread.isTextBased?.()) {
+            console.error(`[Feedback] Tópico da denúncia não encontrado: ${denuncia.threadId}`);
             return;
         }
 
         const menu = criarMenuFeedback(denuncia._id);
-
-        const msg = await thread.send({
-            content: `<@${denuncia.criadoPor}> \uD83D\uDCCB Sua den\u00FAncia foi processada!\nPor favor, avalie o atendimento recebido. \u23F3 *Dispon\u00EDvel por 24 horas.*`,
-            components: [menu]
-        });
-
-        await FeedbackTemp.findOneAndUpdate(
-            { denunciaId: denuncia._id.toString() },
-            {
-                denunciaId: denuncia._id.toString(),
-                messageId: msg.id,
-                channelId: thread.id,
-                criadoEm: new Date()
-            },
-            { upsert: true, new: true }
+        const mensagens = await thread.messages.fetch({ limit: 50 }).catch(() => null);
+        const menuExistente = mensagens?.find(message =>
+            message.author?.id === client.user.id &&
+            message.components?.some(row => row.components?.some(component =>
+                component.customId === `feedback:select:${denuncia._id}`
+            ))
         );
+
+        if (menuExistente) {
+            await menuExistente.edit({ components: [menu] });
+        } else {
+            await thread.send({
+                content: '⭐ **Avalie o atendimento da sua denúncia:**',
+                components: [menu],
+            });
+        }
 
     } catch (err) {
         console.error('[Feedback] Erro ao inserir menu de feedback:', err.message);
     }
 }
 
-// =========================
+async function removerFeedbackMenu(client, denunciaId) {
+    const denuncia = await DenunciaModel.findById(denunciaId).select('threadId').lean().catch(() => null);
+    if (!denuncia) return;
+
+    const thread = await client.channels.fetch(denuncia.threadId).catch(() => null);
+    if (!thread?.isTextBased?.()) return;
+
+    const mensagens = await thread.messages.fetch({ limit: 50 }).catch(() => null);
+    const menuId = `feedback:select:${denunciaId}`;
+    for (const message of mensagens?.values?.() || []) {
+        const temMenu = message.components?.some(row => row.components?.some(component => component.customId === menuId));
+        if (temMenu) await message.delete().catch(() => {});
+    }
+}
+
 module.exports = {
+    registrarFeedback,
     criarMenuFeedback,
     inserirFeedbackMenu,
     handleFeedbackMenu,
     handleFeedbackModal,
-    limparMenusOrfaos
+    removerFeedbackMenu
 };

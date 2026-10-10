@@ -4,7 +4,7 @@
 
 Este documento descreve **TODO o fluxo do bot**, desde a configuração inicial até o encerramento da denúncia.
 
-> **📝 Última atualização:** v1.2.1 — Atualização de documentação e preparação de release
+> **📝 Última atualização:** v3.1.0 — Revisão geral do fluxo do ALTHEA com automações de finalização, proteção de tópicos e sincronização de perfis
 
 ---
 
@@ -14,7 +14,7 @@ Antes de usar o sistema, o administrador deve executar:
 
 ### `!painel`
 Permite configurar no MongoDB:
-- Cargos administrativos
+- Cargos administrativos 
 - Canais de denúncia (PC/Mobile)
 - Canais de logs
 - Canal de análise
@@ -206,16 +206,12 @@ denuncia_[id].zip
 
 ## 9️⃣ Ranking de Staff
 
-### `!rank` (Ranking Mensal)
-- Conta ações no último mês
+### `!rank` (Ranking Principal)
+- Conta ações por período selecionado
 - Exibe top 10 moderadores
 - Base: `ModerationAction` collection
 
-### `!semana` (Ranking Semanal)
-- Conta ações na última semana
-- Mesmo formato do mensal
-
-**Handler:** `commands/rank.js` e `commands/semana.js`  
+**Handler:** `commands/rank.js`  
 **Service:** `services/rankService.js`
 
 ---
@@ -296,5 +292,5 @@ db.denuncias.deleteMany({})
 
 ---
 
-**Última atualização:** v1.2.1  
+**Última atualização:** v3.1.0  
 **Próximas melhorias:** Sistema de appeals, internacionalização

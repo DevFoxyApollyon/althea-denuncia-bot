@@ -1,43 +1,75 @@
-﻿// atualizarStatus.js
-// utils/atualizarStatus.js
+﻿// utils/atualizarStatus.js
+const DenunciaMensagem = require('../models/DenunciaMensagem');
 
-/**
- * Atualiza o status na mensagem principal da denÃºncia.
- * @param {Client} client - InstÃ¢ncia do Discord.js Client
- * @param {Denuncia} denuncia - Documento da denÃºncia
- * @param {string} novoStatus - Novo status (analise, aceita, recusada, reivindicacao, etc)
- */
-async function atualizarStatusNaMensagem(client, denuncia, novoStatus) {
-    try {
-        const channel = await client.channels.fetch(denuncia.channelId);
-        const msg = await channel.messages.fetch(denuncia.messageId);
+const STATUS_MAP = {
+    pendente: 'Pendente',
+    analise: 'Em Análise',
+    reivindicacao: 'Reivindicada',
+    reivindicado: 'Reivindicada',
+    aceita: 'Aceita ✅',
+    recusada: 'Recusada ❌',
+    finalizada: 'Finalizado 📦',
+};
 
-        const statusMap = {
-            'pendente':      'Pendente',
-            'analise':       'Em AnÃ¡lise',
-            'reivindicacao': 'Reivindicada',
-            'reivindicado':  'Reivindicada',
-            'aceita':        'Aceita âœ…',
-            'recusada':      'Recusada âŒ',
-        };
+function atualizarTextoDeStatus(content, novoStatus) {
+    const novoStatusLinha = `➱ **Status**: \`${STATUS_MAP[novoStatus] || novoStatus}\``;
+    const statusRegexGlobal = /^➱ \*\*Status\*\*: `[^`]*`$/gm;
+    const textoSemStatus = String(content || '')
+        .replace(statusRegexGlobal, '')
+        .trim()
+        .replace(/\n{2,}/g, '\n');
 
-        // Remove todas as linhas de status antigas e adiciona apenas uma correta ao final
-        const statusRegexGlobal = /^âž± \*\*Status\*\*: `[^`]*`$/gm;
-        let textoSemStatus = msg.content.replace(statusRegexGlobal, '').trim();
-        // Garante que nÃ£o fique com linhas em branco extras
-        textoSemStatus = textoSemStatus.replace(/\n{2,}/g, '\n');
-        const novoStatusLinha = `âž± **Status**: \`${statusMap[novoStatus] || novoStatus}\``;
-        let novoTexto = textoSemStatus;
-        // Se jÃ¡ termina com o status, sÃ³ atualiza
-        if (textoSemStatus.endsWith(novoStatusLinha)) {
-            novoTexto = textoSemStatus;
-        } else {
-            novoTexto = textoSemStatus + '\n' + novoStatusLinha;
-        }
-        await msg.edit({ content: novoTexto });
-    } catch (e) {
-        console.warn('NÃ£o foi possÃ­vel atualizar o status na mensagem principal:', e.message);
-    }
+    return textoSemStatus.endsWith(novoStatusLinha)
+        ? textoSemStatus
+        : `${textoSemStatus}\n${novoStatusLinha}`;
 }
 
-module.exports = { atualizarStatusNaMensagem };
+async function editarStatusMensagem(message, novoStatus) {
+    if (!message?.edit || !String(message.content || '').includes('➱ **')) return false;
+    const novoTexto = atualizarTextoDeStatus(message.content, novoStatus);
+    if (novoTexto === message.content) return false;
+    await message.edit({ content: novoTexto });
+    return true;
+}
+
+async function buscarMensagemInicialDoEspelho(client, threadId) {
+    if (!threadId) return null;
+    const thread = await client.channels.fetch(threadId, { cache: false }).catch(() => null);
+    if (!thread?.isThread?.()) return null;
+    if (typeof thread.fetchStarterMessage !== 'function') return null;
+    return thread.fetchStarterMessage().catch(() => null);
+}
+
+async function atualizarStatusNaMensagem(client, denuncia, novoStatus) {
+    const mensagens = [];
+
+    try {
+        const channel = await client.channels.fetch(denuncia.channelId, { cache: false });
+        const msg = await channel.messages.fetch(denuncia.messageId);
+        mensagens.push(msg);
+    } catch (e) {
+        console.warn('Não foi possível buscar a mensagem principal:', e.message);
+    }
+
+    for (const threadId of [denuncia.armazemThreadId, denuncia.registroThreadId].filter(Boolean)) {
+        const mensagemInicial = await buscarMensagemInicialDoEspelho(client, threadId);
+        if (mensagemInicial) mensagens.push(mensagemInicial);
+    }
+
+    for (const mensagem of mensagens) {
+        try {
+            const editou = await editarStatusMensagem(mensagem, novoStatus);
+            // A cópia guardada no banco (usada pelo site) acompanha a edição.
+            if (editou && mensagem.id === denuncia.messageId) {
+                await DenunciaMensagem.updateOne(
+                    { denunciaId: denuncia._id, mensagemId: mensagem.id },
+                    { $set: { conteudo: atualizarTextoDeStatus(mensagem.content, novoStatus) } }
+                ).catch(() => {});
+            }
+        } catch (e) {
+            console.warn(`Não foi possível atualizar o status da mensagem ${mensagem.id}:`, e.message);
+        }
+    }
+}
+ 
+module.exports = { atualizarStatusNaMensagem, atualizarTextoDeStatus };

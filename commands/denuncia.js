@@ -1,4 +1,3 @@
-﻿// denuncia.js
 const { 
     EmbedBuilder, 
     ActionRowBuilder, 
@@ -12,21 +11,17 @@ const {
 
 const { garantirAvisoNoTopo } = require('../Handlers/leiaAvisoHandler');
 const Denuncia = require('../models/Denuncia'); 
-const Config = require('../models/Config'); 
 const Usuario = require('../models/Usuario');
-const { getCachedConfig } = require('../utils/performance');
+const { getConfig: getCachedConfig } = require('../utils/configCache');
 const { handleExportButton } = require('../Handlers/exportDenuncia'); 
 const { handleClaimButton } = require('../Handlers/handlerStatusButton'); 
 const { notificarAcusadoPv } = require('../utils/userSyncAndNotify');
 const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('../utils/youtubeUtils');
 const dateUtils = require('../utils/dateUtils');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
-
-const { 
-    handleInputIdLogAceite, 
-    handleModalLogMessageIdCorrecaoAceite,
-    handleSalvarCorrecaoAceite 
-} = require('./correcao'); 
+const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
+const { registrarMensagens, buscarCanal } = require('../utils/denunciaMensagens');
+const { alertarMotivoCritico } = require('../utils/alertaMotivoCritico');
 
 require('dotenv').config();
 
@@ -38,63 +33,34 @@ const PROVAS_TIMEOUT_MS = 5 * 60 * 1000;
 const URL_REGEX = /https?:\/\/[^\s]+/gi;
 const BROKEN_LINK_REGEX = /\b(?!https?:\/\/)[a-zA-Z]{1,5}:\/\/[^\s]+/gi;
 
-const PALAVRAS_BLOQUEADAS = [
-    'mtfe7',
-    'virada de saldo',
-    'equipe mtfe',
-    'entra no grupo',
-    'vem aprender',
-    'trampo do',
-    'trampo ',
-    'saldo equipe',
-    't.me/',
-    'telegram.me/',
-];
+const { PALAVRAS_BLOQUEADAS, PALAVROES, CONTEUDO_INVALIDO } = require('../utils/palavrasProibidas');
 
-// PalavrÃµes e chingamentos bloqueados no Motivo e no Acusado
-const PALAVROES = [
-    'fdp', 'filho da puta', 'filha da puta',
-    'viado', 'viadÃ£o', 'viadinho',
-    'cuzao', 'cuzÃ£o', 'cu',
-    'porra', 'puta merda', 'puta que pariu',
-    'vai se foder', 'vai tomar no cu', 'vai tomar no',
-    'foder', 'fodase', 'foda-se', 'foda se',
-    'otario', 'otÃ¡rio', 'otaria', 'otÃ¡ria',
-    'idiota', 'imbecil', 'retardado', 'retardada',
-    'burro', 'burra', 'animal',
-    'lixo humano', 'escoria', 'escÃ³ria',
-    'vagabundo', 'vagabunda',
-    'prostituta', 'puta', 'piranha',
-    'corno', 'corna',
-    'babaca', 'baba ovo', 'babaovo',
-    'arrombado', 'arrombada',
-    'merda',
-    'inutil', 'inÃºtil',
-    'desgraÃ§ado', 'desgraÃ§ada', 'desgraÃ§ado', 'desgraca',
-    'maldito', 'maldita',
-    'lazaro', 'lazarento', 'lazarenta',
-    'peste',
-    'sua mae', 'sua mÃ£e', 'tua mae', 'tua mÃ£e',
-    'cala boca', 'cala a boca',
-    'bosta',
-    'cagao', 'cagÃ£o',
-    'covarde',
-    'lixo',
-];
+const PALAVRAS_PROIBIDAS = [...new Set([
+    ...PALAVRAS_BLOQUEADAS,
+    ...PALAVROES,
+    ...CONTEUDO_INVALIDO
+].map(p => p.toLowerCase()))];
 
-// Lista unificada â€” usada tanto no Acusado quanto no Motivo (tudo em minÃºsculo)
-const CONTEUDO_INVALIDO = [
-    // Risadas / textos sem sentido
-    'kk', 'kkk', 'kkkk', 'kkkkk', 'kkkkkk',
-    'haha', 'huhu', 'rsrs', 'hehe', 'ahahah', 'hauhau', 'kkkkkkk',
-    // Cargos e funÃ§Ãµes (ninguÃ©m denuncia "ADM", denuncia um ID)
-    'adm', 'admin', 'staff', 'suporte', 'moderador', 'mod', 'dono',
-    'lider', 'lÃ­der', 'sub lider', 'sublider', 'sub lÃ­der', 'sublÃ­der',
-    // Palavras genÃ©ricas sem sentido como motivo/acusado
-    'princesa', 'lixo',
-    // Textos de xingamento direto no campo (jÃ¡ cobertos por PALAVROES, mas redundÃ¢ncia Ã© seguranÃ§a)
-    'vai tomar no cu', 'fdp',
-];
+const RISADA_REPETICAO_REGEX = /([a-zA-Zà-úÀ-Ú]{1,3})\1{3,}/i;
+
+function pareceRisadaSpam(palavra) {
+    const limpa = palavra.replace(/[^a-zA-Zà-úÀ-Ú]/g, '');
+    if (limpa.length < 4) return false;
+    if (!/^[kshr]+$/i.test(limpa)) return false;
+    const totalKS = (limpa.match(/[ks]/gi) || []).length;
+    return totalKS >= limpa.length * 0.5;
+}
+
+function validarRisadaSpam(texto, nomeCampo) {
+    if (RISADA_REPETICAO_REGEX.test(texto)) {
+        return `❌ O campo **${nomeCampo}** parece conter repetição de risada/spam. Descreva o conteúdo normalmente, sem textos desnecessários.`;
+    }
+    const palavras = texto.split(/\s+/).filter(Boolean);
+    if (palavras.some(pareceRisadaSpam)) {
+        return `❌ O campo **${nomeCampo}** parece conter risada/spam em vez de conteúdo real. Descreva o conteúdo normalmente, sem textos desnecessários.`;
+    }
+    return null;
+}
 
 const denunciaCooldowns = new Map();
 
@@ -102,89 +68,172 @@ const { atualizarStatusNaMensagem } = require('../utils/atualizarStatus');
 
 function createStatusButtons() {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('reivindicar').setLabel('Reivindicar').setEmoji('ðŸ“').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('analiser').setLabel('Analisar').setEmoji('ðŸ”Ž').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('aceitar').setLabel('Aceitar').setEmoji('âœ…').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('recusar').setLabel('Recusar').setEmoji('âŒ').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('finalizar_denuncia').setLabel('Finalizar').setEmoji('ðŸ“¦').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('reivindicar').setLabel('Reivindicar').setEmoji('🤝').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('analiser').setLabel('Analisar').setEmoji('🔍').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('aceitar').setLabel('Aceitar').setEmoji('✅').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('recusar').setLabel('Recusar').setEmoji('❌').setStyle(ButtonStyle.Danger)
+    );
+}
+
+function createStatusButtonsRow2() {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('add_player').setLabel('Add Player').setEmoji('➕').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('finalizar_denuncia').setLabel('Finalizar').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
     );
 }
 
 function createDenunciaButtons() {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('denuncia_pc').setLabel('DenÃºncia PC').setEmoji('ðŸ’»').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('denuncia_mobile').setLabel('DenÃºncia Mobile').setEmoji('ðŸ“±').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas DenÃºncias').setEmoji('ðŸ“‹').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('abrir_input_id_log_aceite').setLabel('CorreÃ§Ã£o').setEmoji('ðŸ› ï¸').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('denuncia_pc').setLabel('Denúncia PC').setEmoji('🖥️').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('denuncia_mobile').setLabel('Denúncia Mobile').setEmoji('📱').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas Denúncias').setEmoji('📂').setStyle(ButtonStyle.Secondary)
     );
 }
 
-function validarPalavrasProibidas(texto) {
-    const lower = texto.toLowerCase();
-    const encontrada = PALAVRAS_BLOQUEADAS.find(p => lower.includes(p));
-    if (encontrada) return 'âŒ Sua denÃºncia nÃ£o pÃ´de ser enviada. Verifique os campos e tente novamente.';
-    return null;
+async function atualizarMensagemDenuncia(client, guild, config) {
+    const canalDenuncia = config.channels?.canalDenuncia
+        ? await buscarCanal(client, config.channels.canalDenuncia)
+        : null;
+    const canalDestino = canalDenuncia?.isTextBased?.() ? canalDenuncia : null;
+    if (!canalDestino) return null;
+
+    const emManutencao = Boolean(config.manutencaoDenuncia);
+    const embed = emManutencao
+        ? new EmbedBuilder()
+            .setColor('#F0A500')
+            .setTitle('🛠️ Sistema de Denúncias em Manutenção')
+            .setDescription([
+                'O sistema de denúncias está temporariamente indisponível para manutenção.',
+                '',
+                'A equipe está realizando ajustes para melhorar a estabilidade, a segurança e o armazenamento das denúncias.',
+                '',
+                '📌 **Durante a manutenção:**',
+                '• Novas denúncias não poderão ser enviadas.',
+                '• Denúncias já abertas continuam preservadas.',
+                '• As provas e mensagens existentes permanecem armazenadas.',
+                '',
+                'Aguarde a liberação do sistema e tente novamente mais tarde.'
+            ].join('\n'))
+            .setFooter({ text: `${guild.name} • Sistema Althea` })
+            .setTimestamp()
+        : new EmbedBuilder()
+            .setColor('#FF0000')
+            .setTitle('🚨 Sistema de Denúncias')
+            .setDescription([
+                '### Faça sua Denúncia',
+                'Para realizar a sua denúncia, você deverá apertar no botão abaixo de acordo com o seu dispositivo, lembrando que:',
+                '',
+                '• É obrigatório estar com o Discord autenticado com o jogo',
+                '• Após o envio da Denúncia, você **NÃO** poderá apagar',
+                '• Caso seja constatado que foi apagada alguma prova, você poderá tomar punição',
+                '• O mau uso das denúncias resultará em punição',
+                '',
+                '### Regras do Tópico:',
+                '• O tópico é exclusivo para denúncia e contra-prova',
+                '• Conversas paralelas resultarão em punição',
+                '• Apagar mensagens ou provas resultará em punição',
+                '• Todas as mensagens apagadas serão registradas',
+                '',
+                '### Sobre as Provas em Vídeo:',
+                '• É recomendado enviar vídeos pelo YouTube',
+                '• O vídeo deve mostrar claramente a infração',
+                '• Você pode deixar o vídeo como "não listado"',
+                '• Links de outros sites podem não funcionar',
+                '',
+                '### Como enviar provas:',
+                '**Opção 1 - No formulário:**',
+                '1. Faça upload do vídeo no YouTube',
+                '2. Copie o link do vídeo',
+                '3. Cole o link no campo "Provas" da denúncia',
+                '**Opção 2 - No tópico:**',
+                '1. Envie sua denúncia normalmente',
+                '2. Aguarde o tópico ser criado',
+                '3. Envie suas provas (vídeos/imagens) diretamente no tópico',
+                '',
+                '### Tutorial:',
+                'Confira nosso tutorial detalhado aqui: https://www.instagram.com/p/DPcEkcHlHDe/',
+                '',
+                `📍 **Horário de Brasília:** \`${dateUtils.getBrasiliaTime()}\``
+            ].join('\n'))
+            .setFooter({ text: 'Brasil RolePlay' });
+
+    const componentes = emManutencao ? [] : [createDenunciaButtons()];
+    const mensagens = await canalDestino.messages.fetch({ limit: 50 }).catch(() => null);
+    const existente = mensagens?.find(message =>
+        message.author?.id === client.user.id &&
+        ['🚨 Sistema de Denúncias', '🛠️ Sistema de Denúncias em Manutenção'].includes(message.embeds?.[0]?.title)
+    );
+
+    if (existente) return existente.edit({ embeds: [embed], components: componentes });
+    return canalDestino.send({ embeds: [embed], components: componentes });
 }
 
-// Valida palavrÃµes/chingamentos â€” aplicado no Motivo e no Acusado
-function validarPalavroes(texto, nomeCampo) {
+function validarConteudoProibido(texto, nomeCampo) {
     const lower = texto.toLowerCase();
-    const encontrado = PALAVROES.find(p => lower.includes(p));
-    if (encontrado) return `âŒ O campo **${nomeCampo}** contÃ©m uma palavra ou expressÃ£o ofensiva. Utilize linguagem adequada ao preencher a denÃºncia.`;
+    const encontrada = PALAVRAS_PROIBIDAS.find(p => {
+        const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`\\b${escaped}\\b`, 'i').test(lower);
+    });
+    if (encontrada) return `❌ O campo **${nomeCampo}** contém uma palavra ou expressão não permitida. Verifique o conteúdo e tente novamente.`;
     return null;
 }
 
 function validarMotivo(motivo) {
     BROKEN_LINK_REGEX.lastIndex = 0;
-    if (BROKEN_LINK_REGEX.test(motivo)) return 'âŒ O campo **Motivo** contÃ©m um link invÃ¡lido. NÃ£o Ã© permitido incluir links no motivo.';
+    if (BROKEN_LINK_REGEX.test(motivo)) return '❌ O campo **Motivo** contém um link inválido. Não é permitido incluir links no motivo.';
     URL_REGEX.lastIndex = 0;
-    if (URL_REGEX.test(motivo)) return 'âŒ O campo **Motivo** nÃ£o pode conter links. Descreva o motivo em texto.';
+    if (URL_REGEX.test(motivo)) return '❌ O campo **Motivo** não pode conter links. Descreva o motivo em texto.';
     return null;
 }
 
-function validarMotivoConteudo(motivo) {
-    const lower = motivo.trim().toLowerCase();
-    if (motivo.trim().length < 2) return 'âŒ O campo **Motivo** Ã© muito curto. Digite pelo menos 2 caracteres.';
-    const invalido = CONTEUDO_INVALIDO.find(p => lower.includes(p.toLowerCase()));
-    if (invalido) return 'âŒ O campo **Motivo** contÃ©m um texto invÃ¡lido. Descreva claramente a infraÃ§Ã£o cometida, sem textos desnecessÃ¡rios.';
+function validarMotivoTamanho(motivo) {
+    if (motivo.trim().length < 2) return '❌ O campo **Motivo** é muito curto. Digite pelo menos 2 caracteres.';
     return null;
 }
 
-function validarAcusadoConteudo(acusado) {
-    if (acusado.trim().length < 1) return 'âŒ O campo **Acusado** estÃ¡ vazio.';
-    const lower = acusado.trim().toLowerCase();
-    const partes = lower.split('+').map(s => s.trim());
-    const invalido = CONTEUDO_INVALIDO.find(p => {
-        const pl = p.toLowerCase();
-        return partes.includes(pl) || lower.includes(pl);
-    });
-    if (invalido) return 'âŒ O campo **Acusado** contÃ©m um valor invÃ¡lido. Insira apenas IDs numÃ©ricos reais do jogo.';
+function validarAcusadoVazio(acusado) {
+    if (acusado.trim().length < 1) return '❌ O campo **Acusado** está vazio.';
     return null;
 }
 
-function validarProvasLinks(provas) {
+function validarProvasLinks(provas, currentGuildId) {
     BROKEN_LINK_REGEX.lastIndex = 0;
     if (BROKEN_LINK_REGEX.test(provas)) {
-        return 'âŒ O campo **Provas** contÃ©m um link invÃ¡lido (ex: `htts://...`, `ttps://...`). Certifique-se de copiar o link completo comeÃ§ando com `https://`.';
+        return '❌ O campo **Provas** contém um link inválido (ex: `htts://...`, `ttps://...`). Certifique-se de copiar o link completo começando com `https://`.';
     }
 
     URL_REGEX.lastIndex = 0;
     const links = provas.match(URL_REGEX);
     if (links) {
+        const invitePattern = /https?:\/\/(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[^\s]+/i;
+        const blockedInvite = links.find(link => invitePattern.test(link));
+        if (blockedInvite) {
+                return '❌ O campo **Provas** contém um link de convite do Discord. Convites para outros servidores não são permitidos.';
+        }
         const allowedDomains = [
             'youtube.com/',
             'youtu.be/',
-            'discord.com/',
-            'discord.gg/',
-            'discordapp.com/',
             'cdn.discordapp.com/',
             'ptb.discord.com/',
             'canary.discord.com/',
             'discord.media/',
             'media.discordapp.net/'
         ];
-        const bloqueado = links.find(link => !allowedDomains.some(domain => link.includes(domain)));
-        if (bloqueado) return 'âŒ O campo **Provas** contÃ©m um link nÃ£o permitido. Apenas links do YouTube ou domÃ­nios oficiais do Discord sÃ£o aceitos.';
+
+        for (const link of links) {
+            if (allowedDomains.some(domain => link.includes(domain))) continue;
+
+            const channelLinkMatch = link.match(/discord(?:app)?\.com\/channels\/(\d+)\//i);
+            if (channelLinkMatch) {
+                const linkedGuildId = channelLinkMatch[1];
+                if (linkedGuildId !== String(currentGuildId)) {
+                    return '❌ O campo **Provas** contém um link para outro servidor Discord. Links de outros servidores não são permitidos.';
+                }
+                continue;
+            }
+
+            return '❌ O campo **Provas** contém um link não permitido. Apenas links do YouTube ou domínios oficiais do Discord (neste servidor) são aceitos.';
+        }
     }
 
     return null;
@@ -200,7 +249,7 @@ async function validarVideosHL(provas) {
         try {
             const title = await fetchYouTubeTitle(videoId);
             if (title && title.toLowerCase().includes('hl')) {
-                return 'âŒ Um dos vÃ­deos enviados no campo **Provas** nÃ£o Ã© permitido. Verifique os links e tente novamente.';
+                return '❌ Um dos vídeos enviados no campo **Provas** não é permitido. Verifique os links e tente novamente.';
             }
         } catch {}
     }
@@ -210,82 +259,44 @@ async function validarVideosHL(provas) {
 
 async function handleDenunciaCommand(message) {
     try {
-        const config = await getCachedConfig(message.guild.id, Config);
+        const config = await getCachedConfig(message.guild.id);
         const hasPerm = message.member.roles.cache.has(config.roles.responsavel_admin);
         
-        if (!hasPerm && message.author.id !== SUPORTE_BOT_ID) return message.reply('âŒ Sem permissÃ£o.');
-
-        const embedDesc = [
-            '### FaÃ§a sua DenÃºncia',
-            'Para realizar a sua denÃºncia, vocÃª deverÃ¡ apertar no botÃ£o abaixo de acordo com o seu dispositivo, lembrando que:',
-            'â€¢ Ã‰ obrigatÃ³rio estar com o Discord autenticado com o jogo',
-            'â€¢ ApÃ³s o envio da DenÃºncia, vocÃª **NÃƒO** poderÃ¡ apagar',
-            'â€¢ Caso seja constatado que foi apagada alguma prova, vocÃª poderÃ¡ tomar puniÃ§Ã£o',
-            'â€¢ O mal uso das denÃºncias resultarÃ¡ em puniÃ§Ã£o',
-            '',
-            '### Regras do TÃ³pico:',
-            'â€¢ O tÃ³pico Ã© exclusivo para denÃºncia e contra-prova',
-            'â€¢ Conversas paralelas resultarÃ£o em puniÃ§Ã£o',
-            'â€¢ Apagar mensagens ou provas resultarÃ¡ em puniÃ§Ã£o',
-            'â€¢ Todas as mensagens apagadas serÃ£o registradas',
-            'â€¢ âš ï¸ **Cuidado com as palavras utilizadas** â€” linguagem ofensiva, chingamentos ou xingamentos dentro do tÃ³pico resultarÃ£o em puniÃ§Ã£o imediata',
-            'â€¢ ðŸš« **Enviar imagens ofensivas ou mensagens por brincadeira resultarÃ¡ em banimento permanente do servidor**',
-            '',
-            '### Sobre as Provas em VÃ­deo:',
-            'â€¢ Ã‰ recomendado enviar vÃ­deos pelo YouTube',
-            'â€¢ O vÃ­deo deve mostrar claramente a infraÃ§Ã£o',
-            'â€¢ VocÃª pode deixar o vÃ­deo como "nÃ£o listado"',
-            'â€¢ Links de outros sites podem nÃ£o funcionar',
-            'â€¢ VÃ­deos com "hl" no tÃ­tulo (Highlights) nÃ£o sÃ£o aceitos como prova',
-            '',
-            '### Como enviar provas:',
-            '**OpÃ§Ã£o 1 - No formulÃ¡rio:**',
-            '1. FaÃ§a upload do vÃ­deo no YouTube',
-            '2. Copie o link do vÃ­deo',
-            '3. Cole o link no campo "Provas" da denÃºncia',
-            '**OpÃ§Ã£o 2 - No tÃ³pico:**',
-            '1. Envie sua denÃºncia normalmente',
-            '2. Aguarde o tÃ³pico ser criado',
-            '3. Envie suas imagens diretamente no tÃ³pico',
-            '',
-            '### Tutorial:',
-            'Confira nosso tutorial detalhado aqui: https://www.instagram.com/p/DPcEkcHlHDe/',
-            '',
-            `ðŸ•’ **HorÃ¡rio de BrasÃ­lia:** \`${dateUtils.getBrasiliaTime()}\``
-        ].join('\n');
-
-        const denunciaEmbed = new EmbedBuilder()
-            .setColor('#FF0000')
-            .setTitle('ðŸ›¡ï¸ Sistema de DenÃºncias')
-            .setDescription(embedDesc)
-            .setFooter({ text: 'Brasil RolePlay' });
-
-        const sentMessage = await message.channel.send({
-            embeds: [denunciaEmbed],
-            components: [createDenunciaButtons()]
-        });
-
-        const startRefresh = (msg, embeds) => {
-            const timer = setTimeout(async () => {
-                try {
-                    await msg.edit({ embeds, components: [createDenunciaButtons()] });
-                    startRefresh(msg, embeds);
-                } catch {}
-            }, BUTTON_REFRESH_INTERVAL);
-            timer.unref?.();
-        };
-        startRefresh(sentMessage, [denunciaEmbed]);
+        if (!hasPerm && message.author.id !== SUPORTE_BOT_ID) return message.reply('❌ Sem permissão.');
+        await atualizarMensagemDenuncia(message.client, message.guild, config);
 
     } catch (error) { console.error(error); }
 }
 
+async function handleDenunciaSlash(interaction) {
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+
+    try {
+        const config = await getCachedConfig(interaction.guild.id);
+        if (!config) return interaction.editReply('⚠️ Configure o servidor primeiro com `/painel`.');
+
+        const responsavelAdmin = config.roles?.responsavel_admin;
+        const hasPerm = Boolean(responsavelAdmin && interaction.member.roles.cache.has(responsavelAdmin));
+        if (!hasPerm && interaction.user.id !== SUPORTE_BOT_ID) return interaction.editReply('❌ Sem permissão.');
+
+        const mensagem = await atualizarMensagemDenuncia(interaction.client, interaction.guild, config);
+        return interaction.editReply(mensagem
+            ? `✅ Mensagem do sistema de denúncias atualizada em <#${mensagem.channelId}>.`
+            : '⚠️ O canal de denúncias não está configurado (ou o bot não tem acesso a ele). Ajuste em `/painel` > Canais externos.');
+    } catch (error) {
+        console.error('Erro no /denuncia:', error);
+        return interaction.editReply('❌ Não foi possível atualizar a mensagem de denúncias.').catch(() => {});
+    }
+}
+
 async function handleDenunciaSubmit(interaction, platform) {
+    let confirmacaoEnviada = false;
     try {
         if (!interaction.replied && !interaction.deferred) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
         }
     } catch (e) {
-        console.error('Falha ao deferir interaÃ§Ã£o:', e.message);
+        console.error('Falha ao deferir interação:', e.message);
         return;
     }
 
@@ -300,7 +311,7 @@ async function handleDenunciaSubmit(interaction, platform) {
             const segundos = restante % 60;
             const tempoFormatado = minutos > 0 ? `${minutos}m ${segundos}s` : `${segundos}s`;
             return await interaction.editReply({
-                content: `â³ VocÃª precisa aguardar **${tempoFormatado}** antes de enviar outra denÃºncia.`,
+                content: `⏳ Você precisa aguardar **${tempoFormatado}** antes de enviar outra denúncia.`,
             });
         }
 
@@ -308,84 +319,92 @@ async function handleDenunciaSubmit(interaction, platform) {
         const username = interaction.user.username;
         const nickname = interaction.member?.nickname || null;
 
-        let contaSalva = null;
+        const config = await getCachedConfig(interaction.guild.id);
+
+        if (config?.manutencaoDenuncia) {
+            return await interaction.editReply({
+                content: '🛠️ O sistema de denúncias está em manutenção no momento. Tente novamente mais tarde.'
+            });
+        }
+
+        const contaFromNick = extrairContaDoNickname(nickname);
+
+        if (!contaFromNick) {
+            return await interaction.editReply({
+                content: [
+                    '❌ Seu apelido no Discord não contém o ID da sua conta.',
+                    'Utilize `/menu` dentro do jogo para corrigir seu apelido no Discord (exemplo: `foxy_apollyon 1039`) e tente novamente.'
+                ].join('\n')
+            });
+        }
+
+        const inputDigitado = interaction.fields.fields.has('denunciante_input')
+            ? interaction.fields.getTextInputValue('denunciante_input').trim()
+            : null;
+
+        const denunciante = inputDigitado || contaFromNick;
+
+        if (!/^\d+$/.test(denunciante)) {
+            return await interaction.editReply({ content: '❌ O campo **Denunciante** deve conter apenas números.' });
+        }
+
+        if (denunciante.length > 15) {
+            return await interaction.editReply({ content: '❌ O campo **Denunciante** deve ter no máximo 15 dígitos.' });
+        }
+
+        if (denunciante !== contaFromNick) {
+            return await interaction.editReply({
+                content: [
+                    `❌ O ID informado (\`${denunciante}\`) é diferente do ID presente no seu apelido do servidor (\`${contaFromNick}\`).`,
+                    'Utilize o comando `/menu` dentro do jogo e altere o seu nick no Discord (exemplo: `foxy_apollyon 1039`) para que fiquem iguais, depois tente novamente.'
+                ].join('\n')
+            });
+        }
+
         try {
-            const existing = await Usuario.findOne({ guildId, userId });
-            contaSalva = existing?.conta || null;
-
-            if (!contaSalva) {
-                const contaNick = extrairContaDoNickname(nickname);
-                const denuncianteInput = interaction.fields.getTextInputValue('denunciante_input').trim();
-                contaSalva = contaNick || denuncianteInput || null;
-            }
-
-            const updateFields = { username, nickname, updatedAt: new Date() };
-            if (contaSalva) updateFields.conta = contaSalva;
-
+            const updateFields = { username, nickname, conta: contaFromNick, updatedAt: new Date() };
+            await Usuario.deleteMany({ guildId, conta: contaFromNick, userId: { $ne: userId } });
             await Usuario.findOneAndUpdate(
                 { guildId, userId },
                 { $set: updateFields },
                 { upsert: true, new: true }
             );
         } catch (e) {
-            console.warn('NÃ£o foi possÃ­vel registrar/atualizar nick do denunciante:', e.message);
-        }
-
-        const config = await getCachedConfig(interaction.guild.id, Config);
-
-        const inputDigitado = interaction.fields.fields.has('denunciante_input')
-            ? interaction.fields.getTextInputValue('denunciante_input').trim()
-            : null;
-
-        const denunciante = inputDigitado || contaSalva;
-
-        if (!denunciante) {
-            return await interaction.editReply({ content: 'âŒ NÃ£o foi possÃ­vel identificar o denunciante. Tente novamente.' });
-        }
-
-        if (!/^\d+$/.test(denunciante)) {
-            return await interaction.editReply({ content: 'âŒ O campo **Denunciante** deve conter apenas nÃºmeros.' });
-        }
-
-        if (denunciante.length > 15) {
-            return await interaction.editReply({ content: 'âŒ O campo **Denunciante** deve ter no mÃ¡ximo 15 dÃ­gitos.' });
+            console.warn('Não foi possível registrar/atualizar nick do denunciante:', e.message);
         }
 
         const acusado = interaction.fields.getTextInputValue('acusado_input');
         const motivo  = interaction.fields.getTextInputValue('motivo_input');
-        let provas    = interaction.fields.getTextInputValue('provas_input') || 'TÃ³pico';
+        let provas    = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
 
         if (!/^[a-zA-Z0-9+ ]+$/.test(acusado)) {
-            return await interaction.editReply({ content: 'âŒ O campo **Acusado** sÃ³ pode conter letras, nÃºmeros e o sÃ­mbolo "+" para mÃºltiplos IDs.' });
+            return await interaction.editReply({ content: '❌ O campo **Acusado** só pode conter letras, números e o símbolo "+" para múltiplos IDs.' });
         }
 
-        // ValidaÃ§Ã£o de conteÃºdo do acusado
-        const erroAcusadoConteudo = validarAcusadoConteudo(acusado);
-        if (erroAcusadoConteudo) return await interaction.editReply({ content: erroAcusadoConteudo });
+        const erroAcusadoVazio = validarAcusadoVazio(acusado);
+        if (erroAcusadoVazio) return await interaction.editReply({ content: erroAcusadoVazio });
 
-        // ValidaÃ§Ã£o de palavrÃµes no acusado
-        const erroPalavraoAcusado = validarPalavroes(acusado, 'Acusado');
-        if (erroPalavraoAcusado) return await interaction.editReply({ content: erroPalavraoAcusado });
-
-        // ValidaÃ§Ã£o de palavras bloqueadas em todos os campos
-        const camposParaVerificar = [denunciante, acusado, motivo, provas];
-        for (const campo of camposParaVerificar) {
-            const erroSpam = validarPalavrasProibidas(campo);
-            if (erroSpam) return await interaction.editReply({ content: erroSpam });
-        }
+        const erroMotivoTamanho = validarMotivoTamanho(motivo);
+        if (erroMotivoTamanho) return await interaction.editReply({ content: erroMotivoTamanho });
 
         const erroMotivo = validarMotivo(motivo);
         if (erroMotivo) return await interaction.editReply({ content: erroMotivo });
 
-        const erroMotivoConteudo = validarMotivoConteudo(motivo);
-        if (erroMotivoConteudo) return await interaction.editReply({ content: erroMotivoConteudo });
+        const camposParaVerificar = [
+            { texto: acusado, nome: 'Acusado' },
+            { texto: motivo, nome: 'Motivo' },
+            { texto: provas, nome: 'Provas' }
+        ];
+        for (const campo of camposParaVerificar) {
+            const erroProibido = validarConteudoProibido(campo.texto, campo.nome);
+            if (erroProibido) return await interaction.editReply({ content: erroProibido });
 
-        // ValidaÃ§Ã£o de palavrÃµes no motivo
-        const erroPalavraoMotivo = validarPalavroes(motivo, 'Motivo');
-        if (erroPalavraoMotivo) return await interaction.editReply({ content: erroPalavraoMotivo });
+            const erroRisada = validarRisadaSpam(campo.texto, campo.nome);
+            if (erroRisada) return await interaction.editReply({ content: erroRisada });
+        }
 
-        if (provas !== 'TÃ³pico') {
-            const erroProvas = validarProvasLinks(provas);
+        if (provas !== 'Tópico') {
+            const erroProvas = validarProvasLinks(provas, interaction.guild.id);
             if (erroProvas) return await interaction.editReply({ content: erroProvas });
 
             const erroHL = await validarVideosHL(provas);
@@ -397,22 +416,31 @@ async function handleDenunciaSubmit(interaction, platform) {
         const contaDenunciante = denunciante.toLowerCase();
         const eAutodenunciando = acusadoIds.some(id => id.toLowerCase() === contaDenunciante);
         if (eAutodenunciando) {
-            return await interaction.editReply({ content: 'âŒ VocÃª nÃ£o pode denunciar a si mesmo.' });
+            return await interaction.editReply({ content: '❌ Você não pode denunciar a si mesmo.' });
         }
 
         let acusadoTexto = '';
+        let acusadoUserIds = [];
+        let restritoParticipacao = false;
         try {
             const partes = await Promise.all(acusadoIds.map(async (id) => {
                 try {
-                    const found = await Usuario.findOne({ guildId: interaction.guild.id, conta: id });
-                    return found ? `\`${id}\` (<@${found.userId}>)` : `\`${id}\``;
+                    const found = await Usuario.findOne({ guildId: interaction.guild.id, conta: id }).sort({ updatedAt: -1 });
+                    return { texto: found ? `\`${id}\` (<@${found.userId}>)` : `\`${id}\``, userId: found?.userId || null };
                 } catch {
-                    return `\`${id}\``;
+                    return { texto: `\`${id}\``, userId: null };
                 }
             }));
-            acusadoTexto = partes.join(' ');
+            acusadoTexto = partes.map(p => p.texto).join(' ');
+
+            const userIdsEncontrados = partes.map(p => p.userId).filter(Boolean);
+            const todosResolvidos = userIdsEncontrados.length === acusadoIds.length;
+            if (todosResolvidos) {
+                acusadoUserIds = [...new Set(userIdsEncontrados)];
+                restritoParticipacao = true;
+            }
         } catch (e) {
-            console.warn('NÃ£o foi possÃ­vel buscar acusados no banco:', e.message);
+            console.warn('Não foi possível buscar acusados no banco:', e.message);
             acusadoTexto = acusadoIds.map(id => `\`${id}\``).join(' ');
         }
 
@@ -421,19 +449,19 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         const textoDenuncia = [
             `|| ${interaction.user} ||`,
-            `âž± **Denunciante**: \`${denunciante}\``,
-            `âž± **Acusado**: ${acusadoTexto}`,
-            `âž± **Motivo**: \`${motivo}\``,
-            `âž± **Prova(s)**: ${provas}`,
-            `âž± **Status**: \`Pendente\``
+            `➱ **Denunciante**: \`${denunciante}\``,
+            `➱ **Acusado**: ${acusadoTexto}`,
+            `➱ **Motivo**: \`${motivo}\``,
+            `➱ **Prova(s)**: ${provas}`,
+            `➱ **Status**: \`Pendente\``
         ].join('\n');
 
         const textoDenunciaTopico = [
             `|| ${interaction.user} ||`,
-            `âž± **Denunciante**: \`${denunciante}\``,
-            `âž± **Acusado**: ${acusadoTexto}`,
-            `âž± **Motivo**: \`${motivo}\``,
-            `âž± **Prova(s)**: ${provas}`
+            `➱ **Denunciante**: \`${denunciante}\``,
+            `➱ **Acusado**: ${acusadoTexto}`,
+            `➱ **Motivo**: \`${motivo}\``,
+            `➱ **Prova(s)**: ${provas}`
         ].join('\n');
 
         const mainMessage = await channel.send({
@@ -441,22 +469,24 @@ async function handleDenunciaSubmit(interaction, platform) {
             allowedMentions: { parse: ['users'] }
         });
 
+        const mirrorThreads = {};
+
         let thread;
         try {
             thread = await mainMessage.startThread({
-                name: `DenÃºncia: ${denunciante}`,
+                name: `Denúncia: ${denunciante}`,
                 autoArchiveDuration: 1440
             });
         } catch (e) {
-            console.error('Erro ao criar o tÃ³pico da denÃºncia:', e.message);
+            console.error('Erro ao criar o tópico da denúncia:', e.message);
             await interaction.editReply({
-                content: 'âŒ Erro ao criar o tÃ³pico da denÃºncia. Isso pode ocorrer por falta de permissÃ£o, limite de tÃ³picos ou configuraÃ§Ã£o do canal. Por favor, tente novamente ou contate um administrador.'
+                content: '❌ Erro ao criar o tópico da denúncia. Isso pode ocorrer por falta de permissão, limite de tópicos ou configuração do canal. Por favor, tente novamente ou contate um administrador.'
             });
             return;
         }
 
-        await thread.send({ content: textoDenunciaTopico });
-        await thread.send({ components: [createStatusButtons()] });
+        const threadMessage = await thread.send({ content: textoDenunciaTopico });
+        const controlsMessage = await thread.send({ components: [createStatusButtons(), createStatusButtonsRow2()] });
 
         try {
             await Usuario.findOneAndUpdate(
@@ -465,21 +495,107 @@ async function handleDenunciaSubmit(interaction, platform) {
                 { upsert: true }
             );
         } catch (e) {
-            console.warn('NÃ£o foi possÃ­vel atualizar o Ãºltimo threadId do usuÃ¡rio:', e.message);
+            console.warn('Não foi possível atualizar o último threadId do usuário:', e.message);
         }
 
-        await new Denuncia({
+        const denunciaSalva = await new Denuncia({
             guildId: interaction.guild.id,
             messageId: mainMessage.id,
             channelId: channel.id,
             threadId: thread.id,
             denunciante, acusado, motivo, provas, platform,
+            acusadoUserIds,
+            restritoParticipacao,
             criadoPor: interaction.user.id,
             status: 'pendente',
-            dataCriacao: dateUtils.getBrasiliaDate()
+            dataCriacao: dateUtils.getBrasiliaDate(),
+            armazemThreadId: mirrorThreads.armazem || null,
+            registroThreadId: mirrorThreads.registro || null
         }).save();
 
+        // Estas três foram enviadas antes de a denúncia existir no banco, então
+        // o evento messageCreate não as registrou.
+        await registrarMensagens(denunciaSalva, [mainMessage, threadMessage, controlsMessage])
+            .catch(error => console.warn('Não foi possível registrar as mensagens iniciais da denúncia:', error.message));
+
+        registrarTopicoRestrito(thread.id, interaction.user.id, acusadoUserIds, restritoParticipacao);
+
+        // Com o site ligado, o tópico ganha um atalho direto para o caso.
+        const siteUrl = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
+        if (siteUrl) {
+            await thread.send({
+                content: '🔗 Acompanhe esta denúncia pelo site.',
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setLabel('Acompanhar pelo site').setStyle(ButtonStyle.Link).setURL(`${siteUrl}/#/d/${denunciaSalva._id}`)
+                )]
+            }).catch(error => console.warn('Não foi possível enviar o atalho do site:', error.message));
+        }
+
         denunciaCooldowns.set(interaction.user.id, Date.now());
+
+        await interaction.editReply({
+            content: [
+                `✅ Sua denúncia foi criada com sucesso em ${thread} às \`${dateUtils.getBrasiliaTime()}\`.`,
+                '',
+                '⚠️ **Atenção — leia antes de interagir no tópico:**',
+                '• Utilize linguagem respeitosa. Chingamentos e palavras ofensivas resultarão em **punição imediata**.',
+                '• Enviar **imagens ofensivas**, memes ou qualquer conteúdo por brincadeira dentro do tópico resultará em **banimento permanente do servidor**, sem direito a recurso.',
+                '• O tópico é exclusivo para apresentação de provas e contra-provas. Mensagens fora desse contexto serão removidas e o responsável punido.',
+            ].join('\n')
+        });
+        confirmacaoEnviada = true;
+
+        // Alerta para os cargos responsáveis quando o motivo envolve zaralho, dark rp, hack ou mods proibidos.
+        await alertarMotivoCritico({
+            client: interaction.client,
+            config,
+            thread,
+            mainMessage,
+            denunciante,
+            acusado,
+            motivo
+        });
+
+        const canaisEspelho = [...new Set([
+            config.channels.registro,
+            config.channels.armazem,
+        ].filter(Boolean))];
+        for (const channelId of canaisEspelho) {
+            const canalEspelho = await buscarCanal(interaction.client, channelId);
+            if (!canalEspelho?.isTextBased?.()) {
+                console.warn(`Canal de espelho não encontrado ou sem suporte a texto: ${channelId}`);
+                continue;
+            }
+            const mensagemEspelho = await canalEspelho.send({
+                content: `🗄️ **Cópia da denúncia original**\n${textoDenuncia}\n\n🔗 [Abrir denúncia original](${mainMessage.url})`,
+                allowedMentions: { parse: [] }
+            }).catch(error => {
+                console.warn(`Não foi possível espelhar a denúncia no canal ${channelId}:`, error.message);
+                return null;
+            });
+            if (!mensagemEspelho?.startThread) continue;
+            const mirrorThread = await mensagemEspelho.startThread({
+                name: `Denúncia ${mainMessage.id}`,
+                autoArchiveDuration: 10080,
+                reason: 'Espelho permanente da denúncia'
+            }).catch(error => {
+                console.warn(`Não foi possível criar thread espelho em ${channelId}:`, error.message);
+                return null;
+            });
+            if (!mirrorThread) continue;
+            await mirrorThread.send({ content: textoDenunciaTopico }).catch(() => {});
+            mirrorThreads[channelId === config.channels.armazem ? 'armazem' : 'registro'] = mirrorThread.id;
+        }
+
+        if (mirrorThreads.armazem || mirrorThreads.registro) {
+            await Denuncia.updateOne(
+                { _id: denunciaSalva._id },
+                { $set: {
+                    armazemThreadId: mirrorThreads.armazem || null,
+                    registroThreadId: mirrorThreads.registro || null,
+                } }
+            );
+        }
 
         try {
             const TRES_HORAS_MS = 3 * 60 * 60 * 1000;
@@ -501,30 +617,30 @@ async function handleDenunciaSubmit(interaction, platform) {
                         const links = denunciasRecentes.map((d, idx) => `**${idx + 1}.** [${dateUtils.getDiscordTimestamp(d.dataCriacao, 'R')}] https://discord.com/channels/${d.guildId}/${d.channelId}/${d.messageId}`).join('\n');
                         const embed = new EmbedBuilder()
                             .setColor('#d7263d')
-                            .setTitle('ðŸš¨ TendÃªncia de denÃºncias em massa')
-                            .setDescription(`O acusado **${acusado}** recebeu **${denunciasRecentes.length} denÃºncias** nas Ãºltimas 3 horas.`)
+                            .setTitle('⚠️ Tendência de denúncias em massa')
+                            .setDescription(`O acusado **${acusado}** recebeu **${denunciasRecentes.length} denúncias** nas últimas 3 horas.`)
                             .addFields(
                                 { name: 'Acusado', value: `${acusado}`, inline: true },
-                                { name: 'HorÃ¡rio do alerta', value: dateUtils.getBrasiliaDateTime(), inline: true },
-                                { name: 'Links das denÃºncias', value: links.length > 1024 ? links.slice(0, 1020) + '...' : links }
+                                { name: 'Horário do alerta', value: dateUtils.getBrasiliaDateTime(), inline: true },
+                                { name: 'Links das denúncias', value: links.length > 1024 ? links.slice(0, 1020) + '...' : links }
                             )
-                            .setFooter({ text: 'Brasil RolePlay - Sistema de DenÃºncias' })
+                            .setFooter({ text: 'Brasil RolePlay - Sistema de Denúncias' })
                             .setTimestamp();
                         await logChannel.send({
-                            content: `<@&${responsavelAdminId}> **Alerta:** Muitas denÃºncias para o acusado **${acusado}**!`,
+                            content: `<@&${responsavelAdminId}> **Alerta:** Muitas denúncias para o acusado **${acusado}**!`,
                             embeds: [embed]
                         });
                     }
                 }
             }
         } catch (err) {
-            console.error('Erro ao enviar alerta de tendÃªncia:', err);
+            console.error('Erro ao enviar alerta de tendência:', err);
         }
 
         try {
             const denunciaLink = `https://discord.com/channels/${interaction.guild.id}/${channel.id}/${mainMessage.id}`;
             const mensagemDetalhada = [
-                `âš ï¸ **VocÃª foi denunciado no servidor ${interaction.guild.name}!**`,
+                `⚠️ **Você foi denunciado no servidor ${interaction.guild.name}!**`,
                 '',
                 `**Denunciante:** ${denunciante}`,
                 `**Motivo:** ${motivo}`,
@@ -532,7 +648,7 @@ async function handleDenunciaSubmit(interaction, platform) {
                 '',
                 `${denunciaLink}`,
                 '',
-                'Se vocÃª acredita que esta denÃºncia Ã© injusta, responda no tÃ³pico da denÃºncia com as contras provas ou aguarde a anÃ¡lise da equipe.'
+                'Se você acredita que esta denúncia é injusta, responda no tópico da denúncia com as contraprovas ou aguarde a análise da equipe.'
             ].join('\n');
 
             for (const id of acusadoIds) {
@@ -541,31 +657,22 @@ async function handleDenunciaSubmit(interaction, platform) {
                     interaction.guild.id,
                     id,
                     mensagemDetalhada
-                ).catch(e => console.warn(`NÃ£o foi possÃ­vel notificar acusado ${id} no PV:`, e.message));
+                ).catch(e => console.warn(`Não foi possível notificar acusado ${id} no PV:`, e.message));
             }
         } catch (e) {
-            console.warn('NÃ£o foi possÃ­vel notificar acusado(s) no PV:', e.message);
+            console.warn('Não foi possível notificar acusado(s) no PV:', e.message);
         }
 
         await garantirAvisoNoTopo(channel, interaction.channelId);
 
-        await interaction.editReply({ 
-            content: [
-                `âœ… Sua denÃºncia foi criada com sucesso em ${thread} Ã s \`${dateUtils.getBrasiliaTime()}\`.`,
-                '',
-                'âš ï¸ **AtenÃ§Ã£o â€” leia antes de interagir no tÃ³pico:**',
-                'â€¢ Utilize linguagem respeitosa. Chingamentos e palavras ofensivas resultarÃ£o em **puniÃ§Ã£o imediata**.',
-                'â€¢ Enviar **imagens ofensivas**, memes ou qualquer conteÃºdo por brincadeira dentro do tÃ³pico resultarÃ¡ em **banimento permanente do servidor**, sem direito a recurso.',
-                'â€¢ O tÃ³pico Ã© exclusivo para apresentaÃ§Ã£o de provas e contra-provas. Mensagens fora desse contexto serÃ£o removidas e o responsÃ¡vel punido.',
-            ].join('\n')
-        });
-
     } catch (error) {
         console.error(error);
-        try {
-            await interaction.editReply({ content: 'âŒ Erro ao processar sua denÃºncia.' });
-        } catch (e) {
-            console.error('NÃ£o foi possÃ­vel editar a resposta de erro:', e.message);
+        if (!confirmacaoEnviada) {
+            try {
+                await interaction.editReply({ content: '❌ Erro ao processar sua denúncia.' });
+            } catch (e) {
+                console.error('Não foi possível editar a resposta de erro:', e.message);
+            }
         }
     }
 }
@@ -579,39 +686,37 @@ async function handleDenunciaButtons(interaction, client) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
             const logs = await Denuncia.find({ criadoPor: user.id }).sort({ dataCriacao: -1 }).limit(10);
             const desc = logs.map((d, i) => `**${i+1}.** \`${d.status}\` - ${d.acusado} (${dateUtils.getDiscordTimestamp(d.dataCriacao, 'R')})`).join('\n');
-            return await interaction.editReply({ embeds: [new EmbedBuilder().setTitle('ðŸ“‹ Suas DenÃºncias').setDescription(desc || 'Nenhuma denÃºncia encontrada.')] });
+            return await interaction.editReply({ embeds: [new EmbedBuilder().setTitle('🔎 Suas Denúncias').setDescription(desc || 'Nenhuma denúncia encontrada.')] });
         }
 
         if (customId === 'reivindicar') return await handleClaimButton(interaction);
         if (customId === 'finalizar_denuncia') return await handleExportButton(interaction);
-        if (customId === 'abrir_input_id_log_aceite') return await handleInputIdLogAceite(interaction);
-
         if (['analiser', 'aceitar', 'recusar'].includes(customId)) {
             const { handleStatusButton } = require('../Handlers/handlerStatusButton');
             return await handleStatusButton(interaction, customId);
         }
 
         return await interaction.reply({
-            content: 'âŒ AÃ§Ã£o nÃ£o reconhecida ou nÃ£o suportada para este botÃ£o.',
+            content: '❌ Ação não reconhecida ou não suportada para este botão.',
             flags: [MessageFlags.Ephemeral]
         });
     } catch (error) { console.error(error); }
 }
 
 async function handleDenunciaPC(interaction) {
-    const config = await getCachedConfig(interaction.guild.id, Config);
+    const config = await getCachedConfig(interaction.guild.id);
     const roleRequired = config.roles.pc;
     if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
-        return interaction.reply({ content: `âŒ VocÃª nÃ£o tem permissÃ£o para usar o botÃ£o de denÃºncia PC. Ã‰ necessÃ¡rio o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
+        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia PC. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
     }
     await openDenunciaModal(interaction, 'PC');
 }
 
 async function handleDenunciaMobile(interaction) {
-    const config = await getCachedConfig(interaction.guild.id, Config);
+    const config = await getCachedConfig(interaction.guild.id);
     const roleRequired = config.roles.permitido;
     if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
-        return interaction.reply({ content: `âŒ VocÃª nÃ£o tem permissÃ£o para usar o botÃ£o de denÃºncia Mobile. Ã‰ necessÃ¡rio o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
+        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia Mobile. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
     }
     await openDenunciaModal(interaction, 'Mobile');
 }
@@ -632,14 +737,16 @@ async function buscarContaComTimeout(guildId, userId, timeoutMs = 1500) {
 
 async function openDenunciaModal(interaction, platform) {
     try {
-        const contaSalva = await buscarContaComTimeout(
+        const nickname = interaction.member?.nickname || null;
+        const contaFromNick = extrairContaDoNickname(nickname);
+        const contaSalva = contaFromNick || await buscarContaComTimeout(
             interaction.guild.id,
             interaction.user.id
         );
 
         const modal = new ModalBuilder()
             .setCustomId(platform === 'PC' ? 'denuncia_pc_modal' : 'denuncia_mobile_modal')
-            .setTitle(`FormulÃ¡rio de DenÃºncia - ${platform}`);
+            .setTitle(`Formulário de Denúncia - ${platform}`);
 
         const limits = platform === 'PC'
             ? { acusado: 70, provas: 500 }
@@ -647,7 +754,7 @@ async function openDenunciaModal(interaction, platform) {
 
         const denuncianteInput = new TextInputBuilder()
             .setCustomId('denunciante_input')
-            .setLabel('Denunciante (somente nÃºmeros)')
+            .setLabel('Denunciante (somente números)')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
             .setPlaceholder('Ex: 123456')
@@ -659,14 +766,14 @@ async function openDenunciaModal(interaction, platform) {
 
         const acusadoInput = new TextInputBuilder()
             .setCustomId('acusado_input')
-            .setLabel('ID do Acusado (use + para mÃºltiplos)')
+            .setLabel('ID do Acusado (use + para múltiplos)')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
             .setMaxLength(limits.acusado);
 
         const motivoInput = new TextInputBuilder()
             .setCustomId('motivo_input')
-            .setLabel('Motivo da DenÃºncia')
+            .setLabel('Motivo da Denúncia')
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(true)
             .setMaxLength(100);
@@ -696,8 +803,8 @@ async function handleModalSubmit(interaction, platform) {
     try {
         await handleDenunciaSubmit(interaction, platform);
     } catch (error) {
-        console.error('Erro ao processar submissÃ£o:', error.message);
-        const msg = { content: 'âŒ Erro ao processar sua denÃºncia.', flags: 64 };
+        console.error('Erro ao processar submissão:', error.message);
+        const msg = { content: '❌ Erro ao processar sua denúncia.', flags: 64 };
         if (!interaction.replied && !interaction.deferred) await interaction.reply(msg);
         else await interaction.editReply(msg);
     }
@@ -707,7 +814,7 @@ async function handleMyDenunciasButton(interaction) {
     try {
         const modal = new ModalBuilder()
             .setCustomId('consulta_denuncias_modal')
-            .setTitle('ðŸ” Consultar DenÃºncias por ID');
+            .setTitle('🔍 Consultar Denúncias por ID');
 
         const idInput = new TextInputBuilder()
             .setCustomId('id_consulta_input')
@@ -734,7 +841,7 @@ async function handleConsultaModalSubmit(interaction) {
         const idsToSearch = rawIds.replace(/\s*[+,|]\s*/g, ' ').split(/\s+/).filter(id => id.length > 0);
 
         if (idsToSearch.length === 0) {
-            return await interaction.editReply({ content: 'âŒ ForneÃ§a pelo menos um ID vÃ¡lido.' });
+            return await interaction.editReply({ content: '❌ Forneça pelo menos um ID válido.' });
         }
 
         const escapedIds = idsToSearch.map(id => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
@@ -758,7 +865,7 @@ async function handleConsultaModalSubmit(interaction) {
 
         if (allDenuncias.length === 0) {
             return await interaction.editReply({
-                content: `âœ… Nenhuma denÃºncia (pendente ou finalizada) encontrada para os IDs: \`${idsToSearch.join(', ')}\`.`,
+                content: `✅ Nenhuma denúncia (pendente ou finalizada) encontrada para os IDs: \`${idsToSearch.join(', ')}\`.`,
             });
         }
 
@@ -770,22 +877,22 @@ async function handleConsultaModalSubmit(interaction) {
             const chunk = allDenuncias.slice(i, i + DENUNCIAS_PER_EMBED);
             const embed = new EmbedBuilder()
                 .setColor(0x0099ff)
-                .setTitle(`ðŸ” Resultados da Consulta â€” Total: ${total}`)
+                .setTitle(`🔎 Resultados da Consulta — Total: ${total}`)
                 .setTimestamp();
 
             chunk.forEach((d) => {
-                let statusEmoji = 'ðŸ”';
-                let statusNome  = 'PENDENTE / EM ANÃLISE';
+                let statusEmoji = '⏳';
+                let statusNome  = 'PENDENTE / EM ANÁLISE';
 
-                if (d.status === 'aceita')   { statusEmoji = 'âœ…'; statusNome = 'ACEITA'; }
-                if (d.status === 'recusada') { statusEmoji = 'âŒ'; statusNome = 'RECUSADA'; }
+                if (d.status === 'aceita')   { statusEmoji = '✅'; statusNome = 'ACEITA'; }
+                if (d.status === 'recusada') { statusEmoji = '❌'; statusNome = 'RECUSADA'; }
 
                 const motivoOriginal = (d.status === 'aceita' && d.motivoAceite) ? d.motivoAceite : (d.motivo || 'N/A');
                 const motivoFinal    = motivoOriginal.length > 150 ? motivoOriginal.substring(0, 150) + '...' : motivoOriginal;
                 const linkOriginal   = `https://discord.com/channels/${d.guildId}/${d.channelId}/${d.messageId}`;
 
                 embed.addFields({
-                    name: `${statusEmoji} DenÃºncia #${d._id.toString().substring(0, 8)} [${statusNome}]`,
+                    name: `${statusEmoji} Denuncia #${d._id.toString().substring(0, 8)} [${statusNome}]`,
                     value: `**Denunciante:** <@${d.criadoPor}> (\`${d.denunciante || '?'}\`)\n` +
                            `**Acusado:** \`${d.acusado || '?'}\`\n` +
                            `**Motivo:** ${motivoFinal}\n` +
@@ -800,18 +907,18 @@ async function handleConsultaModalSubmit(interaction) {
 
     } catch (error) {
         console.error('Erro no modal de consulta:', error);
-        
+
         if (!deferred) {
             try {
-                await interaction.reply({ content: 'âŒ Erro ao consultar o banco de dados.', flags: 64 });
+                await interaction.reply({ content: '❌ Erro ao consultar o banco de dados.', flags: 64 });
             } catch (replyError) {
-                console.error('NÃ£o foi possÃ­vel responder Ã  interaÃ§Ã£o:', replyError.code);
+                console.error('Não foi possível responder à interação:', replyError.code);
             }
         } else {
             try {
-                await interaction.editReply({ content: 'âŒ Erro ao consultar o banco de dados.' });
+                await interaction.editReply({ content: '❌ Erro ao consultar o banco de dados.' });
             } catch (editError) {
-                console.error('NÃ£o foi possÃ­vel editar a resposta:', editError.code);
+                console.error('Não foi possível editar a resposta:', editError.code);
             }
         }
     }
@@ -819,6 +926,7 @@ async function handleConsultaModalSubmit(interaction) {
 
 module.exports = {
     handleDenunciaCommand,
+    handleDenunciaSlash,
     handleDenunciaSubmit,
     handleDenunciaButtons,
     handleDenunciaPC,
@@ -826,10 +934,6 @@ module.exports = {
     handleModalSubmit,
     handleMyDenunciasButton,
     handleConsultaModalSubmit,
-    atualizarStatusNaMensagem,
-    handleDenunciaModals: async (interaction) => {
-        const { customId } = interaction;
-        if (customId === 'modal_logmessageid_para_correcao_aceite') return await handleModalLogMessageIdCorrecaoAceite(interaction);
-        if (customId.startsWith('salvar_correcao_aceite_')) return await handleSalvarCorrecaoAceite(interaction);
-    }
+    atualizarMensagemDenuncia,
+    atualizarStatusNaMensagem
 };

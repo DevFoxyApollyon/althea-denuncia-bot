@@ -1,28 +1,119 @@
-﻿// CHANGELOG.md
-# ðŸ“¦ Changelog
+# 📋 Changelog
 
-Todas as mudanÃ§as relevantes deste projeto serÃ£o documentadas neste arquivo.
+Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
-Este projeto segue o padrÃ£o de versionamento semÃ¢ntico (SemVer).
+Este projeto segue o padrão de versionamento semântico (SemVer).
+
+---
+
+## [Não lançado]
+### ✨ Novidades
+- Comandos de barra `/rank`, `/painel`, `/status` e `/denuncia` (os comandos com `!` continuam funcionando).
+- ESLint (`npm run lint`) e testes automatizados (`npm test`).
+
+### 🔧 Correções
+- O reset mensal do ranking agora move as ações antigas para `moderationactions_arquivo` em vez de apagar tudo.
+- O cooldown de reivindicação passa a valer mesmo depois de um restart do bot.
+- O painel de status mostrava latência do banco, comandos e erros sempre zerados.
+- Sincronização de nickname com mais de um ID em `BOT_ALVO_ID`.
+- Datas do model `Denuncia` eram trocadas pelo horário atual ao serem gravadas.
+- Erro escondido no auto-finalizador quando a finalização de uma denúncia falhava.
+- `uuid` era usado sem estar declarado no `package.json`.
+
+### 🧱 Estrutura
+- Cache único de configurações (`utils/configCache.js`), invalidado automaticamente ao salvar.
+- Mensagens dos tópicos gravadas na coleção `DenunciaMensagem` (denúncias antigas continuam sendo lidas do formato anterior).
+- Novos índices em `Denuncia` e índice único `{ guildId, userId }` em `Usuario`.
+- Validação de todas as variáveis do `.env` na inicialização.
+- `handlerStatusButton.js` dividido em `Handlers/statusDenuncia/`.
+- Removidos módulos sem uso e as dependências `googleapis`, `limiter` e `uuid`.
+
+---
+
+## [3.2.3] - 2026-09-09
+### 🔧 Correção do painel
+- Corrigido o processamento dos modais de Canais Externos e Canal de Provas.
+- Os IDs de `registro`, `cloud`, `canalDenuncia` e `databaseprovas` agora são salvos corretamente.
+
+---
+
+## [3.2.2] - 2026-09-09
+### 🔧 Correção de publicação
+- Nova release para garantir que o deploy carregue os handlers de PC, Mobile e envio de formulário da denúncia.
+- Atualização da versão exibida no startup do bot para facilitar a conferência do deploy.
+
+---
+
+## [3.2.1] - 2026-09-09
+### 🚀 Sistema de denúncias, arquivamento e persistência
+
+#### ✨ Novidades
+- Mensagem fixa de abertura de denúncias com botões para PC, Mobile e consulta.
+- Configuração dos canais externos `registro` e `cloud` para armazenar denúncias e exportações.
+- Persistência das mensagens, anexos, embeds, edições e exclusões das denúncias no banco de dados.
+- Menu de feedback integrado diretamente à mensagem principal da denúncia.
+- Registro de mensagens da thread no banco em tempo real.
+
+#### 🔧 Ajustes
+- Exportação manual alinhada ao AutoFinalizador, com divisão por partes e limite de upload do servidor Cloud.
+- AutoFinalizador direcionado ao canal Cloud, com compatibilidade para configurações antigas.
+- Painel administrativo ampliado para configurar canais externos e canal fixo de denúncias.
+- Limpeza do feedback passa a remover apenas o menu, preservando a mensagem original.
+
+---
+
+## [3.1.0] - 2026-08-16
+### 🚀 Atualizações de funcionalidade do ALTHEA
+
+#### ✨ Novidades
+- Sistema de restrição de tópicos por denunciante e acusados
+- Sincronização automática de nickname e restauração de perfil ao entrar no servidor
+- Finalização automática de denúncias sem resposta após prazo definido
+- Melhor monitoramento de mensagens com links proibidos, emojis e encaminhamentos
+- Fluxo mais robusto de exportação, arquivamento e envio de logs da denúncia
+- Revisão dos módulos de automação para maior estabilidade e memória segura em produção
+
+#### 🔧 Ajustes
+- Atualização da documentação do projeto para refletir as funcionalidades ativas do bot
+- Organização e reforço dos módulos de finalização, monitoramento e sincronização
+- Ajustes de compatibilidade para execução com uso real em servidores Discord ativos
+
+---
+
+## [3.0.0] - 2026-08-16
+### 🚀 Evolução principal do ALTHEA
+
+#### ✨ Novidades
+- Atualização geral da documentação do projeto para a release 3.0
+- Melhor organização da estrutura do bot e dos módulos de automação
+- Refino no sistema de denúncias, arquivamento e finalização automática
+- Melhor suporte a tópicos restritos, sincronização de nicknames e monitoramento
+- Ajustes de estabilidade para produção com processamento mais robusto
+- Manutenção e revisão de fluxos críticos do bot e da exportação de dados
+
+#### 🔧 Ajustes
+- Padronização de nomenclatura e documentação de módulos
+- Revisão do fluxo de finalização e exportação de tópicos
+- Redução de riscos operacionais em rotinas automáticas do sistema
 
 ---
 
 ## [1.2.1] - 2026-06-27
-### ðŸ“ DocumentaÃ§Ã£o e preparaÃ§Ã£o de release
+### 📝 Documentação e preparação de release
 
-#### âœ¨ AtualizaÃ§Ãµes
-- Ajuste de documentaÃ§Ã£o de fluxo, botÃµes e modelos para a release 1.2.1
-- OrganizaÃ§Ã£o do repositÃ³rio para publicaÃ§Ã£o no GitHub
-- PreparaÃ§Ã£o do projeto para versionamento e distribuiÃ§Ã£o consistentes
+#### ✨ Atualizações
+- Ajuste de documentação de fluxo, botões e modelos para a release 1.2.1
+- Organização do repositório para publicação no GitHub
+- Preparação do projeto para versionamento e distribuição consistentes
 
 ---
 
 ## [1.0.1] - 2026-01-25
-### ðŸ”§ ManutenÃ§Ã£o, RefatoraÃ§Ã£o e CorreÃ§Ãµes
+### 🔧 Manutenção, Refatoração e Correções
 
-#### â™»ï¸ RefatoraÃ§Ã£o
-- ConsolidaÃ§Ã£o de `denunciaButtons.js`: funcionalidades movidas para `commands/denuncia.js`
-- RemoÃ§Ã£o de arquivos nÃ£o utilizados ou redundantes:
+#### ♻️ Refatoração
+- Consolidação de `denunciaButtons.js`: funcionalidades movidas para `commands/denuncia.js`
+- Remoção de arquivos não utilizados ou redundantes:
   - `utils/performance.js`
   - `utils/monitoring.js`
   - `utils/commands.js`
@@ -30,53 +121,53 @@ Este projeto segue o padrÃ£o de versionamento semÃ¢ntico (SemVer).
   - `services/notificationService.js`
   - `buttons/denunciaButtons.js`
 
-#### ðŸ› CorreÃ§Ãµes
-- CorreÃ§Ã£o do aviso deprecated do Discord.js:  
-  `ephemeral` â†’ `flags: [MessageFlags.Ephemeral]`
+#### 🐛 Correções
+- Correção do aviso deprecated do Discord.js:  
+  `ephemeral` → `flags: [MessageFlags.Ephemeral]`
   - `Handlers/handlerStatusButton.js` (inclui `safeDefer`)
   - `jobs/rankJobs.js`
   - `commands/painel.js`
-- CorreÃ§Ã£o de imports ausentes em `Handlers/interactionHandler.js`
-- RemoÃ§Ã£o de handlers nÃ£o implementados (`atualizar`, `detalhe`)
+- Correção de imports ausentes em `Handlers/interactionHandler.js`
+- Remoção de handlers não implementados (`atualizar`, `detalhe`)
 
-#### âœ¨ Melhorias
-- CÃ³digo mais limpo e organizado
-- ReduÃ§Ã£o de avisos de deprecaÃ§Ã£o
-- Melhor separaÃ§Ã£o de responsabilidades
+#### ✨ Melhorias
+- Código mais limpo e organizado
+- Redução de avisos de depreciação
+- Melhor separação de responsabilidades
 
 ---
 
 ## [1.0.0] - 2026-01-25
-### ðŸŽ‰ LanÃ§amento Inicial
+### 🎉 Lançamento Inicial
 
-#### âœ¨ Adicionado
-- Sistema completo de denÃºncias com organizaÃ§Ã£o automÃ¡tica em threads
-- BotÃµes interativos (PC, Mobile, Minhas DenÃºncias, CorreÃ§Ã£o)
-- Modal de criaÃ§Ã£o de denÃºncia
-- Modal de aplicaÃ§Ã£o de puniÃ§Ã£o
-- Sistema de reivindicaÃ§Ã£o de denÃºncias
-- Sistema de anÃ¡lise
-- Aceitar / Recusar denÃºncia
-- ExportaÃ§Ã£o de denÃºncias (HTML + ZIP)
-- BotÃ£o **Finalizar** (exporta, tranca e arquiva o tÃ³pico)
-- Sistema de correÃ§Ã£o (`!correcao` + botÃ£o)
-- Painel de configuraÃ§Ã£o do servidor (`!painel`)
+#### ✨ Adicionado
+- Sistema completo de denúncias com organização automática em threads
+- Botões interativos (PC, Mobile, Minhas Denúncias, Correção)
+- Modal de criação de denúncia
+- Modal de aplicação de punição
+- Sistema de reivindicação de denúncias
+- Sistema de análise
+- Aceitar / Recusar denúncia
+- Exportação de denúncias (HTML + ZIP)
+- Botão **Finalizar** (exporta, tranca e arquiva o tópico)
+- Sistema de correção (`!correcao` + botão)
+- Painel de configuração do servidor (`!painel`)
 - Ranking mensal (`!rank`)
 - Ranking semanal (`!semana`)
-- Logs centralizados e auditÃ¡veis
-- IntegraÃ§Ã£o com MongoDB
+- Logs centralizados e auditáveis
+- Integração com MongoDB
 - Deploy preparado para SquareCloud
 
-#### ðŸ›¡ï¸ SeguranÃ§a
+#### 🛡️ Segurança
 - Tratamento de `Unknown interaction (10062)`
 - Tratamento de `InteractionNotReplied`
 - Tratamento de DM bloqueada (`50007`)
-- ProteÃ§Ã£o contra cliques duplicados
-- ValidaÃ§Ã£o de permissÃµes por cargo
+- Proteção contra cliques duplicados
+- Validação de permissões por cargo
 
 ---
 
 ## [Unreleased]
 - Melhorias visuais
-- InternacionalizaÃ§Ã£o (EN)
-- MÃ©tricas avanÃ§adas
+- Internacionalização (EN)
+- Métricas avançadas 

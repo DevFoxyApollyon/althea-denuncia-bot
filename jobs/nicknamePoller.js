@@ -1,16 +1,17 @@
-﻿// nicknamePoller.js
 const chalk = require('chalk');
+const { createLog } = require('../utils/logger');
 const Usuarios = require('../models/Usuario');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
 
-const INTERVALO_MS = 5 * 60 * 1000;
+const INTERVALO_MS       = 5 * 60 * 1000;
+const DELAY_ENTRE_ITENS_MS  = 300;
+const DELAY_ENTRE_GUILDS_MS = 500;
 
-const log = {
-    info:    (msg) => console.log(`${chalk.blue('â„¹')} ${chalk.gray('[POLLER]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('âœ”')} ${chalk.gray('[POLLER]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('âš ')} ${chalk.gray('[POLLER]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('âœ–')} ${chalk.gray('[POLLER]')} ${msg}`),
-};
+const log = createLog('POLLER');
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 async function repararContasComDiscordId(client) {
     const BOT_ALVO_IDS = (process.env.BOT_ALVO_ID || '').split(',').map(id => id.trim()).filter(Boolean);
@@ -31,6 +32,7 @@ async function repararContasComDiscordId(client) {
 
     let totalReparados = 0;
     let totalRemovidos = 0;
+    const auditLogsPorGuild = new Map();
 
     for (const registro of registros) {
         try {
@@ -38,13 +40,20 @@ async function repararContasComDiscordId(client) {
             if (!guild) {
                 await Usuarios.deleteOne({ _id: registro._id });
                 totalRemovidos++;
+                log.warn(`🗑️ [REPARO] Removido userId=${registro.userId}: servidor não encontrado.`);
                 continue;
             }
 
-            const auditLogs = await guild.fetchAuditLogs({ limit: 100, type: 24 }).catch(() => null);
+            let auditLogs = auditLogsPorGuild.get(registro.guildId);
+            if (auditLogs === undefined) {
+                auditLogs = await guild.fetchAuditLogs({ limit: 100, type: 24 }).catch(() => null);
+                auditLogsPorGuild.set(registro.guildId, auditLogs);
+            }
+
             if (!auditLogs) {
                 await Usuarios.deleteOne({ _id: registro._id });
                 totalRemovidos++;
+                log.warn(`🗑️ [REPARO] Removido userId=${registro.userId}: não foi possível consultar o histórico.`);
                 continue;
             }
 
@@ -56,7 +65,6 @@ async function repararContasComDiscordId(client) {
             });
 
             if (!entrada) {
-                // FIX: cache: false + delete apÃ³s uso
                 const membro = await guild.members.fetch({ user: registro.userId, cache: false }).catch(() => null);
                 const nickAtual    = membro?.nickname || membro?.user?.username || null;
                 const contaDoNick  = nickAtual ? extrairContaDoNickname(nickAtual) : null;
@@ -65,14 +73,18 @@ async function repararContasComDiscordId(client) {
                 if (!contaDoNick) {
                     await Usuarios.deleteOne({ _id: registro._id });
                     totalRemovidos++;
+                    log.warn(`🗑️ [REPARO] Removido userId=${registro.userId}: conta não encontrada no nickname.`);
+                    await sleep(DELAY_ENTRE_ITENS_MS);
                     continue;
                 }
 
                 await Usuarios.updateOne(
                     { _id: registro._id },
-                    { $set: { conta: contaDoNick, updatedAt: new Date() } }
+                    { $set: { conta: contaDoNick, nickname: nickAtual, updatedAt: new Date() } }
                 );
                 totalReparados++;
+                log.success(`🔧 [REPARO] Reparado userId=${registro.userId}: conta=${contaDoNick}.`);
+                await sleep(DELAY_ENTRE_ITENS_MS);
                 continue;
             }
 
@@ -82,21 +94,25 @@ async function repararContasComDiscordId(client) {
             if (!contaExtraida) {
                 await Usuarios.deleteOne({ _id: registro._id });
                 totalRemovidos++;
+                log.warn(`🗑️ [REPARO] Removido userId=${registro.userId}: histórico sem conta válida.`);
+                await sleep(DELAY_ENTRE_ITENS_MS);
                 continue;
             }
 
             await Usuarios.updateOne(
                 { _id: registro._id },
-                { $set: { conta: contaExtraida, updatedAt: new Date() } }
+                { $set: { conta: contaExtraida, nickname: nickDoLog, updatedAt: new Date() } }
             );
             totalReparados++;
+            log.success(`🔧 [REPARO] Reparado userId=${registro.userId}: conta=${contaExtraida}.`);
         } catch (err) {
             log.error(`[REPARO] Erro ao reparar userId ${registro.userId}: ${err.message}`);
         }
+        await sleep(DELAY_ENTRE_ITENS_MS);
     }
 
     log.info(
-        `[REPARO] ConcluÃ­do â€” ` +
+        `[REPARO] Concluído — ` +
         `${chalk.green(totalReparados + ' reparado(s)')} | ` +
         `${chalk.red(totalRemovidos + ' removido(s)')}`
     );
@@ -109,7 +125,10 @@ async function verificarNicknames(client) {
     let totalAtualizados    = 0;
     let totalContaCorrigida = 0;
 
-    for (const guild of client.guilds.cache.values()) {
+    const guilds = [...client.guilds.cache.values()];
+
+    for (let i = 0; i < guilds.length; i++) {
+        const guild = guilds[i];
         try {
             const auditLogs = await guild.fetchAuditLogs({ limit: 100, type: 24 });
 
@@ -118,7 +137,6 @@ async function verificarNicknames(client) {
                 entry.changes?.some(c => c.key === 'nick')
             );
 
-            // Ãšltima entrada por userId
             const ultimasEntradas = new Map();
             for (const entry of entradasBot) {
                 const userId = entry.target?.id;
@@ -128,7 +146,6 @@ async function verificarNicknames(client) {
             }
 
             if (ultimasEntradas.size > 0) {
-                // FIX: buscar todos os registros relevantes em uma query sÃ³
                 const userIds = [...ultimasEntradas.keys()];
                 const registrosExistentes = await Usuarios.find({
                     guildId: guild.id,
@@ -136,21 +153,27 @@ async function verificarNicknames(client) {
                 }).lean();
                 const registroMap = new Map(registrosExistentes.map(r => [r.userId, r]));
 
-                const bulkOpsAudit = [];
-
+                const nickPorUserId = new Map();
                 for (const entry of ultimasEntradas.values()) {
                     const userId   = entry.target?.id;
-                    const nickNovo = entry.changes?.find(c => c.key === 'nick')?.new ?? null;
                     if (!userId) continue;
-
+                    const nickNovo = entry.changes?.find(c => c.key === 'nick')?.new ?? null;
                     const existente = registroMap.get(userId);
                     if (existente?.nickname?.toLowerCase() === nickNovo?.toLowerCase()) continue;
+                    nickPorUserId.set(userId, nickNovo);
+                }
 
-                    // FIX: cache: false + delete apÃ³s uso
-                    const membro   = await guild.members.fetch({ user: userId, cache: false }).catch(() => null);
-                    const username = membro?.user?.username ?? 'Desconhecido';
-                    if (membro) guild.members.cache.delete(userId);
+                const idsParaBuscar = [...nickPorUserId.keys()];
+                const membrosBuscados = idsParaBuscar.length > 0
+                    ? await guild.members.fetch({ user: idsParaBuscar, cache: false }).catch(() => new Map())
+                    : new Map();
 
+                const bulkOpsAudit = [];
+
+                for (const [userId, nickNovo] of nickPorUserId.entries()) {
+                    const existente = registroMap.get(userId);
+                    const membro    = membrosBuscados.get(userId);
+                    const username  = membro?.user?.username ?? 'Desconhecido';
                     const contaExtraida = nickNovo ? extrairContaDoNickname(nickNovo) : null;
 
                     bulkOpsAudit.push({
@@ -170,16 +193,14 @@ async function verificarNicknames(client) {
                     else totalAtualizados++;
                 }
 
-                // FIX: bulkWrite ao invÃ©s de N operaÃ§Ãµes individuais
+                for (const id of idsParaBuscar) guild.members.cache.delete(id);
+
                 if (bulkOpsAudit.length > 0) await Usuarios.bulkWrite(bulkOpsAudit);
             }
 
-            // FIX: REMOVIDO guild.members.fetch() sem argumentos
-            // Processar somente membros jÃ¡ presentes no cache (sem forÃ§ar carregamento de todos)
             const membersEmCache = guild.members.cache.filter(m => !m.user.bot);
 
             if (membersEmCache.size > 0) {
-                // FIX: buscar todos os registros dos membros em cache de uma vez
                 const cachedIds = [...membersEmCache.keys()];
                 const registrosCached = await Usuarios.find({
                     guildId: guild.id,
@@ -218,18 +239,18 @@ async function verificarNicknames(client) {
                     totalContaCorrigida++;
                 }
 
-                // FIX: bulkWrite ao invÃ©s de N updates individuais
                 if (bulkOpsCache.length > 0) await Usuarios.bulkWrite(bulkOpsCache);
             }
 
         } catch (err) {
             log.error(`Erro na guild ${chalk.white(guild.name)}: ${err.message}`);
         }
+        if (i < guilds.length - 1) await sleep(DELAY_ENTRE_GUILDS_MS);
     }
 
     if (totalNovos > 0 || totalAtualizados > 0 || totalContaCorrigida > 0) {
         log.info(
-            `VerificaÃ§Ã£o concluÃ­da â€” ` +
+            `Verificação concluída — ` +
             `${chalk.green(totalNovos + ' novo(s)')} | ` +
             `${chalk.blue(totalAtualizados + ' atualizado(s)')} | ` +
             `${chalk.yellow(totalContaCorrigida + ' conta(s) corrigida(s)')}`
@@ -240,7 +261,7 @@ async function verificarNicknames(client) {
 function iniciarPoller(client) {
     log.info(chalk.magenta(`Poller iniciado. Verificando a cada ${chalk.bold('5 minutos')}.`));
 
-    repararContasComDiscordId(client).then(() => {
+    return repararContasComDiscordId(client).then(() => {
         verificarNicknames(client);
         setInterval(() => verificarNicknames(client), INTERVALO_MS);
     });

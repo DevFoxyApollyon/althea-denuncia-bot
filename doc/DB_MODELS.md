@@ -1,19 +1,22 @@
-﻿// DB_MODELS.md
+// DB_MODELS.md
 
 # 📗 Modelos do Banco de Dados (MongoDB)
 
-> **📝 v1.2.1:** Nenhuma alteração nos modelos. Estrutura consolidada para v1.2.1.
+> **📝 v3.1.0:** Estrutura principal mantida e documentada para a release 3.1 do ALTHEA, com refinamentos de estabilidade, automação e monitoramento.
 
 ---
-
+ 
 ## 📄 Config
 
 Collection responsável por **configurar o bot por servidor**.
+
+`bloquearReivindicacaoComPendentes` é ativado por padrão e pode ser ligado ou desligado individualmente no painel de cada servidor.
 
 ### Campos principais:
 ```javascript
 {
   guildId: String,           // ID do servidor Discord
+  bloquearReivindicacaoComPendentes: Boolean, // Bloqueia reivindicações enquanto houver denúncias anteriores pendentes
   roles: {
     administrador: String,   // ID do cargo admin
     responsavel_admin: String // ID do cargo responsável
@@ -79,8 +82,7 @@ Collection que registra **ações de moderação** para ranking.
 ```
 
 **Usado em:**
-- `!rank` — ranking mensal
-- `!semana` — ranking semanal
+- `!rank` — ranking principal
 - `rankService.js` — lógica de cálculo
 
 ---
@@ -120,6 +122,41 @@ Collection que registra **infrações/strikes**.
   moderador: String          // ID de quem aplicou
 }
 ```
+
+---
+
+## 📄 DenunciaMensagem
+
+Collection com as **mensagens dos tópicos de denúncia** (uma por documento).
+Substitui o array `mensagens` que ficava dentro de `Denuncia`; denúncias criadas
+antes da mudança continuam com o array embutido e são lidas dele.
+
+### Campos principais:
+```javascript
+{
+  denunciaId: ObjectId,      // referência à Denuncia
+  guildId: String,
+  threadId: String,
+  mensagemId: String,        // único por thread
+  autorId: String,
+  autorNome: String,
+  conteudo: String,
+  dataCriacao: Date,
+  editadaEm: Date,
+  apagadaEm: Date,
+  anexos: [{ id, nome, url, tipo, tamanho }],
+  embeds: Array,
+  espelhos: [{ threadId, messageId }],
+  expiraEm: Date             // mesma data de expiração da denúncia (TTL)
+}
+```
+
+---
+
+## 📄 moderationactions_arquivo
+
+Cópia das ações de `ModerationAction` dos meses anteriores. É preenchida pelo
+reset mensal do ranking (dia 1, 00:05), que move as ações antigas para cá.
 
 ---
 
@@ -185,4 +222,4 @@ db.usuarios.createIndex({ userId: 1, guildId: 1 })
 
 ---
 
-**Última atualização:** v1.2.1
+**Última atualização:** v3.1.0
