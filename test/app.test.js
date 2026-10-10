@@ -116,6 +116,16 @@ test('filtro de links libera YouTube e bloqueia convites', () => {
   assert.equal(contemLinkProibido('https://discord.gg/abc'), true);
 });
 
+test('acesso à fila exige cargo de administrador ou responsável do servidor', () => {
+  const { papeisDoMembro } = require('../site/acesso');
+  const config = { roles: { administrador: 'admin', responsavel_admin: 'responsavel' } };
+
+  const papeis = (cargos) => papeisDoMembro({ roles: { cache: new Set(cargos) } }, config);
+  assert.equal(papeis([]).staff, false);
+  assert.equal(papeis(['admin']).staff, true);
+  assert.equal(papeis(['responsavel']).staff, true);
+});
+
 test('cache de config: lê do cache e invalida', async () => {
   const { globalCache } = require('../utils/smartCache');
   const { getConfig, setConfig, peekConfig, invalidateConfig } = require('../utils/configCache');
@@ -142,4 +152,27 @@ test('salvar a Config invalida o cache', async () => {
     Config.schema.s.hooks.execPost('save', doc, [doc], (erro) => (erro ? reject(erro) : resolve()))
   );
   assert.equal(peekConfig('42'), null);
+});
+
+test('site: extrai menções de usuários, cargos e canais', () => {
+  const { extrairMencoes } = require('../site/rotas');
+  assert.deepEqual(
+    extrairMencoes('oi <@875808985813512242> e <@!111111111111111111>, cargo <@&222222222222222222> em <#333333333333333333>'),
+    { usuarios: ['875808985813512242', '111111111111111111'], cargos: ['222222222222222222'], canais: ['333333333333333333'] }
+  );
+  assert.deepEqual(extrairMencoes('sem menção, só <@123> curto'), { usuarios: [], cargos: [], canais: [] });
+});
+
+test('site: mensagem publicada pelo site volta a ser de quem enviou', () => {
+  const { atribuirAutoriaDoSite } = require('../site/rotas');
+  const doBot = { doBot: true, viaSite: false, autorId: '999999999999999999' };
+
+  const nova = atribuirAutoriaDoSite({ ...doBot, conteudo: 'Enviado por <@657014871228940336>\nteste' });
+  assert.deepEqual([nova.autorId, nova.doBot, nova.viaSite, nova.conteudo], ['657014871228940336', false, true, 'teste']);
+
+  const antiga = atribuirAutoriaDoSite({ ...doBot, conteudo: '📎 **Enviado pelo site** por <@657014871228940336>' });
+  assert.deepEqual([antiga.autorId, antiga.conteudo], ['657014871228940336', '']);
+
+  const registro = { ...doBot, conteudo: '📌 O administrador <@657014871228940336> reivindicou esta denúncia.' };
+  assert.equal(atribuirAutoriaDoSite(registro), registro, 'registros do bot não mudam');
 });

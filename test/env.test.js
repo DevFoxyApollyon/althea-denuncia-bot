@@ -31,11 +31,17 @@ test('aceita quando todas as obrigatórias estão definidas', () => {
 
 test('lista todas as variáveis ausentes de uma vez', () => {
   const log = logMudo();
-  const ok = comEnv({ DISCORD_TOKEN: undefined, MONGODB_URI: '  ', SECONDARY_DB_URI: 'c' }, () => validarEnv(log));
+  const ok = comEnv({ DISCORD_TOKEN: undefined, MONGODB_URI: 'b', SECONDARY_DB_URI: 'c' }, () => validarEnv(log));
   assert.equal(ok, false);
   assert.ok(log.erros.some(msg => msg.includes('DISCORD_TOKEN')));
-  assert.ok(log.erros.some(msg => msg.includes('MONGODB_URI')));
   assert.ok(!log.erros.some(msg => msg.includes('SECONDARY_DB_URI')));
+});
+
+test('exige URI do banco principal para carregar as configurações', () => {
+  const log = logMudo();
+  const ok = comEnv({ DISCORD_TOKEN: 'a', MONGODB_URI: undefined, SECONDARY_DB_URI: 'c' }, () => validarEnv(log));
+  assert.equal(ok, false);
+  assert.ok(log.erros.some(msg => msg.includes('MONGODB_URI')));
 });
 
 test('toda variável obrigatória está documentada no .env.example', () => {

@@ -9,6 +9,7 @@ const {
 
 const { randomUUID } = require('crypto');
 const DenunciaModel = require('../models/Denuncia');
+const StaffProfile = require('../models/StaffProfile');
 
 // =========================
 // UTILITARIOS
@@ -210,6 +211,50 @@ async function handleFeedbackMenu(interaction) {
 // =========================
 // MODAL SUBMIT
 // =========================
+// Grava a avaliação e avisa a staff. Devolve null se a denúncia já tinha sido
+// avaliada (a marcação é atômica: duas avaliações simultâneas não passam).
+async function registrarFeedback(client, denuncia, { nota, comentario }, config) {
+    const n = Number(nota);
+    const staffId = denuncia.staffId || denuncia.claimedBy || null;
+
+    const marcada = await DenunciaModel.findOneAndUpdate(
+        { _id: denuncia._id, feedbackEnviado: { $ne: true } },
+        { $set: {
+            feedbackEnviado: true,
+            feedbackNota: n,
+            feedbackComentario: comentario || '',
+            feedbackStaffId: staffId,
+            feedbackEm: new Date()
+        } },
+        { new: true }
+    );
+    if (!marcada) return null;
+
+    if (staffId) {
+        await StaffProfile.registrarFeedback(denuncia.guildId, staffId, n)
+            .catch(err => console.error('[Feedback] Falha ao atualizar o perfil do staff:', err));
+    }
+
+    const codigo = gerarCodigoFeedback();
+    const threadUrl = `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`;
+    const feedbackData = { nota: n, comentario, denuncianteId: denuncia.criadoPor, staffId, codigo, threadUrl };
+
+    const [canalResult, dmResult] = await Promise.allSettled([
+        enviarFeedbackCanais(client, config || { channels: { log: null } }, feedbackData),
+        enviarFeedbackStaff(client, staffId, feedbackData)
+    ]);
+
+    if (canalResult.status === 'rejected')
+        console.error('[Feedback] Falha ao enviar no canal de log:', canalResult.reason);
+
+    if (dmResult.status === 'rejected')
+        console.error('[Feedback] Falha ao enviar DM para o staff:', dmResult.reason);
+
+    await removerFeedbackMenu(client, String(denuncia._id)).catch(() => {});
+
+    return { codigo, nota: n };
+}
+
 async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
     try {
         await interaction.deferReply({ flags: 64 });
@@ -231,32 +276,12 @@ async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
             return interaction.editReply({ content: '\u274C Apenas o denunciante pode enviar feedback.' });
         }
 
-        const codigo = gerarCodigoFeedback();
-
-        let config = await getCachedConfig(interaction.guild.id);
-        if (!config) {
-            console.warn('[Feedback] Config nao encontrada, usando fallback.');
-            config = { channels: { log: null } };
+        const config = await getCachedConfig(interaction.guild.id);
+        const registrado = await registrarFeedback(interaction.client, denuncia, { nota, comentario }, config);
+        if (!registrado) {
+            return interaction.editReply({ content: '\u274C Voc\u00EA j\u00E1 avaliou esta den\u00FAncia.' });
         }
-
-        const threadUrl = `https://discord.com/channels/${interaction.guild.id}/${denuncia.channelId}/${denuncia.messageId}`;
-        const staffId   = denuncia.staffId || denuncia.reivindicadoPor || null;
-
-        const feedbackData = { nota, comentario, denuncianteId: denuncia.criadoPor, staffId, codigo, threadUrl };
-
-        const [canalResult, dmResult] = await Promise.allSettled([
-            enviarFeedbackCanais(interaction.client, config, feedbackData),
-            enviarFeedbackStaff(interaction.client, staffId, feedbackData)
-        ]);
-
-        if (canalResult.status === 'rejected')
-            console.error('[Feedback] Falha ao enviar no canal de log:', canalResult.reason);
-
-        if (dmResult.status === 'rejected')
-            console.error('[Feedback] Falha ao enviar DM para o staff:', dmResult.reason);
-
-        await Denuncia.updateOne({ _id: denunciaId }, { $set: { feedbackEnviado: true } });
-        await removerFeedbackMenu(interaction.client, denunciaId);
+        const { codigo } = registrado;
 
         const n      = Number(nota);
         const emoji  = gerarEmojiNota(n);
@@ -361,6 +386,7 @@ async function removerFeedbackMenu(client, denunciaId) {
 }
 
 module.exports = {
+    registrarFeedback,
     criarMenuFeedback,
     inserirFeedbackMenu,
     handleFeedbackMenu,

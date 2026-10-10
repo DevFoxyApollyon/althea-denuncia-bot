@@ -33,63 +33,7 @@ const PROVAS_TIMEOUT_MS = 5 * 60 * 1000;
 const URL_REGEX = /https?:\/\/[^\s]+/gi;
 const BROKEN_LINK_REGEX = /\b(?!https?:\/\/)[a-zA-Z]{1,5}:\/\/[^\s]+/gi;
 
-const PALAVRAS_BLOQUEADAS = [
-    'mtfe7',
-    'virada de saldo',
-    'equipe mtfe',
-    'entra no grupo',
-    'vem aprender',
-    'trampo do',
-    'trampo ',
-    'saldo equipe',
-    't.me/',
-    'telegram.me/',
-    'ADM',
-    'TOMA NO CU',
-    'FILHO DA PUTA',
-    'raposa',
-    'mcc',
-];
-
-const PALAVROES = [
-    'fdp', 'filho da puta', 'filha da puta','ADM',
-    'TOMA NO CU','raposa',
-    'viado', 'viadão', 'viadinho',
-    'cuzao', 'cuzão', 'cu','chores',
-    'porra', 'puta merda', 'puta que pariu',
-    'vai se foder', 'vai tomar no cu', 'vai tomar no',
-    'foder', 'fodase', 'foda-se', 'foda se',
-    'otario', 'otário', 'otaria', 'otária',
-    'idiota', 'imbecil', 'retardado', 'retardada',
-    'burro', 'burra', 'animal',
-    'lixo humano', 'escoria', 'escória',
-    'vagabundo', 'vagabunda',
-    'prostituta', 'puta', 'piranha',
-    'corno', 'corna',
-    'babaca', 'baba ovo', 'babaovo',
-    'arrombado', 'arrombada','mcc',
-    'merda','preto',
-    'inútil',
-    'desgraçado', 'desgraçado', 'desgraca',
-    'maldito', 'maldita',
-    'lázaro', 'lazarento', 'lazarenta',
-    'peste',
-    'sua mãe', 'tua mãe',
-    'cala boca', 'cala a boca',
-    'bosta',
-    'cagão',
-    'covarde',
-    'lixo',
-];
-
-const CONTEUDO_INVALIDO = [
-    'fdp', 'filho da puta', 'filha da puta',
-    'adm', 'admin', 'staff', 'suporte', 'moderador', 'mod', 'dono',
-    'líder', 'sub líder', 'sublíder','ADM',
-    'TOMA NO CU','raposa',
-    'princesa', 'lixo',
-    'vai tomar no cu', 'fdp','macacada','macaco',
-];
+const { PALAVRAS_BLOQUEADAS, PALAVROES, CONTEUDO_INVALIDO } = require('../utils/palavrasProibidas');
 
 const PALAVRAS_PROIBIDAS = [...new Set([
     ...PALAVRAS_BLOQUEADAS,
@@ -748,22 +692,66 @@ async function handleDenunciaButtons(interaction, client) {
     } catch (error) { console.error(error); }
 }
 
-async function handleDenunciaPC(interaction) {
-    const config = await getCachedConfig(interaction.guild.id);
-    const roleRequired = config.roles.pc;
-    if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
-        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia PC. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
+async function interactionHasRole(interaction, roleId) {
+    const roles = interaction.member?.roles;
+    if (roles?.cache?.has) return roles.cache.has(roleId);
+    if (Array.isArray(roles)) return roles.includes(roleId);
+
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    return member.roles.cache.has(roleId);
+}
+
+async function handleDenunciaPorPlataforma(interaction, platform, configRole) {
+    if (!interaction.guild) {
+        return interaction.reply({
+            content: '❌ Este botão só pode ser usado em um servidor.',
+            flags: [MessageFlags.Ephemeral]
+        });
     }
-    await openDenunciaModal(interaction, 'PC');
+
+    const config = await getCachedConfig(interaction.guild.id);
+    if (!config) {
+        return interaction.reply({
+            content: '⚠️ Este servidor ainda não tem configuração salva. Configure-o pelo `/painel` ou migre a configuração existente para o banco secundário.',
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    const roleRequired = config?.roles?.[configRole];
+    if (!roleRequired) {
+        return interaction.reply({
+            content: `⚠️ O cargo permitido para denúncias ${platform} não está configurado. Ajuste-o pelo \`/painel\`.`,
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    let hasRole;
+    try {
+        hasRole = await interactionHasRole(interaction, roleRequired);
+    } catch (error) {
+        console.error(`Erro ao verificar o cargo para denúncia ${platform}:`, error);
+        return interaction.reply({
+            content: '❌ Não foi possível verificar seu cargo. Tente novamente.',
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    if (!hasRole) {
+        return interaction.reply({
+            content: `❌ Você não tem permissão para usar o botão de denúncia ${platform}. É necessário o cargo <@&${roleRequired}>.`,
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    await openDenunciaModal(interaction, platform);
+}
+
+async function handleDenunciaPC(interaction) {
+    await handleDenunciaPorPlataforma(interaction, 'PC', 'pc');
 }
 
 async function handleDenunciaMobile(interaction) {
-    const config = await getCachedConfig(interaction.guild.id);
-    const roleRequired = config.roles.permitido;
-    if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
-        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia Mobile. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
-    }
-    await openDenunciaModal(interaction, 'Mobile');
+    await handleDenunciaPorPlataforma(interaction, 'Mobile', 'permitido');
 }
 
 async function buscarContaComTimeout(guildId, userId, timeoutMs = 1500) {
@@ -976,6 +964,7 @@ module.exports = {
     handleDenunciaButtons,
     handleDenunciaPC,
     handleDenunciaMobile,
+    interactionHasRole,
     handleModalSubmit,
     handleMyDenunciasButton,
     handleConsultaModalSubmit,

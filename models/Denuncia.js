@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
+const { model } = require('../utils/persistencia');
 const { getBrasiliaDate } = require('../utils/dateUtils');
+const { avisarMudanca, avisarStatus } = require('../utils/eventosDenuncia');
 
 const denunciaSchema = new mongoose.Schema({
   guildId: { 
@@ -83,7 +85,7 @@ const denunciaSchema = new mongoose.Schema({
   status: { 
     type: String, 
     required: true, 
-    enum: ['pendente', 'reivindicacao', 'aceita', 'recusada', 'analise'],
+    enum: ['pendente', 'reivindicacao', 'aceita', 'recusada', 'analise', 'finalizada'],
     default: 'pendente'
   },
   dataCriacao: { 
@@ -98,7 +100,7 @@ const denunciaSchema = new mongoose.Schema({
       date.setDate(date.getDate() + 45);
       return date;
     },
-    index: { expires: 0 }
+    index: true
   },
   punicao: { 
     type: String 
@@ -189,7 +191,14 @@ const denunciaSchema = new mongoose.Schema({
   isInAnalysis: {
     type: Boolean,
     default: false
-  }
+  },
+  // Avaliação do atendimento feita pelo denunciante (Discord ou site).
+  // O /rank calcula a nota de cada staff a partir destes campos.
+  feedbackEnviado: { type: Boolean, default: false },
+  feedbackNota: { type: Number, default: null, min: 1, max: 10 },
+  feedbackComentario: { type: String, default: '' },
+  feedbackStaffId: { type: String, default: null },
+  feedbackEm: { type: Date, default: null }
 }, {
   timestamps: { 
     currentTime: () => getBrasiliaDate()
@@ -197,6 +206,7 @@ const denunciaSchema = new mongoose.Schema({
 });
 
 denunciaSchema.pre('save', function(next) {
+  this.$locals.statusMudou = !this.isNew && this.isModified('status');
   if (this.isModified()) {
     const now = getBrasiliaDate();
     if (this.isNew) {
@@ -220,4 +230,20 @@ denunciaSchema.index({ guildId: 1, claimedBy: 1, claimedAt: -1 });
 denunciaSchema.index({ criadoPor: 1, dataCriacao: -1 });
 denunciaSchema.index({ guildId: 1, acusado: 1, dataCriacao: -1 });
 
-module.exports = mongoose.model('Denuncia', denunciaSchema);
+// Mudanças de status chegam ao site na hora (ver site/rotas.js, /eventos).
+denunciaSchema.post('save', function(doc) {
+  avisarMudanca(doc?.threadId);
+  if (this.$locals.statusMudou) avisarStatus(doc.toObject());
+});
+denunciaSchema.post('findOneAndUpdate', function(doc) {
+  avisarMudanca(doc?.threadId);
+  // O documento pode vir de antes ou de depois da alteração; o status novo é o do pedido.
+  const alteracao = this.getUpdate() || {};
+  const status = alteracao.$set?.status || alteracao.status;
+  if (!doc || !status) return;
+  const antes = !this.getOptions().new && !this.getOptions().returnDocument;
+  if (antes && doc.status === status) return;
+  avisarStatus({ ...(doc.toObject?.() || doc), ...(alteracao.$set || {}), status });
+});
+
+module.exports = model('Denuncia', denunciaSchema);

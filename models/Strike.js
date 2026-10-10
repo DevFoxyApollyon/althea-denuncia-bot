@@ -1,4 +1,5 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
+const { model } = require('../utils/persistencia');
 
 const StrikeSchema = new mongoose.Schema({
   userId: { type: String, required: true, index: true },
@@ -38,4 +39,4 @@ StrikeSchema.methods.cleanOldStrikesEmoji = function() {
   this.strikesEmoji = this.strikesEmoji.filter(s => (now - s.timestamp.getTime()) < 24 * 60 * 60 * 1000);
 };
 
-module.exports = mongoose.model('Strike', StrikeSchema);
+module.exports = model('Strike', StrikeSchema);

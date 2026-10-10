@@ -1,5 +1,5 @@
 const { globalCache } = require('./smartCache');
-const mongoose = require('mongoose');
+const { secondaryConnection } = require('./persistencia');
 const { createLog } = require('./logger');
 
 const log = createLog('MONITOR');
@@ -131,12 +131,12 @@ class AdvancedMonitor {
     }
   }
 
-  // Latência real do banco principal (ping), usada pelo painel de status.
+  // Latência real do banco secundário, usado por todos os models.
   async measureDbLatency() {
     try {
-      if (mongoose.connection.readyState !== 1) return this.metrics.system.dbLatency;
+      if (secondaryConnection.readyState !== 1) return this.metrics.system.dbLatency;
       const inicio = Date.now();
-      await mongoose.connection.db.admin().ping();
+      await secondaryConnection.db.admin().ping();
       this.metrics.system.dbLatency = Date.now() - inicio;
     } catch {
       this.metrics.system.dbLatency = -1;

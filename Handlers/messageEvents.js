@@ -25,6 +25,8 @@ const { usuarioAutorizadoNoTopico } = require('../utils/restricaoTopicos');
 const { usuarioIsento } = require('../utils/usuariosIsentos');
 const { handleRecusarPorMensagem } = require('./handlerStatusButton');
 const { handleDeletedMessage } = require('./messageDeleteHandler');
+const { avisarAcusadosDaResposta, autorReal } = require('../utils/avisoResposta');
+const { notificarMensagem } = require('../site/push');
 const commands = require('../utils/commands');
 
 function criarPayloadEspelho(message) {
@@ -95,11 +97,20 @@ function registerMessageEvents(client, { log, getConfig }) {
             const denuncia = await Denuncia.findOne({
                 guildId: message.guild.id,
                 threadId: message.channel.id,
-            }).select('guildId threadId messageId armazemThreadId registroThreadId dataExpiracao').lean();
+            }).select('guildId threadId messageId armazemThreadId registroThreadId dataExpiracao acusado acusadoUserIds criadoPor claimedBy').lean();
 
             if (denuncia) {
                 await registrarMensagens(denuncia, message)
                     .catch(error => log.warn('Não foi possível registrar mensagem da denúncia: ' + error.message));
+                // Acusados identificados recebem um aviso por mensagem direta.
+                avisarAcusadosDaResposta(client, denuncia, message)
+                    .catch(error => log.warn('Não foi possível avisar o acusado: ' + error.message));
+                // Quem ativou as notificações do site recebe o aviso no navegador.
+                const autorDaMensagem = autorReal(message);
+                if (autorDaMensagem) {
+                    notificarMensagem(denuncia, autorDaMensagem)
+                        .catch(error => log.warn('Notificação do navegador falhou: ' + error.message));
+                }
 
                 const mirrorThreadIds = [denuncia.armazemThreadId, denuncia.registroThreadId].filter(Boolean);
                 const payload = criarPayloadEspelho(message);

@@ -1,9 +1,8 @@
 const { AttachmentBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const { getConfig } = require('../utils/configCache');
-const archiver = require('archiver');
 const fetch = require('node-fetch');
-const { PassThrough } = require('stream');
+const { escapeHtml, safeFileName, getHighestRole, buildZipBuffer } = require('../utils/exportUtils');
 const { buscarCanal } = require('../utils/denunciaMensagens');
 
 const EXPORT_CONSTANTS = {
@@ -23,25 +22,6 @@ const urlRegex = /(https?:\/\/[^\s]+)/g;
 const cooldowns = new Map();
 const inProgress = new Map();
 
-function escapeHtml(str = '') {
-  return String(str)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function safeFileName(name = '') {
-  return String(name)
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9._-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80);
-}
-
 function nowMs() {
   return Date.now();
 }
@@ -54,22 +34,6 @@ function getGuildUploadLimitBytes(guild) {
 
   const limiteBase = tier >= 3 ? 100 * 1024 * 1024 : tier === 2 ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
   return Math.max(Math.min(limiteBase - 1 * 1024 * 1024, EXPORT_CONSTANTS.MAX_UPLOAD_BYTES), 1 * 1024 * 1024);
-}
-
-function getHighestRole(member) {
-  if (!member) return { name: '', color: '#99aab5' };
-  const highestRole = member.roles.cache
-    .filter(role => role.name !== '@everyone')
-    .sort((a, b) => b.position - a.position)
-    .first();
-
-  return {
-    name: highestRole ? highestRole.name : '',
-    color:
-      highestRole && highestRole.color !== 0
-        ? '#' + highestRole.color.toString(16).padStart(6, '0')
-        : '#99aab5',
-  };
 }
 
 function fetchWithTimeout(url, timeout = EXPORT_CONSTANTS.FETCH_TIMEOUT_MS) {
@@ -106,35 +70,10 @@ async function fetchAllThreadMessages(thread) {
   return all;
 }
 
-async function buildZipBuffer(files) {
-  return new Promise((resolve, reject) => {
-    const archive = archiver('zip', { zlib: { level: 9 } });
-    const stream = new PassThrough();
-    const chunks = [];
-
-    stream.on('data', (c) => chunks.push(c));
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-    stream.on('error', reject);
-
-    archive.on('warning', (err) => {
-      console.warn('[ZIP WARNING]', err?.message || err);
-    });
-    archive.on('error', reject);
-
-    archive.pipe(stream);
-
-    for (const f of files) {
-      archive.append(f.content, { name: f.name });
-    }
-
-    archive.finalize();
-  });
-}
-
 async function splitFilesIntoZipParts(files, maxBytes) {
   if (!files.length) return [];
 
-  const buffer = await buildZipBuffer(files);
+  const buffer = await buildZipBuffer(files, { nivel: 9 });
   if (buffer.length <= maxBytes) {
     return [{ buffer, filesCount: files.length }];
   }
@@ -822,6 +761,25 @@ async function handleExportButton(interaction) {
     if (thread.manageable) {
       await thread.setLocked(true, 'Denúncia finalizada e exportada.');
       await thread.setArchived(true, 'Denúncia finalizada e exportada.');
+      await Denuncia.updateOne(
+        { _id: denuncia._id },
+        {
+          $set: { status: 'finalizada' },
+          $push: {
+            historico: {
+              acao: 'FINALIZADA',
+              staffId: userId,
+              data: new Date(),
+              detalhes: { messageLink: logMessage?.url || null },
+            },
+          },
+        }
+      );
+    } else {
+      await interaction.followUp({
+        content: '⚠️ A denúncia foi exportada, mas o bot não conseguiu trancar o tópico. Ela continuará aberta no site.',
+        flags: MessageFlags.Ephemeral,
+      });
     }
 
     cooldowns.set(userId, nowMs() + EXPORT_CONSTANTS.COOLDOWN_SECONDS * 1000);

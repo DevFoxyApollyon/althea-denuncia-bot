@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { model } = require('../utils/persistencia');
 
 const globalConfigSchema = new mongoose.Schema({
   key: {
@@ -18,4 +19,4 @@ const globalConfigSchema = new mongoose.Schema({
   timestamps: true
 });
 
-module.exports = mongoose.model('GlobalConfig', globalConfigSchema);
+module.exports = model('GlobalConfig', globalConfigSchema);

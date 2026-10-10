@@ -5,6 +5,11 @@ module.exports = [
     { ignores: ['node_modules/**'] },
     js.configs.recommended,
     {
+        files: ['site/public/**/*.js'],
+        languageOptions: { sourceType: 'module', globals: { ...globals.browser } }
+    },
+    {
+        ignores: ['site/public/**'],
         languageOptions: {
             ecmaVersion: 2023,
             sourceType: 'commonjs',

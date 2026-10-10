@@ -1,5 +1,5 @@
-const secondaryConnection = require('../utils/secondaryDb');
 const { Schema } = require('mongoose');
+const { model } = require('../utils/persistencia');
 
 const usuariosSchema = new Schema({
   guildId: { type: String, required: true, index: true },
@@ -15,4 +15,4 @@ const usuariosSchema = new Schema({
 usuariosSchema.index({ guildId: 1, userId: 1 }, { unique: true });
 usuariosSchema.index({ guildId: 1, conta: 1 });
 
-module.exports = secondaryConnection.model('Usuarios', usuariosSchema, 'usuarios');
+module.exports = model('Usuarios', usuariosSchema, 'usuarios');

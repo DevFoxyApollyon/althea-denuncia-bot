@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { model } = require('../utils/persistencia');
 
 // Mensagens dos tópicos de denúncia. Ficavam embutidas em Denuncia.mensagens,
 // o que fazia o documento crescer sem limite a cada mensagem do tópico.
@@ -28,10 +29,12 @@ const denunciaMensagemSchema = new mongoose.Schema({
     messageId: { type: String, required: true }
   }],
   apagadaEm: { type: Date, default: null },
+  // Enviada pelo site: o bot publicou no tópico em nome de autorId.
+  viaSite: { type: Boolean, default: false },
   // Mesma data de expiração da denúncia: as mensagens somem junto com ela.
-  expiraEm: { type: Date, default: null, index: { expires: 0 } }
+  expiraEm: { type: Date, default: null, index: true }
 });
 
 denunciaMensagemSchema.index({ threadId: 1, mensagemId: 1 }, { unique: true });
 
-module.exports = mongoose.model('DenunciaMensagem', denunciaMensagemSchema);
+module.exports = model('DenunciaMensagem', denunciaMensagemSchema);

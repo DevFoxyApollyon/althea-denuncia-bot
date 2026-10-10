@@ -1,10 +1,9 @@
 require('dotenv').config();
-const mongoose = require('mongoose');
 const cron = require('node-cron');
 const { createLog } = require('../utils/logger');
 const Usuario = require('../models/Usuario');
+const { secondaryConnection } = require('../utils/persistencia');
 
-const MONGO_URI = process.env.MONGODB_URI;
 const APAGAR = process.argv.includes('--apagar');
 let executando = false;
 
@@ -73,18 +72,13 @@ function iniciarLimpezaContasDuplicadas() {
 }
 
 async function main() {
-  if (!MONGO_URI) {
-    log.error('Defina MONGODB_URI no .env antes de rodar este script.');
-    process.exit(1);
-  }
-
-  await mongoose.connect(MONGO_URI);
-  log.success('Conectado ao MongoDB.');
+  await secondaryConnection.asPromise();
+  log.success('Conectado ao banco secundário.');
 
   await limparContasDuplicadas({ apagar: APAGAR, detalhar: true });
   if (!APAGAR) log.info('Modo de simulação (nada foi apagado).');
 
-  await mongoose.disconnect();
+  await secondaryConnection.close();
 }
 
 if (require.main === module) {

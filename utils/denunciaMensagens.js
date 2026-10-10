@@ -1,5 +1,6 @@
 const Denuncia = require('../models/Denuncia');
 const DenunciaMensagem = require('../models/DenunciaMensagem');
+const { avisarMudanca } = require('./eventosDenuncia');
 
 function serializarAnexos(message) {
   return Array.from(message.attachments?.values?.() || []).map(attachment => ({
@@ -56,6 +57,7 @@ async function registrarMensagens(denuncia, messages) {
       upsert: true
     }
   })), { ordered: false });
+  avisarMudanca(denuncia.threadId);
 }
 
 async function registrarEspelho(denuncia, mensagemId, espelho) {
@@ -75,6 +77,7 @@ async function registrarEspelho(denuncia, mensagemId, espelho) {
 // Atualiza o conteúdo salvo de uma mensagem editada e devolve os espelhos dela
 // (ou null se a mensagem não pertence a nenhuma denúncia).
 async function atualizarMensagemEditada(guildId, threadId, message) {
+  avisarMudanca(threadId);
   const campos = {
     conteudo: message.content || '',
     editadaEm: new Date(),
@@ -105,6 +108,7 @@ async function atualizarMensagemEditada(guildId, threadId, message) {
 }
 
 async function marcarMensagemApagada(guildId, threadId, mensagemId) {
+  avisarMudanca(threadId);
   const apagadaEm = new Date();
   const result = await DenunciaMensagem.updateOne({ threadId, mensagemId }, { $set: { apagadaEm } });
   if (result.matchedCount) return;

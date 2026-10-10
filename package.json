@@ -4,10 +4,13 @@
   "description": "ALTHEA — Bot Discord para gestão de denúncia, moderação, automações e arquivamento de logs.",
   "main": "index.js",
   "scripts": {
-    "start": "node --expose-gc --max-old-space-size=512 index.js",
-    "dev": "nodemon --expose-gc --max-old-space-size=512 index.js",
+    "start": "node --expose-gc --max-old-space-size=2560 index.js",
+    "dev": "nodemon --expose-gc --max-old-space-size=2560 index.js",
     "lint": "eslint .",
-    "test": "node --test"
+    "test": "node --test",
+    "site:previa": "node site/previa.js",
+    "pacote": "node scripts/pacote-squarecloud.js",
+    "db:migrar": "node scripts/migrar-banco-secundario.js"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -17,9 +20,11 @@
     "chalk": "^4.1.2",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
+    "express": "^4.22.3",
     "mongoose": "^7.6.3",
     "node-cron": "^3.0.3",
     "node-fetch": "^2.6.7",
+    "web-push": "^3.6.7",
     "ws": "^8.18.0"
   },
   "author": "Foxyapollyon",

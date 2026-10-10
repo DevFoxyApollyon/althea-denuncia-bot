@@ -177,7 +177,7 @@ function createStatusEmbed(client) {
         .setTimestamp();
 }
 
-function createStatusButtons(restarting = false) {
+function createStatusButtons() {
     return [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('refresh_status').setLabel('Atualizar').setEmoji('🔄').setStyle(ButtonStyle.Primary),
@@ -186,11 +186,6 @@ function createStatusButtons(restarting = false) {
         ),
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('status_toggle_autorefresh').setLabel('Auto-Refresh').setEmoji('⏱️').setStyle(ButtonStyle.Success),
-            new ButtonBuilder()
-                .setCustomId('status_restart_confirm')
-                .setLabel(restarting ? 'Confirmar Reinício' : 'Reiniciar Bot')
-                .setEmoji(restarting ? '⚠️' : '🔁')
-                .setStyle(restarting ? ButtonStyle.Danger : ButtonStyle.Secondary),
         )
     ];
 }
@@ -262,14 +257,12 @@ async function handleStatusSlash(interaction) {
     });
 }
 
-const restartConfirmPending = new Set();
-
 async function handleStatusButtons(interaction) {
     if (!interaction.isButton()) return;
 
     const validIds = [
         'refresh_status', 'status_ping_test', 'status_cache_clear',
-        'status_toggle_autorefresh', 'status_restart_confirm'
+        'status_toggle_autorefresh'
     ];
     if (!validIds.includes(interaction.customId)) return;
 
@@ -344,24 +337,6 @@ async function handleStatusButtons(interaction) {
         return;
     }
 
-    if (customId === 'status_restart_confirm') {
-        const userId = interaction.user.id;
-
-        if (!restartConfirmPending.has(userId)) {
-            restartConfirmPending.add(userId);
-            setTimeout(() => restartConfirmPending.delete(userId), 10_000);
-            await interaction.deferUpdate();
-            await interaction.editReply({ embeds: [createStatusEmbed(client)], components: createStatusButtons(true) });
-            await interaction.followUp({
-                content: '⚠️ Clique em **Confirmar Reinício** novamente em até 10 segundos para reiniciar o bot.',
-                flags: [MessageFlags.Ephemeral]
-            });
-        } else {
-            restartConfirmPending.delete(userId);
-            await interaction.reply({ content: '🔁 Reiniciando o bot...', flags: [MessageFlags.Ephemeral] });
-            setTimeout(() => process.exit(0), 1500);
-        }
-    }
 }
 
 module.exports = { handleStatusCommand, handleStatusSlash, handleStatusButtons, checkAndSendAlerts };

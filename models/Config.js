@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { globalCache } = require('../utils/smartCache');
+const { modelPrincipal } = require('../utils/persistencia');
 
 const configSchema = new mongoose.Schema({
   guildId: { 
@@ -58,4 +59,4 @@ configSchema.post(['findOneAndUpdate', 'updateOne', 'deleteOne', 'findOneAndDele
   invalidarCache(this.getQuery?.()?.guildId);
 });
 
-module.exports = mongoose.model('Config', configSchema);
+module.exports = modelPrincipal('Config', configSchema);

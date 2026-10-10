@@ -496,4 +496,4 @@ async function handleRankSlash(interaction) {
   });
 }
 
-module.exports = { handleRankCommand, handleRankSlash };
+module.exports = { handleRankCommand, handleRankSlash, loadRank };

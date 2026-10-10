@@ -52,31 +52,10 @@ function estaEmCanalDeDenuncia(message, config) {
   );
 }
 
-const PALAVRAS_PROIBIDAS = [
-  'animal', 'anta', 'arrombada', 'arrombado', 'chorão', 'mds', 'mds',
-  'babaca', 'besta', 'bobalhão', 'bobalhona', 'bocó', 'bosta', 'burra', 'burrice', 'burro',
-  'canalha', 'caralho', 'corna', 'corno', 'cretina', 'cretino', 'crápula', 'cuzão', 'cuzona',
-  'desgraçado', 'doente', 'doida', 'doido', 'PCD', 'deficiente', 'deficiente mental', 'deficiente físico',
-  'energúmeno', 'escrota', 'escroto',
-  'fdp', 'v conta', 'vendo conta', 'Choro',
-  'galinha','mds', 'seu buraquinho','mrd',
-  'idiota', 'idiotice', 'imbecil','Chora n','Desgracado','vacilão','vacilão',
-  'jegue', 'jumento',
-  'lambe botas', 'lixo',
-  'maluca', 'maluco', 'mané', 'merda', 'mongoloide', 'mongol', 'mula',
-  'noob',
-  'otaria', 'otário', 'otária',
-  'palhaça', 'palhaço', 'panaca', 'passa pano', 'piranha', 'pnc', 'porra', 'prostituta', 'puta', 'puto', 'puxa saco',
-  'retardada', 'retardado',
-  'tanso', 'tapada', 'tapado', 'traste', 'trouxa',
-  'vadia', 'vagabunda', 'vagabundo', 'viado',
-  'zé ninguém', 'zé povinho', 'zé ruela',
-  'chorao',
-];
-
-const PALAVRAS_INTEIRAS_PROIBIDAS = [
-  /\bk+\b/i,
-];
+const {
+  PALAVRAS_PROIBIDAS_NO_CHAT: PALAVRAS_PROIBIDAS,
+  PALAVRAS_INTEIRAS_PROIBIDAS_NO_CHAT: PALAVRAS_INTEIRAS_PROIBIDAS
+} = require('./palavrasProibidas');
 
 function contemPalavraProibida(texto) {
   if (!texto) return false;

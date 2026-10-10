@@ -3,9 +3,8 @@ const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
 const { toBrasiliaDate } = require('../utils/dateUtils');
-const archiver = require('archiver');
 const fetch = require('node-fetch');
-const { PassThrough } = require('stream');
+const { escapeHtml, safeFileName, getHighestRole, buildZipBuffer } = require('../utils/exportUtils');
 const { buscarCanal } = require('../utils/denunciaMensagens');
 
 const MODULO_TAG = chalk.gray('[AutoFinalizador]');
@@ -55,39 +54,6 @@ const EXPORT = {
 };
 
 const urlRegex = /(https?:\/\/[^\s]+)/g;
-
-function escapeHtml(str = '') {
-    return String(str)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-}
-
-function safeFileName(name = '') {
-    return String(name)
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9._-]+/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_+|_+$/g, '')
-        .slice(0, 80);
-}
-
-function getHighestRole(member) {
-    if (!member) return { name: '', color: '#99aab5' };
-    const highestRole = member.roles.cache
-        .filter(role => role.name !== '@everyone')
-        .sort((a, b) => b.position - a.position)
-        .first();
-    return {
-        name:  highestRole ? highestRole.name : '',
-        color: highestRole && highestRole.color !== 0
-            ? '#' + highestRole.color.toString(16).padStart(6, '0')
-            : '#99aab5',
-    };
-}
 
 function combinarAbort(signalPai, controller) {
     if (!signalPai) return () => {};
@@ -280,21 +246,6 @@ async function fetchAllThreadMessages(thread) {
     }
     all.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
     return all;
-}
-
-function buildZipBuffer(files) {
-    return new Promise((resolve, reject) => {
-        const archive = archiver('zip', { zlib: { level: 6 } });
-        const pass    = new PassThrough();
-        const chunks  = [];
-        pass.on('data',  c   => chunks.push(c));
-        pass.on('end',   ()  => resolve(Buffer.concat(chunks)));
-        pass.on('error', reject);
-        archive.on('error', reject);
-        archive.pipe(pass);
-        for (const f of files) if (f.content) archive.append(f.content, { name: f.name });
-        archive.finalize();
-    });
 }
 
 class ZipBatcher {

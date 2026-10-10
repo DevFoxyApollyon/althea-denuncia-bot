@@ -1,4 +1,5 @@
 ﻿// utils/atualizarStatus.js
+const DenunciaMensagem = require('../models/DenunciaMensagem');
 
 const STATUS_MAP = {
     pendente: 'Pendente',
@@ -7,6 +8,7 @@ const STATUS_MAP = {
     reivindicado: 'Reivindicada',
     aceita: 'Aceita ✅',
     recusada: 'Recusada ❌',
+    finalizada: 'Finalizado 📦',
 };
 
 function atualizarTextoDeStatus(content, novoStatus) {
@@ -56,11 +58,18 @@ async function atualizarStatusNaMensagem(client, denuncia, novoStatus) {
 
     for (const mensagem of mensagens) {
         try {
-            await editarStatusMensagem(mensagem, novoStatus);
+            const editou = await editarStatusMensagem(mensagem, novoStatus);
+            // A cópia guardada no banco (usada pelo site) acompanha a edição.
+            if (editou && mensagem.id === denuncia.messageId) {
+                await DenunciaMensagem.updateOne(
+                    { denunciaId: denuncia._id, mensagemId: mensagem.id },
+                    { $set: { conteudo: atualizarTextoDeStatus(mensagem.content, novoStatus) } }
+                ).catch(() => {});
+            }
         } catch (e) {
             console.warn(`Não foi possível atualizar o status da mensagem ${mensagem.id}:`, e.message);
         }
     }
 }
  
-module.exports = { atualizarStatusNaMensagem };
+module.exports = { atualizarStatusNaMensagem, atualizarTextoDeStatus };

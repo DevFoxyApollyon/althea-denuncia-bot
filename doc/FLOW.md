@@ -161,7 +161,6 @@ Finalizada (arquivada)
 
 ## 7️⃣ Finalizar Denúncia (Exportação)
 
-<<<<<<< HEAD
 ### Fluxo:
 1. **Staff clica** em "✅ Finalizar"
 2. **Bot:**
@@ -188,20 +187,6 @@ denuncia_[id].zip
 **Handler:** `Handlers/exportDenuncia.js`  
 **Timeout:** 5 segundos por anexo  
 **Tamanho máximo:** 50 MB por arquivo
-=======
-### ✅ Aceitar
-- Modal de puniÃ§Ã£o
-- Atualiza banco
-- Envia logs
-- Envia DM
-- Mostra aviso de reanÃ¡lise
-
-### ❌ Recusar
-- Atualiza banco
-- Remove logs
-- Envia DM
-- Mostra aviso de reanÃ¡lise
->>>>>>> d3a0324 (Fix: normalizar emojis, validar links, corrigir regex e caracteres)
 
 ---
 

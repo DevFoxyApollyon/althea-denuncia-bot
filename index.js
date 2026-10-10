@@ -15,17 +15,17 @@ const {
     ActivityType,
     version: discordVersion
 } = require('discord.js');
-const mongoose = require('mongoose');
 const chalk = require('chalk'); 
 const packageJson = require('./package.json');
 
 const commands = require('./utils/commands');
 const { getConfig } = require('./utils/configCache');
 const { registrarComandosSlash, registrarComandosNoServidor } = require('./commands/slash');
-const Strike = require('./models/Strike');
 const { advancedMonitor } = require('./utils/advancedMonitoring');
 const { setupRankJobs } = require('./jobs/rankJobs');
-const secondaryConnection = require('./utils/secondaryDb');
+const { primaryConnection, secondaryConnection } = require('./utils/persistencia');
+const { adicionarMeses, prepararRetencaoNoBanco } = require('./utils/retencaoDados');
+const Config = require('./models/Config');
 const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 const { iniciarPoller } = require('./jobs/nicknamePoller');
 const { iniciarLimpezaContasDuplicadas } = require('./jobs/Limparcontasduplicadas');
@@ -33,6 +33,7 @@ const { iniciarAvisoReivindicacao } = require('./jobs/avisoReivindicacao');
 const { registerMemberEvents } = require('./Handlers/memberEvents');
 const { registerMessageEvents } = require('./Handlers/messageEvents');
 const { registerInteractionEvents } = require('./Handlers/interactionEvents');
+const { iniciarSite } = require('./site/servidor');
 
 const client = new Client({
     intents: [
@@ -48,42 +49,21 @@ const client = new Client({
     }
 });
 
+let servidorDoSite = null;
+
 registerMemberEvents(client, log);
 registerMessageEvents(client, { log, getConfig });
 registerInteractionEvents(client, log);
 
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => {
-        log.success('Database principal conectada.');
-
-        async function limparStrikesAntigas() {
-            try {
-                const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
-                const resultado = await Strike.updateMany({}, {
-                    $pull: {
-                        strikes:      { timestamp: { $lt: limite } },
-                        strikesLink:  { timestamp: { $lt: limite } },
-                        strikesEmoji: { timestamp: { $lt: limite } },
-                    }
-                });
-                if (resultado.modifiedCount > 0) {
-                    log.info(`Limpeza de strikes: ${resultado.modifiedCount} documento(s) atualizado(s).`);
-                }
-
-                const remocao = await Strike.deleteMany({
-                    updatedAt: { $lt: limite },
-                });
-                if (remocao.deletedCount > 0) {
-                    log.info(`Limpeza de strikes: ${remocao.deletedCount} documento(s) sem atividade nas últimas 24h removido(s).`);
-                }
-            } catch (e) {
-                log.error('Erro na limpeza de strikes: ' + e.message);
-            }
-        }
-
-        limparStrikesAntigas();
-        setInterval(limparStrikesAntigas, 60 * 60 * 1000);
-
+Promise.all([primaryConnection.asPromise(), secondaryConnection.asPromise()])
+    .then(async () => {
+        await prepararRetencaoNoBanco(secondaryConnection.db);
+        await Config.updateMany(
+            { dataRetencaoAte: { $exists: false } },
+            { $set: { dataRetencaoAte: adicionarMeses(new Date()) } }
+        );
+        await Config.createIndexes();
+        log.success('Bancos principal e secundário conectados; retenção de seis meses configurada.');
         client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
     })
     .catch((err) => {
@@ -91,7 +71,7 @@ mongoose.connect(process.env.MONGODB_URI)
         process.exit(1);
     });
 
-client.once('clientReady', async (readyClient) => {
+client.once('ready', async (readyClient) => {
     log.system(`BOT ONLINE: ${chalk.white.bold(readyClient.user.username)}`);
 
     log.info(`${chalk.bold('Versão do Bot:')} ${chalk.green(packageJson.version)}`);
@@ -142,6 +122,7 @@ client.once('clientReady', async (readyClient) => {
 
     iniciarAutoFinalizador(client);
     iniciarAvisoReivindicacao(client);
+    servidorDoSite = iniciarSite(client, log);
 
     readyClient.user.setPresence({
         activities: [{
@@ -183,11 +164,14 @@ async function gracefulShutdown(signal, exitCode = 0) {
 
     log.warn(`Sinal ${signal} recebido. Encerrando bot com segurança...`);
     try {
+        servidorDoSite?.close();
         advancedMonitor.destroy();
         client.destroy();
-        await mongoose.connection.close();
         if (secondaryConnection.readyState === 1) {
             await secondaryConnection.close();
+        }
+        if (primaryConnection.readyState === 1) {
+            await primaryConnection.close();
         }
         log.success('Bot encerrado com sucesso.');
     } catch (e) {
