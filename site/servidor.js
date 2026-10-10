@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 
 const { criarRotas, ErroHttp, infoPublicaDoSite, criarLimitador } = require('./rotas');
@@ -17,6 +18,8 @@ const {
 } = require('./sessao');
 
 const DISCORD_API = 'https://discord.com/api/v10';
+// Muda a cada vez que o bot liga; entra no endereço dos arquivos do site.
+const VERSAO_DO_SITE = Date.now().toString(36);
 const VARIAVEIS = ['SITE_URL', 'CLIENT_ID', 'CLIENT_SECRET', 'SESSION_SECRET'];
 
 // O site é opcional: só sobe quando todas as variáveis dele estão no .env.
@@ -186,12 +189,27 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
   app.use('/api', criarRotas({ client }));
   app.use('/api', (req, res, next) => next(new ErroHttp(404, 'Rota não encontrada.')));
 
-  // O index.html não fica em cache: é ele que aponta para a versão atual do site.
-  app.use(express.static(path.join(__dirname, 'public'), {
-    index: 'index.html',
+  // Cada vez que o site sobe, os arquivos passam a ser servidos num endereço
+  // novo (/v/<versão>/...). A hospedagem e os navegadores guardam JS e CSS por
+  // semanas; com o endereço mudando a cada versão, ninguém fica preso a
+  // arquivos antigos e não é preciso limpar o cache.
+  const pastaPublica = path.join(__dirname, 'public');
+  const paginaInicial = fs.readFileSync(path.join(pastaPublica, 'index.html'), 'utf8')
+    .replace(/\/estilo\.css(\?v=\d+)?/g, `/v/${VERSAO_DO_SITE}/estilo.css`)
+    .replace(/\/app\.js(\?v=\d+)?/g, `/v/${VERSAO_DO_SITE}/app.js`);
+
+  app.get(['/', '/index.html'], (req, res) => {
+    res.set('Cache-Control', 'no-store').type('html').send(paginaInicial);
+  });
+  // Os arquivos de uma versão nunca mudam: podem ficar guardados por um ano.
+  app.use('/v/:versao', express.static(pastaPublica, { index: false, maxAge: '365d', immutable: true }));
+
+  // O restante (logo, políticas, service worker) continua no endereço de sempre.
+  app.use(express.static(pastaPublica, {
+    index: false,
     maxAge: '5m',
     setHeaders: (res, arquivo) => {
-      if (arquivo.endsWith('.html') || arquivo.endsWith('sw.js')) res.set('Cache-Control', 'no-cache');
+      if (arquivo.endsWith('.html') || arquivo.endsWith('sw.js')) res.set('Cache-Control', 'no-store');
     }
   }));
 

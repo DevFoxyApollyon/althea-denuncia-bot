@@ -309,3 +309,33 @@ test('DMs: depois do limite do Discord (340002) os avisos opcionais pausam por u
   delete process.env.DM_AVISOS_EXTRAS;
   assert.equal(avisosExtrasLigados(), false);
 });
+
+test('site: cada versão serve JS e CSS num endereço próprio, guardado por muito tempo', async () => {
+  const { criarApp } = require('../site/servidor');
+  const app = criarApp({
+    client: { guilds: { cache: new Map() }, user: { id: '1' } },
+    config: { origem: 'http://localhost', seguro: false, segredo: 'x'.repeat(40), clientId: '1', clientSecret: 's' },
+    log: { warn() {}, error() {}, info() {}, success() {} }
+  });
+  const servidor = app.listen(0);
+  const base = `http://127.0.0.1:${servidor.address().port}`;
+  try {
+    const pagina = await fetch(`${base}/`);
+    const html = await pagina.text();
+    assert.equal(pagina.headers.get('cache-control'), 'no-store', 'a página inicial nunca fica em cache');
+    const versao = /\/v\/([a-z0-9]+)\/app\.js/.exec(html)?.[1];
+    assert.ok(versao, 'a página aponta para /v/<versão>/app.js');
+    assert.ok(html.includes(`/v/${versao}/estilo.css`));
+    assert.equal(/\?v=\d+/.test(html), false, 'não sobra o número antigo de versão');
+
+    // Os módulos importados com caminho relativo caem dentro da mesma versão.
+    const modulo = await fetch(`${base}/v/${versao}/js/painel.js`);
+    assert.equal(modulo.status, 200);
+    assert.match(modulo.headers.get('cache-control'), /max-age=31536000.*immutable/);
+
+    assert.equal((await fetch(`${base}/termos.html`)).status, 200);
+    assert.equal((await fetch(`${base}/.env`)).status, 404);
+  } finally {
+    servidor.close();
+  }
+});

@@ -6,6 +6,16 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.3.2] - 2026-10-10
+### ✨ Novidades
+- Versão para celular: barra de abas fixa no rodapé, topo compacto, chat em tela cheia e botões maiores para o toque.
+
+### 🔧 Correções
+- O site passa a servir JS e CSS em um endereço que muda a cada versão (`/v/<versão>/`), porque a hospedagem guarda esses arquivos por 31 dias e os navegadores continuavam mostrando telas antigas depois de uma atualização.
+- Os cartões de números não deixam mais o texto passar por cima do cartão vizinho.
+
+---
+
 ## [3.3.1] - 2026-10-10
 ### 🔧 Correções
 - O bot para de enviar mensagens diretas quando o Discord limita (erro 340002) ou coloca o bot em quarentena (erro 20026), em vez de insistir e piorar o bloqueio.
