@@ -7,6 +7,7 @@ const { toBrasiliaDate } = require('../utils/dateUtils');
 const fetch = require('node-fetch');
 const { escapeHtml, safeFileName, getHighestRole, buildZipBuffer } = require('../utils/exportUtils');
 const { buscarCanal } = require('../utils/denunciaMensagens');
+const { fecharEspelhos } = require('../utils/espelhos');
 
 const MODULO_TAG = chalk.gray('[AutoFinalizador]');
 
@@ -632,6 +633,8 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                     await thread.setLocked(true).catch(() => { sucessoRecusaAuto = false; });
                     await thread.setArchived(true).catch(() => { sucessoRecusaAuto = false; });
                     if (guild) guild.channels.cache.delete(thread.id);
+                    // Os tópicos espelho fecham junto com o da denúncia.
+                    await fecharEspelhos(client, denuncia._id, 'Denúncia recusada automaticamente.');
                     if (sucessoRecusaAuto) log.success(`Denúncia ${denuncia._id} recusada automaticamente.`, meta);
                 } catch (err) {
                     log.error(`Erro ao recusar automaticamente: ${err.message}`, meta);
@@ -1031,6 +1034,8 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                 'ultimaEdicao.data':            new Date(),
             });
             log.success(`Status atualizado para 'finalizada': ${denuncia._id}`, meta);
+            // Os tópicos espelho (armazém e registro) fecham junto com o da denúncia.
+            await fecharEspelhos(client, denuncia._id, 'Denúncia finalizada automaticamente.');
         } catch (err) {
             log.warn(`Falha ao atualizar status no banco: ${err.message}`, meta);
             houveErroCritico = true;

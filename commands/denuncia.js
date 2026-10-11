@@ -536,6 +536,10 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         denunciaCooldowns.set(interaction.user.id, Date.now());
 
+        // Link direto para o caso no site (só com endereço público, em https).
+        const enderecoDoSite = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
+        const linkNoSite = enderecoDoSite.startsWith('https://') ? `${enderecoDoSite}/#/d/${denunciaSalva._id}` : '';
+
         await interaction.editReply({
             content: [
                 `✅ Sua denúncia foi criada com sucesso em ${thread} às \`${dateUtils.getBrasiliaTime()}\`.`,
@@ -544,6 +548,7 @@ async function handleDenunciaSubmit(interaction, platform) {
                 '• Utilize linguagem respeitosa. Chingamentos e palavras ofensivas resultarão em **punição imediata**.',
                 '• Enviar **imagens ofensivas**, memes ou qualquer conteúdo por brincadeira dentro do tópico resultará em **banimento permanente do servidor**, sem direito a recurso.',
                 '• O tópico é exclusivo para apresentação de provas e contra-provas. Mensagens fora desse contexto serão removidas e o responsável punido.',
+                ...(linkNoSite ? ['', `🌐 **Acompanhe também pelo site:** ${linkNoSite}`] : []),
             ].join('\n')
         });
         confirmacaoEnviada = true;

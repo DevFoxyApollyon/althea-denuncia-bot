@@ -10,6 +10,7 @@ const {
 const { randomUUID } = require('crypto');
 const DenunciaModel = require('../models/Denuncia');
 const StaffProfile = require('../models/StaffProfile');
+const { avisosExtrasLigados, CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM } = require('./dmSegura');
 
 // =========================
 // UTILITARIOS
@@ -95,8 +96,11 @@ async function enviarFeedbackCanais(client, config, data) {
 // =========================
 // ENVIAR DM PARA O STAFF
 // =========================
+// A avaliação já vai para o canal de log e aparece no site; a DM é um aviso
+// extra, desligado por padrão (DM_AVISOS_EXTRAS=1 liga) e nunca enviado
+// enquanto o Discord estiver limitando as DMs do bot.
 async function enviarFeedbackStaff(client, staffId, data) {
-    if (!staffId) return;
+    if (!staffId || !avisosExtrasLigados() || dmPausada()) return;
 
     const staff = await client.users.fetch(staffId).catch(() => null);
 
@@ -111,7 +115,8 @@ async function enviarFeedbackStaff(client, staffId, data) {
         content: '\uD83D\uDCEC **Voce recebeu uma avaliacao pela denuncia que atendeu!**',
         embeds: [embed]
     }).catch((err) => {
-        console.warn(`[Feedback] DM bloqueada para staff ${staffId}: ${err.message}`);
+        if (registrarErroDeDM(err)) return console.warn('[Feedback] DMs do bot limitadas pelo Discord: avisos por DM pausados.');
+        if (!CODIGOS_ESPERADOS.includes(err?.code)) console.warn(`[Feedback] DM não enviada para staff ${staffId}: ${err.message}`);
     });
 }
 

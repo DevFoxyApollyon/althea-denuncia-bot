@@ -5,6 +5,7 @@ const { getConfig } = require('../utils/configCache');
 const fetch = require('node-fetch');
 const { escapeHtml, safeFileName, getHighestRole, buildZipBuffer } = require('../utils/exportUtils');
 const { buscarCanal } = require('../utils/denunciaMensagens');
+const { fecharEspelhos } = require('../utils/espelhos');
 
 const EXPORT_CONSTANTS = {
   MAX_UPLOAD_BYTES: 100 * 1024 * 1024,
@@ -786,6 +787,8 @@ async function handleExportButton(interaction) {
           },
         }
       );
+      // Os tópicos espelho (armazém e registro) fecham junto com o da denúncia.
+      await fecharEspelhos(interaction.client, denuncia._id, 'Denúncia finalizada e exportada.');
     } else {
       await interaction.followUp({
         content: '⚠️ A denúncia foi exportada, mas o bot não conseguiu trancar o tópico. Ela continuará aberta no site.',

@@ -30,6 +30,7 @@ const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 const { iniciarPoller } = require('./jobs/nicknamePoller');
 const { iniciarLimpezaContasDuplicadas } = require('./jobs/Limparcontasduplicadas');
 const { iniciarAvisoReivindicacao } = require('./jobs/avisoReivindicacao');
+const { iniciarLimpezaDeEspelhos } = require('./utils/espelhos');
 const { registerMemberEvents } = require('./Handlers/memberEvents');
 const { registerMessageEvents } = require('./Handlers/messageEvents');
 const { registerInteractionEvents } = require('./Handlers/interactionEvents');
@@ -117,6 +118,7 @@ client.once('clientReady', async (readyClient) => {
     }, 5000);
 
     setupRankJobs(client);
+    iniciarLimpezaDeEspelhos(client);
 
     setTimeout(async () => {
         iniciarLimpezaContasDuplicadas();
