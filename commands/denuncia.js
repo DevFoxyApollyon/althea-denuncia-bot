@@ -98,6 +98,9 @@ async function atualizarMensagemDenuncia(client, guild, config) {
     if (!canalDestino) return null;
 
     const emManutencao = Boolean(config.manutencaoDenuncia);
+    // Endereço público do site (só https: o endereço local de testes não é divulgado).
+    const enderecoDoSite = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
+    const siteUrl = enderecoDoSite.startsWith('https://') ? enderecoDoSite : '';
     const embed = emManutencao
         ? new EmbedBuilder()
             .setColor('#F0A500')
@@ -153,11 +156,22 @@ async function atualizarMensagemDenuncia(client, guild, config) {
                 '### Tutorial:',
                 'Confira nosso tutorial detalhado aqui: https://www.instagram.com/p/DPcEkcHlHDe/',
                 '',
+                // O site só é anunciado quando está configurado (SITE_URL no .env).
+                ...(siteUrl ? [
+                    '### Também pelo site:',
+                    `Você pode abrir a denúncia, enviar as provas e acompanhar cada etapa pelo navegador, sem precisar ficar no Discord: ${siteUrl}`,
+                    '• Entre com a mesma conta do Discord que você usa aqui',
+                    '• Tudo o que você envia pelo site aparece no tópico, e vice-versa',
+                    ''
+                ] : []),
                 `📍 **Horário de Brasília:** \`${dateUtils.getBrasiliaTime()}\``
             ].join('\n'))
             .setFooter({ text: 'Brasil RolePlay' });
 
-    const componentes = emManutencao ? [] : [createDenunciaButtons()];
+    // Com o site ligado, a mensagem ganha um botão que leva direto a ele.
+    const botoes = createDenunciaButtons();
+    if (siteUrl) botoes.addComponents(new ButtonBuilder().setLabel('Abrir o site').setEmoji('🌐').setStyle(ButtonStyle.Link).setURL(siteUrl));
+    const componentes = emManutencao ? [] : [botoes];
     const mensagens = await canalDestino.messages.fetch({ limit: 50 }).catch(() => null);
     const existente = mensagens?.find(message =>
         message.author?.id === client.user.id &&
