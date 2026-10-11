@@ -65,7 +65,10 @@ async function reabrirEspelho(topico) {
 async function limparEspelhosAbertos(client) {
   const configs = await Config.find({}).select('channels.armazem channels.registro').lean();
   const canaisEspelho = new Set(configs.flatMap(config => [config.channels?.armazem, config.channels?.registro]).filter(Boolean));
-  if (!canaisEspelho.size) return { ativos: 0, fechados: 0 };
+  // Para o log mostrar separado o que foi fechado no armazém e no registro.
+  const canaisDeRegistro = new Set(configs.map(config => config.channels?.registro).filter(Boolean));
+  const porCanal = { armazem: 0, registro: 0 };
+  if (!canaisEspelho.size) return { ativos: 0, fechados: 0, porCanal };
 
   // Os canais de espelho podem estar em qualquer servidor em que o bot esteja.
   const servidores = new Map();
@@ -101,6 +104,7 @@ async function limparEspelhosAbertos(client) {
         if (destino === 'trancar') await fecharTopico(topico, 'Denúncia finalizada: espelho fechado.');
         else await topico.edit({ archived: true, autoArchiveDuration: ARQUIVAR_APOS_MINUTOS, reason: 'Espelho arquivado para liberar tópicos ativos.' });
         fechados += 1;
+        porCanal[canaisDeRegistro.has(topico.parentId) ? 'registro' : 'armazem'] += 1;
       } catch (erro) {
         console.warn(`[Espelhos] Não foi possível fechar o tópico espelho ${topico.id}: ${erro.message}`);
       }
@@ -109,7 +113,7 @@ async function limparEspelhosAbertos(client) {
     }
   }
 
-  return { ativos, fechados };
+  return { ativos, fechados, porCanal };
 }
 
 function iniciarLimpezaDeEspelhos(client) {
@@ -118,8 +122,8 @@ function iniciarLimpezaDeEspelhos(client) {
     if (rodando) return;
     rodando = true;
     try {
-      const { ativos, fechados } = await limparEspelhosAbertos(client);
-      if (ativos) console.log(`[Espelhos] ${ativos} tópico(s) espelho ativo(s); ${fechados} arquivado(s) para liberar o limite do servidor.`);
+      const { ativos, fechados, porCanal } = await limparEspelhosAbertos(client);
+      if (ativos) console.log(`[Espelhos] ${ativos} tópico(s) espelho ativo(s); ${fechados} arquivado(s): ${porCanal.registro} no registro e ${porCanal.armazem} no armazém.`);
     } catch (erro) {
       console.warn(`[Espelhos] Falha na limpeza dos tópicos espelho: ${erro.message}`);
     } finally {
