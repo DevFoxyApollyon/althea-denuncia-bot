@@ -2218,3 +2218,78 @@ input[type="text"], input[type="search"], input[type="number"], select, textarea
   .mensagem-corpo header strong { font-size: 16px; }
   .dado dt, .dado dd { font-size: 15px; }
 }
+
+
+/* ==========================================================================
+   Tema claro com o mesmo acabamento do escuro
+   ========================================================================== */
+
+:root[data-tema="claro"] {
+  --fundo: #f4f5f7;
+  --trilho: #ffffff;
+  --superficie: #ffffff;
+  --elevada: #eef0f3;
+  --linha: #e3e6ea;
+  --linha-forte: #c9ced6;
+  --texto: #15181d;
+  --texto-2: #4c5562;
+  --texto-3: #7a8491;
+  --marca: #1a8f4c;
+  --marca-forte: #15773f;
+  --sobre-marca: #ffffff;
+  --marca-suave: rgb(26 143 76 / 10%);
+  --sombra: 0 16px 40px -12px rgb(20 24 30 / 22%), 0 2px 6px rgb(20 24 30 / 8%);
+}
+
+/* estado: ponto de cor e palavra também no claro (sem fundo colorido) */
+.selo.pendente, .selo.reivindicacao, .selo.analise, .selo.aceita, .selo.recusada, .selo.finalizada { background: transparent; color: var(--texto-2); box-shadow: none; }
+
+:root[data-tema="claro"] button, :root[data-tema="claro"] a.botao { border-color: var(--linha-forte); background: var(--superficie); color: var(--texto); box-shadow: none; }
+:root[data-tema="claro"] button:hover, :root[data-tema="claro"] a.botao:hover { border-color: var(--texto-3); background: var(--elevada); }
+:root[data-tema="claro"] .primario, :root[data-tema="claro"] a.botao.primario { border-color: var(--marca); background: var(--marca); color: var(--sobre-marca); font-weight: 600; }
+:root[data-tema="claro"] .primario:hover, :root[data-tema="claro"] a.botao.primario:hover { border-color: var(--marca-forte); background: var(--marca-forte); }
+:root[data-tema="claro"] button.perigo-cheio { border-color: var(--recusada); background: var(--recusada); color: #fff; }
+:root[data-tema="claro"] button.perigo { color: var(--recusada); }
+
+:root[data-tema="claro"] .so-icone, :root[data-tema="claro"] .menu-item, :root[data-tema="claro"] .voltar, :root[data-tema="claro"] .linha-abrir,
+:root[data-tema="claro"] .atividade button, :root[data-tema="claro"] button.usuario, :root[data-tema="claro"] button.perfil-item, :root[data-tema="claro"] .ver-tudo,
+:root[data-tema="claro"] button.discreto, :root[data-tema="claro"] .historico-lista button, :root[data-tema="claro"] .notificacoes li button, :root[data-tema="claro"] .punicoes button,
+:root[data-tema="claro"] button.acao-caso, :root[data-tema="claro"] .chat-abas button, :root[data-tema="claro"] button.chat-citacao, :root[data-tema="claro"] .reacao-escolha button,
+:root[data-tema="claro"] .numeros .numero, :root[data-tema="claro"] .areas button, :root[data-tema="claro"] .filtro { border-color: transparent; background: transparent; box-shadow: none; }
+:root[data-tema="claro"] .so-icone:hover, :root[data-tema="claro"] .menu-item:hover, :root[data-tema="claro"] button.perfil-item:hover, :root[data-tema="claro"] button.usuario:hover,
+:root[data-tema="claro"] .historico-lista button:hover, :root[data-tema="claro"] .notificacoes li button:hover, :root[data-tema="claro"] .numeros button.numero:hover { background: var(--elevada); }
+:root[data-tema="claro"] .linha-abrir:hover, :root[data-tema="claro"] .voltar:hover { background: transparent; }
+
+:root[data-tema="claro"] .menu-item { color: var(--texto-2); }
+:root[data-tema="claro"] .menu-item[aria-current="page"], :root[data-tema="claro"] .area-staff .menu-item[aria-current="page"], :root[data-tema="claro"] .area-admin .menu-item[aria-current="page"] { background: var(--elevada); color: var(--texto); font-weight: 600; box-shadow: none; }
+:root[data-tema="claro"] .areas { border-color: var(--linha); background: var(--fundo); }
+:root[data-tema="claro"] .areas button[aria-pressed="true"], :root[data-tema="claro"] .topo > .areas button[aria-pressed="true"] { background: var(--superficie); color: var(--texto); font-weight: 600; box-shadow: 0 1px 2px rgb(20 24 30 / 12%); }
+:root[data-tema="claro"] .filtro { color: var(--texto-2); }
+:root[data-tema="claro"] .filtro[aria-pressed="true"] { background: var(--elevada); color: var(--texto); font-weight: 600; }
+:root[data-tema="claro"] .numeros button.numero[aria-pressed="true"] { background: var(--elevada); box-shadow: inset 0 -2px 0 var(--marca); }
+:root[data-tema="claro"] input[type="text"], :root[data-tema="claro"] input[type="search"], :root[data-tema="claro"] input[type="number"],
+:root[data-tema="claro"] select, :root[data-tema="claro"] textarea, :root[data-tema="claro"] .compositor { border-color: var(--linha-forte); background: var(--superficie); box-shadow: none; }
+:root[data-tema="claro"] .topo, :root[data-tema="claro"] .menu { background: var(--trilho); }
+:root[data-tema="claro"] .linha:hover { background: var(--elevada); }
+:root[data-tema="claro"] .chat-cartao, :root[data-tema="claro"] .chat-conversa, :root[data-tema="claro"] .chat-membros { background: var(--superficie); }
+:root[data-tema="claro"] .chat .compositor { background: var(--fundo); }
+:root[data-tema="claro"] .dialogo, :root[data-tema="claro"] .notificacoes, :root[data-tema="claro"] .chat-acoes { border-color: var(--linha-forte); background: var(--superficie); box-shadow: var(--sombra); }
+
+@media (max-width: 860px) {
+  :root[data-tema="claro"] .menu { background: var(--trilho); }
+  :root[data-tema="claro"] .menu-item[aria-current="page"] { background: transparent; color: var(--marca); box-shadow: inset 0 2px 0 var(--marca); }
+}
+
+/* ==========================================================================
+   Tela de entrada: as duas metades alinhadas e o texto ocupando a largura
+   ========================================================================== */
+
+.entrada { align-items: stretch; }
+.entrada-apresentacao { display: grid; align-content: center; gap: 18px; padding: clamp(32px, 6vw, 96px); }
+.entrada-apresentacao h1 { max-width: 14ch; }
+.entrada-texto { max-width: 44ch; font-size: 16px; line-height: 1.55; color: var(--texto-2); }
+.entrada-acesso { display: grid; align-content: center; justify-items: center; }
+.entrada-cartao { width: min(340px, 100%); gap: 12px; text-align: left; }
+.entrada-logo { width: 132px; height: 132px; margin: 0 0 8px; }
+.entrada-cartao .dica { margin-top: 2px; }
+.entrada-cartao .politicas { justify-content: flex-start; }
