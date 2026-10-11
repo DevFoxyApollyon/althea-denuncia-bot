@@ -8,11 +8,22 @@
   <meta name="theme-color" content="#17191c">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/png" href="/logo.png">
-  <link rel="stylesheet" href="/estilo.css?v=55">
+  <link rel="stylesheet" href="/estilo.css?v=56">
 </head>
 <body>
-  <div id="app" class="carregando">Carregando…</div>
+  <div id="app" class="carregando">
+    <div class="abertura" role="status" aria-label="Carregando o portal">
+      <div class="abertura-selo">
+        <span class="abertura-onda"></span>
+        <span class="abertura-onda"></span>
+        <span class="abertura-anel"></span>
+        <img src="/logo.png" alt="">
+      </div>
+      <div class="abertura-barra"><span></span></div>
+      <p>Carregando o portal<span class="abertura-pontos"><i>.</i><i>.</i><i>.</i></span></p>
+    </div>
+  </div>
   <noscript>Este site precisa de JavaScript para funcionar.</noscript>
-  <script type="module" src="/app.js?v=55"></script>
+  <script type="module" src="/app.js?v=56"></script>
 </body>
 </html>

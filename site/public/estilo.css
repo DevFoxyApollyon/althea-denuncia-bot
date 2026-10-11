@@ -2293,3 +2293,54 @@ input[type="text"], input[type="search"], input[type="number"], select, textarea
 .entrada-logo { width: 132px; height: 132px; margin: 0 0 8px; }
 .entrada-cartao .dica { margin-top: 2px; }
 .entrada-cartao .politicas { justify-content: flex-start; }
+
+
+/* ==========================================================================
+   Tela de abertura: a logo flutua dentro de um anel que gira, com ondas
+   saindo dela e uma barra correndo embaixo. Some assim que o site carrega.
+   ========================================================================== */
+
+.carregando { min-height: 100dvh; padding: 0; display: grid; place-items: center; }
+.carregando::before { content: none; }
+
+.abertura { display: grid; justify-items: center; gap: 26px; }
+.abertura-selo { position: relative; display: grid; place-items: center; width: 168px; height: 168px; }
+.abertura-selo img { position: relative; z-index: 2; width: 104px; height: 104px; object-fit: contain; animation: abertura-flutuar 2.4s ease-in-out infinite; }
+
+/* anel: um arco verde correndo em volta da logo */
+.abertura-anel { position: absolute; inset: 6px; z-index: 1; border-radius: 50%; background: conic-gradient(from 0deg, transparent 0 62%, var(--marca) 86%, #b8f5cf 100%); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); animation: girar 1.15s linear infinite; }
+.abertura-selo::before { content: ""; position: absolute; inset: 6px; border-radius: 50%; border: 1px solid var(--linha-forte); }
+
+/* ondas: dois círculos que crescem e somem, um depois do outro */
+.abertura-onda { position: absolute; inset: 24px; border-radius: 50%; border: 2px solid var(--marca); opacity: 0; animation: abertura-onda 2.4s ease-out infinite; }
+.abertura-onda + .abertura-onda { animation-delay: 1.2s; }
+
+/* barra: um trecho de luz correndo da esquerda para a direita */
+.abertura-barra { position: relative; width: 190px; height: 4px; overflow: hidden; border-radius: 4px; background: var(--linha); }
+.abertura-barra span { position: absolute; inset: 0 auto 0 0; width: 42%; border-radius: 4px; background: linear-gradient(90deg, transparent, var(--marca), transparent); animation: abertura-correr 1.25s ease-in-out infinite; }
+
+.abertura p { margin: -8px 0 0; color: var(--texto-2); font-size: 14px; font-weight: 500; }
+.abertura-pontos i { font-style: normal; animation: abertura-piscar 1.2s infinite; }
+.abertura-pontos i:nth-child(2) { animation-delay: .2s; }
+.abertura-pontos i:nth-child(3) { animation-delay: .4s; }
+
+@keyframes abertura-flutuar { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-7px) scale(1.04); } }
+@keyframes abertura-onda { 0% { transform: scale(.7); opacity: .65; } 100% { transform: scale(1.75); opacity: 0; } }
+@keyframes abertura-correr { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
+@keyframes abertura-piscar { 0%, 60%, 100% { opacity: .2; } 30% { opacity: 1; } }
+
+/* Carregadores de dentro do site: barras que sobem e descem, em vez de pontos */
+.carregador { gap: 5px; align-items: flex-end; min-height: 120px; padding-bottom: 46px; }
+.carregador span, .carregador::before, .carregador::after { content: ""; width: 5px; height: 26px; border-radius: 3px; background: var(--marca); transform-origin: bottom; animation: carregador-barra 1s ease-in-out infinite; }
+.carregador::before { animation-delay: -.45s; opacity: .55; }
+.carregador span:nth-child(1) { animation-delay: -.3s; opacity: .75; }
+.carregador span:nth-child(2) { animation-delay: -.15s; }
+.carregador span:nth-child(3) { animation-delay: 0s; opacity: .75; }
+.carregador::after { animation-delay: .15s; opacity: .55; }
+@keyframes carregador-barra { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .abertura-selo img, .abertura-anel, .abertura-onda, .abertura-barra span, .abertura-pontos i, .carregador span, .carregador::before, .carregador::after { animation: none; }
+  .abertura-onda { display: none; }
+  .abertura-barra span { width: 100%; }
+}
