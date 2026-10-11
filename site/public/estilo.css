@@ -2374,3 +2374,91 @@ input[type="text"], input[type="search"], input[type="number"], select, textarea
 @media (max-width: 760px) {
   .bot-linha { grid-template-columns: 1fr; }
 }
+
+
+/* ==========================================================================
+   Painel do bot, acabamento: resumo no topo, cabeçalho com ícone em cada
+   bloco, ponto de situação em cada linha e barra de salvar que acompanha a tela
+   ========================================================================== */
+
+.bot { gap: 14px; padding-bottom: 8px; }
+
+.bot-resumo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--linha); border-radius: var(--raio); background: var(--superficie); overflow: hidden; }
+button.bot-resumo-item { display: grid; justify-items: start; gap: 2px; min-height: 0; padding: 14px 16px; border: 0; border-left: 1px solid var(--linha); border-radius: 0; background: none; text-align: left; font-weight: 400; }
+button.bot-resumo-item:first-child { border-left: 0; }
+button.bot-resumo-item:hover { background: var(--elevada); }
+.bot-resumo-item span { color: var(--texto-3); font-size: 12.5px; }
+.bot-resumo-item strong { display: flex; align-items: center; gap: 8px; color: var(--texto); font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.bot-resumo-item strong::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--linha-forte); }
+.bot-resumo-item.ok strong::before { background: var(--marca); }
+.bot-resumo-item.atencao strong::before { background: var(--analise); }
+.bot-resumo-item.falta strong::before { background: var(--recusada); }
+.bot-resumo-item small { color: var(--texto-2); font-size: 12.5px; }
+.bot-resumo-item.falta small { color: var(--recusada); }
+
+.bot .cartao { padding: 0; overflow: hidden; scroll-margin-top: 76px; }
+.bot-cabecalho { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--linha); background: var(--elevada); }
+.bot-cabecalho > div { flex: 1; min-width: 0; }
+.bot-cabecalho h2 { font-size: 14.5px; font-weight: 600; }
+.bot-cabecalho p { margin-top: 2px; max-width: 70ch; color: var(--texto-2); font-size: 13px; }
+.bot-icone { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--linha-forte); border-radius: 8px; background: var(--superficie); color: var(--marca); }
+.bot-icone .icone { width: 17px; height: 17px; }
+.bot-situacao { flex: none; align-self: center; padding: 3px 9px; border: 1px solid var(--linha-forte); border-radius: 20px; color: var(--texto-2); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.bot-situacao.ok { border-color: transparent; background: var(--aceita-fundo); color: var(--aceita); }
+.bot-situacao.falta { border-color: transparent; background: var(--recusada-fundo); color: var(--recusada); }
+
+.bot .bot-linha, .bot .cartao > h2 + .bot-linha { margin: 0; padding: 15px 18px; border-top: 1px solid var(--linha); }
+.bot .bot-cabecalho + .bot-linha { border-top: 0; }
+.bot-linha { transition: background .15s; }
+.bot-linha:hover { background: color-mix(in srgb, var(--elevada) 55%, transparent); }
+.bot-linha.mudou { background: var(--marca-suave); box-shadow: inset 3px 0 0 var(--marca); }
+.bot-ponto { flex: none; align-self: center; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--linha-forte); }
+.bot-linha.ok .bot-ponto { border-color: var(--marca); background: var(--marca); }
+.bot-linha.falta .bot-ponto { border-color: var(--recusada); background: var(--recusada); }
+.bot-rotulo p { padding-left: 16px; }
+.bot-mudou { padding: 1px 7px; border-radius: 20px; background: var(--marca); color: var(--sobre-marca); font-size: 11px; font-weight: 600; }
+.bot-linha.falta .bot-obrigatorio { color: var(--recusada); }
+
+.bot-ajuda { margin: 0; padding: 10px 18px; border-bottom: 1px solid var(--linha); color: var(--texto-3); font-size: 12.5px; }
+.bot .bot-ajuda + .bot-linha { border-top: 0; }
+.bot-id { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; letter-spacing: .01em; }
+.bot-cargo { display: flex; align-items: center; gap: 9px; }
+.bot-cor { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--linha-forte); background: var(--linha-forte); }
+
+.bot-efeitos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 24px; margin: 0; padding: 14px 18px 4px 36px; color: var(--texto-2); font-size: 13px; }
+.bot-pessoas { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 12px 18px 0; list-style: none; }
+.bot-pessoas li { padding: 3px 10px; border: 1px solid var(--linha-forte); border-radius: 20px; background: var(--elevada); font-size: 12.5px; }
+.bot .cartao > .campo { margin: 0; padding: 14px 18px 18px; }
+
+.bot-barra { position: sticky; bottom: 14px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 12px 10px 16px; border: 1px solid var(--linha-forte); border-radius: var(--raio); background: var(--superficie); box-shadow: 0 10px 28px rgb(0 0 0 / 28%); }
+.bot-barra p { display: flex; align-items: center; gap: 8px; color: var(--texto-2); font-size: 13.5px; }
+.bot-barra p::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--marca); }
+.bot-barra.ativa { border-color: var(--analise); }
+.bot-barra.ativa p { color: var(--texto); font-weight: 600; }
+.bot-barra.ativa p::before { background: var(--analise); animation: bot-pulsar 1.6s ease-in-out infinite; }
+@keyframes bot-pulsar { 50% { opacity: .35; } }
+
+@media (max-width: 760px) {
+  .bot-resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  button.bot-resumo-item:nth-child(3) { border-left: 0; }
+  button.bot-resumo-item:nth-child(n+3) { border-top: 1px solid var(--linha); }
+  .bot-cabecalho { flex-wrap: wrap; }
+  .bot-situacao { margin-left: 44px; }
+  .bot-efeitos { grid-template-columns: 1fr; }
+  .bot-barra { bottom: 8px; }
+  .bot-barra .acoes { flex: 1; justify-content: flex-end; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bot-barra.ativa p::before { animation: none; }
+}
+
+/* Painel do bot: resumo alinhado à esquerda e barra de salvar acima do menu do celular */
+button.bot-resumo-item { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; width: 100%; }
+.bot-rotulo p { text-align: left; text-wrap: wrap; }
+@media (max-width: 860px) {
+  .bot { padding-bottom: 0; }
+  .bot-barra { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); flex-wrap: nowrap; padding: 8px 8px 8px 12px; }
+  .bot-barra p { font-size: 13px; }
+  .bot-barra .acoes { flex: none; flex-direction: row; flex-wrap: nowrap; width: auto; margin: 0; gap: 6px; }
+  .bot-barra .acoes button { width: auto; min-height: 38px; padding: 0 12px; font-size: 13.5px; }
+}

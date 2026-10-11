@@ -6,7 +6,7 @@ import { confirmar } from './confirmacao.js';
 import { desenhar } from './desenho.js';
 import { estado } from './estado.js';
 import { blocoAviso } from './navegacao.js';
-import { api, avisar, el, enviarJson, formatarData } from './util.js';
+import { api, avisar, el, enviarJson, formatarData, icone } from './util.js';
 
 const GRUPOS_DE_CANAIS = [
   {
@@ -96,10 +96,17 @@ async function salvar(botao) {
   });
 }
 
-function linha({ nome, obrigatorio, explica }, id, controle, extra) {
-  return el('div', { class: 'bot-linha' },
+// Situação da linha: "ok" (configurada), "vazio" (opcional sem valor) ou
+// "falta" (obrigatória sem valor). "mudou" marca o que ainda não foi salvo.
+function linha({ nome, obrigatorio, explica }, id, controle, extra, { valor = true, mudou = false } = {}) {
+  const situacao = valor ? 'ok' : obrigatorio ? 'falta' : 'vazio';
+  return el('div', { class: `bot-linha ${situacao}${mudou ? ' mudou' : ''}` },
     el('div', { class: 'bot-rotulo' },
-      el('label', { for: id }, nome, obrigatorio && el('span', { class: 'bot-obrigatorio' }, 'obrigatório')),
+      el('label', { for: id },
+        el('span', { class: 'bot-ponto', 'aria-hidden': 'true' }),
+        nome,
+        obrigatorio && el('span', { class: 'bot-obrigatorio' }, 'obrigatório'),
+        mudou && el('span', { class: 'bot-mudou' }, 'não salvo')),
       el('p', null, explica)),
     el('div', { class: 'bot-controle' }, controle, extra));
 }
@@ -147,6 +154,30 @@ function interruptor(edicao, chave, id, { ligado, desligado }) {
     el('span', null, edicao[chave] ? ligado : desligado));
 }
 
+// Cabeçalho de cada bloco: ícone, título e, à direita, quanto já está configurado.
+function cabecalho(nomeIcone, titulo, texto, situacao) {
+  return el('header', { class: 'bot-cabecalho' },
+    el('span', { class: 'bot-icone', 'aria-hidden': 'true' }, icone(nomeIcone)),
+    el('div', null, el('h2', null, titulo), texto && el('p', null, texto)),
+    situacao && el('span', { class: `bot-situacao ${situacao.tom || ''}` }, situacao.texto));
+}
+
+// "3 de 5 configurados", ou quantos obrigatórios faltam.
+function contar(itens, valores) {
+  const feitos = itens.filter(item => valores[item.chave]).length;
+  const faltam = itens.filter(item => item.obrigatorio && !valores[item.chave]).length;
+  if (faltam) return { feitos, total: itens.length, tom: 'falta', texto: faltam === 1 ? 'Falta 1 obrigatório' : `Faltam ${faltam} obrigatórios` };
+  return { feitos, total: itens.length, tom: feitos === itens.length ? 'ok' : '', texto: `${feitos} de ${itens.length} configurados` };
+}
+
+function resumo(rotulo, valor, detalhe, tom, alvo) {
+  return el('button', {
+    class: `bot-resumo-item ${tom || ''}`,
+    type: 'button',
+    onclick: () => document.getElementById(alvo)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, el('span', null, rotulo), el('strong', null, valor), el('small', null, detalhe));
+}
+
 export function telaPainelDoBot() {
   const painel = estado.painelBot;
 
@@ -156,8 +187,22 @@ export function telaPainelDoBot() {
   }
 
   const { edicao } = painel;
-  const mudou = JSON.stringify(edicao) !== painel.salvo;
-  const nomesDosIsentos = painel.valores.isentos.filter(item => item.nome);
+  const antes = JSON.parse(painel.salvo);
+  const todosOsCanais = [...GRUPOS_DE_CANAIS.flatMap(grupo => grupo.itens), ...CANAIS_EXTERNOS];
+  const mudancas = [
+    edicao.manutencao !== antes.manutencao,
+    edicao.bloqueio !== antes.bloqueio,
+    edicao.isentos.trim() !== antes.isentos.trim(),
+    ...todosOsCanais.map(item => edicao.channels[item.chave] !== antes.channels[item.chave]),
+    ...CARGOS.map(item => edicao.roles[item.chave] !== antes.roles[item.chave])
+  ].filter(Boolean).length;
+
+  const canais = contar(todosOsCanais, edicao.channels);
+  const cargos = contar(CARGOS, edicao.roles);
+  const isentos = edicao.isentos.split(/[\s,;]+/).filter(Boolean).length;
+  const nomesDosIsentos = painel.valores.isentos;
+  const linhaDeCanal = (item, controle, extra) => linha(item, `bot-canal-${item.chave}`, controle, extra,
+    { valor: edicao.channels[item.chave], mudou: edicao.channels[item.chave] !== antes.channels[item.chave] });
 
   return el('main', { class: 'principal' },
     el('div', { class: 'config bot' },
@@ -165,30 +210,35 @@ export function telaPainelDoBot() {
         el('div', null,
           el('h1', null, 'Painel do bot'),
           el('p', { class: 'sub' }, 'As mesmas opções do comando /painel do Discord. O que você salvar aqui vale na hora para o bot e para o site.'),
-          painel.atualizado?.em && el('p', { class: 'sub bot-atualizado' }, `Última alteração: ${formatarData(painel.atualizado.em)}${painel.atualizado.por ? `, por ${painel.atualizado.por}` : ''}`)),
-        el('div', { class: 'acoes' },
-          mudou && el('span', { class: 'bot-pendente' }, 'Há mudanças não salvas'),
-          el('button', { class: 'primario', type: 'button', disabled: !mudou, onclick: (evento) => salvar(evento.currentTarget) }, 'Salvar painel'))),
+          painel.atualizado?.em && el('p', { class: 'sub bot-atualizado' }, `Última alteração: ${formatarData(painel.atualizado.em)}${painel.atualizado.por ? `, por ${painel.atualizado.por}` : ''}`))),
       blocoAviso(),
 
-      el('section', { class: 'cartao' },
-        el('h2', null, 'Funcionamento'),
+      el('nav', { class: 'bot-resumo', 'aria-label': 'Resumo do painel' },
+        resumo('Denúncias', edicao.manutencao ? 'Em manutenção' : 'Abertas', edicao.bloqueio ? 'Fila em ordem' : 'Fila em qualquer ordem', edicao.manutencao ? 'atencao' : 'ok', 'bot-funcionamento'),
+        resumo('Canais', `${canais.feitos} de ${canais.total}`, canais.tom === 'falta' ? canais.texto : 'configurados', canais.tom, 'bot-canais'),
+        resumo('Cargos', `${cargos.feitos} de ${cargos.total}`, cargos.tom === 'falta' ? cargos.texto : 'configurados', cargos.tom, 'bot-cargos'),
+        resumo('Isentos', String(isentos), isentos === 1 ? 'conta sem filtros' : 'contas sem filtros', '', 'bot-isentos-bloco')),
+
+      el('section', { class: 'cartao', id: 'bot-funcionamento' },
+        cabecalho('ajustes', 'Funcionamento', 'Liga e desliga o que vale para o servidor inteiro.'),
         linha({ nome: 'Manutenção das denúncias', explica: 'Ligada, ninguém consegue abrir denúncia nova, nem pelo Discord nem pelo site, e a mensagem do /denuncia avisa da manutenção. As denúncias já abertas continuam normais.' },
-          'bot-manutencao', interruptor(edicao, 'manutencao', 'bot-manutencao', { ligado: 'Em manutenção', desligado: 'Denúncias abertas' })),
+          'bot-manutencao', interruptor(edicao, 'manutencao', 'bot-manutencao', { ligado: 'Em manutenção', desligado: 'Denúncias abertas' }), null,
+          { valor: !edicao.manutencao, mudou: edicao.manutencao !== antes.manutencao }),
         linha({ nome: 'Bloqueio de pendências anteriores', explica: 'Ligado, a staff só consegue reivindicar uma denúncia depois que as mais antigas do mesmo canal forem reivindicadas. Serve para ninguém pular a fila.' },
-          'bot-bloqueio', interruptor(edicao, 'bloqueio', 'bot-bloqueio', { ligado: 'Fila em ordem', desligado: 'Qualquer ordem' }))),
+          'bot-bloqueio', interruptor(edicao, 'bloqueio', 'bot-bloqueio', { ligado: 'Fila em ordem', desligado: 'Qualquer ordem' }), null,
+          { valor: edicao.bloqueio, mudou: edicao.bloqueio !== antes.bloqueio })),
 
-      GRUPOS_DE_CANAIS.map(grupo => el('section', { class: 'cartao' },
-        el('h2', null, grupo.titulo),
-        el('p', { class: 'sub' }, grupo.texto),
-        grupo.itens.map(item => linha(item, `bot-canal-${item.chave}`, seletor(edicao.channels, item, `bot-canal-${item.chave}`, painel.canais, '# '))))),
+      GRUPOS_DE_CANAIS.map((grupo, indice) => el('section', { class: 'cartao', id: indice ? null : 'bot-canais' },
+        cabecalho(indice ? 'documento' : 'balao', grupo.titulo, grupo.texto, contar(grupo.itens, edicao.channels)),
+        grupo.itens.map(item => linhaDeCanal(item, seletor(edicao.channels, item, `bot-canal-${item.chave}`, painel.canais, '# '))))),
 
       el('section', { class: 'cartao' },
-        el('h2', null, 'Canais de outros servidores'),
-        el('p', { class: 'sub' }, 'Estes canais podem ficar em outro servidor, por isso entram pelo ID. O bot precisa estar no servidor e enxergar o canal. Para copiar o ID no Discord: ative o Modo desenvolvedor, clique com o botão direito no canal e escolha "Copiar ID do canal".'),
-        CANAIS_EXTERNOS.map(item => linha(item, `bot-canal-${item.chave}`,
+        cabecalho('externo', 'Canais de outros servidores', 'Podem ficar em outro servidor, por isso entram pelo ID. O bot precisa estar no servidor e enxergar o canal.', contar(CANAIS_EXTERNOS, edicao.channels)),
+        el('p', { class: 'bot-ajuda' }, 'Para copiar o ID no Discord: ative o Modo desenvolvedor, clique com o botão direito no canal e escolha "Copiar ID do canal".'),
+        CANAIS_EXTERNOS.map(item => linhaDeCanal(item,
           el('input', {
             id: `bot-canal-${item.chave}`,
+            class: 'bot-id',
             type: 'text',
             inputmode: 'numeric',
             maxlength: '21',
@@ -199,23 +249,53 @@ export function telaPainelDoBot() {
           }),
           painel.externos[item.chave] && edicao.channels[item.chave] === painel.valores.channels[item.chave] && el('small', null, painel.externos[item.chave])))),
 
-      el('section', { class: 'cartao' },
-        el('h2', null, 'Cargos'),
-        el('p', { class: 'sub' }, 'O bot e o site decidem o que cada pessoa pode fazer pelos cargos dela no Discord.'),
-        CARGOS.map(item => linha(item, `bot-cargo-${item.chave}`, seletor(edicao.roles, item, `bot-cargo-${item.chave}`, painel.cargos, '@ ')))),
+      el('section', { class: 'cartao', id: 'bot-cargos' },
+        cabecalho('escudo', 'Cargos', 'O bot e o site decidem o que cada pessoa pode fazer pelos cargos dela no Discord.', cargos),
+        CARGOS.map(item => {
+          const cor = painel.cargos.find(cargo => cargo.id === edicao.roles[item.chave])?.cor;
+          // A cor entra por JavaScript: a política de segurança do site barra style no HTML.
+          const amostra = el('span', { class: 'bot-cor', 'aria-hidden': 'true' });
+          if (cor) amostra.style.background = cor;
+          return linha(item, `bot-cargo-${item.chave}`,
+            el('div', { class: 'bot-cargo' },
+              amostra,
+              seletor(edicao.roles, item, `bot-cargo-${item.chave}`, painel.cargos, '@ ')), null,
+            { valor: edicao.roles[item.chave], mudou: edicao.roles[item.chave] !== antes.roles[item.chave] });
+        })),
 
-      el('section', { class: 'cartao' },
-        el('h2', null, 'Usuários isentos'),
-        el('p', { class: 'sub' }, 'Contas que o bot não filtra: não levam strike por palavras proibidas, não têm links barrados, podem escrever em tópicos restritos e podem recusar uma denúncia escrevendo "recusado" no tópico. A lista é a mesma em todos os servidores.'),
+      el('section', { class: 'cartao', id: 'bot-isentos-bloco' },
+        cabecalho('cadeado', 'Usuários isentos', 'Contas que o bot não filtra. A lista é a mesma em todos os servidores.', { texto: isentos === 1 ? '1 conta' : `${isentos} contas` }),
+        el('ul', { class: 'bot-efeitos' },
+          el('li', null, 'Não levam strike por palavras proibidas.'),
+          el('li', null, 'Não têm links barrados.'),
+          el('li', null, 'Podem escrever em tópicos restritos.'),
+          el('li', null, 'Podem recusar uma denúncia escrevendo "recusado" no tópico.')),
+        nomesDosIsentos.length > 0 && el('ul', { class: 'bot-pessoas', 'aria-label': 'Na lista hoje' },
+          nomesDosIsentos.map(item => el('li', { title: item.id }, item.nome || `ID ${item.id}`))),
         el('div', { class: 'campo' },
           el('label', { for: 'bot-isentos' }, 'IDs do Discord, um por linha'),
           el('textarea', {
             id: 'bot-isentos',
+            class: 'bot-id',
             rows: '4',
             placeholder: '123456789012345678',
             value: edicao.isentos,
             oninput: (evento) => { edicao.isentos = evento.target.value; },
             onchange: () => desenhar()
-          })),
-        nomesDosIsentos.length > 0 && el('p', { class: 'sub bot-isentos-nomes' }, `Na lista hoje: ${nomesDosIsentos.map(item => item.nome).join(', ')}.`))));
+          }))),
+
+      // Barra que acompanha a tela: sempre à mão, sem precisar voltar ao topo.
+      el('div', { class: `bot-barra${mudancas ? ' ativa' : ''}`, role: 'status' },
+        el('p', null, mudancas
+          ? (mudancas === 1 ? '1 mudança não salva' : `${mudancas} mudanças não salvas`)
+          : 'Tudo salvo'),
+        el('div', { class: 'acoes' },
+          mudancas > 0 && el('button', {
+            type: 'button',
+            onclick: () => {
+              painel.edicao = JSON.parse(painel.salvo);
+              desenhar();
+            }
+          }, 'Descartar'),
+          el('button', { class: 'primario', type: 'button', disabled: !mudancas, onclick: (evento) => salvar(evento.currentTarget) }, 'Salvar painel')))));
 }

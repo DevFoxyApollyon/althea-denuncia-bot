@@ -93,7 +93,7 @@ function registrarRotasDoPainelDoBot(router, { client }) {
       cargos: [...guild.roles.cache.values()]
         .filter(cargo => cargo.id !== guild.id && !cargo.managed)
         .sort((a, b) => b.rawPosition - a.rawPosition)
-        .map(cargo => ({ id: cargo.id, nome: cargo.name })),
+        .map(cargo => ({ id: cargo.id, nome: cargo.name, cor: cargo.hexColor && cargo.hexColor !== '#000000' ? cargo.hexColor : null })),
       // Canais de outros servidores: o nome aparece ao lado do ID, quando o bot enxerga.
       externos: Object.fromEntries(CANAIS_EXTERNOS.map(chave => {
         const canal = client.channels.cache.get(config?.channels?.[chave]);

@@ -182,7 +182,7 @@ const painelDoBot = {
     { id: '13', nome: 'cadeia-staff', categoria: 'Staff' }, { id: '14', nome: 'log-admin', categoria: 'Staff' }, { id: '15', nome: 'top-diario', categoria: 'Staff' },
     { id: '16', nome: 'geral', categoria: '' }
   ],
-  cargos: [{ id: '24', nome: 'Responsável' }, { id: '23', nome: 'Administrador' }, { id: '21', nome: 'Autenticado PC' }, { id: '22', nome: 'Autenticado Mobile' }],
+  cargos: [{ id: '24', nome: 'Responsável', cor: '#e84fd0' }, { id: '23', nome: 'Administrador', cor: '#5bc0eb' }, { id: '21', nome: 'Autenticado PC' }, { id: '22', nome: 'Autenticado Mobile' }],
   externos: { registro: '#registro em Althea Cloud', cloud: '#cloud em Althea Cloud', canalDenuncia: null },
   atualizado: { em: horas(30), por: 'rafael (site)' }
 };
