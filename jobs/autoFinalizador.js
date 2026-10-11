@@ -30,12 +30,19 @@ function formatLevel(label, colorFn) {
     return colorFn(label.padEnd(7, ' '));
 }
 
+// Só avisos e erros vão para o log. As linhas de INFO, SUCESSO e SISTEMA
+// (cada denúncia finalizada, memória, próximo ciclo) enchiam o console;
+// para vê-las de novo ao investigar um problema, use AUTOFINALIZADOR_DETALHADO=1.
+const DETALHADO = ['1', 'true', 'sim'].includes(String(process.env.AUTOFINALIZADOR_DETALHADO || '').trim().toLowerCase());
+const linha = (rotulo, cor, msg, meta) => `${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel(rotulo, cor)} ${msg}${formatMeta(meta)}`;
+const detalhe = (rotulo, cor) => (msg, meta = {}) => { if (DETALHADO) console.log(linha(rotulo, cor, msg, meta)); };
+
 const log = {
-    info:    (msg, meta = {}) => console.log(`${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel('INFO', chalk.blue)} ${msg}${formatMeta(meta)}`),
-    success: (msg, meta = {}) => console.log(`${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel('SUCESSO', chalk.green)} ${msg}${formatMeta(meta)}`),
-    warn:    (msg, meta = {}) => console.log(`${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel('AVISO', chalk.yellow)} ${msg}${formatMeta(meta)}`),
-    error:   (msg, meta = {}) => console.error(`${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel('ERRO', chalk.red)} ${msg}${formatMeta(meta)}`),
-    system:  (msg, meta = {}) => console.log(`${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel('SISTEMA', chalk.magenta)} ${msg}${formatMeta(meta)}`),
+    info:    detalhe('INFO', chalk.blue),
+    success: detalhe('SUCESSO', chalk.green),
+    warn:    (msg, meta = {}) => console.log(linha('AVISO', chalk.yellow, msg, meta)),
+    error:   (msg, meta = {}) => console.error(linha('ERRO', chalk.red, msg, meta)),
+    system:  detalhe('SISTEMA', chalk.magenta),
 };
 
 const DIAS_PARA_FINALIZAR     = 7;
