@@ -1,6 +1,6 @@
 {
   "name": "althea-denuncia-bot",
-  "version": "3.6.3",
+  "version": "3.6.4",
   "description": "ALTHEA — Bot Discord para gestão de denúncia, moderação, automações e arquivamento de logs.",
   "main": "index.js",
   "scripts": {
@@ -23,7 +23,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.22.3",
     "mongoose": "^7.6.3",
-    "node-cron": "^3.0.3",
+    "node-cron": "^4.6.0",
     "node-fetch": "^2.6.7",
     "web-push": "^3.6.7",
     "ws": "^8.18.0"
@@ -35,5 +35,8 @@
     "eslint": "^9.39.5",
     "globals": "^17.13.0",
     "nodemon": "^3.1.14"
+  },
+  "overrides": {
+    "glob": "^13.0.6"
   }
 }
