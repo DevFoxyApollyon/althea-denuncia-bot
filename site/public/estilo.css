@@ -2344,3 +2344,33 @@ input[type="text"], input[type="search"], input[type="number"], select, textarea
   .abertura-onda { display: none; }
   .abertura-barra span { width: 100%; }
 }
+
+
+/* ==========================================================================
+   Painel do bot: cada opção numa linha, explicação à esquerda e controle à direita
+   ========================================================================== */
+
+.bot .cartao > h2 + .bot-linha { margin-top: 6px; }
+.bot-atualizado { margin-top: 2px; font-size: 12.5px; color: var(--texto-3); }
+.bot-pendente { align-self: center; color: var(--analise); font-size: 13px; font-weight: 500; }
+.bot-linha { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 320px); gap: 8px 28px; align-items: start; padding: 14px 0; border-top: 1px solid var(--linha); }
+.bot .cartao > h2 + .bot-linha { border-top: 0; }
+.bot-rotulo label { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; font-size: 14px; font-weight: 600; }
+.bot-rotulo p { margin-top: 3px; max-width: 62ch; color: var(--texto-2); font-size: 13px; line-height: 1.5; }
+.bot-obrigatorio { color: var(--texto-3); font-size: 11.5px; font-weight: 500; }
+.bot-controle { display: grid; gap: 5px; min-width: 0; }
+.bot-controle select, .bot-controle input[type="text"] { width: 100%; }
+.bot-controle small { color: var(--texto-3); font-size: 12px; overflow-wrap: anywhere; }
+.bot-isentos-nomes { margin: 10px 0 0; }
+
+.bot-interruptor { display: inline-flex; align-items: center; gap: 10px; min-height: 36px; cursor: pointer; font-size: 13.5px; font-weight: 500; }
+.bot-interruptor input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.bot-trilho { position: relative; flex: none; width: 40px; height: 22px; border-radius: 22px; background: var(--linha-forte); transition: background .15s; }
+.bot-trilho::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.bot-interruptor input:checked + .bot-trilho { background: var(--marca); }
+.bot-interruptor input:checked + .bot-trilho::after { transform: translateX(18px); }
+.bot-interruptor input:focus-visible + .bot-trilho { outline: 2px solid var(--marca); outline-offset: 2px; }
+
+@media (max-width: 760px) {
+  .bot-linha { grid-template-columns: 1fr; }
+}

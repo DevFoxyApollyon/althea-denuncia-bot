@@ -359,3 +359,35 @@ test('denúncias abertas: entra quem ainda tem acusado sem conta do Discord', ()
   assert.equal(faltaIdentificar({ acusado: '1039+2471', acusadoUserIds: ['111111111111111111'] }), true, '1 marcado e 2 denunciados');
   assert.equal(faltaIdentificar({ acusado: '1039+2471', acusadoUserIds: ['111111111111111111', '222222222222222222'] }), false);
 });
+
+test('painel do bot: valida canais, cargos e isentos antes de salvar', () => {
+  const { validarPainel } = require('../site/rotas/painelBot');
+  const servidor = {
+    atual: { channels: { backup: '900000000000000009' }, roles: {} },
+    canais: new Set(['100000000000000001', '100000000000000002', '100000000000000003']),
+    cargos: new Set(['200000000000000001', '200000000000000002', '200000000000000003']),
+    canaisVisiveis: new Set(['100000000000000001', '300000000000000001']),
+    cargosDeQuemSalva: new Set(['200000000000000003'])
+  };
+  const entrada = () => ({
+    channels: { pc: '100000000000000001', mobile: '100000000000000002', logs: '100000000000000003', backup: '900000000000000009', cloud: '300000000000000001' },
+    roles: { pc: '200000000000000001', permitido: '200000000000000002', responsavel_admin: '200000000000000003' },
+    manutencao: true,
+    isentos: '123456789012345678\n123456789012345678, abc'
+  });
+
+  const limpo = validarPainel(entrada(), servidor);
+  assert.equal(limpo.manutencaoDenuncia, true);
+  assert.equal(limpo.bloquearReivindicacaoComPendentes, true);
+  assert.equal(limpo.channels.backup, '900000000000000009', 'valor que não mudou é mantido mesmo fora do servidor');
+  assert.equal(limpo.channels.analysis, '');
+  assert.deepEqual(limpo.isentos, ['123456789012345678']);
+
+  const com = (mudar) => { const e = entrada(); mudar(e); return () => validarPainel(e, servidor); };
+  assert.throws(com(e => { e.channels.pc = ''; }), /principais/);
+  assert.throws(com(e => { e.channels.log = '100000000000000999'; }), /não existe mais/);
+  assert.throws(com(e => { e.channels.registro = '300000000000000999'; }), /não enxerga/);
+  assert.throws(com(e => { e.roles.administrador = '200000000000000999'; }), /cargos escolhidos/);
+  assert.throws(com(e => { e.roles.responsavel_admin = '200000000000000001'; }), /sem acesso/);
+  assert.throws(com(e => { e.isentos = 'abc'; }), /isentos/);
+});

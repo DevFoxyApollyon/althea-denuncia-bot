@@ -169,6 +169,29 @@ app.delete('/api/avisos/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+const painelDoBot = {
+  valores: {
+    channels: { pc: '11', mobile: '12', logs: '13', log: '14', analysis: '', topDaily: '15', backup: '', armazem: '900000000000000001', registro: '900000000000000002', cloud: '900000000000000003', canalDenuncia: '' },
+    roles: { pc: '21', permitido: '22', administrador: '23', responsavel_admin: '24' },
+    manutencao: false,
+    bloqueio: true,
+    isentos: [{ id: '200000000000000200', nome: 'Lucas Prado' }]
+  },
+  canais: [
+    { id: '11', nome: 'denuncias-pc', categoria: 'Denúncias' }, { id: '12', nome: 'denuncias-mobile', categoria: 'Denúncias' },
+    { id: '13', nome: 'cadeia-staff', categoria: 'Staff' }, { id: '14', nome: 'log-admin', categoria: 'Staff' }, { id: '15', nome: 'top-diario', categoria: 'Staff' },
+    { id: '16', nome: 'geral', categoria: '' }
+  ],
+  cargos: [{ id: '24', nome: 'Responsável' }, { id: '23', nome: 'Administrador' }, { id: '21', nome: 'Autenticado PC' }, { id: '22', nome: 'Autenticado Mobile' }],
+  externos: { registro: '#registro em Althea Cloud', cloud: '#cloud em Althea Cloud', canalDenuncia: null },
+  atualizado: { em: horas(30), por: 'rafael (site)' }
+};
+app.get('/api/painel-bot', (req, res) => res.json(painelDoBot));
+app.post('/api/painel-bot', express.json(), (req, res) => {
+  Object.assign(painelDoBot.valores, { channels: req.body.channels, roles: req.body.roles, manutencao: req.body.manutencao === true, bloqueio: req.body.bloqueio !== false });
+  res.json({ ok: true, mensagem: 'Painel do bot salvo (prévia, nada foi gravado).', ...painelDoBot });
+});
+
 app.get('/api/config-site', (req, res) => res.json({ config: configVisivel('1'), padrao: PADRAO }));
 app.post('/api/config-site', express.json(), (req, res) => res.json({ ok: true, mensagem: 'Configurações salvas (prévia, nada foi gravado).', config: configVisivel('1') }));
 

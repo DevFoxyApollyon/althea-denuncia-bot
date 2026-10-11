@@ -3,6 +3,7 @@ import { conversaNoFim, rolarConversaParaOFim } from './acoes.js';
 import { carregarAvisos } from './avisos.js';
 import { carregarChat, carregarNovasDoChat } from './chat.js';
 import { carregarTeste, carregarTesteAdmin } from './teste.js';
+import { carregarPainelDoBot } from './bot.js';
 import { carregarConfigDoSite } from './config.js';
 import { desenhar } from './desenho.js';
 import { CHAVE_AREA, CHAVE_SERVIDOR, FILTROS, INTERVALO_ATUALIZACAO_MS, VISTAS, estado, raiz } from './estado.js';
@@ -193,6 +194,7 @@ export async function aoMudarRota() {
     if (rota.tipo === 'geral') carregarGeral();
     if (rota.tipo === 'identificar') carregarNaoIdentificadas();
     if (rota.tipo === 'config') carregarConfigDoSite();
+    if (rota.tipo === 'bot') carregarPainelDoBot();
     if (rota.tipo === 'jogador') carregarJogador(rota.id);
     if (rota.tipo === 'avisos') carregarAvisos();
     if (rota.tipo === 'teste') carregarTeste();
@@ -321,6 +323,7 @@ export function entrarNoServidor(guildId) {
   estado.canalChat = 'geral';
   estado.jogador = null;
   estado.configSite = null;
+  estado.painelBot = null;
   salvarPreferencia(CHAVE_SERVIDOR, guildId);
   const papeis = estado.servidores.find(servidor => servidor.id === guildId)?.papeis || {};
   // Mantém a área em que a pessoa estava, se ela também existe nesse servidor.

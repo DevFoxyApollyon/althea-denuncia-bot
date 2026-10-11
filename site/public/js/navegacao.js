@@ -232,7 +232,8 @@ export function menuLateral() {
       itemDoChat(),
       itemDeRota('Sugestões', 'lampada', 'sugestoes'),
       grupo('Ajustes'),
-      itemDeRota('Configurações', 'ajustes', 'config')
+      itemDeRota('Configurações do site', 'ajustes', 'config'),
+      itemDeRota('Painel do bot', 'escudo', 'bot')
     ]
     : estado.area === 'staff'
       ? [

@@ -14,6 +14,7 @@ const { registrarRotasDoChat } = require('./rotas/chat');
 const { registrarRotasDaSala } = require('./rotas/chatSala');
 const { registrarRotasDoTeste } = require('./rotas/teste');
 const { registrarRotasDeAvisos } = require('./rotas/avisos');
+const { registrarRotasDoPainelDoBot } = require('./rotas/painelBot');
 
 const { ErroHttp, criarLimitador } = comum;
 
@@ -66,6 +67,7 @@ function criarRotas({ client }) {
   registrarRotasDoChat(router, contexto);
   registrarRotasDoTeste(router, contexto);
   registrarRotasDeAvisos(router, contexto);
+  registrarRotasDoPainelDoBot(router, contexto);
 
   return router;
 }
