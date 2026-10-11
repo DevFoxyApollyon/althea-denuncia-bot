@@ -18,6 +18,7 @@ const {
     podeFalarSemBloqueio
 } = require('../utils/strikeWords');
 const Denuncia = require('../models/Denuncia');
+const { reabrirEspelho } = require('../utils/espelhos');
 const Strike = require('../models/Strike');
 const { handleYoutubeDenuncia } = require('../utils/youtubeUtils');
 const { advancedMonitor } = require('../utils/advancedMonitoring');
@@ -247,6 +248,7 @@ function registerMessageEvents(client, { log, getConfig }) {
                 for (const espelho of espelhos) {
                     const threadEspelho = await buscarCanal(client, espelho.threadId);
                     if (!threadEspelho?.isTextBased?.()) continue;
+                    await reabrirEspelho(threadEspelho);
                     const mensagemEspelho = await threadEspelho.messages.fetch(espelho.messageId).catch(() => null);
                     if (!mensagemEspelho) continue;
                     await mensagemEspelho.edit(payload).catch(error =>

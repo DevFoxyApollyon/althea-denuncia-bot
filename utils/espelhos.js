@@ -9,10 +9,13 @@ const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
 const { buscarCanal } = require('./denunciaMensagens');
 
-const PAUSA_ENTRE_TOPICOS_MS = 1500;
-const IDADE_MINIMA_MS = 60 * 60 * 1000;
-const INTERVALO_DA_LIMPEZA_MS = 6 * 60 * 60 * 1000;
-const ESPERA_INICIAL_MS = 3 * 60 * 1000;
+const PAUSA_ENTRE_TOPICOS_MS = 1200;
+const IDADE_MINIMA_MS = 15 * 60 * 1000;
+const INTERVALO_DA_LIMPEZA_MS = 60 * 60 * 1000;
+const ESPERA_INICIAL_MS = 60 * 1000;
+// Espelho parado por 1 hora é arquivado pelo próprio Discord. Arquivado ele não
+// conta no limite, e volta sozinho quando o bot manda uma mensagem nova nele.
+const ARQUIVAR_APOS_MINUTOS = 60;
 const STATUS_FECHADOS = ['finalizada'];
 
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -44,12 +47,18 @@ async function fecharEspelhos(client, denunciaId, motivo = 'Denúncia finalizada
   return fechados;
 }
 
-// Decide se um espelho ativo já pode ser fechado: a denúncia dele foi
-// finalizada, ou o registro já saiu do banco (denúncia antiga). Espelho recém
-// criado fica, porque a denúncia pode ainda não ter sido gravada.
-function podeFechar(denuncia, criadoEm, agora = Date.now()) {
-  if (agora - criadoEm < IDADE_MINIMA_MS) return false;
-  return !denuncia || STATUS_FECHADOS.includes(denuncia.status);
+// O que fazer com um espelho ativo:
+//   'trancar'  - a denúncia foi finalizada ou já saiu do banco: tranca e arquiva;
+//   'arquivar' - a denúncia segue aberta: só arquiva (ele reabre sozinho se chegar mensagem);
+//   null       - recém-criado, ainda está recebendo as primeiras mensagens.
+function destinoDoEspelho(denuncia, criadoEm, agora = Date.now()) {
+  if (agora - criadoEm < IDADE_MINIMA_MS) return null;
+  return !denuncia || STATUS_FECHADOS.includes(denuncia.status) ? 'trancar' : 'arquivar';
+}
+
+// Antes de editar uma mensagem dentro do espelho: o Discord não deixa editar em tópico arquivado.
+async function reabrirEspelho(topico) {
+  if (topico?.isThread?.() && topico.archived) await topico.setArchived(false, 'Atualização da cópia da denúncia.').catch(() => {});
 }
 
 // Varre os canais de espelho e fecha o que sobrou aberto de denúncias já finalizadas.
@@ -86,9 +95,12 @@ async function limparEspelhosAbertos(client) {
     }
 
     for (const topico of topicos) {
-      if (!podeFechar(porTopico.get(topico.id), topico.createdTimestamp || 0)) continue;
+      const destino = destinoDoEspelho(porTopico.get(topico.id), topico.createdTimestamp || 0);
+      if (!destino) continue;
       try {
-        if (await fecharTopico(topico, 'Denúncia finalizada: espelho fechado.')) fechados += 1;
+        if (destino === 'trancar') await fecharTopico(topico, 'Denúncia finalizada: espelho fechado.');
+        else await topico.edit({ archived: true, autoArchiveDuration: ARQUIVAR_APOS_MINUTOS, reason: 'Espelho arquivado para liberar tópicos ativos.' });
+        fechados += 1;
       } catch (erro) {
         console.warn(`[Espelhos] Não foi possível fechar o tópico espelho ${topico.id}: ${erro.message}`);
       }
@@ -107,7 +119,7 @@ function iniciarLimpezaDeEspelhos(client) {
     rodando = true;
     try {
       const { ativos, fechados } = await limparEspelhosAbertos(client);
-      if (ativos) console.log(`[Espelhos] ${ativos} tópico(s) espelho ativo(s); ${fechados} fechado(s) por serem de denúncias finalizadas.`);
+      if (ativos) console.log(`[Espelhos] ${ativos} tópico(s) espelho ativo(s); ${fechados} arquivado(s) para liberar o limite do servidor.`);
     } catch (erro) {
       console.warn(`[Espelhos] Falha na limpeza dos tópicos espelho: ${erro.message}`);
     } finally {
@@ -119,4 +131,4 @@ function iniciarLimpezaDeEspelhos(client) {
   setInterval(rodar, INTERVALO_DA_LIMPEZA_MS).unref?.();
 }
 
-module.exports = { fecharEspelhos, limparEspelhosAbertos, iniciarLimpezaDeEspelhos, podeFechar };
+module.exports = { ARQUIVAR_APOS_MINUTOS, fecharEspelhos, reabrirEspelho, limparEspelhosAbertos, iniciarLimpezaDeEspelhos, destinoDoEspelho };

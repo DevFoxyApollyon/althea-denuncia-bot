@@ -407,13 +407,13 @@ test('lista do responsável: busca e filtros viram consulta no banco', () => {
   assert.equal(filtroDaListaAdmin('1', { status: 'inventado', plataforma: 'TV' }).status, undefined);
 });
 
-test('espelhos: só fecha o tópico de denúncia finalizada ou que já saiu do banco', () => {
-  const { podeFechar } = require('../utils/espelhos');
+test('espelhos: finalizada tranca, aberta só arquiva, recém-criado fica', () => {
+  const { destinoDoEspelho } = require('../utils/espelhos');
   const agora = Date.now();
   const antigo = agora - 3 * 60 * 60 * 1000;
-  assert.equal(podeFechar({ status: 'finalizada' }, antigo, agora), true);
-  assert.equal(podeFechar({ status: 'analise' }, antigo, agora), false);
-  assert.equal(podeFechar({ status: 'recusada' }, antigo, agora), false, 'recusada ainda pode ter reanálise');
-  assert.equal(podeFechar(null, antigo, agora), true, 'denúncia antiga, já apagada do banco');
-  assert.equal(podeFechar(null, agora - 60 * 1000, agora), false, 'espelho recém-criado ainda não tem registro');
+  assert.equal(destinoDoEspelho({ status: 'finalizada' }, antigo, agora), 'trancar');
+  assert.equal(destinoDoEspelho(null, antigo, agora), 'trancar', 'denúncia antiga, já apagada do banco');
+  assert.equal(destinoDoEspelho({ status: 'analise' }, antigo, agora), 'arquivar');
+  assert.equal(destinoDoEspelho({ status: 'recusada' }, antigo, agora), 'arquivar');
+  assert.equal(destinoDoEspelho(null, agora - 60 * 1000, agora), null, 'espelho recém-criado ainda recebe as primeiras mensagens');
 });

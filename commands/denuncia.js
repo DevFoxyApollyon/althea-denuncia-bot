@@ -21,6 +21,7 @@ const dateUtils = require('../utils/dateUtils');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
 const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
 const { registrarMensagens, buscarCanal } = require('../utils/denunciaMensagens');
+const { ARQUIVAR_APOS_MINUTOS } = require('../utils/espelhos');
 const { alertarMotivoCritico } = require('../utils/alertaMotivoCritico');
 
 require('dotenv').config();
@@ -584,7 +585,8 @@ async function handleDenunciaSubmit(interaction, platform) {
             if (!mensagemEspelho?.startThread) continue;
             const mirrorThread = await mensagemEspelho.startThread({
                 name: `Denúncia ${mainMessage.id}`,
-                autoArchiveDuration: 10080,
+                // Arquiva sozinho depois de 1 hora parado, para não ocupar o limite de tópicos ativos.
+                autoArchiveDuration: ARQUIVAR_APOS_MINUTOS,
                 reason: 'Espelho permanente da denúncia'
             }).catch(error => {
                 console.warn(`Não foi possível criar thread espelho em ${channelId}:`, error.message);
