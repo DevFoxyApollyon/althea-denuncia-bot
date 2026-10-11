@@ -10,7 +10,7 @@ const { registrarFeedback } = require('../../utils/feedback');
 const { getConfig } = require('../../utils/configCache');
 const ModerationAction = require('../../models/ModerationAction');
 const { avisarMudanca, ouvirMudancas, ouvirServidor } = require('../../utils/eventosDenuncia');
-const { prioridadeDoMotivo, configVisivel } = require('../categorias');
+const { prioridadeDoMotivo, categoriaDoMotivo, configVisivel } = require('../categorias');
 const { registrarMensagens } = require('../../utils/denunciaMensagens');
 const { contemPalavraProibida, contemLinkProibido } = require('../../utils/strikeWords');
 const { handleDenunciaSubmit } = require('../../commands/denuncia');
@@ -20,6 +20,7 @@ const { criarInteracaoSite, resultadoDaInteracao } = require('../interacaoSite')
 const {
   STATUS_ABERTOS,
   LIMITE_LISTA,
+  escaparRegex,
   SERVIDOR_OCULTO_VISAO_ADMIN,
   TAMANHO_MAX_MENSAGEM,
   EXTENSOES_PERMITIDAS,
@@ -48,6 +49,37 @@ const {
 function ehResumoDaDenuncia(texto) {
   return ['**Denunciante**:', '**Acusado**:', '**Motivo**:', '**Prova(s)**:']
     .filter(campo => String(texto || '').includes(campo)).length >= 2;
+}
+
+const STATUS_DO_FILTRO = {
+  andamento: ['pendente', 'reivindicacao', 'analise'],
+  aceita: ['aceita'],
+  recusada: ['recusada'],
+  finalizada: ['finalizada']
+};
+
+// Filtro da lista do responsável: busca por acusado, denunciante, motivo ou
+// número do caso (os 6 últimos caracteres do ID), mais status e plataforma.
+function filtroDaListaAdmin(guildId, consulta = {}) {
+  const filtro = { guildId };
+  const status = STATUS_DO_FILTRO[consulta.status];
+  if (status) filtro.status = { $in: status };
+  if (['PC', 'Mobile'].includes(consulta.plataforma)) filtro.platform = consulta.plataforma;
+
+  const termo = String(consulta.busca || '').trim().slice(0, 80);
+  if (termo) {
+    const expressao = new RegExp(escaparRegex(termo), 'i');
+    const numero = termo.replace(/^#/, '');
+    filtro.$or = [
+      { acusado: expressao },
+      { denunciante: expressao },
+      { motivo: expressao },
+      ...(/^[0-9a-f]{3,24}$/i.test(numero)
+        ? [{ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: `${numero.toLowerCase()}$` } } }]
+        : [])
+    ];
+  }
+  return filtro;
 }
 
 function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTopico, podeEscrever, podeEnviarArquivo, podeAbrirDenuncia }) {
@@ -83,6 +115,7 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
     let pagina = 1;
     let total = 0;
     let totalPaginas = 1;
+    let antigasPrimeiro = false;
 
     if (admin) {
       const servidores = await servidoresDoUsuario(client, req.usuario.id);
@@ -96,7 +129,15 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
       if (!escolhido) throw new ErroHttp(403, 'Você não tem o cargo responsável neste servidor.');
 
       nomesServidores = new Map([[escolhido.guild.id, escolhido.guild.name]]);
-      filtro = { guildId: escolhido.guild.id };
+      // Busca e filtros valem para o servidor inteiro, não só para a página aberta.
+      filtro = filtroDaListaAdmin(escolhido.guild.id, req.query);
+      const categoria = String(req.query.categoria || '').slice(0, 40);
+      if (categoria && categoria !== 'todas') {
+        // A categoria não fica gravada: sai do motivo, então é conferida aqui.
+        const candidatas = await Denuncia.find(filtro).select('motivo guildId').lean();
+        filtro = { _id: { $in: candidatas.filter(item => categoriaDoMotivo(item.motivo, item.guildId) === categoria).map(item => item._id) } };
+      }
+      antigasPrimeiro = req.query.ordem === 'antigas';
       const solicitada = Number.parseInt(String(req.query.pagina || '1'), 10);
       pagina = Number.isInteger(solicitada) && solicitada > 0 ? solicitada : 1;
       total = await Denuncia.countDocuments(filtro);
@@ -123,7 +164,7 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
     }
 
     let consulta = Denuncia.find(filtro)
-      .sort({ dataCriacao: fila ? 1 : -1 })
+      .sort({ dataCriacao: fila || antigasPrimeiro ? 1 : -1 })
       .select('guildId acusado denunciante motivo platform status dataCriacao updatedAt claimedBy claimedAt criadoPor acusadoUserIds');
     if (admin) consulta = consulta.skip((pagina - 1) * LIMITE_LISTA).limit(LIMITE_LISTA);
     else consulta = consulta.limit(fila ? LIMITE_LISTA * 3 : LIMITE_LISTA);
@@ -232,7 +273,9 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
         dataPunicao: denuncia.dataPunicao || null,
         responsavel,
         linkDiscord: `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`,
-        aberta: STATUS_ABERTOS.includes(denuncia.status)
+        aberta: STATUS_ABERTOS.includes(denuncia.status),
+        parte: denuncia.criadoPor === req.usuario.id ? 'denunciante'
+          : (denuncia.acusadoUserIds || []).includes(req.usuario.id) ? 'acusado' : null
       },
       mensagens,
       pessoas,
@@ -501,4 +544,4 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
   }));
 }
 
-module.exports = { registrarRotasDeDenuncias, ehResumoDaDenuncia };
+module.exports = { filtroDaListaAdmin, registrarRotasDeDenuncias, ehResumoDaDenuncia };

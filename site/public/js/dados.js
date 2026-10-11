@@ -28,7 +28,11 @@ export function casosVisiveis() {
   const termo = estado.busca.trim().toLowerCase();
   const status = FILTROS[estado.filtro].status;
   const vistos = lerVistos();
+  // Na lista do responsável a busca e os filtros são feitos no servidor, em
+  // todas as denúncias; aqui só sobra o filtro de novidades.
+  const noServidor = estado.vista === 'admin';
   const casos = casosDaVista().filter(denuncia => {
+    if (noServidor) return !estado.soNovidades || temNovidade(denuncia, vistos);
     if (status && !status.includes(denuncia.status)) return false;
     if (estado.plataforma !== 'todas' && denuncia.platform !== estado.plataforma) return false;
     if (estado.categoria !== 'todas' && denuncia.categoria !== estado.categoria) return false;
@@ -38,19 +42,42 @@ export function casosVisiveis() {
       .some(campo => String(campo || '').toLowerCase().includes(termo));
   });
 
-  if (estado.ordem === 'padrao') return casos;
+  if (estado.ordem === 'padrao' || noServidor) return casos;
   const sinal = estado.ordem === 'antigas' ? 1 : -1;
   return [...casos].sort((a, b) => sinal * (new Date(a.dataCriacao) - new Date(b.dataCriacao)));
+}
+
+// Mudou a busca ou um filtro: na lista do responsável volta para a página 1 e
+// pede de novo ao servidor (com uma pausa curta enquanto a pessoa digita).
+let esperaDaBusca = null;
+const pedidos = {};
+export function filtrarLista({ digitando = false } = {}) {
+  if (estado.vista !== 'admin') return desenhar();
+  estado.paginaAdmin = 1;
+  clearTimeout(esperaDaBusca);
+  if (!digitando) return carregarLista('admin');
+  desenhar();
+  esperaDaBusca = setTimeout(() => carregarLista('admin'), 350);
 }
 
 export async function carregarLista(escopo) {
   if (!estado.guildId) return;
   estado.carregando[escopo] = true;
   desenhar();
+  // Só a resposta do pedido mais recente vale: as antigas chegam fora de ordem.
+  const pedido = pedidos[escopo] = (pedidos[escopo] || 0) + 1;
   try {
     const parametros = new URLSearchParams({ guildId: estado.guildId, escopo });
-    if (escopo === 'admin') parametros.set('pagina', String(estado.paginaAdmin));
+    if (escopo === 'admin') {
+      parametros.set('pagina', String(estado.paginaAdmin));
+      if (estado.busca.trim()) parametros.set('busca', estado.busca.trim());
+      if (estado.filtro !== 'todos') parametros.set('status', estado.filtro);
+      if (estado.plataforma !== 'todas') parametros.set('plataforma', estado.plataforma);
+      if (estado.categoria !== 'todas') parametros.set('categoria', estado.categoria);
+      if (estado.ordem === 'antigas') parametros.set('ordem', 'antigas');
+    }
     const resultado = await api(`/api/denuncias?${parametros}`);
+    if (pedido !== pedidos[escopo]) return;
     estado.listas[escopo] = resultado.denuncias;
     if (escopo === 'admin') {
       estado.paginaAdmin = resultado.pagina || 1;
@@ -58,6 +85,7 @@ export async function carregarLista(escopo) {
       estado.totalAdmin = resultado.total || resultado.denuncias.length;
     }
   } catch (erro) {
+    if (pedido !== pedidos[escopo]) return;
     estado.listas[escopo] = [];
     avisar('erro', erro.message);
   }

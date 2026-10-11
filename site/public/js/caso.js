@@ -449,8 +449,9 @@ export function telaDetalhe() {
   const { denuncia, mensagens, papeis, pessoas = {}, limiteUploadMb } = estado.detalhe;
   const dado = (rotulo, valor) => valor && el('div', { class: 'dado' }, el('dt', null, rotulo), el('dd', null, valor));
   const responsavel = pessoas[denuncia.claimedBy];
-  // As ações de atendimento só existem no painel da staff.
-  const mostrarStaff = areaDaEquipe() && papeis.staff && denuncia.aberta;
+  // As ações de atendimento aparecem para a staff em qualquer área (inclusive
+  // vindo de "Denúncias abertas"), menos na área do jogador quando o caso é dela.
+  const mostrarStaff = papeis.staff && denuncia.aberta && (areaDaEquipe() || !denuncia.parte);
 
   return el('main', { class: 'principal' },
     voltar,

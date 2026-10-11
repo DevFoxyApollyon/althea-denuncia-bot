@@ -1,6 +1,6 @@
 // Painel inicial: saudação, números, tabela de casos e coluna de apoio.
 import { finalizarDenuncia } from './acoes.js';
-import { carregarLista, casosDaVista, casosVisiveis } from './dados.js';
+import { carregarLista, casosDaVista, casosVisiveis, filtrarLista } from './dados.js';
 import { desenhar } from './desenho.js';
 import { EM_ANDAMENTO, FILTROS, VISTAS, estado } from './estado.js';
 import { blocoAviso } from './navegacao.js';
@@ -71,15 +71,19 @@ export function tabelaDeCasos() {
   const opcao = (valor, rotulo, atual) => el('option', { value: valor, selected: valor === atual }, rotulo);
   const porCategoria = new Map();
   for (const denuncia of casos) porCategoria.set(denuncia.categoria, (porCategoria.get(denuncia.categoria) || 0) + 1);
-  const categoriasPresentes = [...porCategoria.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const noServidor = estado.vista === 'admin';
+  const filtrando = noServidor && Boolean(estado.busca.trim() || estado.filtro !== 'todos' || estado.plataforma !== 'todas' || estado.categoria !== 'todas');
+  const categoriasPresentes = (noServidor
+    ? [...new Set([...(estado.servidores.find(servidor => servidor.id === estado.guildId)?.categorias || []).map(item => item.nome), 'Outros'])]
+    : [...porCategoria.keys()].filter(Boolean)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const filtrosPresentes = Object.keys(FILTROS).filter(chave =>
-    chave === 'todos' || casos.some(denuncia => FILTROS[chave].status.includes(denuncia.status)));
+    chave === 'todos' || noServidor || casos.some(denuncia => FILTROS[chave].status.includes(denuncia.status)));
 
   let corpo;
   if (carregando && !casos.length) {
     corpo = el('div', { class: 'tabela', 'aria-busy': 'true', 'aria-label': 'Carregando denúncias' },
       [0, 1, 2, 3].map(() => el('div', { class: 'linha esqueleto' }, el('span'), el('span'), el('span'))));
-  } else if (!casos.length) {
+  } else if (!casos.length && !filtrando) {
     corpo = el('div', { class: 'vazio' },
       el('h3', null, estado.vista === 'fila' ? 'Fila em dia'
         : estado.vista === 'atendimentos' ? 'Nenhum caso com você'
@@ -93,7 +97,7 @@ export function tabelaDeCasos() {
   } else if (!visiveis.length) {
     corpo = el('div', { class: 'vazio' },
       el('h3', null, 'Nada com esse filtro'),
-      el('p', null, 'Mude a busca ou o status para ver outros casos.'));
+      el('p', null, filtrando ? 'Nenhuma denúncia deste servidor bate com a busca e os filtros.' : 'Mude a busca ou o status para ver outros casos.'));
   } else {
     corpo = el('div', { class: 'tabela', role: 'list' },
       el('div', { class: 'tabela-colunas', 'aria-hidden': 'true' },
@@ -132,13 +136,13 @@ export function tabelaDeCasos() {
         el('h1', null, vista.titulo)),
       estado.vista === 'minhas' && podeAbrir() && el('button', { class: 'primario', type: 'button', onclick: () => ir('#/nova') },
         icone('mais'), 'Nova denúncia')),
-    casos.length > 1 && el('div', { class: 'tabela-ferramentas' },
+    (casos.length > 1 || filtrando) && el('div', { class: 'tabela-ferramentas' },
       el('label', null, el('span', null, 'Plataforma'),
         el('select', {
           id: 'filtro-plataforma',
           onchange: (evento) => {
             estado.plataforma = evento.target.value;
-            desenhar();
+            filtrarLista();
           }
         }, opcao('todas', 'Todas', estado.plataforma), opcao('PC', 'PC', estado.plataforma), opcao('Mobile', 'Mobile', estado.plataforma))),
       categoriasPresentes.length > 1 && el('label', null, el('span', null, 'Categoria'),
@@ -146,15 +150,15 @@ export function tabelaDeCasos() {
           id: 'filtro-categoria',
           onchange: (evento) => {
             estado.categoria = evento.target.value;
-            desenhar();
+            filtrarLista();
           }
-        }, opcao('todas', 'Todas', estado.categoria), categoriasPresentes.map(nome => opcao(nome, `${nome} (${porCategoria.get(nome)})`, estado.categoria)))),
+        }, opcao('todas', 'Todas', estado.categoria), categoriasPresentes.map(nome => opcao(nome, noServidor ? nome : `${nome} (${porCategoria.get(nome)})`, estado.categoria)))),
       el('label', null, el('span', null, 'Ordem'),
         el('select', {
           id: 'filtro-ordem',
           onchange: (evento) => {
             estado.ordem = evento.target.value;
-            desenhar();
+            filtrarLista();
           }
         }, opcao('padrao', estado.vista === 'fila' ? 'Prioridade, depois mais antigas' : 'Mais novas primeiro', estado.ordem),
         opcao(estado.vista === 'fila' ? 'novas' : 'antigas', estado.vista === 'fila' ? 'Mais novas primeiro' : 'Mais antigas primeiro', estado.ordem))),
@@ -174,12 +178,14 @@ export function tabelaDeCasos() {
         'aria-pressed': String(estado.filtro === chave),
         onclick: () => {
           estado.filtro = chave;
-          desenhar();
+          filtrarLista();
         }
       }, FILTROS[chave].rotulo))),
     corpo,
     visiveis.length > 0 && el('p', { class: 'tabela-rodape' },
-      `Mostrando ${visiveis.length} de ${estado.vista === 'admin' ? estado.totalAdmin : casos.length}`),
+      noServidor && filtrando
+        ? (estado.totalAdmin === 1 ? '1 denúncia encontrada no servidor' : `${estado.totalAdmin} denúncias encontradas no servidor, ${visiveis.length} nesta página`)
+        : `Mostrando ${visiveis.length} de ${noServidor ? estado.totalAdmin : casos.length}`),
     estado.vista === 'admin' && estado.totalPaginasAdmin > 1 && el('nav', { class: 'paginacao', 'aria-label': 'Páginas' },
       el('button', {
         type: 'button',

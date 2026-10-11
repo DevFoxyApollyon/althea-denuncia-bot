@@ -1,6 +1,6 @@
 // Barra superior, seletor de áreas, notificações e menu lateral.
 import { sair } from './acoes.js';
-import { abrirArea, abrirVista, casosDaVista, entrarNoServidor } from './dados.js';
+import { abrirArea, abrirVista, casosDaVista, entrarNoServidor, filtrarLista } from './dados.js';
 import { desenhar } from './desenho.js';
 import { ROTAS_PROPRIAS, VISTAS, estado } from './estado.js';
 import { marca } from './marca.js';
@@ -139,7 +139,7 @@ export function barraSuperior() {
         oninput: (evento) => {
           estado.busca = evento.target.value;
           if (rotaAtual().tipo !== 'inicio') ir('#/');
-          else desenhar();
+          filtrarLista({ digitando: true });
         }
       })),
     el('div', { class: 'topo-acoes' },

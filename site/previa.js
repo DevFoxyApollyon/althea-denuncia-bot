@@ -69,7 +69,17 @@ app.get('/api/denuncias', (req, res) => {
   const escopo = req.query.escopo;
   if (req.query.vazio !== undefined) return res.json({ denuncias: [] });
   if (escopo === 'fila') return res.json({ denuncias: denuncias.filter(d => d.status === 'pendente').sort((a, b) => (a.prioridade === 'alta' ? 0 : 1) - (b.prioridade === 'alta' ? 0 : 1)) });
-  if (escopo === 'admin') return res.json({ denuncias, pagina: 1, totalPaginas: 3, total: 214 });
+  if (escopo === 'admin') {
+    // Mesma ideia do site real: a busca e os filtros valem para a lista inteira.
+    const termo = String(req.query.busca || '').toLowerCase();
+    const status = { andamento: ['pendente', 'reivindicacao', 'analise'], aceita: ['aceita'], recusada: ['recusada'], finalizada: ['finalizada'] }[req.query.status];
+    const filtrando = Boolean(termo || status || req.query.plataforma || req.query.categoria);
+    const achadas = denuncias.filter(d => (!termo || [d.acusado, d.denunciante, d.motivo].some(campo => campo.toLowerCase().includes(termo)))
+      && (!status || status.includes(d.status))
+      && (!req.query.plataforma || d.platform === req.query.plataforma)
+      && (!req.query.categoria || d.categoria === req.query.categoria));
+    return res.json({ denuncias: achadas, pagina: filtrando ? 1 : Number(req.query.pagina) || 1, totalPaginas: filtrando ? 1 : 3, total: filtrando ? achadas.length : 214 });
+  }
   res.json({ denuncias });
 });
 

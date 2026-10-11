@@ -391,3 +391,18 @@ test('painel do bot: valida canais, cargos e isentos antes de salvar', () => {
   assert.throws(com(e => { e.roles.responsavel_admin = '200000000000000001'; }), /sem acesso/);
   assert.throws(com(e => { e.isentos = 'abc'; }), /isentos/);
 });
+
+test('lista do responsável: busca e filtros viram consulta no banco', () => {
+  const { filtroDaListaAdmin } = require('../site/rotas/denuncias');
+  assert.deepEqual(filtroDaListaAdmin('1', {}), { guildId: '1' });
+
+  const filtro = filtroDaListaAdmin('1', { busca: ' flood ', status: 'andamento', plataforma: 'PC' });
+  assert.equal(filtro.platform, 'PC');
+  assert.deepEqual(filtro.status.$in, ['pendente', 'reivindicacao', 'analise']);
+  assert.equal(filtro.$or.length, 3, 'flood não é número de caso');
+  assert.ok(filtro.$or[2].motivo.test('Flood no chat'));
+
+  assert.equal(filtroDaListaAdmin('1', { busca: '#757FA7' }).$or.length, 4, 'número do caso também é procurado');
+  assert.ok(filtroDaListaAdmin('1', { busca: 'a.b(' }).$or[0].acusado.test('xa.b(y'), 'símbolos da busca não quebram a consulta');
+  assert.equal(filtroDaListaAdmin('1', { status: 'inventado', plataforma: 'TV' }).status, undefined);
+});
