@@ -61,56 +61,74 @@ async function reabrirEspelho(topico) {
   if (topico?.isThread?.() && topico.archived) await topico.setArchived(false, 'Atualização da cópia da denúncia.').catch(() => {});
 }
 
-// Varre os canais de espelho e fecha o que sobrou aberto de denúncias já finalizadas.
+// Os espelhos são criados com o nome "Denúncia <id da mensagem>".
+const NOME_DE_ESPELHO = /^Denúncia \d{15,21}$/;
+
+// Varre os tópicos ativos de todos os servidores do bot e arquiva:
+//   - os espelhos (armazém e registro), em qualquer canal em que estejam: o
+//     canal configurado pode ter mudado e os tópicos antigos ficam no anterior;
+//   - o tópico da própria denúncia, quando ela já está finalizada.
 async function limparEspelhosAbertos(client) {
   const configs = await Config.find({}).select('channels.armazem channels.registro').lean();
   const canaisEspelho = new Set(configs.flatMap(config => [config.channels?.armazem, config.channels?.registro]).filter(Boolean));
-  // Para o log mostrar separado o que foi fechado no armazém e no registro.
   const canaisDeRegistro = new Set(configs.map(config => config.channels?.registro).filter(Boolean));
-  const porCanal = { armazem: 0, registro: 0 };
-  if (!canaisEspelho.size) return { ativos: 0, fechados: 0, porCanal };
-
-  // Os canais de espelho podem estar em qualquer servidor em que o bot esteja.
-  const servidores = new Map();
-  for (const canalId of canaisEspelho) {
-    const canal = await buscarCanal(client, canalId);
-    if (canal?.guild) servidores.set(canal.guild.id, canal.guild);
-  }
-
+  const porCanal = { armazem: 0, registro: 0, denuncia: 0 };
   let ativos = 0;
   let fechados = 0;
-  for (const guild of servidores.values()) {
+
+  for (const guild of client.guilds.cache.values()) {
     const resposta = await guild.channels.fetchActiveThreads(false).catch((erro) => {
       console.warn(`[Espelhos] Não foi possível listar os tópicos ativos de ${guild.name}: ${erro.message}`);
       return null;
     });
-    const topicos = [...(resposta?.threads?.values() || [])].filter(topico => canaisEspelho.has(topico.parentId));
-    ativos += topicos.length;
-    if (!topicos.length) continue;
+    const todos = [...(resposta?.threads?.values() || [])];
+    if (!todos.length) continue;
 
-    const ids = topicos.map(topico => topico.id);
-    const denuncias = await Denuncia.find({ $or: [{ armazemThreadId: { $in: ids } }, { registroThreadId: { $in: ids } }] })
-      .select('status armazemThreadId registroThreadId').lean();
-    const porTopico = new Map();
+    const ids = todos.map(topico => topico.id);
+    const denuncias = await Denuncia.find({ $or: [{ threadId: { $in: ids } }, { armazemThreadId: { $in: ids } }, { registroThreadId: { $in: ids } }] })
+      .select('status threadId armazemThreadId registroThreadId').lean();
+    const tipoPorTopico = new Map();
     for (const denuncia of denuncias) {
-      if (denuncia.armazemThreadId) porTopico.set(denuncia.armazemThreadId, denuncia);
-      if (denuncia.registroThreadId) porTopico.set(denuncia.registroThreadId, denuncia);
+      if (denuncia.threadId) tipoPorTopico.set(denuncia.threadId, { tipo: 'denuncia', denuncia });
+      if (denuncia.armazemThreadId) tipoPorTopico.set(denuncia.armazemThreadId, { tipo: 'armazem', denuncia });
+      if (denuncia.registroThreadId) tipoPorTopico.set(denuncia.registroThreadId, { tipo: 'registro', denuncia });
     }
 
-    for (const topico of topicos) {
-      const destino = destinoDoEspelho(porTopico.get(topico.id), topico.createdTimestamp || 0);
+    let ativosAqui = 0;
+    let fechadosAqui = 0;
+    for (const topico of todos) {
+      const achado = tipoPorTopico.get(topico.id);
+      // Sem registro no banco, só é espelho se estiver num canal de espelho ou tiver nome de espelho.
+      const espelhoSemRegistro = !achado && (canaisEspelho.has(topico.parentId) || NOME_DE_ESPELHO.test(topico.name || ''));
+      if (!achado && !espelhoSemRegistro) continue;
+
+      const tipo = achado?.tipo || (canaisDeRegistro.has(topico.parentId) ? 'registro' : 'armazem');
+      let destino;
+      if (tipo === 'denuncia') {
+        // O tópico da denúncia só é mexido aqui quando ela já foi finalizada.
+        if (!STATUS_FECHADOS.includes(achado.denuncia.status)) continue;
+        destino = 'trancar';
+      } else {
+        destino = destinoDoEspelho(achado?.denuncia, topico.createdTimestamp || 0);
+      }
+      ativosAqui += 1;
       if (!destino) continue;
+
       try {
-        if (destino === 'trancar') await fecharTopico(topico, 'Denúncia finalizada: espelho fechado.');
+        if (destino === 'trancar') await fecharTopico(topico, 'Denúncia finalizada: tópico fechado.');
         else await topico.edit({ archived: true, autoArchiveDuration: ARQUIVAR_APOS_MINUTOS, reason: 'Espelho arquivado para liberar tópicos ativos.' });
-        fechados += 1;
-        porCanal[canaisDeRegistro.has(topico.parentId) ? 'registro' : 'armazem'] += 1;
+        fechadosAqui += 1;
+        porCanal[tipo] += 1;
       } catch (erro) {
-        console.warn(`[Espelhos] Não foi possível fechar o tópico espelho ${topico.id}: ${erro.message}`);
+        console.warn(`[Espelhos] Não foi possível fechar o tópico ${topico.id} (${topico.name}): ${erro.message}`);
       }
       // Devagar, para não bater no limite de requisições do Discord.
       await esperar(PAUSA_ENTRE_TOPICOS_MS);
     }
+
+    if (ativosAqui) console.log(`[Espelhos] ${guild.name}: ${todos.length} tópico(s) ativo(s) no servidor, ${ativosAqui} de denúncias/espelhos, ${fechadosAqui} fechado(s).`);
+    ativos += ativosAqui;
+    fechados += fechadosAqui;
   }
 
   return { ativos, fechados, porCanal };
@@ -123,7 +141,7 @@ function iniciarLimpezaDeEspelhos(client) {
     rodando = true;
     try {
       const { ativos, fechados, porCanal } = await limparEspelhosAbertos(client);
-      if (ativos) console.log(`[Espelhos] ${ativos} tópico(s) espelho ativo(s); ${fechados} arquivado(s): ${porCanal.registro} no registro e ${porCanal.armazem} no armazém.`);
+      if (ativos) console.log(`[Espelhos] Total: ${fechados} tópico(s) fechado(s): ${porCanal.registro} no registro, ${porCanal.armazem} no armazém e ${porCanal.denuncia} de denúncias finalizadas.`);
     } catch (erro) {
       console.warn(`[Espelhos] Falha na limpeza dos tópicos espelho: ${erro.message}`);
     } finally {
