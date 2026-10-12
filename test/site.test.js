@@ -250,6 +250,28 @@ test('teste da staff: valida o que o responsável monta e corrige as respostas',
   assert.equal(metade.acertos, 1);
   assert.equal(metade.aprovado, false, '50% não chega aos 70%');
   assert.deepEqual(metade.erradas, [p1.id]);
+
+  // Vários testes por servidor: cada um tem título, pode ser rascunho e as perguntas podem ter vídeo próprio.
+  assert.throws(() => validarTeste({ ...base, titulo: '  ' }), /título/);
+  assert.equal(teste.ativo, true, 'publicado por padrão');
+  assert.equal(validarTeste({ ...base, ativo: false }).ativo, false);
+  const comVideos = validarTeste({ ...base, perguntas: [
+    { texto: 'Cena 1?', video: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', opcoes: ['a', 'b'], correta: 0 },
+    { texto: 'Cena 2?', video: 'https://youtu.be/jNQXAC9IVRw', opcoes: ['a', 'b'], correta: 1 },
+    { texto: 'Sem vídeo?', opcoes: ['a', 'b'], correta: 1 }
+  ] });
+  assert.deepEqual(comVideos.perguntas.map(item => item.video), ['dQw4w9WgXcQ', 'jNQXAC9IVRw', '']);
+  assert.throws(() => validarTeste({ ...base, perguntas: [{ texto: 'x', video: 'https://exemplo.com/v', opcoes: ['a', 'b'], correta: 0 }] }), /vídeo da pergunta 1/);
+
+  const { ultimasPorPessoa } = require('../site/rotas/teste');
+  const ultimas = ultimasPorPessoa([
+    { usuarioId: 'a', acertos: 3, total: 3, aprovado: true, erradas: [], em: 3 },
+    { usuarioId: 'b', acertos: 1, total: 3, aprovado: false, erradas: ['x'], em: 2 },
+    { usuarioId: 'a', acertos: 0, total: 3, aprovado: false, erradas: ['x'], em: 1 }
+  ]);
+  assert.equal(ultimas.length, 2);
+  assert.equal(ultimas[0].aprovado, true, 'vale a tentativa mais recente');
+  assert.equal(ultimas[0].tentativas, 2);
 });
 
 test('botões da denúncia: o que já foi feito fica desativado', async () => {

@@ -2544,3 +2544,41 @@ button.bot-resumo-item { display: flex; flex-direction: column; align-items: fle
 }
 
 .saude-cabecalho h2 { font-size: 14.5px; font-weight: 600; letter-spacing: 0; line-height: 1.3; }
+
+
+/* ==========================================================================
+   Testes da staff: lista de testes, vídeo por pergunta e publicação
+   ========================================================================== */
+
+.testes-lista { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+button.teste-cartao { display: flex; align-items: center; justify-content: flex-start; gap: 14px; width: 100%; min-height: 0; padding: 14px 12px 14px 16px; border: 1px solid var(--linha); border-radius: var(--raio); background: var(--superficie); text-align: left; font-weight: 400; white-space: normal; box-shadow: inset 3px 0 0 var(--linha-forte); }
+button.teste-cartao:hover { border-color: var(--linha-forte); background: var(--elevada); }
+button.teste-cartao.aprovado { box-shadow: inset 3px 0 0 var(--aceita); }
+button.teste-cartao.reprovado { box-shadow: inset 3px 0 0 var(--recusada); }
+button.teste-cartao.novo { box-shadow: inset 3px 0 0 var(--marca); }
+button.teste-cartao.rascunho { border-style: dashed; }
+.teste-cartao-texto { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.teste-cartao-texto strong { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.teste-cartao-sub { color: var(--texto-2); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.teste-cartao small { color: var(--texto-3); font-size: 12.5px; }
+.teste-cartao-situacao { display: grid; justify-items: end; gap: 3px; flex: none; }
+.teste-cartao-situacao strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.teste-cartao > .icone { flex: none; width: 16px; height: 16px; color: var(--texto-3); }
+
+.teste > .voltar { justify-self: start; margin: -6px 0 -8px -8px; }
+.teste-video-pergunta { margin: 0 0 12px; }
+.teste-editor-video { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.teste-editor-video .icone { flex: none; width: 16px; height: 16px; color: var(--texto-3); }
+.teste-editor-video input { flex: 1; min-width: 0; font-size: 13px; }
+.teste-publicado { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--linha); cursor: pointer; }
+.teste-publicado input { flex: none; width: 17px; height: 17px; margin-top: 2px; accent-color: var(--marca); }
+.teste-publicado span { display: grid; gap: 1px; }
+.teste-publicado small { color: var(--texto-3); font-size: 12.5px; }
+.teste-editor-geral .campo:last-child { grid-column: auto; }
+.teste-editor-geral .campo:nth-child(4) { grid-column: 1 / -1; }
+
+@media (max-width: 640px) {
+  button.teste-cartao { flex-wrap: wrap; }
+  .teste-cartao-texto { flex-basis: 100%; }
+  .teste-cartao-situacao { justify-items: start; grid-auto-flow: column; align-items: center; gap: 8px; }
+}

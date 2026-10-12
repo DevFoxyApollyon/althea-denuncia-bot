@@ -307,8 +307,8 @@ export async function aoMudarRota() {
     if (rota.tipo === 'metas') carregarMetas();
     if (rota.tipo === 'jogador') carregarJogador(rota.id);
     if (rota.tipo === 'avisos') carregarAvisos();
-    if (rota.tipo === 'teste') carregarTeste();
-    if (rota.tipo === 'teste-admin') carregarTesteAdmin();
+    if (rota.tipo === 'teste') carregarTeste(rota.id);
+    if (rota.tipo === 'teste-admin') carregarTesteAdmin(rota.id);
     if (rota.tipo === 'chat') {
       estado.chat = null;
       estado.arquivoChat = null;

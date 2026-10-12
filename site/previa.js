@@ -143,30 +143,84 @@ app.get('/api/nao-identificadas', (req, res) => res.json({ minhaConta: '1187', d
 app.get('/api/duplicadas', (req, res) => res.json(String(req.query.acusado || '').includes('2471')
   ? { total: 1, suas: 1, categorias: ['Anti-RP'] }
   : { total: 0, suas: 0, categorias: [] }));
-let testeDaStaff = {
-  titulo: 'Teste de admissão da staff', instrucoes: 'Assista ao vídeo inteiro antes de responder. Você pode refazer o teste.', video: 'jNQXAC9IVRw', notaMinima: 70,
-  perguntas: [
-    { id: 'aaaa0001', texto: 'Um jogador atira em outro sem nenhuma interação antes. Qual é a infração?', opcoes: ['VDM', 'RDM', 'Metagaming', 'Combat log'], correta: 1 },
-    { id: 'aaaa0002', texto: 'O que fazer antes de analisar uma denúncia da fila?', opcoes: ['Reivindicar o caso', 'Recusar direto', 'Pedir para outro staff'], correta: 0 },
-    { id: 'aaaa0003', texto: 'Prova em vídeo com 5 segundos, sem contexto. O que fazer?', opcoes: ['Aceitar', 'Pedir o vídeo completo', 'Banir o denunciante'], correta: 1 }
-  ]
-};
-let ultimaDoTeste = null;
-const resultadosDoTeste = [{ usuarioId: '200', acertos: 3, total: 3, aprovado: true, erradas: [], em: horas(30), tentativas: 2 }, { usuarioId: '300', acertos: 1, total: 3, aprovado: false, erradas: ['aaaa0001', 'aaaa0003'], em: horas(5), tentativas: 1 }];
-app.get('/api/teste', (req, res) => res.json({ configurado: true, ...testeDaStaff, perguntas: testeDaStaff.perguntas.map(({ id, texto, opcoes }) => ({ id, texto, opcoes })), ultima: ultimaDoTeste }));
-app.post('/api/teste/respostas', express.json(), (req, res) => {
-  const erradas = testeDaStaff.perguntas.filter(p => Number(req.body?.respostas?.[p.id]) !== p.correta).map(p => p.id);
-  const total = testeDaStaff.perguntas.length;
-  ultimaDoTeste = { acertos: total - erradas.length, total, erradas, aprovado: ((total - erradas.length) / total) * 100 >= testeDaStaff.notaMinima, em: new Date().toISOString() };
-  res.status(201).json({ ok: true, resultado: ultimaDoTeste });
+// Testes da staff (dados de exemplo): vários por servidor, cada um com os seus resultados.
+const testesDaStaff = [
+  {
+    id: 'aaaaaaaaaaaaaaaaaaaaaaa1', titulo: 'Teste de admissão da staff', instrucoes: 'Assista ao vídeo inteiro antes de responder. Você pode refazer o teste.', video: 'jNQXAC9IVRw', notaMinima: 70, ativo: true,
+    perguntas: [
+      { id: 'aaaa0001', texto: 'Um jogador atira em outro sem nenhuma interação antes. Qual é a infração?', video: '', opcoes: ['VDM', 'RDM', 'Metagaming', 'Combat log'], correta: 1 },
+      { id: 'aaaa0002', texto: 'O que fazer antes de analisar uma denúncia da fila?', video: '', opcoes: ['Reivindicar o caso', 'Recusar direto', 'Pedir para outro staff'], correta: 0 },
+      { id: 'aaaa0003', texto: 'Prova em vídeo com 5 segundos, sem contexto. O que fazer?', video: '', opcoes: ['Aceitar', 'Pedir o vídeo completo', 'Banir o denunciante'], correta: 1 }
+    ],
+    resultados: [{ usuarioId: '200', acertos: 3, total: 3, aprovado: true, erradas: [], em: horas(30), tentativas: 2 }, { usuarioId: '300', acertos: 1, total: 3, aprovado: false, erradas: ['aaaa0001', 'aaaa0003'], em: horas(5), tentativas: 1 }],
+    ultima: { acertos: 3, total: 3, aprovado: true, erradas: [], em: horas(50) }
+  },
+  {
+    id: 'aaaaaaaaaaaaaaaaaaaaaaa2', titulo: 'Análise de vídeos: abordagem policial', instrucoes: 'Cada pergunta tem a sua cena. Assista e diga o que aconteceu.', video: '', notaMinima: 60, ativo: true,
+    perguntas: [
+      { id: 'bbbb0001', texto: 'Nesta cena, o que o jogador fez de errado?', video: 'jNQXAC9IVRw', opcoes: ['Anti-RP', 'Nada', 'Combat log'], correta: 0 },
+      { id: 'bbbb0002', texto: 'E nesta segunda cena?', video: 'dQw4w9WgXcQ', opcoes: ['RDM', 'VDM', 'Está dentro das regras'], correta: 2 }
+    ],
+    resultados: [],
+    ultima: null
+  },
+  {
+    id: 'aaaaaaaaaaaaaaaaaaaaaaa3', titulo: 'Reciclagem trimestral', instrucoes: '', video: '', notaMinima: 80, ativo: false,
+    perguntas: [{ id: 'cccc0001', texto: 'Pergunta em rascunho', video: '', opcoes: ['Sim', 'Não'], correta: 0 }],
+    resultados: [],
+    ultima: null
+  }
+];
+const videoDaPrevia = (valor) => /([A-Za-z0-9_-]{11})(?:[?&]|$)/.exec(String(valor || ''))?.[1] || '';
+const acharTeste = (id) => testesDaStaff.find(teste => teste.id === id);
+
+app.get('/api/teste/admin', (req, res) => res.json({ limite: 30, testes: testesDaStaff.map(teste => ({
+  id: teste.id, titulo: teste.titulo, ativo: teste.ativo, perguntas: teste.perguntas.length, notaMinima: teste.notaMinima,
+  comVideo: teste.perguntas.filter(pergunta => pergunta.video).length + (teste.video ? 1 : 0),
+  responderam: teste.resultados.length, aprovados: teste.resultados.filter(item => item.aprovado).length, atualizadoEm: horas(40)
+})) }));
+app.get('/api/teste/admin/:id', (req, res) => {
+  const teste = acharTeste(req.params.id);
+  if (!teste) return res.status(404).json({ erro: 'Teste não encontrado.' });
+  const { resultados, ultima, ...dados } = teste;
+  res.json({ teste: dados, resultados, pessoas });
 });
-app.get('/api/teste/admin', (req, res) => res.json({ teste: testeDaStaff, resultados: resultadosDoTeste, pessoas }));
 app.post('/api/teste/admin', express.json(), (req, res) => {
-  // Na prévia não há validação completa: só guarda o que veio, trocando o link pelo identificador do vídeo.
+  // Na prévia não há validação completa: só guarda o que veio, trocando os links pelos identificadores dos vídeos.
   const enviado = req.body?.teste || {};
+  if (!String(enviado.titulo || '').trim()) return res.status(400).json({ erro: 'Dê um título ao teste.' });
   if (!enviado.perguntas?.length) return res.status(400).json({ erro: 'Adicione pelo menos uma pergunta.' });
-  testeDaStaff = { ...enviado, video: /([A-Za-z0-9_-]{11})(?:[?&]|$)/.exec(String(enviado.video || ''))?.[1] || '', perguntas: enviado.perguntas.map((p, i) => ({ id: p.id || `nova${i}`, ...p })) };
-  res.json({ ok: true, mensagem: 'Teste salvo (prévia).', teste: testeDaStaff });
+  const dados = { ...enviado, video: videoDaPrevia(enviado.video), perguntas: enviado.perguntas.map((p, i) => ({ ...p, id: p.id || `nova${Date.now()}${i}`, video: videoDaPrevia(p.video) })) };
+  const atual = acharTeste(req.body?.id);
+  if (atual) {
+    Object.assign(atual, dados, { id: atual.id });
+    return res.json({ ok: true, id: atual.id, mensagem: 'Teste salvo (prévia).' });
+  }
+  const id = `bbbbbbbbbbbbbbbbbbbbbb${String(testesDaStaff.length).padStart(2, '0')}`;
+  testesDaStaff.push({ ...dados, id, resultados: [], ultima: null });
+  res.status(201).json({ ok: true, id, mensagem: 'Teste criado (prévia).' });
+});
+app.delete('/api/teste/admin/:id', (req, res) => {
+  const indice = testesDaStaff.findIndex(teste => teste.id === req.params.id);
+  if (indice >= 0) testesDaStaff.splice(indice, 1);
+  res.json({ ok: true, mensagem: 'Teste apagado (prévia).' });
+});
+app.get('/api/teste', (req, res) => res.json({ testes: testesDaStaff.filter(teste => teste.ativo).map(teste => ({
+  id: teste.id, titulo: teste.titulo, instrucoes: teste.instrucoes, perguntas: teste.perguntas.length, notaMinima: teste.notaMinima,
+  comVideo: Boolean(teste.video) || teste.perguntas.some(pergunta => pergunta.video), ultima: teste.ultima
+})) }));
+app.get('/api/teste/:id', (req, res) => {
+  const teste = acharTeste(req.params.id);
+  if (!teste) return res.status(404).json({ erro: 'Teste não encontrado.' });
+  res.json({ id: teste.id, titulo: teste.titulo, instrucoes: teste.instrucoes, video: teste.video, notaMinima: teste.notaMinima, perguntas: teste.perguntas.map(({ id, texto, video, opcoes }) => ({ id, texto, video, opcoes })), ultima: teste.ultima });
+});
+app.post('/api/teste/:id/respostas', express.json(), (req, res) => {
+  const teste = acharTeste(req.params.id);
+  if (!teste) return res.status(404).json({ erro: 'Teste não encontrado.' });
+  const erradas = teste.perguntas.filter(p => Number(req.body?.respostas?.[p.id]) !== p.correta).map(p => p.id);
+  const total = teste.perguntas.length;
+  teste.ultima = { acertos: total - erradas.length, total, erradas, aprovado: ((total - erradas.length) / total) * 100 >= teste.notaMinima, em: new Date().toISOString() };
+  res.status(201).json({ ok: true, resultado: teste.ultima });
 });
 
 const avisosDoSite = [{ id: 'av1', texto: 'Manutenção do servidor hoje às 23h. As denúncias voltam em seguida.', tipo: 'atencao', criadoEm: horas(2), expiraEm: null, por: 'Rafael Monteiro 1187' }];

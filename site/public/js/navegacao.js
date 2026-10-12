@@ -226,7 +226,7 @@ export function menuLateral() {
       grupo('Equipe'),
       itemDeRota('Ranking', 'trofeu', 'ranking'),
       itemDeRota('Metas', 'visto', 'metas'),
-      itemDeRota('Teste da staff', 'nota', 'teste-admin'),
+      itemDeRota('Testes da staff', 'nota', 'teste-admin'),
       itemDeRota('Auditoria', 'olho', 'auditoria'),
       itemDeRota('Logins', 'cadeado', 'logins'),
       grupo('Comunidade'),
@@ -245,7 +245,7 @@ export function menuLateral() {
         grupo('Ferramentas'),
         itemDeRota('Perfil do jogador', 'usuario', 'jogador'),
         itemDeRota('Ranking', 'trofeu', 'ranking'),
-        itemDeRota('Teste', 'nota', 'teste'),
+        itemDeRota('Testes', 'nota', 'teste'),
         grupo('Comunidade'),
         itemDoChat()
       ]

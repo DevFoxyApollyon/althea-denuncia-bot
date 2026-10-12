@@ -110,6 +110,8 @@ export const estado = {
   teste: null,
   respostasTeste: {},
   testeAdmin: null,
+  testes: null,
+  testesAdmin: null,
   avisosSite: [],
   textoAviso: '',
   chatNovas: { total: 0, mencoes: 0 },
