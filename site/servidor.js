@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { criarRotas, ErroHttp, infoPublicaDoSite, criarLimitador } = require('./rotas');
-const { limparCacheDeAcesso } = require('./acesso');
+const { limparCacheDeAcesso, acompanharMudancasDeAcesso } = require('./acesso');
 const { iniciarPush } = require('./push');
 const { criarProtecao, ajustarServidor, ipDoCliente } = require('./protecao');
 const {
@@ -260,6 +260,7 @@ function iniciarSite(client, log) {
     log.success(`Site no ar em ${config.origem} (porta ${config.porta}).`);
   }));
   iniciarPush(log);
+  acompanharMudancasDeAcesso(client);
   servidor.on('error', (erro) => log.error(`Não foi possível iniciar o site: ${erro.message}`));
   return servidor;
 }

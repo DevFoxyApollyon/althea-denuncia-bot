@@ -1,4 +1,5 @@
 const { getConfig } = require('../utils/configCache');
+const { avisarAcesso } = require('../utils/eventosDenuncia');
 
 const CACHE_SERVIDORES_MS = 60 * 1000;
 const servidoresPorUsuario = new Map();
@@ -57,7 +58,35 @@ function limparCacheDeAcesso(userId) {
   else servidoresPorUsuario.clear();
 }
 
+// O que o site mostra de um membro: cargos e apelido. Mudou um dos dois?
+function mudouParaOSite(antes, depois) {
+  // Sem o estado anterior (membro que o bot ainda não tinha em memória), confere por garantia.
+  if (!antes || antes.partial || !antes.roles?.cache) return true;
+  if (antes.nickname !== depois.nickname) return true;
+  const cargosAntes = antes.roles.cache;
+  const cargosDepois = depois.roles.cache;
+  return cargosAntes.size !== cargosDepois.size || [...cargosDepois.keys()].some(id => !cargosAntes.has(id));
+}
+
+// Perdeu ou ganhou um cargo no Discord, mudou o apelido, entrou ou saiu do
+// servidor: o acesso guardado é descartado e o site aberto dessa pessoa se
+// atualiza na hora, sem precisar recarregar a página.
+function acompanharMudancasDeAcesso(client) {
+  const renovar = (userId) => {
+    if (!userId) return;
+    servidoresPorUsuario.delete(userId);
+    avisarAcesso(userId);
+  };
+  client.on('guildMemberUpdate', (antes, depois) => {
+    if (mudouParaOSite(antes, depois)) renovar(depois.id);
+  });
+  client.on('guildMemberRemove', (membro) => renovar(membro.id));
+  client.on('guildMemberAdd', (membro) => renovar(membro.id));
+}
+
 module.exports = {
+  mudouParaOSite,
+  acompanharMudancasDeAcesso,
   papeisDoMembro,
   servidoresDoUsuario,
   acessoAoServidor,

@@ -464,3 +464,14 @@ test('proteção do site: enxurrada de pedidos recebe 429 e o site segue respond
     servidor.close();
   }
 });
+
+test('acesso: perder cargo ou mudar apelido no Discord renova o acesso no site', () => {
+  const { mudouParaOSite } = require('../site/acesso');
+  const membro = (cargos, nickname = 'Fulano 1039') => ({ nickname, roles: { cache: new Map(cargos.map(id => [id, {}])) } });
+  assert.equal(mudouParaOSite(membro(['a', 'b']), membro(['a', 'b'])), false, 'nada mudou');
+  assert.equal(mudouParaOSite(membro(['a', 'b']), membro(['a'])), true, 'perdeu um cargo');
+  assert.equal(mudouParaOSite(membro(['a']), membro(['a', 'b'])), true, 'ganhou um cargo');
+  assert.equal(mudouParaOSite(membro(['a', 'b']), membro(['a', 'c'])), true, 'trocou de cargo');
+  assert.equal(mudouParaOSite(membro(['a']), membro(['a'], 'Fulano 2000')), true, 'mudou o apelido');
+  assert.equal(mudouParaOSite({ partial: true }, membro(['a'])), true, 'sem o estado anterior, confere por garantia');
+});

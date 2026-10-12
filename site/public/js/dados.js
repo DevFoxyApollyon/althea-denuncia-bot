@@ -10,7 +10,7 @@ import { CHAVE_AREA, CHAVE_SERVIDOR, FILTROS, INTERVALO_ATUALIZACAO_MS, VISTAS, 
 import { lerVistos, marcarVisto, temNovidade } from './novidades.js';
 import { ir, rotaAtual } from './rotas.js';
 import { salvarPreferencia } from './tema.js';
-import { api, areaDaEquipe, avisar, numeroDoCaso } from './util.js';
+import { api, areaDaEquipe, avisar, numeroDoCaso, papeisAtuais } from './util.js';
 
 export let recargaPendente = null;
 export let fluxo = null;
@@ -178,6 +178,45 @@ export function ouvirListas() {
     if (tipo === 'inicio') carregarArea();
     else if (tipo === 'identificar') carregarNaoIdentificadas();
   });
+  fluxoDasListas.addEventListener('acesso', () => atualizarAcesso());
+}
+
+// Os cargos ou o apelido mudaram no Discord: busca de novo o que a pessoa pode
+// fazer e ajusta a tela, sem recarregar a página.
+let conferindoAcesso = false;
+export async function atualizarAcesso() {
+  if (conferindoAcesso) return;
+  conferindoAcesso = true;
+  try {
+    const dados = await api('/api/eu');
+    const antes = JSON.stringify(papeisAtuais());
+    estado.usuario = dados.usuario;
+    estado.servidores = dados.servidores;
+    estado.visaoAdmin = dados.visaoAdmin;
+
+    // Saiu (ou foi removido) do servidor que estava aberto: recomeça do zero.
+    if (!dados.servidores.some(servidor => servidor.id === estado.guildId)) return location.reload();
+
+    const papeis = papeisAtuais();
+    if (JSON.stringify(papeis) === antes) return desenhar();
+
+    // Estava numa área que não pode mais ver: volta para a que ainda pode.
+    const semAcesso = (estado.area === 'admin' && !papeis.responsavel) || (estado.area === 'staff' && !papeis.staff);
+    if (semAcesso) {
+      await abrirArea(papeis.staff ? 'staff' : 'jogador');
+      // Depois da troca de tela, que limpa os avisos.
+      setTimeout(() => avisar('erro', 'Seus cargos mudaram no Discord. Esta área não está mais disponível para você.'), 300);
+    } else {
+      avisar('ok', 'Seus cargos mudaram no Discord. O site foi atualizado.');
+      desenhar();
+      carregarArea();
+    }
+  } catch (erro) {
+    // Sessão encerrada ou sem acesso a nenhum servidor: a tela de entrada resolve.
+    if (erro.status === 401 || erro.status === 403) location.reload();
+  } finally {
+    conferindoAcesso = false;
+  }
 }
 
 export function agendarAtualizacao() {

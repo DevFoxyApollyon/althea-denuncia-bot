@@ -32,9 +32,21 @@ function ouvirServidor(guildId, aoMudar) {
   return () => eventos.off(canal, aoMudar);
 }
 
+// Os cargos ou o apelido de alguém mudaram no Discord (ou a pessoa saiu do
+// servidor): o site dela confere de novo o que ela pode fazer.
+function avisarAcesso(userId) {
+  if (userId) eventos.emit(`acesso:${userId}`);
+}
+
+function ouvirAcesso(userId, aoMudar) {
+  const canal = `acesso:${userId}`;
+  eventos.on(canal, aoMudar);
+  return () => eventos.off(canal, aoMudar);
+}
+
 function ouvirStatus(aoMudar) {
   eventos.on('status', aoMudar);
   return () => eventos.off('status', aoMudar);
 }
 
-module.exports = { avisarMudanca, ouvirMudancas, avisarStatus, ouvirStatus, avisarServidor, ouvirServidor };
+module.exports = { avisarMudanca, ouvirMudancas, avisarStatus, ouvirStatus, avisarServidor, ouvirServidor, avisarAcesso, ouvirAcesso };

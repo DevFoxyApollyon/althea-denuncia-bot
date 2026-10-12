@@ -9,7 +9,7 @@ const AcessoCaso = require('../../models/AcessoCaso');
 const { registrarFeedback } = require('../../utils/feedback');
 const { getConfig } = require('../../utils/configCache');
 const ModerationAction = require('../../models/ModerationAction');
-const { avisarMudanca, ouvirMudancas, ouvirServidor } = require('../../utils/eventosDenuncia');
+const { avisarMudanca, ouvirMudancas, ouvirServidor, ouvirAcesso } = require('../../utils/eventosDenuncia');
 const { prioridadeDoMotivo, categoriaDoMotivo, configVisivel } = require('../categorias');
 const { registrarMensagens } = require('../../utils/denunciaMensagens');
 const { contemPalavraProibida, contemLinkProibido } = require('../../utils/strikeWords');
@@ -486,6 +486,8 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
         res.write('event: lista\ndata: {}\n\n');
       }, 800);
     });
+    // Cargos ou apelido da pessoa mudaram no Discord: o site confere o acesso de novo.
+    const pararDeOuvirAcesso = ouvirAcesso(req.usuario.id, () => res.write('event: acesso\ndata: {}\n\n'));
     const pulso = setInterval(() => res.write(': ok\n\n'), 25 * 1000);
 
     req.on('close', () => {
@@ -495,6 +497,7 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
       clearInterval(pulso);
       clearTimeout(agendado);
       pararDeOuvir();
+      pararDeOuvirAcesso();
     });
   }));
 
