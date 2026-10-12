@@ -123,7 +123,7 @@ export function telaJogador() {
               el('strong', null, String(item.total)))))
             : el('p', { class: 'sub' }, 'Nenhuma denúncia recebida.'),
           el('p', { class: 'historico-resumo' },
-            el('strong', null, String(recebidas.andamento)), ' em andamento, ',
+            el('strong', null, String(recebidas.andamento)), ' em análise, ',
             el('strong', null, String(recebidas.recusadas)), recebidas.recusadas === 1 ? ' recusada.' : ' recusadas.')),
 
         el('section', { class: 'cartao' },
@@ -135,6 +135,6 @@ export function telaJogador() {
           feitas.total > 0 && el('p', { class: 'historico-resumo' },
             el('strong', null, String(feitas.aceitas)), feitas.aceitas === 1 ? ' aceita, ' : ' aceitas, ',
             el('strong', null, String(feitas.recusadas)), feitas.recusadas === 1 ? ' recusada e ' : ' recusadas e ',
-            el('strong', null, String(feitas.andamento)), ' em andamento.'),
+            el('strong', null, String(feitas.andamento)), ' em análise.'),
           listaDeCasos(feitas.casos, 'Este jogador não abriu denúncias.')))));
 }

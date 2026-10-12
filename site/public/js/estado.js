@@ -39,7 +39,7 @@ export const VISTAS = {
 };
 export const FILTROS = {
   todos: { rotulo: 'Todas', status: null },
-  andamento: { rotulo: 'Em andamento', status: EM_ANDAMENTO },
+  andamento: { rotulo: 'Em análise', status: EM_ANDAMENTO },
   aceita: { rotulo: 'Aceitas', status: ['aceita'] },
   recusada: { rotulo: 'Recusadas', status: ['recusada'] },
   finalizada: { rotulo: 'Finalizadas', status: ['finalizada'] }

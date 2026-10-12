@@ -54,7 +54,7 @@ export function numerosDoPainel() {
   const contar = (lista) => casos.filter(denuncia => lista.includes(denuncia.status)).length;
   return [
     cartaoNumero({ rotulo: 'Total de denúncias', valor: casos.length, nomeIcone: 'documento', tom: 'reivindicacao', filtro: 'todos' }),
-    cartaoNumero({ rotulo: 'Em andamento', valor: contar(EM_ANDAMENTO), nomeIcone: 'relogio', tom: 'analise', filtro: 'andamento' }),
+    cartaoNumero({ rotulo: 'Em análise', valor: contar(EM_ANDAMENTO), nomeIcone: 'relogio', tom: 'analise', filtro: 'andamento' }),
     cartaoNumero({ rotulo: 'Aceitas', valor: contar(['aceita']), nomeIcone: 'visto', tom: 'aceita', filtro: 'aceita' }),
     cartaoNumero({ rotulo: 'Recusadas', valor: contar(['recusada']), nomeIcone: 'fechar', tom: 'recusada', filtro: 'recusada' })
   ];

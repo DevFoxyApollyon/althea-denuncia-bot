@@ -58,28 +58,43 @@ const STATUS_DO_FILTRO = {
   finalizada: ['finalizada']
 };
 
-// Filtro da lista do responsável: busca por acusado, denunciante, motivo ou
-// número do caso (os 6 últimos caracteres do ID), mais status e plataforma.
+// Filtro da lista do responsável que o banco resolve sozinho: status e plataforma.
 function filtroDaListaAdmin(guildId, consulta = {}) {
   const filtro = { guildId };
   const status = STATUS_DO_FILTRO[consulta.status];
   if (status) filtro.status = { $in: status };
   if (['PC', 'Mobile'].includes(consulta.plataforma)) filtro.platform = consulta.plataforma;
-
-  const termo = String(consulta.busca || '').trim().slice(0, 80);
-  if (termo) {
-    const expressao = new RegExp(escaparRegex(termo), 'i');
-    const numero = termo.replace(/^#/, '');
-    filtro.$or = [
-      { acusado: expressao },
-      { denunciante: expressao },
-      { motivo: expressao },
-      ...(/^[0-9a-f]{3,24}$/i.test(numero)
-        ? [{ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: `${numero.toLowerCase()}$` } } }]
-        : [])
-    ];
-  }
   return filtro;
+}
+
+// Minúsculas e sem acento, para "denuncia" achar "Denúncia".
+const semAcento = (texto) => String(texto ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+
+// A busca do responsável. Cada palavra digitada precisa aparecer em algum lugar
+// da denúncia: acusado, denunciante, motivo, categoria, número do caso (#757FA7)
+// ou ID do Discord de quem abriu, foi acusado ou atendeu. Não importa a ordem,
+// acento, maiúscula nem pontuação ("anti rp" acha "Anti-RP").
+function bateComABusca(denuncia, termo) {
+  const palavras = semAcento(termo).replace(/#/g, ' ').split(/\s+/).filter(Boolean);
+  if (!palavras.length) return true;
+
+  const texto = semAcento([
+    denuncia.acusado,
+    denuncia.denunciante,
+    denuncia.motivo,
+    denuncia.categoria,
+    String(denuncia._id).slice(-6),
+    denuncia.criadoPor,
+    denuncia.claimedBy,
+    ...(denuncia.acusadoUserIds || [])
+  ].filter(Boolean).join(' \n '));
+  // Segunda versão sem pontuação nem espaços, para "antirp" e "anti rp" acharem "Anti-RP".
+  const compacto = texto.replace(/[^a-z0-9\n]/g, '');
+
+  return palavras.every((palavra) => {
+    const limpa = palavra.replace(/[^a-z0-9]/g, '');
+    return texto.includes(palavra) || (limpa.length > 1 && compacto.includes(limpa));
+  });
 }
 
 function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTopico, podeEscrever, podeEnviarArquivo, podeAbrirDenuncia }) {
@@ -132,10 +147,18 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
       // Busca e filtros valem para o servidor inteiro, não só para a página aberta.
       filtro = filtroDaListaAdmin(escolhido.guild.id, req.query);
       const categoria = String(req.query.categoria || '').slice(0, 40);
-      if (categoria && categoria !== 'todas') {
-        // A categoria não fica gravada: sai do motivo, então é conferida aqui.
-        const candidatas = await Denuncia.find(filtro).select('motivo guildId').lean();
-        filtro = { _id: { $in: candidatas.filter(item => categoriaDoMotivo(item.motivo, item.guildId) === categoria).map(item => item._id) } };
+      const filtraCategoria = Boolean(categoria) && categoria !== 'todas';
+      const termo = String(req.query.busca || '').trim().slice(0, 80);
+      if (filtraCategoria || termo) {
+        // A categoria não fica gravada (sai do motivo) e a busca ignora acento e
+        // pontuação: as duas são conferidas aqui, em todas as denúncias do servidor.
+        const candidatas = await Denuncia.find(filtro).select('acusado denunciante motivo guildId criadoPor claimedBy acusadoUserIds').lean();
+        const achadas = candidatas.filter((item) => {
+          const categoriaDoItem = categoriaDoMotivo(item.motivo, item.guildId);
+          if (filtraCategoria && categoriaDoItem !== categoria) return false;
+          return bateComABusca({ ...item, categoria: categoriaDoItem }, termo);
+        });
+        filtro = { _id: { $in: achadas.map(item => item._id) } };
       }
       antigasPrimeiro = req.query.ordem === 'antigas';
       const solicitada = Number.parseInt(String(req.query.pagina || '1'), 10);
@@ -547,4 +570,4 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
   }));
 }
 
-module.exports = { filtroDaListaAdmin, registrarRotasDeDenuncias, ehResumoDaDenuncia };
+module.exports = { filtroDaListaAdmin, bateComABusca, registrarRotasDeDenuncias, ehResumoDaDenuncia };

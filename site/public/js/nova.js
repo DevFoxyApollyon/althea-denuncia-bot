@@ -54,7 +54,7 @@ function conferirDuplicadas(acusado) {
 function avisoDeDuplicada() {
   const dup = estado.duplicadas;
   if (!dup?.total) return null;
-  const quantas = dup.total === 1 ? 'Já existe 1 denúncia em andamento' : `Já existem ${dup.total} denúncias em andamento`;
+  const quantas = dup.total === 1 ? 'Já existe 1 denúncia em análise' : `Já existem ${dup.total} denúncias em análise`;
   return el('div', { class: 'aviso info', role: 'status' },
     el('span', null,
       `${quantas} contra esse ID`,

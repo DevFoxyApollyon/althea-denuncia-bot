@@ -394,19 +394,34 @@ test('painel do bot: valida canais, cargos e isentos antes de salvar', () => {
   assert.throws(com(e => { e.isentos = 'abc'; }), /isentos/);
 });
 
-test('lista do responsável: busca e filtros viram consulta no banco', () => {
-  const { filtroDaListaAdmin } = require('../site/rotas/denuncias');
+test('lista do responsável: a busca acha por qualquer campo, sem ligar para acento ou pontuação', () => {
+  const { filtroDaListaAdmin, bateComABusca } = require('../site/rotas/denuncias');
   assert.deepEqual(filtroDaListaAdmin('1', {}), { guildId: '1' });
-
-  const filtro = filtroDaListaAdmin('1', { busca: ' flood ', status: 'andamento', plataforma: 'PC' });
+  const filtro = filtroDaListaAdmin('1', { busca: 'flood', status: 'andamento', plataforma: 'PC' });
   assert.equal(filtro.platform, 'PC');
   assert.deepEqual(filtro.status.$in, ['pendente', 'reivindicacao', 'analise']);
-  assert.equal(filtro.$or.length, 3, 'flood não é número de caso');
-  assert.ok(filtro.$or[2].motivo.test('Flood no chat'));
-
-  assert.equal(filtroDaListaAdmin('1', { busca: '#757FA7' }).$or.length, 4, 'número do caso também é procurado');
-  assert.ok(filtroDaListaAdmin('1', { busca: 'a.b(' }).$or[0].acusado.test('xa.b(y'), 'símbolos da busca não quebram a consulta');
   assert.equal(filtroDaListaAdmin('1', { status: 'inventado', plataforma: 'TV' }).status, undefined);
+
+  const caso = {
+    _id: '6ac2c0de56c5b47538757fa7', acusado: '827653+1039', denunciante: '1247173',
+    motivo: 'Anti-RP e Flood no chat após abordagem', categoria: 'Anti-RP',
+    criadoPor: '111111111111111111', claimedBy: '222222222222222222', acusadoUserIds: ['333333333333333333']
+  };
+  const acha = (termo) => bateComABusca(caso, termo);
+  assert.ok(acha('flood'));
+  assert.ok(acha('FLOOD'));
+  assert.ok(acha('apos abordagem'), 'sem acento');
+  assert.ok(acha('abordagem flood'), 'palavras em qualquer ordem');
+  assert.ok(acha('anti rp'), 'pontuação não atrapalha');
+  assert.ok(acha('antirp'));
+  assert.ok(acha('1039'), 'segundo acusado');
+  assert.ok(acha('1247173'), 'denunciante');
+  assert.ok(acha('#757FA7'), 'número do caso');
+  assert.ok(acha('222222222222222222'), 'ID do Discord de quem atendeu');
+  assert.ok(acha(''), 'sem termo, tudo passa');
+  assert.equal(acha('rdm'), false);
+  assert.equal(acha('flood rdm'), false, 'todas as palavras precisam aparecer');
+  assert.equal(acha('x.y(('), false, 'símbolos não quebram a busca');
 });
 
 test('espelhos: finalizada tranca, aberta só arquiva, recém-criado fica', () => {
