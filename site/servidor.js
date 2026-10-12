@@ -6,6 +6,7 @@ const path = require('path');
 const { criarRotas, ErroHttp, infoPublicaDoSite, criarLimitador } = require('./rotas');
 const { limparCacheDeAcesso } = require('./acesso');
 const { iniciarPush } = require('./push');
+const { criarProtecao, ajustarServidor, ipDoCliente } = require('./protecao');
 const {
   COOKIE_SESSAO,
   COOKIE_ESTADO,
@@ -117,6 +118,10 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
     next();
   });
 
+  // Proteção contra enxurrada de acessos: vem antes de qualquer rota, para
+  // recusar cedo quem pede demais (ver site/protecao.js).
+  app.use(criarProtecao({}, { log }).middleware);
+
   // Requisições que alteram dados só são aceitas quando partem do próprio site.
   app.use((req, res, next) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
@@ -129,11 +134,11 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
   const dentroDoLimiteDaApi = criarLimitador(300, 60 * 1000);
   const dentroDoLimiteDeLogin = criarLimitador(20, 60 * 1000);
   app.use('/api', (req, res, next) => {
-    if (dentroDoLimiteDaApi(req.usuario?.id || `ip:${req.ip}`)) return next();
+    if (dentroDoLimiteDaApi(req.usuario?.id || `ip:${ipDoCliente(req)}`)) return next();
     next(new ErroHttp(429, 'Muitas requisições em pouco tempo. Aguarde um minuto.'));
   });
   app.use('/auth', (req, res, next) => {
-    if (dentroDoLimiteDeLogin(`ip:${req.ip}`)) return next();
+    if (dentroDoLimiteDeLogin(`ip:${ipDoCliente(req)}`)) return next();
     next(new ErroHttp(429, 'Muitas tentativas de login. Aguarde um minuto.'));
   });
 
@@ -241,9 +246,9 @@ function iniciarSite(client, log) {
     return null;
   }
 
-  const servidor = criarApp({ client, config, log }).listen(config.porta, () => {
+  const servidor = ajustarServidor(criarApp({ client, config, log }).listen(config.porta, () => {
     log.success(`Site no ar em ${config.origem} (porta ${config.porta}).`);
-  });
+  }));
   iniciarPush(log);
   servidor.on('error', (erro) => log.error(`Não foi possível iniciar o site: ${erro.message}`));
   return servidor;

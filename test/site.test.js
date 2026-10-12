@@ -417,3 +417,48 @@ test('espelhos: finalizada tranca, aberta só arquiva, recém-criado fica', () =
   assert.equal(destinoDoEspelho({ status: 'recusada' }, antigo, agora), 'arquivar');
   assert.equal(destinoDoEspelho(null, agora - 60 * 1000, agora), null, 'espelho recém-criado ainda recebe as primeiras mensagens');
 });
+
+test('proteção do site: limita, bloqueia quem insiste e libera depois', () => {
+  const { criarProtecao, ipDoCliente } = require('../site/protecao');
+  let relogio = 1_000_000;
+  const protecao = criarProtecao({ maximoPorJanela: 5, maximoAntesDoBloqueio: 8, bloqueioMs: 60_000, janelaMs: 10_000 }, { agora: () => relogio });
+
+  for (let i = 0; i < 5; i += 1) assert.equal(protecao.avaliar('1.1.1.1').permitido, true);
+  assert.equal(protecao.avaliar('1.1.1.1').motivo, 'limite', 'passou do limite: recusa até a janela virar');
+  assert.equal(protecao.avaliar('2.2.2.2').permitido, true, 'outro IP não é afetado');
+
+  relogio += 10_000;
+  assert.equal(protecao.avaliar('1.1.1.1').permitido, true, 'janela nova libera de novo');
+
+  for (let i = 0; i < 8; i += 1) protecao.avaliar('3.3.3.3');
+  assert.equal(protecao.avaliar('3.3.3.3').motivo, 'bloqueado', 'insistiu muito: bloqueio temporário');
+  relogio += 30_000;
+  assert.equal(protecao.avaliar('3.3.3.3').motivo, 'bloqueado', 'continua bloqueado mesmo com janela nova');
+  relogio += 31_000;
+  assert.equal(protecao.avaliar('3.3.3.3').permitido, true, 'bloqueio acaba sozinho');
+
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '10.0.0.1' }), '9.9.9.9');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '<script>' }, ip: '10.0.0.1' }), '10.0.0.1');
+});
+
+test('proteção do site: enxurrada de pedidos recebe 429 e o site segue respondendo', async () => {
+  const { criarApp } = require('../site/servidor');
+  const app = criarApp({
+    client: { guilds: { cache: new Map() }, user: { id: '1' } },
+    config: { origem: 'http://localhost', seguro: false, segredo: 'x'.repeat(40), clientId: '1', clientSecret: 's' },
+    log: { warn() {}, error() {}, info() {}, success() {} }
+  });
+  const servidor = app.listen(0);
+  const base = `http://127.0.0.1:${servidor.address().port}`;
+  try {
+    const pedir = (ip) => fetch(`${base}/logo.png`, { headers: { 'cf-connecting-ip': ip } }).then(async (r) => { await r.arrayBuffer(); return r; });
+    const respostas = [];
+    for (let lote = 0; lote < 7; lote += 1) respostas.push(...await Promise.all(Array.from({ length: 100 }, () => pedir('7.7.7.7'))));
+    assert.equal(respostas.filter(r => r.status === 200).length, 600);
+    assert.equal(respostas.filter(r => r.status === 429).length, 100);
+    assert.ok(respostas.find(r => r.status === 429).headers.get('retry-after'));
+    assert.equal((await pedir('8.8.8.8')).status, 200, 'quem não está atacando continua entrando');
+  } finally {
+    servidor.close();
+  }
+});
