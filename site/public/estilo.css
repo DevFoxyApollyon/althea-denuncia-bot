@@ -2462,3 +2462,85 @@ button.bot-resumo-item { display: flex; flex-direction: column; align-items: fle
   .bot-barra .acoes { flex: none; flex-direction: row; flex-wrap: nowrap; width: auto; margin: 0; gap: 6px; }
   .bot-barra .acoes button { width: auto; min-height: 38px; padding: 0 12px; font-size: 13.5px; }
 }
+
+
+/* ==========================================================================
+   Ferramentas do responsável: saúde do bot, tópicos, logins, metas e backup;
+   decisão em lote na tela do caso
+   ========================================================================== */
+
+.gestao { gap: 14px; }
+.saude-grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--linha); border-radius: var(--raio); background: var(--superficie); overflow: hidden; }
+.saude-item { display: grid; align-content: start; gap: 3px; padding: 15px 16px; border-left: 1px solid var(--linha); border-top: 1px solid var(--linha); margin: -1px 0 0 -1px; }
+.saude-item > span { color: var(--texto-3); font-size: 12.5px; }
+.saude-item strong { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.saude-item strong::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--linha-forte); }
+.saude-item.ok strong::before { background: var(--marca); }
+.saude-item.atencao strong::before { background: var(--analise); }
+.saude-item.critico strong::before { background: var(--recusada); }
+.saude-item.critico strong { color: var(--recusada); }
+.saude-item small { color: var(--texto-2); font-size: 12.5px; line-height: 1.45; }
+
+.saude-cabecalho { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.saude-cabecalho .sub { max-width: 68ch; }
+.saude-andamento { margin: 10px 0 0; padding: 9px 12px; border-left: 3px solid var(--analise); border-radius: 6px; background: var(--analise-fundo); color: var(--analise); font-size: 13.5px; font-weight: 500; }
+.saude-rodape { margin-top: 12px; font-size: 12.5px; color: var(--texto-3); }
+
+.topicos-lista { display: grid; gap: 14px; margin: 16px 0 0; padding: 0; list-style: none; }
+.topicos-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 14px; }
+.topicos-linha strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.topicos-linha span { flex: none; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.topicos-barra { height: 8px; margin: 6px 0 5px; border-radius: 8px; background: var(--linha); overflow: hidden; }
+.topicos-barra span { display: block; height: 100%; min-width: 2px; border-radius: 8px; background: var(--marca); }
+.topicos-lista li.atencao .topicos-barra span { background: var(--analise); }
+.topicos-lista li.critico .topicos-barra span { background: var(--recusada); }
+.topicos-lista li.critico .topicos-linha span { color: var(--recusada); font-weight: 600; }
+.topicos-lista small { color: var(--texto-3); font-size: 12.5px; }
+
+.logins-lista li { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.logins-quem, .logins-ip { display: grid; gap: 2px; min-width: 0; }
+.logins-quem strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logins-quem small { color: var(--texto-3); font-size: 12px; }
+.logins-ip code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+.logins-alerta { color: var(--analise); font-size: 12px; font-weight: 500; }
+
+.metas-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.metas-form input { width: 120px; }
+.metas-lista { margin: 0; padding: 0; list-style: none; }
+.metas-lista li { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(80px, 1fr) 96px; align-items: center; gap: 16px; padding: 11px 16px; border-top: 1px solid var(--linha); }
+.metas-quem { display: grid; gap: 1px; min-width: 0; }
+.metas-quem strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.metas-quem small, .metas-numero small { color: var(--texto-3); font-size: 12px; }
+.metas-numero { display: grid; justify-items: end; }
+.metas-numero strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.metas-lista .topicos-barra { margin: 0; }
+.metas-lista li.abaixo { box-shadow: inset 3px 0 0 var(--recusada); }
+.metas-lista li.abaixo .topicos-barra span { background: var(--recusada); }
+.metas-lista li.abaixo .metas-numero small { color: var(--recusada); font-weight: 500; }
+
+.backup-acoes { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 16px 18px; }
+.backup-acoes .sub { flex-basis: 100%; margin: 0; }
+.so-leitor { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.lote .sub { margin: -4px 0 10px; }
+.lote-todas { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--texto-2); cursor: pointer; }
+.lote-lista { display: grid; gap: 4px; margin: 8px 0 12px; padding: 0; list-style: none; }
+.lote-lista li { display: flex; align-items: center; gap: 8px; }
+.lote-lista input, .lote-todas input { flex: none; width: 16px; height: 16px; accent-color: var(--marca); }
+.lote-lista button { flex: 1; justify-content: space-between; gap: 10px; min-width: 0; min-height: 0; padding: 7px 9px; text-align: left; font-weight: 400; white-space: normal; }
+.lote-lista button > span:first-child { display: grid; min-width: 0; }
+.lote-lista strong { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lote-lista small { color: var(--texto-3); font-size: 12px; }
+.lote .acoes { flex-wrap: wrap; }
+
+@media (max-width: 860px) {
+  .saude-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .logins-lista li { grid-template-columns: 1fr; gap: 4px; }
+  .metas-lista li { grid-template-columns: minmax(0, 1fr) auto; }
+  .metas-lista .topicos-barra { grid-column: 1 / -1; grid-row: 2; }
+}
+@media (max-width: 520px) {
+  .saude-grade { grid-template-columns: 1fr; }
+}
+
+.saude-cabecalho h2 { font-size: 14.5px; font-weight: 600; letter-spacing: 0; line-height: 1.3; }

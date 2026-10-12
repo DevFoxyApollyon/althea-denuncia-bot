@@ -25,6 +25,7 @@ const COLECOES_PERMANENTES = [
   'inscricaopushes',  // aparelhos com notificação ativada
   'staffprofiles',    // nota de atendimento acumulada de cada staff
   'testestaffs',      // teste da staff montado pelo responsável
+  'metastaffs',       // meta de atendimentos da staff
   'usuarios'          // vínculo entre a conta do Discord e o ID do jogo
 ];
 
@@ -33,7 +34,8 @@ const COLECOES_PERMANENTES = [
 const PRAZOS_EM_DIAS = {
   denunciamensagems: 45,   // mensagens das denúncias (mesmo tempo da denúncia)
   moderationactions: 30,   // ações da staff (rank e auditoria)
-  acessocasos: 15          // quem abriu cada caso pelo site
+  acessocasos: 15,         // quem abriu cada caso pelo site
+  loginsites: 30           // entradas no site (quem, quando e de qual IP)
 };
 
 // O prazo fica no próprio modelo:

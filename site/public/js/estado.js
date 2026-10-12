@@ -9,7 +9,7 @@ export const CHAVE_RASCUNHO = 'althea-rascunho-denuncia';
 export const CHAVE_CHAT = 'althea-chat';
 export const CHAVE_SERVIDOR = 'althea-servidor';
 // Telas que não são uma lista de casos.
-export const ROTAS_PROPRIAS = ['ranking', 'numeros', 'sugestoes', 'geral', 'auditoria', 'identificar', 'config', 'jogador', 'chat', 'home', 'teste', 'teste-admin', 'avisos', 'bot'];
+export const ROTAS_PROPRIAS = ['ranking', 'numeros', 'sugestoes', 'geral', 'auditoria', 'identificar', 'config', 'jogador', 'chat', 'home', 'teste', 'teste-admin', 'avisos', 'bot', 'saude', 'logins', 'metas'];
 export const ROTULOS_ACAO = { reivindicacao: 'Reivindicou', analise: 'Colocou em análise', aceita: 'Aceitou', recusada: 'Recusou' };
 export const PERIODOS = { hoje: 'Hoje', semana: 'Semana', mes: 'Mês' };
 export const ROTULOS_STATUS = {
@@ -39,10 +39,14 @@ export const VISTAS = {
 };
 export const FILTROS = {
   todos: { rotulo: 'Todas', status: null },
-  andamento: { rotulo: 'Em análise', status: EM_ANDAMENTO },
+  pendente: { rotulo: 'Pendentes', status: ['pendente'] },
+  reivindicacao: { rotulo: 'Reivindicadas', status: ['reivindicacao'] },
+  analise: { rotulo: 'Em análise', status: ['analise'] },
   aceita: { rotulo: 'Aceitas', status: ['aceita'] },
   recusada: { rotulo: 'Recusadas', status: ['recusada'] },
-  finalizada: { rotulo: 'Finalizadas', status: ['finalizada'] }
+  finalizada: { rotulo: 'Finalizadas', status: ['finalizada'] },
+  // As três situações sem decisão juntas: usado pelo cartão "Em aberto", não vira aba.
+  andamento: { rotulo: 'Em aberto', status: EM_ANDAMENTO, semAba: true }
 };
 
 export const estado = {
@@ -54,8 +58,9 @@ export const estado = {
   guildId: null,
   area: 'jogador',
   vista: 'minhas',
-  listas: { minhas: [], fila: [], admin: [] },
-  carregando: { minhas: false, fila: false, admin: false },
+  listas: { minhas: [], fila: [], admin: [], busca: [] },
+  totalDaBusca: 0,
+  carregando: { minhas: false, fila: false, admin: false, busca: false },
   paginaAdmin: 1,
   totalPaginasAdmin: 1,
   totalAdmin: 0,
@@ -83,6 +88,12 @@ export const estado = {
   naoIdentificadas: null,
   configSite: null,
   painelBot: null,
+  saude: null,
+  topicos: null,
+  logins: null,
+  filtroLogins: '',
+  metas: null,
+  selecionadas: [],
   rascunhoDenuncia: null,
   duplicadas: null,
   filtroCategoria: '',

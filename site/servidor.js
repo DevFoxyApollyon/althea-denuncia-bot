@@ -74,7 +74,7 @@ async function trocarCodigoPorUsuario(config, codigo) {
   return perfil.json();
 }
 
-function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPorUsuario }) {
+function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPorUsuario, aoEntrar = () => {} }) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -175,6 +175,8 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
       const sessao = criarToken({ id: perfil.id, nome: perfil.global_name || perfil.username, avatar }, config.segredo);
 
       res.cookie(COOKIE_SESSAO, sessao, opcoesCookie(config.seguro, DURACAO_SESSAO_MS));
+      // Registro de logins, visível ao responsável.
+      aoEntrar({ usuarioId: perfil.id, nome: perfil.global_name || perfil.username, ip: ipDoCliente(req), agente: req.get('User-Agent') });
       res.redirect(302, '/');
     } catch (erro) {
       log.warn(`Login pelo site falhou: ${erro.message}`);
@@ -256,7 +258,7 @@ function iniciarSite(client, log) {
     return null;
   }
 
-  const servidor = ajustarServidor(criarApp({ client, config, log }).listen(config.porta, () => {
+  const servidor = ajustarServidor(criarApp({ client, config, log, aoEntrar: require('./rotas/gestao').registrarLogin }).listen(config.porta, () => {
     log.success(`Site no ar em ${config.origem} (porta ${config.porta}).`);
   }));
   iniciarPush(log);

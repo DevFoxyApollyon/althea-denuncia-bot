@@ -2,6 +2,7 @@
 import { telaIdentificar } from './abertas.js';
 import { faixaDeAvisos, telaAvisos } from './avisos.js';
 import { telaPainelDoBot } from './bot.js';
+import { telaLogins, telaMetas, telaSaude } from './gestao.js';
 import { telaDetalhe } from './caso.js';
 import { telaChat } from './chat.js';
 import { telaConfig } from './config.js';
@@ -71,6 +72,9 @@ export function desenhar() {
               : rota.tipo === 'jogador' && papeisAtuais().staff ? telaJogador()
               : rota.tipo === 'config' && papeisAtuais().responsavel ? telaConfig()
               : rota.tipo === 'bot' && papeisAtuais().responsavel ? telaPainelDoBot()
+              : rota.tipo === 'saude' && papeisAtuais().responsavel ? telaSaude()
+              : rota.tipo === 'logins' && papeisAtuais().responsavel ? telaLogins()
+              : rota.tipo === 'metas' && papeisAtuais().responsavel ? telaMetas()
               : rota.tipo === 'geral' && papeisAtuais().responsavel ? telaVisaoGeral()
                 : rota.tipo === 'auditoria' && papeisAtuais().responsavel ? telaAuditoria() : telaPainel();
     const faixa = rota.tipo !== 'avisos' && faixaDeAvisos();

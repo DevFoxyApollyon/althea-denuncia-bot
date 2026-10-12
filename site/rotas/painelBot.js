@@ -110,49 +110,55 @@ function registrarRotasDoPainelDoBot(router, { client }) {
 
   router.post('/painel-bot', express.json({ limit: '32kb' }), assincrono(async (req, res) => {
     const acesso = await acessoDoResponsavel(req, req.body?.guildId);
-    const { guild, member } = acesso;
-    const atual = await Config.findOne({ guildId: guild.id }).lean();
-
-    let novo;
-    try {
-      novo = validarPainel(req.body, {
-        atual: atual || {},
-        canais: new Set(guild.channels.cache.keys()),
-        cargos: new Set(guild.roles.cache.keys()),
-        canaisVisiveis: new Set(client.channels.cache.keys()),
-        cargosDeQuemSalva: new Set(member.roles.cache.keys())
-      });
-    } catch (erro) {
-      throw new ErroHttp(400, erro.message);
-    }
-
-    const quem = member.user?.tag || req.usuario.id;
-    const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
-    for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
-    for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
-
-    const salvo = await Config.findOneAndUpdate({ guildId: guild.id }, { $set: ajustes }, { new: true, upsert: true });
-    cachePanelConfig(guild.id, salvo);
-    // Os cargos podem ter mudado: o acesso de todo mundo é conferido de novo.
-    limparCacheDeAcesso();
-
-    // A lista de isentos vale para todos os servidores: só mexe se mudou.
-    const isentosAntes = await getUsuariosIsentos(true);
-    if (isentosAntes.length !== novo.isentos.length || novo.isentos.some(id => !isentosAntes.includes(id))) {
-      await salvarUsuariosIsentos(novo.isentos, `${quem} (site)`);
-    }
-
-    // A mensagem do /denuncia mostra a manutenção e mora no canal fixo: refaz se um dos dois mudou.
-    let aviso = '';
-    if (Boolean(atual?.manutencaoDenuncia) !== novo.manutencaoDenuncia || (atual?.channels?.canalDenuncia || '') !== novo.channels.canalDenuncia) {
-      await atualizarMensagemDenuncia(client, guild, salvo).catch((erro) => {
-        console.error('[PainelBot] Falha ao atualizar a mensagem do /denuncia:', erro?.message || erro);
-        aviso = ' A mensagem do /denuncia no Discord não pôde ser atualizada agora; use /denuncia para refazer.';
-      });
-    }
-
-    res.json({ ok: true, mensagem: `Painel do bot salvo.${aviso}`, ...await montar(guild) });
+    const { aviso } = await salvarPainel(client, acesso, req.body, req.usuario.id);
+    res.json({ ok: true, mensagem: `Painel do bot salvo.${aviso}`, ...await montar(acesso.guild) });
   }));
 }
 
-module.exports = { registrarRotasDoPainelDoBot, validarPainel };
+// Confere e grava o painel. Usado pela tela e pela restauração de backup.
+// Com manterIsentos, a lista de usuários isentos (que é de todos os servidores) não é tocada.
+async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos = false } = {}) {
+  const { guild, member } = acesso;
+  const atual = await Config.findOne({ guildId: guild.id }).lean();
+  const isentosAntes = await getUsuariosIsentos(true);
+
+  let novo;
+  try {
+    novo = validarPainel(manterIsentos ? { ...entrada, isentos: isentosAntes } : entrada, {
+      atual: atual || {},
+      canais: new Set(guild.channels.cache.keys()),
+      cargos: new Set(guild.roles.cache.keys()),
+      canaisVisiveis: new Set(client.channels.cache.keys()),
+      cargosDeQuemSalva: new Set(member.roles.cache.keys())
+    });
+  } catch (erro) {
+    throw new ErroHttp(400, erro.message);
+  }
+
+  const quem = member.user?.tag || usuarioId;
+  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
+  for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
+  for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
+
+  const salvo = await Config.findOneAndUpdate({ guildId: guild.id }, { $set: ajustes }, { new: true, upsert: true });
+  cachePanelConfig(guild.id, salvo);
+  // Os cargos podem ter mudado: o acesso de todo mundo é conferido de novo.
+  limparCacheDeAcesso();
+
+  // A lista de isentos vale para todos os servidores: só mexe se mudou.
+  if (!manterIsentos && (isentosAntes.length !== novo.isentos.length || novo.isentos.some(id => !isentosAntes.includes(id)))) {
+    await salvarUsuariosIsentos(novo.isentos, `${quem} (site)`);
+  }
+
+  // A mensagem do /denuncia mostra a manutenção e mora no canal fixo: refaz se um dos dois mudou.
+  let aviso = '';
+  if (Boolean(atual?.manutencaoDenuncia) !== novo.manutencaoDenuncia || (atual?.channels?.canalDenuncia || '') !== novo.channels.canalDenuncia) {
+    await atualizarMensagemDenuncia(client, guild, salvo).catch((erro) => {
+      console.error('[PainelBot] Falha ao atualizar a mensagem do /denuncia:', erro?.message || erro);
+      aviso = ' A mensagem do /denuncia no Discord não pôde ser atualizada agora; use /denuncia para refazer.';
+    });
+  }
+  return { aviso, salvo };
+}
+
+module.exports = { registrarRotasDoPainelDoBot, validarPainel, salvarPainel };

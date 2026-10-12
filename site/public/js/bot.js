@@ -6,6 +6,7 @@ import { confirmar } from './confirmacao.js';
 import { desenhar } from './desenho.js';
 import { estado } from './estado.js';
 import { blocoAviso } from './navegacao.js';
+import { cartaoDeBackup } from './gestao.js';
 import { api, avisar, el, enviarJson, formatarData, icone } from './util.js';
 
 const GRUPOS_DE_CANAIS = [
@@ -283,6 +284,8 @@ export function telaPainelDoBot() {
             oninput: (evento) => { edicao.isentos = evento.target.value; },
             onchange: () => desenhar()
           }))),
+
+      cartaoDeBackup(carregarPainelDoBot),
 
       // Barra que acompanha a tela: sempre à mão, sem precisar voltar ao topo.
       el('div', { class: `bot-barra${mudancas ? ' ativa' : ''}`, role: 'status' },

@@ -18,6 +18,8 @@ const PAUSA_MS = { [LIMITE_DE_DMS]: 60 * 60 * 1000, [QUARENTENA]: 6 * 60 * 60 * 
 let pausadoAte = 0;
 
 const dmPausada = (agora = Date.now()) => agora < pausadoAte;
+// Até quando as DMs estão pausadas (0 = não estão), para a tela de saúde do bot.
+const pausaDeDMs = () => pausadoAte;
 
 // Avisos por DM que não são essenciais (mensagem nova no tópico, denúncia
 // reivindicada, punição ao acusado). Ficam desligados por padrão, porque
@@ -42,4 +44,4 @@ function motivoDaFalha(erro) {
   return `Erro do Discord (${erro?.code ?? erro?.message ?? 'desconhecido'}).`;
 }
 
-module.exports = { LIMITE_DE_DMS, QUARENTENA, avisosExtrasLigados, CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM, motivoDaFalha };
+module.exports = { LIMITE_DE_DMS, QUARENTENA, avisosExtrasLigados, CODIGOS_ESPERADOS, dmPausada, pausaDeDMs, registrarErroDeDM, motivoDaFalha };

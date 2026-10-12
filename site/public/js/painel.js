@@ -1,6 +1,6 @@
 // Painel inicial: saudação, números, tabela de casos e coluna de apoio.
 import { finalizarDenuncia } from './acoes.js';
-import { carregarLista, casosDaVista, casosVisiveis, filtrarLista } from './dados.js';
+import { buscandoNoServidor, carregarLista, casosDaVista, casosVisiveis, filtrarLista } from './dados.js';
 import { desenhar } from './desenho.js';
 import { EM_ANDAMENTO, FILTROS, VISTAS, estado } from './estado.js';
 import { blocoAviso } from './navegacao.js';
@@ -54,7 +54,7 @@ export function numerosDoPainel() {
   const contar = (lista) => casos.filter(denuncia => lista.includes(denuncia.status)).length;
   return [
     cartaoNumero({ rotulo: 'Total de denúncias', valor: casos.length, nomeIcone: 'documento', tom: 'reivindicacao', filtro: 'todos' }),
-    cartaoNumero({ rotulo: 'Em análise', valor: contar(EM_ANDAMENTO), nomeIcone: 'relogio', tom: 'analise', filtro: 'andamento' }),
+    cartaoNumero({ rotulo: 'Em aberto', valor: contar(EM_ANDAMENTO), nomeIcone: 'relogio', tom: 'analise', filtro: 'andamento' }),
     cartaoNumero({ rotulo: 'Aceitas', valor: contar(['aceita']), nomeIcone: 'visto', tom: 'aceita', filtro: 'aceita' }),
     cartaoNumero({ rotulo: 'Recusadas', valor: contar(['recusada']), nomeIcone: 'fechar', tom: 'recusada', filtro: 'recusada' })
   ];
@@ -62,7 +62,7 @@ export function numerosDoPainel() {
 
 export function tabelaDeCasos() {
   const vista = VISTAS[estado.vista];
-  const carregando = estado.carregando[vista.escopo];
+  const carregando = estado.carregando[buscandoNoServidor() ? 'busca' : vista.escopo];
   const casos = casosDaVista();
   const visiveis = casosVisiveis();
   const responsavel = papeisAtuais().responsavel;
@@ -76,13 +76,18 @@ export function tabelaDeCasos() {
   const categoriasPresentes = (noServidor
     ? [...new Set([...(estado.servidores.find(servidor => servidor.id === estado.guildId)?.categorias || []).map(item => item.nome), 'Outros'])]
     : [...porCategoria.keys()].filter(Boolean)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  const filtrosPresentes = Object.keys(FILTROS).filter(chave =>
-    chave === 'todos' || noServidor || casos.some(denuncia => FILTROS[chave].status.includes(denuncia.status)));
+  const filtrosPresentes = Object.keys(FILTROS).filter(chave => !FILTROS[chave].semAba
+    && (chave === 'todos' || noServidor || casos.some(denuncia => FILTROS[chave].status.includes(denuncia.status))));
+  const naBusca = buscandoNoServidor();
 
   let corpo;
   if (carregando && !casos.length) {
     corpo = el('div', { class: 'tabela', 'aria-busy': 'true', 'aria-label': 'Carregando denúncias' },
       [0, 1, 2, 3].map(() => el('div', { class: 'linha esqueleto' }, el('span'), el('span'), el('span'))));
+  } else if (!casos.length && naBusca) {
+    corpo = el('div', { class: 'vazio' },
+      el('h3', null, 'Nada encontrado no servidor'),
+      el('p', null, 'Nenhuma denúncia deste servidor bate com a busca. Tente outra palavra, o ID do jogador ou o número do caso.'));
   } else if (!casos.length && !filtrando) {
     corpo = el('div', { class: 'vazio' },
       el('h3', null, estado.vista === 'fila' ? 'Fila em dia'
@@ -123,7 +128,7 @@ export function tabelaDeCasos() {
               el('span', null, denuncia.relacao === 'acusado' ? 'Você é o acusado' : `Denunciante ${denuncia.denunciante}`))),
           el('span', { class: 'celula caso-status' }, selo(denuncia.status), staff && seloSla(denuncia)),
           icone('avancar')),
-        estado.vista === 'fila' && responsavel && denuncia.aberta && el('button', {
+        estado.vista === 'fila' && !naBusca && responsavel && denuncia.aberta && el('button', {
           class: 'linha-finalizar perigo',
           type: 'button',
           onclick: (evento) => finalizarDenuncia(evento.currentTarget, denuncia)
@@ -133,7 +138,8 @@ export function tabelaDeCasos() {
   return el('section', { class: 'cartao cartao-tabela' },
     el('header', { class: 'cartao-cabecalho' },
       el('div', null,
-        el('h1', null, vista.titulo)),
+        el('h1', null, naBusca ? 'Busca no servidor' : vista.titulo),
+        naBusca && el('p', { class: 'sub' }, 'Resultados em todas as denúncias deste servidor, não só na sua lista. Apague a busca para voltar.')),
       estado.vista === 'minhas' && podeAbrir() && el('button', { class: 'primario', type: 'button', onclick: () => ir('#/nova') },
         icone('mais'), 'Nova denúncia')),
     (casos.length > 1 || filtrando) && el('div', { class: 'tabela-ferramentas' },
@@ -183,7 +189,9 @@ export function tabelaDeCasos() {
       }, FILTROS[chave].rotulo))),
     corpo,
     visiveis.length > 0 && el('p', { class: 'tabela-rodape' },
-      noServidor && filtrando
+      naBusca
+        ? (estado.totalDaBusca > casos.length ? `Mostrando as ${casos.length} mais recentes de ${estado.totalDaBusca} encontradas` : `${visiveis.length} de ${casos.length} encontrada(s) no servidor`)
+        : noServidor && filtrando
         ? (estado.totalAdmin === 1 ? '1 denúncia encontrada no servidor' : `${estado.totalAdmin} denúncias encontradas no servidor, ${visiveis.length} nesta página`)
         : `Mostrando ${visiveis.length} de ${noServidor ? estado.totalAdmin : casos.length}`),
     estado.vista === 'admin' && estado.totalPaginasAdmin > 1 && el('nav', { class: 'paginacao', 'aria-label': 'Páginas' },

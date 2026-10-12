@@ -69,10 +69,10 @@ app.get('/api/denuncias', (req, res) => {
   const escopo = req.query.escopo;
   if (req.query.vazio !== undefined) return res.json({ denuncias: [] });
   if (escopo === 'fila') return res.json({ denuncias: denuncias.filter(d => d.status === 'pendente').sort((a, b) => (a.prioridade === 'alta' ? 0 : 1) - (b.prioridade === 'alta' ? 0 : 1)) });
-  if (escopo === 'admin') {
+  if (escopo === 'admin' || escopo === 'busca') {
     // Mesma ideia do site real: a busca e os filtros valem para a lista inteira.
     const termo = String(req.query.busca || '').toLowerCase();
-    const status = { andamento: ['pendente', 'reivindicacao', 'analise'], aceita: ['aceita'], recusada: ['recusada'], finalizada: ['finalizada'] }[req.query.status];
+    const status = { andamento: ['pendente', 'reivindicacao', 'analise'], pendente: ['pendente'], reivindicacao: ['reivindicacao'], analise: ['analise'], aceita: ['aceita'], recusada: ['recusada'], finalizada: ['finalizada'] }[req.query.status];
     const filtrando = Boolean(termo || status || req.query.plataforma || req.query.categoria);
     const achadas = denuncias.filter(d => (!termo || [d.acusado, d.denunciante, d.motivo].some(campo => campo.toLowerCase().includes(termo)))
       && (!status || status.includes(d.status))
@@ -103,6 +103,8 @@ app.get('/api/denuncias/:id', (req, res) => {
     auditoria: [{ acao: 'reivindicacao', autorId: '200', data: horas(25) }, { acao: 'analise', autorId: '200', data: horas(2.5) }],
     historicoAcusado: { total: 3, aceitas: 2, recusadas: 1, casos: [
       { id: denuncias[1].id, acusado: '2471', motivo: 'RDM na praça central', status: 'aceita', dataCriacao: horas(300) },
+      { id: denuncias[3].id, acusado: '2471', motivo: 'Uso de hack (aimbot) em tiroteio', status: 'pendente', dataCriacao: horas(5) },
+      { id: denuncias[4].id, acusado: '2471', motivo: 'Uso de bug para duplicar itens', status: 'reivindicacao', dataCriacao: horas(1) },
       { id: denuncias[2].id, acusado: '2471', motivo: 'VDM em área segura', status: 'recusada', dataCriacao: horas(500) }
     ] },
     acessos: [{ usuarioId: '100', relacao: 'denunciante', em: horas(1) }, { usuarioId: '300', relacao: 'acusado', em: horas(20) }],
@@ -197,6 +199,67 @@ const painelDoBot = {
   atualizado: { em: horas(30), por: 'rafael (site)' }
 };
 app.get('/api/painel-bot', (req, res) => res.json(painelDoBot));
+
+// Ferramentas do responsável (dados de exemplo).
+const limpezaDeTopicos = { rodando: false, fechados: 0, previstos: 0, terminouEm: null };
+const topicos = [
+  { id: '9', nome: 'Althea Cloud', ativos: 962, limite: 1000, deDenuncias: 940, antigos: 310 },
+  { id: '1', nome: 'Brasil RolePlay', ativos: 412, limite: 1000, deDenuncias: 380, antigos: 12 },
+  { id: '2', nome: 'Brasil Roleplay - 2', ativos: 88, limite: 1000, deDenuncias: 70, antigos: 0 }
+];
+app.get('/api/saude', (req, res) => res.json({
+  versao: '3.8.0', node: process.version, ligadoHaMs: 2 * 86400000 + 5 * 3600000,
+  memoria: { usadaMb: 186, heapMb: 52 },
+  discord: { conectado: true, latenciaMs: 84, servidores: 4 },
+  bancos: [{ nome: 'Principal', estado: 'conectado' }, { nome: 'Secundário', estado: 'conectado' }],
+  finalizador: { naFila: 37, abertas: 214 },
+  dms: { pausadaAte: new Date(Date.now() + 3 * 3600000), avisosExtras: false },
+  agora: new Date()
+}));
+app.get('/api/topicos', (req, res) => res.json({ servidores: topicos, conferidoEm: new Date(), limpeza: limpezaDeTopicos }));
+app.post('/api/topicos/limpar', express.json(), (req, res) => {
+  Object.assign(limpezaDeTopicos, { rodando: true, fechados: 0, previstos: 322 });
+  const passo = setInterval(() => {
+    limpezaDeTopicos.fechados = Math.min(322, limpezaDeTopicos.fechados + 120);
+    if (limpezaDeTopicos.fechados >= 322) {
+      clearInterval(passo);
+      limpezaDeTopicos.rodando = false;
+      topicos[0].ativos -= 310; topicos[0].antigos = 0; topicos[1].ativos -= 12; topicos[1].antigos = 0;
+    }
+  }, 4000);
+  res.json({ ok: true, mensagem: 'Limpeza iniciada. Só os tópicos abertos há 7 dias ou mais são fechados.' });
+});
+app.get('/api/logins', (req, res) => res.json({ pessoas: {}, logins: [
+  { usuarioId: '100', nome: 'Rafael Monteiro 1187', ip: '189.45.210.17', agente: 'Mozilla/5.0 (Windows NT 10.0) Chrome/141.0', em: horas(0.2) },
+  { usuarioId: '200', nome: '『Mod』 Lucas Prado 259', ip: '177.92.14.203', agente: 'Mozilla/5.0 (Linux; Android 15) Chrome/141.0 Mobile', em: horas(3) },
+  { usuarioId: '300', nome: 'Bruno Vidal 2471', ip: '177.92.14.203', agente: 'Mozilla/5.0 (Windows NT 10.0) Firefox/143.0', em: horas(9) },
+  { usuarioId: '100', nome: 'Rafael Monteiro 1187', ip: '2804:14c:5b:8a01::1f3', agente: 'Mozilla/5.0 (iPhone) Safari/605', em: horas(30) }
+] }));
+const metas = { minimoSemanal: 10 };
+const linhasDasMetas = () => [
+  { id: '201', nome: 'Marina Costa 88', atendimentos: 2, naEquipe: true },
+  { id: '200', nome: '『Mod』 Lucas Prado 259', atendimentos: 7, naEquipe: true },
+  { id: '202', nome: 'Diego Ramos 431', atendimentos: 4, naEquipe: false },
+  { id: '100', nome: 'Rafael Monteiro 1187', atendimentos: 23, naEquipe: true }
+].map(linha => ({ ...linha, avatar: null, faltam: Math.max(0, metas.minimoSemanal - linha.atendimentos) }));
+const respostaDasMetas = () => {
+  const linhas = linhasDasMetas();
+  return { minimoSemanal: metas.minimoSemanal, linhas, desde: horas(168), abaixo: metas.minimoSemanal ? linhas.filter(linha => linha.naEquipe && linha.faltam > 0).length : 0 };
+};
+app.get('/api/metas', (req, res) => res.json(respostaDasMetas()));
+app.post('/api/metas', express.json(), (req, res) => {
+  metas.minimoSemanal = Number(req.body.minimoSemanal) || 0;
+  res.json({ ok: true, mensagem: 'Meta salva (prévia, nada foi gravado).', ...respostaDasMetas() });
+});
+app.get('/api/backup', (req, res) => res.json({
+  tipo: 'althea-backup', versao: 1, geradoEm: new Date(), servidor: { id: '1', nome: 'Brasil RolePlay' },
+  painelBot: { channels: painelDoBot.valores.channels, roles: painelDoBot.valores.roles, manutencao: painelDoBot.valores.manutencao, bloqueio: painelDoBot.valores.bloqueio },
+  configSite: null, minimoSemanal: metas.minimoSemanal
+}));
+app.post('/api/backup', express.json(), (req, res) => {
+  if (req.body?.backup?.tipo !== 'althea-backup') return res.status(400).json({ erro: 'Este arquivo não é um backup do Althea.' });
+  res.json({ ok: true, mensagem: 'Backup restaurado (prévia, nada foi gravado).' });
+});
 app.post('/api/painel-bot', express.json(), (req, res) => {
   Object.assign(painelDoBot.valores, { channels: req.body.channels, roles: req.body.roles, manutencao: req.body.manutencao === true, bloqueio: req.body.bloqueio !== false });
   res.json({ ok: true, mensagem: 'Painel do bot salvo (prévia, nada foi gravado).', ...painelDoBot });

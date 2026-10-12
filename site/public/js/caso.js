@@ -2,14 +2,18 @@
 import {
   acaoStaff,
   adicionarArquivos,
+  executar,
   enviarAvaliacao,
   enviarProva,
   finalizarDenuncia,
   listaDeArquivos,
   salvarNota
 } from './acoes.js';
+import { confirmar } from './confirmacao.js';
+import { carregarArea, carregarDetalhe } from './dados.js';
 import { desenhar } from './desenho.js';
 import {
+  EM_ANDAMENTO,
   ETAPAS,
   ETAPA_DO_STATUS,
   ROTULOS_ACAO,
@@ -24,7 +28,9 @@ import {
   ampliarImagem,
   areaDaEquipe,
   avatar,
+  avisar,
   el,
+  enviarJson,
   formatarData,
   formatoDia,
   formatoHora,
@@ -345,12 +351,84 @@ export function painelStaff(denuncia, podeFinalizar) {
   );
 }
 
+// Outras denúncias ainda sem decisão contra o mesmo jogador, para a staff
+// resolver todas de uma vez. Cada uma passa pela mesma regra do botão
+// individual (quem reivindicou, bloqueio de pendências, etc.).
+const ACOES_EM_LOTE = [['reivindicar', 'Reivindicar'], ['analisar', 'Analisar'], ['recusar', 'Recusar']];
+
+async function decidirEmLote(botao, acao, rotulo, casos) {
+  const ids = estado.selecionadas.filter(id => casos.some(caso => caso.id === id));
+  if (!ids.length) return avisar('erro', 'Marque pelo menos uma denúncia.');
+  const confirmado = await confirmar({
+    titulo: `${rotulo} ${ids.length} denúncia(s)?`,
+    texto: `A ação "${rotulo}" será aplicada em ${ids.length} denúncia(s) contra o mesmo jogador, uma de cada vez, como se você clicasse em cada uma. A denúncia que você está vendo agora não entra.`,
+    rotulo,
+    perigo: acao === 'recusar'
+  });
+  if (!confirmado) return;
+
+  await executar(botao, async () => {
+    const falhas = [];
+    let feitas = 0;
+    for (const id of ids) {
+      try {
+        await enviarJson(`/api/denuncias/${id}/acoes`, { acao });
+        feitas += 1;
+      } catch (erro) {
+        falhas.push(`${numeroDoCaso(id)}: ${erro.message}`);
+      }
+    }
+    estado.selecionadas = [];
+    await Promise.all([carregarDetalhe(estado.detalhe.denuncia.id), carregarArea()]);
+    if (falhas.length) avisar('erro', `${feitas} feita(s), ${falhas.length} não: ${falhas.slice(0, 3).join(' | ')}`);
+    else avisar('ok', `${rotulo}: ${feitas} denúncia(s).`);
+  });
+}
+
+function blocoEmLote(historico) {
+  const casos = (historico?.casos || []).filter(caso => EM_ANDAMENTO.includes(caso.status));
+  if (!casos.length || !estado.detalhe.papeis?.staff) return null;
+  const marcadas = estado.selecionadas.filter(id => casos.some(caso => caso.id === id));
+  const todas = marcadas.length === casos.length;
+
+  return el('section', { class: 'cartao lote' },
+    el('h2', null, casos.length === 1 ? 'Outra denúncia aberta contra este jogador' : `${casos.length} outras denúncias abertas contra este jogador`),
+    el('p', { class: 'sub' }, 'Marque as que quer resolver junto e escolha a ação. Para aceitar com punição, abra cada uma.'),
+    el('label', { class: 'lote-todas' },
+      el('input', {
+        type: 'checkbox', id: 'lote-todas', checked: todas,
+        onchange: () => {
+          estado.selecionadas = todas ? [] : casos.map(caso => caso.id);
+          desenhar();
+        }
+      }), 'Marcar todas'),
+    el('ul', { class: 'lote-lista' }, casos.map(caso => el('li', null,
+      el('input', {
+        type: 'checkbox', id: `lote-${caso.id}`, 'aria-label': `Selecionar ${caso.motivo}`, checked: marcadas.includes(caso.id),
+        onchange: (evento) => {
+          estado.selecionadas = evento.target.checked ? [...marcadas, caso.id] : marcadas.filter(id => id !== caso.id);
+          desenhar();
+        }
+      }),
+      el('button', { type: 'button', onclick: () => ir(`#/d/${caso.id}`) },
+        el('span', null, el('strong', null, caso.motivo), el('small', null, `${numeroDoCaso(caso.id)}, ${formatarData(caso.dataCriacao)}`)),
+        selo(caso.status))))),
+    el('div', { class: 'acoes' }, ACOES_EM_LOTE.map(([acao, rotulo]) => el('button', {
+      class: acao === 'recusar' ? 'perigo' : '',
+      type: 'button',
+      disabled: !marcadas.length,
+      onclick: (evento) => decidirEmLote(evento.currentTarget, acao, rotulo, casos)
+    }, marcadas.length ? `${rotulo} (${marcadas.length})` : rotulo))));
+}
+
 // Blocos que só a staff vê: histórico do acusado, registro de ações e notas internas.
 export function blocosDaStaff() {
   const { historicoAcusado, auditoria = [], notas = [], pessoas = {}, acessos } = estado.detalhe;
   const nomeDe = (id) => pessoas[id]?.nome || 'Staff';
 
   return [
+    blocoEmLote(historicoAcusado),
+
     historicoAcusado && el('section', { class: 'cartao' },
       el('h2', null, 'Histórico do acusado'),
       historicoAcusado.total === 0

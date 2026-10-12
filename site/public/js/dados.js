@@ -4,6 +4,7 @@ import { carregarAvisos } from './avisos.js';
 import { carregarChat, carregarNovasDoChat } from './chat.js';
 import { carregarTeste, carregarTesteAdmin } from './teste.js';
 import { carregarPainelDoBot } from './bot.js';
+import { carregarLogins, carregarMetas, carregarSaude } from './gestao.js';
 import { carregarConfigDoSite } from './config.js';
 import { desenhar } from './desenho.js';
 import { CHAVE_AREA, CHAVE_SERVIDOR, FILTROS, INTERVALO_ATUALIZACAO_MS, VISTAS, estado, raiz } from './estado.js';
@@ -17,7 +18,12 @@ export let fluxo = null;
 export let temporizador = null;
 // Casos de uma vista. "Minhas" (jogador) e "Meus atendimentos" (staff) vêm
 // da mesma consulta e são separados aqui.
+// Na área da staff, digitar na busca procura no servidor inteiro, não só na
+// lista aberta (fila ou meus atendimentos).
+export const buscandoNoServidor = () => estado.area === 'staff' && Boolean(estado.busca.trim());
+
 export function casosDaVista(vista = estado.vista) {
+  if (vista === estado.vista && buscandoNoServidor()) return estado.listas.busca;
   const lista = estado.listas[VISTAS[vista].escopo];
   if (vista === 'minhas') return lista.filter(denuncia => denuncia.relacao !== 'staff');
   if (vista === 'atendimentos') return lista.filter(denuncia => denuncia.claimedBy === estado.usuario.id);
@@ -33,6 +39,12 @@ export function casosVisiveis() {
   const noServidor = estado.vista === 'admin';
   const casos = casosDaVista().filter(denuncia => {
     if (noServidor) return !estado.soNovidades || temNovidade(denuncia, vistos);
+    // A busca da staff já veio filtrada pelo texto; status e plataforma continuam valendo aqui.
+    if (buscandoNoServidor()) {
+      return (!status || status.includes(denuncia.status))
+        && (estado.plataforma === 'todas' || denuncia.platform === estado.plataforma)
+        && (estado.categoria === 'todas' || denuncia.categoria === estado.categoria);
+    }
     if (status && !status.includes(denuncia.status)) return false;
     if (estado.plataforma !== 'todas' && denuncia.platform !== estado.plataforma) return false;
     if (estado.categoria !== 'todas' && denuncia.categoria !== estado.categoria) return false;
@@ -52,12 +64,40 @@ export function casosVisiveis() {
 let esperaDaBusca = null;
 const pedidos = {};
 export function filtrarLista({ digitando = false } = {}) {
+  if (estado.area === 'staff' && digitando) {
+    clearTimeout(esperaDaBusca);
+    desenhar();
+    if (!buscandoNoServidor()) return;
+    esperaDaBusca = setTimeout(carregarBuscaDaStaff, 350);
+    return;
+  }
   if (estado.vista !== 'admin') return desenhar();
   estado.paginaAdmin = 1;
   clearTimeout(esperaDaBusca);
   if (!digitando) return carregarLista('admin');
   desenhar();
   esperaDaBusca = setTimeout(() => carregarLista('admin'), 350);
+}
+
+async function carregarBuscaDaStaff() {
+  const termo = estado.busca.trim();
+  if (!termo || !estado.guildId) return;
+  const pedido = pedidos.busca = (pedidos.busca || 0) + 1;
+  estado.carregando.busca = true;
+  desenhar();
+  try {
+    const resultado = await api(`/api/denuncias?${new URLSearchParams({ guildId: estado.guildId, escopo: 'busca', busca: termo })}`);
+    if (pedido !== pedidos.busca) return;
+    estado.listas.busca = resultado.denuncias;
+    estado.totalDaBusca = resultado.total || resultado.denuncias.length;
+  } catch (erro) {
+    if (pedido !== pedidos.busca) return;
+    estado.listas.busca = [];
+    estado.totalDaBusca = 0;
+    avisar('erro', erro.message);
+  }
+  estado.carregando.busca = false;
+  desenhar();
 }
 
 export async function carregarLista(escopo) {
@@ -262,6 +302,9 @@ export async function aoMudarRota() {
     if (rota.tipo === 'identificar') carregarNaoIdentificadas();
     if (rota.tipo === 'config') carregarConfigDoSite();
     if (rota.tipo === 'bot') carregarPainelDoBot();
+    if (rota.tipo === 'saude') carregarSaude();
+    if (rota.tipo === 'logins') carregarLogins();
+    if (rota.tipo === 'metas') carregarMetas();
     if (rota.tipo === 'jogador') carregarJogador(rota.id);
     if (rota.tipo === 'avisos') carregarAvisos();
     if (rota.tipo === 'teste') carregarTeste();
@@ -385,7 +428,11 @@ export function abrirVista(vista) {
 // nele. A escolha fica guardada para a próxima visita.
 export function entrarNoServidor(guildId) {
   estado.guildId = guildId;
-  estado.listas = { minhas: [], fila: [], admin: [] };
+  estado.listas = { minhas: [], fila: [], admin: [], busca: [] };
+  estado.saude = null;
+  estado.topicos = null;
+  estado.logins = null;
+  estado.metas = null;
   estado.chat = null;
   estado.canalChat = 'geral';
   estado.jogador = null;

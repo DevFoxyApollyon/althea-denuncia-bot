@@ -225,15 +225,18 @@ export function menuLateral() {
       itemDeRota('Perfil do jogador', 'usuario', 'jogador'),
       grupo('Equipe'),
       itemDeRota('Ranking', 'trofeu', 'ranking'),
+      itemDeRota('Metas', 'visto', 'metas'),
       itemDeRota('Teste da staff', 'nota', 'teste-admin'),
       itemDeRota('Auditoria', 'olho', 'auditoria'),
+      itemDeRota('Logins', 'cadeado', 'logins'),
       grupo('Comunidade'),
       itemDeRota('Avisos', 'sino', 'avisos'),
       itemDoChat(),
       itemDeRota('Sugestões', 'lampada', 'sugestoes'),
       grupo('Ajustes'),
       itemDeRota('Configurações do site', 'ajustes', 'config'),
-      itemDeRota('Painel do bot', 'escudo', 'bot')
+      itemDeRota('Painel do bot', 'escudo', 'bot'),
+      itemDeRota('Saúde do bot', 'grafico', 'saude')
     ]
     : estado.area === 'staff'
       ? [

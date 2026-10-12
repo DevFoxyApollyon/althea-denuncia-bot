@@ -490,3 +490,19 @@ test('acesso: perder cargo ou mudar apelido no Discord renova o acesso no site',
   assert.equal(mudouParaOSite(membro(['a']), membro(['a'], 'Fulano 2000')), true, 'mudou o apelido');
   assert.equal(mudouParaOSite({ partial: true }, membro(['a'])), true, 'sem o estado anterior, confere por garantia');
 });
+
+test('metas da staff: conta atendimentos da semana e aponta quem está abaixo', () => {
+  const { montarMetas, lerBackup } = require('../site/rotas/gestao');
+  const metas = montarMetas(5, ['a', 'b', 'c'], new Map([['a', 7], ['b', 2], ['ex', 4]]));
+  assert.deepEqual(metas.linhas.map(linha => linha.id), ['c', 'b', 'ex', 'a'], 'quem atendeu menos vem primeiro');
+  assert.equal(metas.abaixo, 2, 'b e c estão abaixo; quem saiu da equipe não conta');
+  assert.equal(metas.linhas.find(linha => linha.id === 'b').faltam, 3);
+  assert.equal(metas.linhas.find(linha => linha.id === 'ex').naEquipe, false);
+  assert.equal(montarMetas(0, ['a'], new Map()).abaixo, 0, 'sem meta, ninguém está abaixo');
+
+  assert.throws(() => lerBackup({ tipo: 'outro' }), /não é um backup/);
+  assert.throws(() => lerBackup({ tipo: 'althea-backup', versao: 99, painelBot: {} }), /versão/);
+  const lido = lerBackup({ tipo: 'althea-backup', versao: 1, painelBot: { channels: {} }, minimoSemanal: '12' });
+  assert.equal(lido.minimoSemanal, 12);
+  assert.equal(lido.configSite, null);
+});

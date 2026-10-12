@@ -20,7 +20,6 @@ const { criarInteracaoSite, resultadoDaInteracao } = require('../interacaoSite')
 const {
   STATUS_ABERTOS,
   LIMITE_LISTA,
-  escaparRegex,
   SERVIDOR_OCULTO_VISAO_ADMIN,
   TAMANHO_MAX_MENSAGEM,
   EXTENSOES_PERMITIDAS,
@@ -53,6 +52,9 @@ function ehResumoDaDenuncia(texto) {
 
 const STATUS_DO_FILTRO = {
   andamento: ['pendente', 'reivindicacao', 'analise'],
+  pendente: ['pendente'],
+  reivindicacao: ['reivindicacao'],
+  analise: ['analise'],
   aceita: ['aceita'],
   recusada: ['recusada'],
   finalizada: ['finalizada']
@@ -123,7 +125,10 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
   }));
 
   router.get('/denuncias', assincrono(async (req, res) => {
-    const admin = req.query.escopo === 'admin';
+    // "busca" é a busca da staff no servidor inteiro: usa a mesma lista do
+    // responsável, mas basta ser staff.
+    const buscaDaStaff = req.query.escopo === 'busca';
+    const admin = req.query.escopo === 'admin' || buscaDaStaff;
     let filtro;
     let fila = false;
     let nomesServidores = new Map();
@@ -135,13 +140,13 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
     if (admin) {
       const servidores = await servidoresDoUsuario(client, req.usuario.id);
       const autorizados = servidores.filter(({ guild, papeis }) =>
-        papeis.responsavel && guild.id !== SERVIDOR_OCULTO_VISAO_ADMIN
+        (buscaDaStaff ? papeis.staff : papeis.responsavel) && guild.id !== SERVIDOR_OCULTO_VISAO_ADMIN
       );
-      if (!autorizados.length) throw new ErroHttp(403, 'A visão administrativa exige o cargo responsável em pelo menos um servidor.');
+      if (!autorizados.length) throw new ErroHttp(403, buscaDaStaff ? 'A busca no servidor é restrita à staff.' : 'A visão administrativa exige o cargo responsável em pelo menos um servidor.');
 
       // A lista do responsável é a do servidor escolhido no site, não a soma de todos.
       const escolhido = autorizados.find(({ guild }) => guild.id === String(req.query.guildId || ''));
-      if (!escolhido) throw new ErroHttp(403, 'Você não tem o cargo responsável neste servidor.');
+      if (!escolhido) throw new ErroHttp(403, buscaDaStaff ? 'Você não é da staff deste servidor.' : 'Você não tem o cargo responsável neste servidor.');
 
       nomesServidores = new Map([[escolhido.guild.id, escolhido.guild.name]]);
       // Busca e filtros valem para o servidor inteiro, não só para a página aberta.
