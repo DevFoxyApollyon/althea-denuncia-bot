@@ -199,9 +199,17 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
   // semanas; com o endereço mudando a cada versão, ninguém fica preso a
   // arquivos antigos e não é preciso limpar o cache.
   const pastaPublica = path.join(__dirname, 'public');
+  // O site é dividido em vários módulos que importam uns aos outros. Sem aviso,
+  // o navegador só descobre cada um depois de baixar o anterior (uma fila de
+  // idas e vindas). Com modulepreload ele baixa todos de uma vez, em paralelo.
+  const modulos = fs.readdirSync(path.join(pastaPublica, 'js'))
+    .filter(nome => nome.endsWith('.js') && nome !== 'tema-estatico.js')
+    .map(nome => `  <link rel="modulepreload" href="/v/${VERSAO_DO_SITE}/js/${nome}">`)
+    .join('\n');
   const paginaInicial = fs.readFileSync(path.join(pastaPublica, 'index.html'), 'utf8')
     .replace(/\/estilo\.css(\?v=\d+)?/g, `/v/${VERSAO_DO_SITE}/estilo.css`)
-    .replace(/\/app\.js(\?v=\d+)?/g, `/v/${VERSAO_DO_SITE}/app.js`);
+    .replace(/\/app\.js(\?v=\d+)?/g, `/v/${VERSAO_DO_SITE}/app.js`)
+    .replace('</head>', `  <link rel="preconnect" href="https://cdn.discordapp.com" crossorigin>\n${modulos}\n</head>`);
 
   app.get(['/', '/index.html'], (req, res) => {
     res.set('Cache-Control', 'no-store').type('html').send(paginaInicial);
@@ -215,6 +223,8 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
     maxAge: '5m',
     setHeaders: (res, arquivo) => {
       if (arquivo.endsWith('.html') || arquivo.endsWith('sw.js')) res.set('Cache-Control', 'no-store');
+      // A logo quase nunca muda: fica guardada por um dia, em vez de ser conferida a cada 5 minutos.
+      else if (/\.(png|jpg|jpeg|webp|svg|ico)$/.test(arquivo)) res.set('Cache-Control', 'public, max-age=86400');
     }
   }));
 

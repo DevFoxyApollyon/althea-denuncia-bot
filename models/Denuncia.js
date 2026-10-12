@@ -219,6 +219,8 @@ denunciaSchema.pre('save', function(next) {
 
 denunciaSchema.index({ 'ultimaEdicao.data': 1 });
 denunciaSchema.index({ guildId: 1, createdAt: 1 });
+// Lista do responsável no site: todas as denúncias do servidor, das mais novas para as mais antigas.
+denunciaSchema.index({ guildId: 1, dataCriacao: -1 });
 // Fila de pendências por servidor e auto-finalizador (status + data de criação).
 denunciaSchema.index({ guildId: 1, status: 1, dataCriacao: 1 });
 denunciaSchema.index({ status: 1, dataCriacao: 1 });

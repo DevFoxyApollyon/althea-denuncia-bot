@@ -327,6 +327,8 @@ test('site: cada versão serve JS e CSS num endereço próprio, guardado por mui
     assert.ok(versao, 'a página aponta para /v/<versão>/app.js');
     assert.ok(html.includes(`/v/${versao}/estilo.css`));
     assert.equal(/\?v=\d+/.test(html), false, 'não sobra o número antigo de versão');
+    assert.ok(html.includes(`<link rel="modulepreload" href="/v/${versao}/js/desenho.js">`), 'os módulos são baixados em paralelo');
+    assert.equal(html.includes('tema-estatico'), false);
 
     // Os módulos importados com caminho relativo caem dentro da mesma versão.
     const modulo = await fetch(`${base}/v/${versao}/js/painel.js`);
