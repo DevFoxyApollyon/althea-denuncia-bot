@@ -20,6 +20,7 @@ export function rotaAtual() {
   if (tipo === 'saude') return { tipo: 'saude' };
   if (tipo === 'logins') return { tipo: 'logins' };
   if (tipo === 'metas') return { tipo: 'metas' };
+  if (tipo === 'sessoes') return { tipo: 'sessoes' };
   if (tipo === 'jogador') return { tipo: 'jogador', id: id ? decodeURIComponent(id) : '' };
   if (tipo === 'auditoria') return { tipo: 'auditoria' };
   return { tipo: 'inicio' };

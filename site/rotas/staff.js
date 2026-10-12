@@ -25,6 +25,14 @@ const {
   exigirDenunciaAberta
 } = require('./comum');
 
+// Hora (0 a 23) e dia da semana (0 = domingo) de uma data, no horário de Brasília.
+const formatoDeBrasilia = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23', weekday: 'short' });
+const DIAS_DA_SEMANA = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function horaDeBrasilia(data) {
+  const partes = Object.fromEntries(formatoDeBrasilia.formatToParts(new Date(data)).map(parte => [parte.type, parte.value]));
+  return { hora: Number(partes.hour) % 24, diaDaSemana: Math.max(0, DIAS_DA_SEMANA.indexOf(partes.weekday)) };
+}
+
 function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico, podeEscrever, podeFinalizar, finalizandoDenuncias }) {
   router.post('/denuncias/:id/acoes', express.json({ limit: '16kb' }), assincrono(async (req, res) => {
     const { denuncia, acesso } = await carregarDenuncia(req);
@@ -161,6 +169,9 @@ function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico,
     }
     const porCategoria = new Map();
     const porStatus = {};
+    // Horários de pico, no horário de Brasília.
+    const porHora = Array(24).fill(0);
+    const porDiaDaSemana = Array(7).fill(0);
     let somaEspera = 0;
     let reivindicadas = 0;
     let slaAvaliados = 0;
@@ -175,6 +186,9 @@ function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico,
       const categoria = categoriaDoMotivo(caso.motivo, acesso.guild.id);
       porCategoria.set(categoria, (porCategoria.get(categoria) || 0) + 1);
       porStatus[caso.status] = (porStatus[caso.status] || 0) + 1;
+      const quando = horaDeBrasilia(caso.dataCriacao);
+      porHora[quando.hora] += 1;
+      porDiaDaSemana[quando.diaDaSemana] += 1;
       if (caso.claimedAt) {
         somaEspera += Math.max(0, new Date(caso.claimedAt) - new Date(caso.dataCriacao));
         reivindicadas++;
@@ -201,6 +215,8 @@ function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico,
       porDia: [...porDia].map(([dia, total]) => ({ dia, total })),
       porCategoria: [...porCategoria].map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total).slice(0, 10),
       porStatus,
+      porHora,
+      porDiaDaSemana,
       // Só entram casos com decisão ainda visível; os finalizados perdem essa informação.
       taxaDeAceite: aceitas + recusadas ? aceitas / (aceitas + recusadas) : null,
       minutosAteReivindicar: reivindicadas ? Math.round(somaEspera / reivindicadas / 60000) : null,
@@ -324,4 +340,4 @@ function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico,
   }));
 }
 
-module.exports = { registrarRotasDaStaff };
+module.exports = { horaDeBrasilia, registrarRotasDaStaff };

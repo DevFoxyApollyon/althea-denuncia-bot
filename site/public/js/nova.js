@@ -5,7 +5,7 @@ import { CHAVE_RASCUNHO, estado } from './estado.js';
 import { blocoAviso } from './navegacao.js';
 import { ir } from './rotas.js';
 import { lerPreferencia, salvarPreferencia } from './tema.js';
-import { api, el, icone, papeisAtuais, servidorAtual } from './util.js';
+import { api, el, formatarData, icone, papeisAtuais, servidorAtual } from './util.js';
 
 const CAMPOS_DO_RASCUNHO = ['platform', 'acusado', 'categoria', 'detalhes', 'provas'];
 const semAcento = (texto) => String(texto || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
@@ -24,13 +24,54 @@ export function limparRascunhoDaDenuncia() {
   estado.rascunhoDenuncia = {};
   estado.duplicadas = null;
   estado.filtroCategoria = '';
+  estado.rascunhoDaConta = null;
   salvarPreferencia(CHAVE_RASCUNHO, '{}');
+  clearTimeout(esperaDoRascunho);
+  // Na conta também: o rascunho some em todos os aparelhos.
+  if (estado.guildId) api(`/api/rascunho?${new URLSearchParams({ guildId: estado.guildId })}`, { method: 'DELETE' }).catch(() => {});
 }
 
+// O rascunho também fica na conta, para continuar em outro aparelho. A cópia do
+// navegador é gravada na hora; a da conta, um pouco depois de a pessoa parar de digitar.
+let esperaDoRascunho = null;
 function guardarRascunho(formulario) {
   const dados = Object.fromEntries(new FormData(formulario));
   estado.rascunhoDenuncia = Object.fromEntries(CAMPOS_DO_RASCUNHO.map(campo => [campo, String(dados[campo] || '')]));
   salvarPreferencia(CHAVE_RASCUNHO, JSON.stringify(estado.rascunhoDenuncia));
+
+  const guildId = estado.guildId;
+  const rascunho = { ...estado.rascunhoDenuncia };
+  clearTimeout(esperaDoRascunho);
+  esperaDoRascunho = setTimeout(() => {
+    api('/api/rascunho', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guildId, rascunho }) }).catch(() => {});
+  }, 1500);
+}
+
+const temTexto = (rascunho) => ['acusado', 'detalhes', 'provas'].some(campo => String(rascunho?.[campo] || '').trim());
+
+// Ao abrir o formulário: se há um rascunho na conta (feito em outro aparelho) e
+// este navegador está vazio, ele é carregado direto; se os dois têm texto
+// diferente, a pessoa escolhe.
+export async function carregarRascunhoDaConta() {
+  if (!estado.guildId) return;
+  const guildId = estado.guildId;
+  const dados = await api(`/api/rascunho?${new URLSearchParams({ guildId })}`).catch(() => null);
+  if (!dados?.rascunho || estado.guildId !== guildId) return;
+
+  const daConta = dados.rascunho;
+  const local = rascunhoDaDenuncia();
+  const igual = CAMPOS_DO_RASCUNHO.every(campo => String(local[campo] || '') === String(daConta[campo] || ''));
+  if (igual) return;
+
+  if (!temTexto(local)) usarRascunhoDaConta(daConta);
+  else estado.rascunhoDaConta = daConta;
+  desenhar();
+}
+
+function usarRascunhoDaConta(daConta) {
+  estado.rascunhoDenuncia = Object.fromEntries(CAMPOS_DO_RASCUNHO.map(campo => [campo, String(daConta[campo] || '')]));
+  salvarPreferencia(CHAVE_RASCUNHO, JSON.stringify(estado.rascunhoDenuncia));
+  estado.rascunhoDaConta = null;
 }
 
 // Meio segundo depois de a pessoa parar de digitar o ID, confere se já existe
@@ -216,6 +257,23 @@ export function telaNova() {
         el('p', { class: 'sub' }, temRascunho
           ? 'Continuando de onde você parou. O ID do denunciante é lido do seu apelido no servidor.'
           : 'O ID do denunciante é lido do seu apelido no servidor.')),
+      estado.rascunhoDaConta && el('div', { class: 'aviso rascunho-da-conta', role: 'status' },
+        el('span', null, `Há um rascunho diferente salvo na sua conta${estado.rascunhoDaConta.atualizadoEm ? `, de ${formatarData(estado.rascunhoDaConta.atualizadoEm)}` : ''}, feito em outro aparelho. Contra: ${estado.rascunhoDaConta.acusado || 'sem ID'}.`),
+        el('div', { class: 'acoes' },
+          el('button', {
+            type: 'button',
+            onclick: () => {
+              usarRascunhoDaConta(estado.rascunhoDaConta);
+              desenhar();
+            }
+          }, 'Usar o da conta'),
+          el('button', {
+            class: 'discreto', type: 'button',
+            onclick: () => {
+              estado.rascunhoDaConta = null;
+              desenhar();
+            }
+          }, 'Ficar com o deste aparelho'))),
       formulario,
       el('aside', { class: 'cartao nova-regras' },
         el('h2', null, 'Antes de enviar'),

@@ -1,5 +1,24 @@
 const { getConfig } = require('../utils/configCache');
+const { AsyncLocalStorage } = require('async_hooks');
 const { avisarAcesso } = require('../utils/eventosDenuncia');
+
+// Dados do pedido em andamento (método e caminho), para o modo somente leitura
+// valer em todas as rotas sem cada uma ter que conferir.
+const pedidoAtual = new AsyncLocalStorage();
+const METODOS_QUE_ALTERAM = ['POST', 'PUT', 'PATCH', 'DELETE'];
+// O que continua funcionando com o site só para consulta: ativar notificações e sessões da própria conta.
+const LIVRES_NO_SOMENTE_LEITURA = ['/push', '/sessoes'];
+
+const acompanharPedido = (req, res, next) => pedidoAtual.run({ metodo: req.method, caminho: req.path }, next);
+
+// Com o site em modo somente leitura, só o responsável consegue enviar ou alterar algo.
+function exigirEscritaLiberada(config, papeis) {
+  const pedido = pedidoAtual.getStore();
+  if (!pedido || !METODOS_QUE_ALTERAM.includes(pedido.metodo)) return;
+  if (!config?.siteSomenteLeitura || papeis?.responsavel) return;
+  if (LIVRES_NO_SOMENTE_LEITURA.some(caminho => pedido.caminho.startsWith(caminho))) return;
+  throw Object.assign(new Error('O site está em modo somente leitura para manutenção. Dá para consultar tudo, mas não enviar nem alterar. Tente de novo mais tarde.'), { status: 503 });
+}
 
 const CACHE_SERVIDORES_MS = 60 * 1000;
 const servidoresPorUsuario = new Map();
@@ -42,7 +61,9 @@ async function servidoresDoUsuario(client, userId) {
 
 async function acessoAoServidor(client, userId, guildId) {
   const servidores = await servidoresDoUsuario(client, userId);
-  return servidores.find(item => item.guild.id === guildId) || null;
+  const acesso = servidores.find(item => item.guild.id === guildId) || null;
+  if (acesso) exigirEscritaLiberada(acesso.config, acesso.papeis);
+  return acesso;
 }
 
 // Mesma regra dos tópicos restritos: denunciante, acusados e staff.
@@ -85,6 +106,9 @@ function acompanharMudancasDeAcesso(client) {
 }
 
 module.exports = {
+  acompanharPedido,
+  exigirEscritaLiberada,
+  pedidoAtual,
   mudouParaOSite,
   acompanharMudancasDeAcesso,
   papeisDoMembro,

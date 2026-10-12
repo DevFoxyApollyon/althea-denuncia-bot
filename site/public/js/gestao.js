@@ -25,12 +25,14 @@ let acompanhando = null;
 
 export async function carregarSaude({ atualizarTopicos = false } = {}) {
   const guildId = estado.guildId;
-  const [saude, topicos] = await Promise.all([
+  const [saude, erros, topicos] = await Promise.all([
     api(comServidor('/api/saude')).catch((erro) => { avisar('erro', erro.message); return null; }),
+    api(comServidor('/api/erros')).catch(() => null),
     api(comServidor('/api/topicos', atualizarTopicos ? { atualizar: '1' } : {})).catch(() => null)
   ]);
   if (estado.guildId !== guildId) return;
   estado.saude = saude;
+  estado.erros = erros;
   estado.topicos = topicos;
   desenhar();
 
@@ -100,6 +102,35 @@ function blocoDeTopicos() {
     dados.conferidoEm && el('p', { class: 'sub saude-rodape' }, `Conferido em ${formatarData(dados.conferidoEm)}.`));
 }
 
+// Últimos erros e avisos do bot e do site (ficam na memória desde que o bot ligou).
+function blocoDeErros() {
+  const dados = estado.erros;
+  if (!dados) return null;
+  const erros = dados.registros.filter(item => item.nivel === 'erro').length;
+  const visiveis = dados.registros.filter(item => estado.filtroErros === 'todos' || item.nivel === estado.filtroErros);
+  const aba = (chave, rotulo) => el('button', {
+    class: 'filtro', type: 'button', 'aria-pressed': String(estado.filtroErros === chave),
+    onclick: () => {
+      estado.filtroErros = chave;
+      desenhar();
+    }
+  }, rotulo);
+
+  return el('section', { class: 'cartao' },
+    el('header', { class: 'saude-cabecalho' },
+      el('div', null,
+        el('h2', null, 'Erros e avisos recentes'),
+        el('p', { class: 'sub' }, `O que o bot e o site registraram desde que ligaram, há ${duracao(dados.ligadoHaMs)}. A lista some quando o bot reinicia; senhas e tokens são escondidos.`))),
+    dados.registros.length > 0 && el('div', { class: 'filtros', role: 'group', 'aria-label': 'Filtrar por tipo' },
+      aba('todos', `Todos (${dados.registros.length})`), aba('erro', `Erros (${erros})`), aba('aviso', `Avisos (${dados.registros.length - erros})`)),
+    !visiveis.length
+      ? el('p', { class: 'sub erros-vazio' }, dados.registros.length ? 'Nada neste filtro.' : 'Nenhum erro ou aviso desde que o bot ligou.')
+      : el('ol', { class: 'erros-lista' }, visiveis.map(item => el('li', { class: item.nivel },
+        el('span', { class: 'erros-nivel' }, item.nivel === 'erro' ? 'Erro' : 'Aviso'),
+        el('code', null, item.texto),
+        el('span', { class: 'erros-quando' }, el('time', { datetime: item.em }, formatarData(item.em)), item.vezes > 1 && el('small', null, `${item.vezes} vezes`))))));
+}
+
 export function telaSaude() {
   const saude = estado.saude;
   if (!saude) return el('main', { class: 'principal' }, blocoAviso() || esqueleto('Carregando a saúde do bot'));
@@ -126,7 +157,8 @@ export function telaSaude() {
           pausa ? `O Discord limitou as DMs do bot. Nova tentativa depois de ${formatarData(pausa)}.` : saude.dms.avisosExtras ? 'Avisos extras por DM ligados.' : 'Avisos extras por DM desligados (padrão).',
           pausa ? 'critico' : 'ok')),
 
-      blocoDeTopicos()));
+      blocoDeTopicos(),
+      blocoDeErros()));
 }
 
 // ---------------------------------------------------------------- registro de logins
@@ -160,7 +192,7 @@ export function telaLogins() {
         el('header', { class: 'cartao-cabecalho' },
           el('div', null,
             el('h1', null, 'Registro de logins'),
-            el('p', { class: 'sub' }, 'Cada entrada no site de membros deste servidor: quem, quando e de qual IP. Fica guardado por 30 dias.'))),
+            el('p', { class: 'sub' }, 'Cada entrada no site de membros deste servidor: quem, quando e de qual IP. Fica guardado por 30 dias. Quando alguém da staff entra de um IP que a conta nunca usou, você é avisado pelas notificações do navegador.'))),
         blocoAviso(),
         logins && logins.length > 0 && el('div', { class: 'tabela-ferramentas' },
           el('label', null, el('span', null, 'Filtrar'),
@@ -179,6 +211,7 @@ export function telaLogins() {
               el('span', { class: 'logins-quem' }, el('strong', null, item.nome || item.usuarioId), el('small', null, navegador(item.agente))),
               el('span', { class: 'logins-ip' },
                 el('code', null, item.ip || 'sem IP'),
+                item.ipNovo && el('small', { class: `logins-alerta${item.staff ? ' forte' : ''}`, title: 'A conta nunca tinha entrado deste IP' }, item.staff ? 'IP novo para esta conta da staff' : 'IP novo para esta conta'),
                 contasPorIp.get(item.ip)?.size > 1 && el('small', { class: 'logins-alerta', title: 'Este IP foi usado por mais de uma conta' }, `${contasPorIp.get(item.ip).size} contas neste IP`)),
               el('time', { datetime: item.em }, formatarData(item.em))))))));
 }
@@ -244,6 +277,25 @@ export function telaMetas() {
               el('span', { class: 'metas-numero' },
                 el('strong', null, String(linha.atendimentos)),
                 el('small', null, abaixo ? (linha.faltam === 1 ? 'falta 1' : `faltam ${linha.faltam}`) : temMeta && linha.naEquipe ? 'meta batida' : linha.atendimentos === 1 ? 'atendimento' : 'atendimentos')));
+          }))),
+
+      el('section', { class: 'cartao cartao-tabela' },
+        el('header', { class: 'cartao-cabecalho' },
+          el('div', null,
+            el('h2', null, 'Qualidade das decisões'),
+            el('p', { class: 'sub' }, 'Últimos 30 dias. Uma decisão conta como revertida quando, depois dela, a mesma denúncia recebeu a decisão contrária (aceita virou recusada, ou o inverso). A nota é a média das avaliações dos jogadores.'))),
+        !(metas.qualidade || []).length
+          ? el('div', { class: 'vazio' }, el('h3', null, 'Sem decisões no período'), el('p', null, 'Quando a staff aceitar ou recusar denúncias, os números aparecem aqui.'))
+          : el('ol', { class: 'metas-lista qualidade-lista' }, metas.qualidade.map((linha) => {
+            const parte = Math.round(linha.taxa * 100);
+            return el('li', { class: linha.revertidas ? (parte >= 20 ? 'abaixo' : 'atencao') : 'ok' },
+              el('span', { class: 'metas-quem' },
+                el('strong', null, linha.nome),
+                el('small', null, `${linha.decisoes} ${linha.decisoes === 1 ? 'decisão' : 'decisões'}${linha.nota ? `, nota ${linha.nota.toFixed(1)} em ${linha.avaliacoes} avaliação(ões)` : ', sem avaliações'}`)),
+              barra(Math.min(100, parte), `${parte}% revertidas`),
+              el('span', { class: 'metas-numero' },
+                el('strong', null, `${parte}%`),
+                el('small', null, linha.revertidas === 1 ? '1 revertida' : `${linha.revertidas} revertidas`)));
           })))));
 }
 

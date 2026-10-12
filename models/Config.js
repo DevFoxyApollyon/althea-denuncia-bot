@@ -23,6 +23,8 @@ const configSchema = new mongoose.Schema({
   },
   manutencaoDenuncia: { type: Boolean, default: false },
   bloquearReivindicacaoComPendentes: { type: Boolean, default: true },
+  // Site só para consulta: ninguém (fora o responsável) envia ou altera nada por ele.
+  siteSomenteLeitura: { type: Boolean, default: false },
   roles: {
     permitido: { type: String, required: false, default: '' },
     pc: { type: String, required: false, default: '' },

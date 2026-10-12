@@ -3,6 +3,7 @@ import { telaIdentificar } from './abertas.js';
 import { faixaDeAvisos, telaAvisos } from './avisos.js';
 import { telaPainelDoBot } from './bot.js';
 import { telaLogins, telaMetas, telaSaude } from './gestao.js';
+import { telaSessoes } from './sessoes.js';
 import { telaDetalhe } from './caso.js';
 import { telaChat } from './chat.js';
 import { telaConfig } from './config.js';
@@ -22,7 +23,7 @@ import { rotaAtual } from './rotas.js';
 import { telaSugestoes } from './sugestoes.js';
 import { telaTeste, telaTesteAdmin } from './teste.js';
 import { lerPreferencia, salvarPreferencia } from './tema.js';
-import { api, avisar, el, nomeDoSite, papeisAtuais } from './util.js';
+import { api, avisar, el, nomeDoSite, papeisAtuais, servidorAtual } from './util.js';
 
 // Aviso de cookies: o site só usa os essenciais, então basta informar uma vez.
 function avisoDeCookies() {
@@ -72,6 +73,7 @@ export function desenhar() {
               : rota.tipo === 'jogador' && papeisAtuais().staff ? telaJogador()
               : rota.tipo === 'config' && papeisAtuais().responsavel ? telaConfig()
               : rota.tipo === 'bot' && papeisAtuais().responsavel ? telaPainelDoBot()
+              : rota.tipo === 'sessoes' ? telaSessoes()
               : rota.tipo === 'saude' && papeisAtuais().responsavel ? telaSaude()
               : rota.tipo === 'logins' && papeisAtuais().responsavel ? telaLogins()
               : rota.tipo === 'metas' && papeisAtuais().responsavel ? telaMetas()
@@ -79,6 +81,11 @@ export function desenhar() {
                 : rota.tipo === 'auditoria' && papeisAtuais().responsavel ? telaAuditoria() : telaPainel();
     const faixa = rota.tipo !== 'avisos' && faixaDeAvisos();
     if (faixa) principal.prepend(faixa);
+    if (servidorAtual()?.somenteLeitura) {
+      principal.prepend(el('div', { class: 'aviso somente-leitura', role: 'status' }, el('span', null, papeisAtuais().responsavel
+        ? 'O site está em modo somente leitura: só você, responsável, consegue enviar e alterar. Desligue no Painel do bot quando a manutenção acabar.'
+        : 'O site está em modo somente leitura para manutenção. Dá para consultar tudo, mas não enviar nem alterar por enquanto.')));
+    }
     conteudo = el('div', { class: `aplicativo rota-${rota.tipo} area-${rota.tipo === 'home' ? 'neutra' : estado.area}` }, barraSuperior(), menuLateral(), principal);
   }
 

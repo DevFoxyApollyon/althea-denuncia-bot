@@ -2601,3 +2601,64 @@ button.teste-cartao.rascunho { border-style: dashed; }
 .teste-erros { display: grid; justify-items: end; }
 .teste-erros strong { font-size: 15px; font-variant-numeric: tabular-nums; }
 .teste-erros small { color: var(--texto-3); font-size: 12px; white-space: nowrap; }
+
+
+/* ==========================================================================
+   Sessões, modo somente leitura, erros recentes, horários de pico, qualidade,
+   rascunho da conta e aviso de denúncia contra você
+   ========================================================================== */
+
+.aviso.somente-leitura { max-width: 1180px; margin: 0 auto 16px; border-left: 3px solid var(--analise); background: var(--analise-fundo); }
+.sessoes-nota { margin: 0; padding: 10px 16px; }
+.sessao-atual { box-shadow: inset 3px 0 0 var(--marca); }
+.sessao-etiqueta { background: var(--marca-suave); color: var(--marca); }
+.logins-alerta.forte { color: var(--recusada); font-weight: 600; }
+
+.erros-lista { display: grid; gap: 0; margin: 12px 0 0; padding: 0; list-style: none; border: 1px solid var(--linha); border-radius: var(--raio); overflow: hidden; }
+.erros-lista li { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 9px 12px; border-top: 1px solid var(--linha); }
+.erros-lista li:first-child { border-top: 0; }
+.erros-nivel { font-size: 12px; font-weight: 600; color: var(--analise); }
+.erros-lista li.erro .erros-nivel { color: var(--recusada); }
+.erros-lista li.erro { box-shadow: inset 3px 0 0 var(--recusada); }
+.erros-lista code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; line-height: 1.5; color: var(--texto); white-space: pre-wrap; overflow-wrap: anywhere; }
+.erros-quando { display: grid; justify-items: end; gap: 1px; color: var(--texto-3); font-size: 12px; white-space: nowrap; }
+.erros-quando small { color: var(--analise); font-weight: 500; }
+.erros-vazio { margin: 12px 0 0; }
+.gestao .filtros { margin-top: 12px; }
+
+.picos { display: flex; align-items: flex-end; gap: 3px; height: 150px; margin-top: 14px; }
+.picos + .picos { height: 110px; gap: 10px; max-width: 420px; }
+.picos-coluna { display: flex; flex-direction: column; flex: 1; min-width: 0; height: 100%; }
+.picos-area { display: flex; align-items: flex-end; flex: 1; min-height: 0; }
+.picos-barra { display: block; width: 100%; border-radius: 3px 3px 0 0; background: var(--linha-forte); }
+.picos-barra.pico { background: var(--marca); }
+.picos-coluna:hover .picos-barra { background: var(--marca-forte); }
+.picos-coluna small { height: 18px; padding-top: 4px; color: var(--texto-3); font-size: 11px; text-align: center; white-space: nowrap; overflow: hidden; }
+
+.qualidade-lista li.atencao .topicos-barra span { background: var(--analise); }
+.qualidade-lista li.ok .topicos-barra span { background: var(--marca); }
+
+.aviso.rascunho-da-conta { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
+.aviso.rascunho-da-conta .acoes { flex-wrap: wrap; margin: 0; }
+
+.contra-voce { border: 1px solid var(--linha); border-left: 3px solid var(--recusada); border-radius: var(--raio); background: var(--superficie); overflow: hidden; }
+.contra-voce header { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; background: var(--recusada-fundo); }
+.contra-voce header .icone { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--recusada); }
+.contra-voce h2 { font-size: 15px; font-weight: 600; }
+.contra-voce header p { margin-top: 3px; max-width: 72ch; color: var(--texto-2); font-size: 13px; }
+.contra-voce ul { margin: 0; padding: 0; list-style: none; }
+.contra-voce li button { display: flex; align-items: center; justify-content: flex-start; gap: 14px; width: 100%; min-height: 0; padding: 11px 16px; border: 0; border-top: 1px solid var(--linha); border-radius: 0; background: none; text-align: left; font-weight: 400; white-space: normal; }
+.contra-voce li button:hover { background: var(--elevada); }
+.contra-voce li button > span:first-child { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.contra-voce li strong { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contra-voce li small { color: var(--texto-3); font-size: 12px; }
+.contra-voce-prazo { flex: none; color: var(--recusada); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.contra-voce-acao { flex: none; padding: 5px 10px; border: 1px solid var(--linha-forte); border-radius: var(--raio); font-size: 13px; font-weight: 500; white-space: nowrap; }
+
+@media (max-width: 700px) {
+  .erros-lista li { grid-template-columns: 1fr; gap: 4px; }
+  .erros-quando { justify-items: start; grid-auto-flow: column; gap: 8px; }
+  .contra-voce li button { flex-wrap: wrap; gap: 6px 12px; }
+  .contra-voce li button > span:first-child { flex-basis: 100%; }
+  .picos { gap: 2px; }
+}

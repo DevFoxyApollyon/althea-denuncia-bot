@@ -216,12 +216,43 @@ export function tabelaDeCasos() {
 }
 
 
+const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Denúncias em aberto em que a pessoa é o acusado: destaque no topo, com o
+// tempo que resta para mandar a contraprova. Sete dias depois de aberta, a
+// denúncia é finalizada sozinha e o tópico é trancado.
+function avisoDeDenunciaContraVoce() {
+  if (estado.vista !== 'minhas') return null;
+  const contra = estado.listas.minhas.filter(denuncia => denuncia.relacao === 'acusado' && denuncia.aberta && !['aceita', 'recusada'].includes(denuncia.status));
+  if (!contra.length) return null;
+
+  const prazo = (denuncia) => {
+    const resta = new Date(denuncia.dataCriacao).getTime() + SETE_DIAS_MS - Date.now();
+    if (resta <= 0) return 'pode ser fechada a qualquer momento';
+    const horas = Math.ceil(resta / 3600000);
+    return horas <= 48 ? `fecha em ${horas} h` : `fecha em ${Math.ceil(horas / 24)} dias`;
+  };
+
+  return el('section', { class: 'contra-voce', role: 'status' },
+    el('header', null,
+      icone('alerta'),
+      el('div', null,
+        el('h2', null, contra.length === 1 ? 'Há uma denúncia contra você em aberto' : `Há ${contra.length} denúncias contra você em aberto`),
+        el('p', null, 'Mande a sua contraprova pela conversa do caso. A staff pode decidir antes do prazo, e depois de 7 dias a denúncia é fechada e não aceita mais mensagens.'))),
+    el('ul', null, contra.map(denuncia => el('li', null,
+      el('button', { type: 'button', onclick: () => ir(`#/d/${denuncia.id}`) },
+        el('span', null, el('strong', null, denuncia.motivo), el('small', null, `${numeroDoCaso(denuncia.id)}, aberta em ${formatarData(denuncia.dataCriacao)}`)),
+        el('span', { class: 'contra-voce-prazo' }, prazo(denuncia)),
+        el('span', { class: 'contra-voce-acao' }, 'Enviar contraprova'))))));
+}
+
 export function telaPainel() {
   return el('main', { class: 'principal' },
     el('div', { class: 'painel' },
       blocoAviso(),
       servidorAtual()?.manutencao && el('div', { class: 'aviso manutencao', role: 'status' },
         el('span', null, 'O sistema de denúncias está em manutenção. Novas denúncias estão pausadas; as abertas continuam preservadas.')),
+      avisoDeDenunciaContraVoce(),
       el('div', { class: 'numeros resumo' }, numerosDoPainel()),
       tabelaDeCasos()));
 }

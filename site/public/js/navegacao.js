@@ -105,6 +105,8 @@ export function menuDoPerfil(papeis, claro) {
       ir('#/config');
     }),
 
+    item('Sessões da conta', 'cadeado', () => ir('#/sessoes')),
+
     el('p', { class: 'perfil-titulo' }, 'Configurações deste aparelho'),
     item(claro ? 'Usar tema escuro' : 'Usar tema claro', claro ? 'lua' : 'sol', alternarTema),
     estado.push === 'inativo' && item('Ativar notificações', 'sino', (evento) => ativarPush(evento.currentTarget)),

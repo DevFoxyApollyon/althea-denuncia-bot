@@ -48,6 +48,37 @@ export function graficoPorDia(porDia) {
   return svg;
 }
 
+// Barras verticais simples (uma por hora ou por dia da semana), com o pico em destaque.
+function graficoDeBarras(itens, descricao) {
+  const maximo = Math.max(1, ...itens.map(item => item.total));
+  return el('div', { class: 'picos', role: 'img', 'aria-label': descricao }, itens.map((item) => {
+    const coluna = el('span', { class: `picos-barra${item.total === maximo && item.total ? ' pico' : ''}` });
+    coluna.style.height = `${Math.max(item.total ? 4 : 1, Math.round(item.total / maximo * 100))}%`;
+    return el('div', { class: 'picos-coluna', title: `${item.rotulo}: ${item.total}` }, el('div', { class: 'picos-area' }, coluna), el('small', null, item.curto));
+  }));
+}
+
+const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+function blocoDePicos(numeros) {
+  if (!numeros.porHora || !numeros.total) return null;
+  const horaDePico = numeros.porHora.indexOf(Math.max(...numeros.porHora));
+  const diaDePico = numeros.porDiaDaSemana.indexOf(Math.max(...numeros.porDiaDaSemana));
+  // As três horas seguidas com mais denúncias: a faixa em que mais vale ter staff online.
+  let melhor = 0;
+  for (let hora = 1; hora < 24; hora++) {
+    const soma = (inicio) => [0, 1, 2].reduce((total, passo) => total + numeros.porHora[(inicio + passo) % 24], 0);
+    if (soma(hora) > soma(melhor)) melhor = hora;
+  }
+  const faixa = [0, 1, 2].reduce((total, passo) => total + numeros.porHora[(melhor + passo) % 24], 0);
+
+  return el('div', { class: 'numeros-bloco' },
+    el('h3', null, 'Horários de pico'),
+    el('p', { class: 'sub' }, `Quando as denúncias chegam, no horário de Brasília. A faixa mais movimentada é das ${melhor}h às ${(melhor + 3) % 24}h, com ${Math.round(faixa / numeros.total * 100)}% das denúncias; o pico é às ${horaDePico}h e o dia mais cheio é ${DIAS[diaDePico].toLowerCase()}.`),
+    graficoDeBarras(numeros.porHora.map((total, hora) => ({ total, rotulo: `${hora}h`, curto: hora % 3 === 0 ? `${hora}h` : '' })), 'Denúncias por hora do dia'),
+    graficoDeBarras(numeros.porDiaDaSemana.map((total, dia) => ({ total, rotulo: DIAS[dia], curto: DIAS[dia].slice(0, 3) })), 'Denúncias por dia da semana'));
+}
+
 export function telaNumeros() {
   const numeros = estado.numeros;
   const duracao = (minutos) => minutos === null || minutos === undefined ? 'sem dado'
@@ -85,6 +116,7 @@ export function telaNumeros() {
             el('div', { class: 'numeros-bloco' },
               el('h3', null, 'Denúncias por dia'),
               numeros.total ? graficoPorDia(numeros.porDia) : el('p', { class: 'sub' }, 'Nenhuma denúncia neste período.')),
+            blocoDePicos(numeros),
             numeros.porCategoria.length > 0 && el('div', { class: 'numeros-bloco' },
               el('h3', null, 'Por categoria'),
               el('ul', { class: 'categorias-barras' }, numeros.porCategoria.map(item => {

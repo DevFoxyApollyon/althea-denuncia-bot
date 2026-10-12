@@ -35,7 +35,8 @@ const PRAZOS_EM_DIAS = {
   denunciamensagems: 45,   // mensagens das denúncias (mesmo tempo da denúncia)
   moderationactions: 30,   // ações da staff (rank e auditoria)
   acessocasos: 15,         // quem abriu cada caso pelo site
-  loginsites: 30           // entradas no site (quem, quando e de qual IP)
+  loginsites: 30,          // entradas no site (quem, quando e de qual IP)
+  rascunhodenuncias: 15    // denúncia começada e não enviada
 };
 
 // O prazo fica no próprio modelo:

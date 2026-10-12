@@ -549,3 +549,52 @@ test('testes obrigatórios: situação da pessoa considera reprovação e valida
   assert.equal(validarTeste({ ...base, obrigatorio: true, validadeDias: '90' }).validadeDias, 90);
   assert.throws(() => validarTeste({ ...base, validadeDias: 5000 }), /validade/);
 });
+
+test('qualidade da staff: decisão contrária depois conta como revertida', () => {
+  const { contarRevertidas } = require('../site/rotas/gestao');
+  const porPessoa = contarRevertidas([
+    { moderatorId: 'ana', action: 'aceita', denunciaId: 'c1' },
+    { moderatorId: 'bia', action: 'recusada', denunciaId: 'c1' },
+    { moderatorId: 'ana', action: 'recusada', denunciaId: 'c2' },
+    { moderatorId: 'ana', action: 'recusada', denunciaId: 'c2' },
+    { moderatorId: 'ana', action: 'analise', denunciaId: 'c3' }
+  ]);
+  assert.deepEqual(porPessoa.get('ana'), { decisoes: 2, revertidas: 1 }, 'c1 foi revertido; c2 repetido conta uma vez');
+  assert.deepEqual(porPessoa.get('bia'), { decisoes: 1, revertidas: 0 });
+});
+
+test('horários de pico usam o horário de Brasília', () => {
+  const { horaDeBrasilia } = require('../site/rotas/staff');
+  // 02:30 UTC de segunda é 23:30 de domingo em Brasília.
+  assert.deepEqual(horaDeBrasilia('2026-10-12T02:30:00Z'), { hora: 23, diaDaSemana: 0 });
+  assert.deepEqual(horaDeBrasilia('2026-10-12T15:00:00Z'), { hora: 12, diaDaSemana: 1 });
+});
+
+test('modo somente leitura: bloqueia quem altera, menos o responsável e as rotas livres', () => {
+  const { exigirEscritaLiberada, pedidoAtual } = require('../site/acesso');
+  const ligado = { siteSomenteLeitura: true };
+  const em = (metodo, caminho, fn) => pedidoAtual.run({ metodo, caminho }, fn);
+
+  em('GET', '/denuncias', () => assert.doesNotThrow(() => exigirEscritaLiberada(ligado, {})));
+  em('POST', '/denuncias', () => assert.throws(() => exigirEscritaLiberada(ligado, { staff: true }), /somente leitura/));
+  em('POST', '/denuncias', () => assert.doesNotThrow(() => exigirEscritaLiberada(ligado, { responsavel: true })));
+  em('POST', '/denuncias', () => assert.doesNotThrow(() => exigirEscritaLiberada({ siteSomenteLeitura: false }, {})));
+  em('POST', '/push/inscricao', () => assert.doesNotThrow(() => exigirEscritaLiberada(ligado, {})));
+  assert.doesNotThrow(() => exigirEscritaLiberada(ligado, {}), 'fora de um pedido do site (bot), nada é bloqueado');
+});
+
+test('registro de erros: esconde segredos e junta repetições', () => {
+  const { limpar } = require('../utils/registroDeErros');
+  assert.equal(limpar('falha em mongodb+srv://usuario:senha123@cluster.mongodb.net/db'), 'falha em mongodb+srv://***@cluster.mongodb.net/db');
+  assert.match(limpar('token: abcDEF123456'), /token: \*\*\*/);
+  assert.equal(limpar('\u001b[31mErro vermelho\u001b[0m'), 'Erro vermelho');
+});
+
+test('rascunho na conta: só os campos do formulário, dentro do tamanho', () => {
+  const { limparRascunho, temConteudo } = require('../site/rotas/rascunho');
+  const limpo = limparRascunho({ acusado: '1039', detalhes: 'x'.repeat(200), invasor: 'sim' });
+  assert.equal(limpo.detalhes.length, 75);
+  assert.equal(limpo.invasor, undefined);
+  assert.equal(temConteudo(limpo), true);
+  assert.equal(temConteudo(limparRascunho({ platform: 'PC', categoria: 'RDM' })), false, 'só plataforma e categoria não é rascunho');
+});

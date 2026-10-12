@@ -1,6 +1,8 @@
 process.env.TZ = 'America/Sao_Paulo';
 process.env.FORCE_COLOR = '3';
 console.log('\x1b[36m' + '═'.repeat(60) + '\x1b[0m');
+// Erros e avisos passam a ficar guardados para a tela "Saúde do bot" do site.
+require('./utils/registroDeErros').instalarRegistroDeErros();
 require('dotenv').config();
 
 const { log } = require('./utils/logger');

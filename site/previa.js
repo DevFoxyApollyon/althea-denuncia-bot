@@ -254,6 +254,7 @@ const painelDoBot = {
     roles: { pc: '21', permitido: '22', administrador: '23', responsavel_admin: '24' },
     manutencao: false,
     bloqueio: true,
+    somenteLeitura: false,
     isentos: [{ id: '200000000000000200', nome: 'Lucas Prado' }]
   },
   canais: [
@@ -266,6 +267,34 @@ const painelDoBot = {
   atualizado: { em: horas(30), por: 'rafael (site)' }
 };
 app.get('/api/painel-bot', (req, res) => res.json(painelDoBot));
+
+// Sessões da conta, erros recentes e rascunho na conta (dados de exemplo).
+let sessoesDaConta = [
+  { id: 'a'.repeat(24), atual: true, ip: '189.45.210.17', agente: 'Mozilla/5.0 (Windows NT 10.0) Chrome/141.0', em: horas(3), vistaEm: horas(0.1), ipNovo: false },
+  { id: 'b'.repeat(24), atual: false, ip: '177.92.14.203', agente: 'Mozilla/5.0 (Linux; Android 15) Chrome/141.0 Mobile', em: horas(50), vistaEm: horas(20), ipNovo: false },
+  { id: 'c'.repeat(24), atual: false, ip: '45.230.11.9', agente: 'Mozilla/5.0 (Windows NT 10.0) Firefox/143.0', em: horas(90), vistaEm: horas(80), ipNovo: true }
+];
+app.get('/api/sessoes', (req, res) => res.json({ sessoes: sessoesDaConta, semIdentificador: false }));
+app.post('/api/sessoes/encerrar', express.json(), (req, res) => {
+  sessoesDaConta = sessoesDaConta.filter(item => (req.body?.outras ? item.atual : item.id !== req.body?.id));
+  res.json({ ok: true, mensagem: req.body?.outras ? 'Sessões encerradas. Só este aparelho continua logado.' : 'Sessão encerrada. Aquele aparelho precisa entrar de novo.' });
+});
+app.get('/api/erros', (req, res) => res.json({ ligadoHaMs: 2 * 86400000, registros: [
+  { nivel: 'erro', texto: '[AutoFinalizador] ERRO Erro ao finalizar 6ac2c0de: Missing Access', em: horas(0.4), vezes: 1 },
+  { nivel: 'aviso', texto: 'Não foi possível criar thread espelho em 1547358936221622282: Maximum number of active threads reached', em: horas(1), vezes: 14 },
+  { nivel: 'aviso', texto: '[Feedback] DMs do bot limitadas pelo Discord: avisos por DM pausados.', em: horas(5), vezes: 1 },
+  { nivel: 'erro', texto: 'Erro no site (POST /denuncias): MongoServerSelectionError: connection timed out em mongodb+srv://***@cluster.mongodb.net', em: horas(26), vezes: 2 }
+] }));
+let rascunhoNaConta = { platform: 'Mobile', acusado: '5580', categoria: 'VDM', detalhes: 'Atropelou na praça', provas: 'https://youtu.be/jNQXAC9IVRw', atualizadoEm: horas(6) };
+app.get('/api/rascunho', (req, res) => res.json({ rascunho: rascunhoNaConta }));
+app.put('/api/rascunho', express.json(), (req, res) => {
+  rascunhoNaConta = { ...req.body?.rascunho, atualizadoEm: new Date().toISOString() };
+  res.json({ ok: true, atualizadoEm: rascunhoNaConta.atualizadoEm });
+});
+app.delete('/api/rascunho', (req, res) => {
+  rascunhoNaConta = null;
+  res.json({ ok: true });
+});
 
 // Ferramentas do responsável (dados de exemplo).
 const limpezaDeTopicos = { rodando: false, fechados: 0, previstos: 0, terminouEm: null };
@@ -300,6 +329,7 @@ app.get('/api/logins', (req, res) => res.json({ pessoas: {}, logins: [
   { usuarioId: '100', nome: 'Rafael Monteiro 1187', ip: '189.45.210.17', agente: 'Mozilla/5.0 (Windows NT 10.0) Chrome/141.0', em: horas(0.2) },
   { usuarioId: '200', nome: '『Mod』 Lucas Prado 259', ip: '177.92.14.203', agente: 'Mozilla/5.0 (Linux; Android 15) Chrome/141.0 Mobile', em: horas(3) },
   { usuarioId: '300', nome: 'Bruno Vidal 2471', ip: '177.92.14.203', agente: 'Mozilla/5.0 (Windows NT 10.0) Firefox/143.0', em: horas(9) },
+  { usuarioId: '200', nome: '『Mod』 Lucas Prado 259', ip: '45.230.11.9', agente: 'Mozilla/5.0 (Windows NT 10.0) Firefox/143.0', em: horas(12), ipNovo: true, staff: true },
   { usuarioId: '100', nome: 'Rafael Monteiro 1187', ip: '2804:14c:5b:8a01::1f3', agente: 'Mozilla/5.0 (iPhone) Safari/605', em: horas(30) }
 ] }));
 const metas = { minimoSemanal: 10 };
@@ -311,7 +341,12 @@ const linhasDasMetas = () => [
 ].map(linha => ({ ...linha, avatar: null, faltam: Math.max(0, metas.minimoSemanal - linha.atendimentos) }));
 const respostaDasMetas = () => {
   const linhas = linhasDasMetas();
-  return { minimoSemanal: metas.minimoSemanal, linhas, desde: horas(168), abaixo: metas.minimoSemanal ? linhas.filter(linha => linha.naEquipe && linha.faltam > 0).length : 0 };
+  const qualidade = [
+    { id: '201', nome: 'Marina Costa 88', decisoes: 12, revertidas: 3, taxa: 0.25, nota: 6.4, avaliacoes: 5 },
+    { id: '200', nome: '『Mod』 Lucas Prado 259', decisoes: 48, revertidas: 2, taxa: 2 / 48, nota: 8.9, avaliacoes: 21 },
+    { id: '100', nome: 'Rafael Monteiro 1187', decisoes: 30, revertidas: 0, taxa: 0, nota: null, avaliacoes: 0 }
+  ];
+  return { minimoSemanal: metas.minimoSemanal, linhas, qualidade, desde: horas(168), abaixo: metas.minimoSemanal ? linhas.filter(linha => linha.naEquipe && linha.faltam > 0).length : 0 };
 };
 app.get('/api/metas', (req, res) => res.json(respostaDasMetas()));
 app.post('/api/metas', express.json(), (req, res) => {
@@ -328,7 +363,7 @@ app.post('/api/backup', express.json(), (req, res) => {
   res.json({ ok: true, mensagem: 'Backup restaurado (prévia, nada foi gravado).' });
 });
 app.post('/api/painel-bot', express.json(), (req, res) => {
-  Object.assign(painelDoBot.valores, { channels: req.body.channels, roles: req.body.roles, manutencao: req.body.manutencao === true, bloqueio: req.body.bloqueio !== false });
+  Object.assign(painelDoBot.valores, { channels: req.body.channels, roles: req.body.roles, manutencao: req.body.manutencao === true, bloqueio: req.body.bloqueio !== false, somenteLeitura: req.body.somenteLeitura === true });
   res.json({ ok: true, mensagem: 'Painel do bot salvo (prévia, nada foi gravado).', ...painelDoBot });
 });
 
@@ -452,6 +487,8 @@ app.get('/api/numeros', (req, res) => {
     return { dia: dia.toISOString().slice(0, 10), total: [3, 7, 4, 0, 9, 12, 5, 6, 2, 8][i % 10] };
   });
   res.json({
+    porHora: [2, 1, 0, 0, 0, 1, 2, 4, 6, 8, 9, 11, 14, 13, 12, 15, 18, 22, 27, 34, 38, 31, 19, 8],
+    porDiaDaSemana: [61, 38, 35, 40, 42, 55, 74],
     dias, total: porDia.reduce((s, d) => s + d.total, 0), porDia,
     porCategoria: [['Anti-RP', 41], ['RDM', 33], ['Zaralho', 21], ['VDM', 18], ['Slide', 9], ['Outros', 7]].map(([nome, total]) => ({ nome, total })),
     porStatus: { pendente: 6, reivindicacao: 3, analise: 4, aceita: 58, recusada: 31, finalizada: 27 },

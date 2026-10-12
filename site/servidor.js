@@ -7,6 +7,7 @@ const { criarRotas, ErroHttp, infoPublicaDoSite, criarLimitador } = require('./r
 const { limparCacheDeAcesso, acompanharMudancasDeAcesso } = require('./acesso');
 const { iniciarPush } = require('./push');
 const { criarProtecao, ajustarServidor, ipDoCliente } = require('./protecao');
+const sessoes = require('./sessoes');
 const {
   COOKIE_SESSAO,
   COOKIE_ESTADO,
@@ -113,8 +114,12 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
   });
 
   app.use((req, res, next) => {
-    const sessao = lerToken(lerCookies(req)[COOKIE_SESSAO], config.segredo);
+    let sessao = lerToken(lerCookies(req)[COOKIE_SESSAO], config.segredo);
+    // Sessão encerrada pela pessoa em outro aparelho deixa de valer na hora.
+    if (sessao?.sid && sessoes.sessaoEncerrada(sessao.sid)) sessao = null;
     req.usuario = sessao ? { id: sessao.id, nome: sessao.nome, avatar: sessao.avatar || null } : null;
+    req.sid = sessao?.sid || null;
+    if (req.sid) sessoes.marcarUso(req.sid);
     next();
   });
 
@@ -172,11 +177,12 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
       const avatar = perfil.avatar
         ? `https://cdn.discordapp.com/avatars/${perfil.id}/${perfil.avatar}.png?size=64`
         : null;
-      const sessao = criarToken({ id: perfil.id, nome: perfil.global_name || perfil.username, avatar }, config.segredo);
+      const sid = sessoes.novoSid();
+      const sessao = criarToken({ id: perfil.id, nome: perfil.global_name || perfil.username, avatar, sid }, config.segredo);
 
       res.cookie(COOKIE_SESSAO, sessao, opcoesCookie(config.seguro, DURACAO_SESSAO_MS));
       // Registro de logins, visível ao responsável.
-      aoEntrar({ usuarioId: perfil.id, nome: perfil.global_name || perfil.username, ip: ipDoCliente(req), agente: req.get('User-Agent') });
+      aoEntrar({ usuarioId: perfil.id, nome: perfil.global_name || perfil.username, ip: ipDoCliente(req), agente: req.get('User-Agent'), sid });
       res.redirect(302, '/');
     } catch (erro) {
       log.warn(`Login pelo site falhou: ${erro.message}`);
@@ -186,6 +192,7 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
 
   app.post('/auth/sair', (req, res) => {
     if (req.usuario) limparCacheDeAcesso(req.usuario.id);
+    sessoes.encerrarSessao(req.sid);
     res.clearCookie(COOKIE_SESSAO, { path: '/' });
     res.json({ ok: true });
   });
@@ -258,11 +265,12 @@ function iniciarSite(client, log) {
     return null;
   }
 
-  const servidor = ajustarServidor(criarApp({ client, config, log, aoEntrar: require('./rotas/gestao').registrarLogin }).listen(config.porta, () => {
+  const servidor = ajustarServidor(criarApp({ client, config, log, aoEntrar: sessoes.criarRegistroDeLogin(client) }).listen(config.porta, () => {
     log.success(`Site no ar em ${config.origem} (porta ${config.porta}).`);
   }));
   iniciarPush(log);
   acompanharMudancasDeAcesso(client);
+  sessoes.carregarSessoesEncerradas();
   servidor.on('error', (erro) => log.error(`Não foi possível iniciar o site: ${erro.message}`));
   return servidor;
 }

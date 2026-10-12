@@ -2,7 +2,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const Denuncia = require('../models/Denuncia');
-const { acessoAoServidor, relacaoComDenuncia } = require('./acesso');
+const { acessoAoServidor, relacaoComDenuncia, acompanharPedido } = require('./acesso');
 const comum = require('./rotas/comum');
 const { garantirConfigDoSite } = require('./configSite');
 const { registrarRotasDeDenuncias } = require('./rotas/denuncias');
@@ -16,6 +16,8 @@ const { registrarRotasDoTeste } = require('./rotas/teste');
 const { registrarRotasDeAvisos } = require('./rotas/avisos');
 const { registrarRotasDoPainelDoBot } = require('./rotas/painelBot');
 const { registrarRotasDeGestao } = require('./rotas/gestao');
+const { registrarRotasDeRascunho } = require('./rotas/rascunho');
+const { registrarRotasDeSessoes } = require('./sessoes');
 
 const { ErroHttp, criarLimitador } = comum;
 
@@ -26,6 +28,9 @@ function criarRotas({ client }) {
   const podeAbrirDenuncia = criarLimitador(5, 10 * 60 * 1000);
   const podeFinalizar = criarLimitador(3, 60 * 1000);
   const finalizandoDenuncias = new Set();
+
+  // Método e caminho do pedido ficam à mão para o modo somente leitura.
+  router.use(acompanharPedido);
 
   router.use((req, res, next) => {
     if (!req.usuario) return next(new ErroHttp(401, 'Entre com sua conta do Discord para continuar.'));
@@ -70,6 +75,8 @@ function criarRotas({ client }) {
   registrarRotasDeAvisos(router, contexto);
   registrarRotasDoPainelDoBot(router, contexto);
   registrarRotasDeGestao(router, contexto);
+  registrarRotasDeRascunho(router, contexto);
+  registrarRotasDeSessoes(router);
 
   return router;
 }

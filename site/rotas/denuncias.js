@@ -110,6 +110,7 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
       servidores: servidores.map(({ guild, member, config, papeis }) => ({
         id: guild.id,
         manutencao: Boolean(config?.manutencaoDenuncia),
+        somenteLeitura: Boolean(config?.siteSomenteLeitura),
         // Categorias, prazos e respostas prontas valem por servidor.
         categorias: configVisivel(guild.id).categorias.map(({ nome, grupo, prioridade, termos }) => ({ nome, grupo, prioridade, termos })),
         slaHoras: configVisivel(guild.id).slaHoras,

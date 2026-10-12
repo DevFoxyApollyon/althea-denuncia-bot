@@ -5,6 +5,8 @@ import { carregarChat, carregarNovasDoChat } from './chat.js';
 import { carregarTeste, carregarTesteAdmin, carregarTestesPendentes } from './teste.js';
 import { carregarPainelDoBot } from './bot.js';
 import { carregarLogins, carregarMetas, carregarSaude } from './gestao.js';
+import { carregarRascunhoDaConta } from './nova.js';
+import { carregarSessoes } from './sessoes.js';
 import { carregarConfigDoSite } from './config.js';
 import { desenhar } from './desenho.js';
 import { CHAVE_AREA, CHAVE_SERVIDOR, FILTROS, INTERVALO_ATUALIZACAO_MS, VISTAS, estado, raiz } from './estado.js';
@@ -306,6 +308,8 @@ export async function aoMudarRota() {
     if (rota.tipo === 'saude') carregarSaude();
     if (rota.tipo === 'logins') carregarLogins();
     if (rota.tipo === 'metas') carregarMetas();
+    if (rota.tipo === 'sessoes') carregarSessoes();
+    if (rota.tipo === 'nova') carregarRascunhoDaConta();
     if (rota.tipo === 'jogador') carregarJogador(rota.id);
     if (rota.tipo === 'avisos') carregarAvisos();
     if (rota.tipo === 'teste') carregarTeste(rota.id);

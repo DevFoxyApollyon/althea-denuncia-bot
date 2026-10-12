@@ -9,7 +9,7 @@ export const CHAVE_RASCUNHO = 'althea-rascunho-denuncia';
 export const CHAVE_CHAT = 'althea-chat';
 export const CHAVE_SERVIDOR = 'althea-servidor';
 // Telas que não são uma lista de casos.
-export const ROTAS_PROPRIAS = ['ranking', 'numeros', 'sugestoes', 'geral', 'auditoria', 'identificar', 'config', 'jogador', 'chat', 'home', 'teste', 'teste-admin', 'avisos', 'bot', 'saude', 'logins', 'metas'];
+export const ROTAS_PROPRIAS = ['ranking', 'numeros', 'sugestoes', 'geral', 'auditoria', 'identificar', 'config', 'jogador', 'chat', 'home', 'teste', 'teste-admin', 'avisos', 'bot', 'saude', 'logins', 'metas', 'sessoes'];
 export const ROTULOS_ACAO = { reivindicacao: 'Reivindicou', analise: 'Colocou em análise', aceita: 'Aceitou', recusada: 'Recusou' };
 export const PERIODOS = { hoje: 'Hoje', semana: 'Semana', mes: 'Mês' };
 export const ROTULOS_STATUS = {
@@ -89,6 +89,10 @@ export const estado = {
   configSite: null,
   painelBot: null,
   saude: null,
+  erros: null,
+  filtroErros: 'todos',
+  sessoes: null,
+  rascunhoDaConta: null,
   topicos: null,
   logins: null,
   filtroLogins: '',

@@ -65,6 +65,7 @@ function aplicar(dados) {
     roles: { ...dados.valores.roles },
     manutencao: dados.valores.manutencao,
     bloqueio: dados.valores.bloqueio,
+    somenteLeitura: Boolean(dados.valores.somenteLeitura),
     isentos: dados.valores.isentos.map(item => item.id).join('\n')
   };
   estado.painelBot = { ...dados, edicao: valores, salvo: JSON.stringify(valores) };
@@ -78,6 +79,7 @@ async function salvar(botao) {
   // Trocas que mudam quem tem acesso ou param as denúncias pedem confirmação.
   const avisos = [
     edicao.manutencao && !antes.manutencao && 'As denúncias entram em manutenção: ninguém consegue abrir denúncia nova até você desligar.',
+    edicao.somenteLeitura && !antes.somenteLeitura && 'O site entra em modo somente leitura: todos continuam consultando, mas só você consegue enviar ou alterar algo por ele até desligar.',
     edicao.roles.responsavel_admin !== antes.roles.responsavel_admin && 'O cargo de responsável muda: quem tem o cargo novo passa a mandar no painel e quem só tem o antigo perde o acesso.',
     edicao.roles.administrador !== antes.roles.administrador && 'O cargo da staff muda: quem só tem o cargo antigo deixa de atender denúncias.',
     edicao.isentos !== antes.isentos && 'A lista de usuários isentos muda em todos os servidores, não só neste.'
@@ -193,6 +195,7 @@ export function telaPainelDoBot() {
   const mudancas = [
     edicao.manutencao !== antes.manutencao,
     edicao.bloqueio !== antes.bloqueio,
+    edicao.somenteLeitura !== antes.somenteLeitura,
     edicao.isentos.trim() !== antes.isentos.trim(),
     ...todosOsCanais.map(item => edicao.channels[item.chave] !== antes.channels[item.chave]),
     ...CARGOS.map(item => edicao.roles[item.chave] !== antes.roles[item.chave])
@@ -227,7 +230,10 @@ export function telaPainelDoBot() {
           { valor: !edicao.manutencao, mudou: edicao.manutencao !== antes.manutencao }),
         linha({ nome: 'Bloqueio de pendências anteriores', explica: 'Ligado, a staff só consegue reivindicar uma denúncia depois que as mais antigas do mesmo canal forem reivindicadas. Serve para ninguém pular a fila.' },
           'bot-bloqueio', interruptor(edicao, 'bloqueio', 'bot-bloqueio', { ligado: 'Fila em ordem', desligado: 'Qualquer ordem' }), null,
-          { valor: edicao.bloqueio, mudou: edicao.bloqueio !== antes.bloqueio })),
+          { valor: edicao.bloqueio, mudou: edicao.bloqueio !== antes.bloqueio }),
+        linha({ nome: 'Site em modo somente leitura', explica: 'Ligado, o site fica só para consulta: ninguém abre denúncia, envia mensagem, escreve no chat nem decide caso por ele. Só o responsável continua podendo alterar. O bot no Discord segue funcionando normalmente. Serve para manutenção sem tirar o site do ar.' },
+          'bot-leitura', interruptor(edicao, 'somenteLeitura', 'bot-leitura', { ligado: 'Só consulta', desligado: 'Site normal' }), null,
+          { valor: !edicao.somenteLeitura, mudou: edicao.somenteLeitura !== antes.somenteLeitura })),
 
       GRUPOS_DE_CANAIS.map((grupo, indice) => el('section', { class: 'cartao', id: indice ? null : 'bot-canais' },
         cabecalho(indice ? 'documento' : 'balao', grupo.titulo, grupo.texto, contar(grupo.itens, edicao.channels)),

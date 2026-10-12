@@ -9,6 +9,9 @@ const LoginSite = require('../../models/LoginSite');
 const { primaryConnection, secondaryConnection } = require('../../utils/persistencia');
 const { pausaDeDMs, avisosExtrasLigados } = require('../../utils/dmSegura');
 const { resumoDosTopicos, limparEspelhosAbertos } = require('../../utils/espelhos');
+const { ultimosRegistros } = require('../../utils/registroDeErros');
+const StaffProfile = require('../../models/StaffProfile');
+const { papeisDoMembro } = require('../acesso');
 const { configVisivel } = require('../categorias');
 const { salvarConfigDoSite, restaurarConfigDoSite } = require('../configSite');
 const { salvarPainel } = require('./painelBot');
@@ -39,6 +42,28 @@ function montarMetas(minimoSemanal, staffIds, atendimentosPorPessoa) {
     linhas,
     abaixo: minimoSemanal > 0 ? linhas.filter(linha => linha.naEquipe && linha.faltam > 0).length : 0
   };
+}
+
+// Qualidade das decisões: uma decisão (aceita ou recusada) conta como revertida
+// quando depois dela a mesma denúncia recebeu a decisão contrária.
+// "acoes" vem em ordem de data: { moderatorId, action, denunciaId }.
+function contarRevertidas(acoes) {
+  const porPessoa = new Map();
+  const ultimaDoCaso = new Map();
+  const linha = (id) => {
+    if (!porPessoa.has(id)) porPessoa.set(id, { decisoes: 0, revertidas: 0 });
+    return porPessoa.get(id);
+  };
+
+  for (const acao of acoes) {
+    if (!['aceita', 'recusada'].includes(acao.action) || !acao.denunciaId) continue;
+    const anterior = ultimaDoCaso.get(acao.denunciaId);
+    if (anterior && anterior.action !== acao.action) linha(anterior.moderatorId).revertidas += 1;
+    // Repetir a mesma decisão no mesmo caso não conta duas vezes.
+    if (!anterior || anterior.action !== acao.action) linha(acao.moderatorId).decisoes += 1;
+    ultimaDoCaso.set(acao.denunciaId, acao);
+  }
+  return porPessoa;
 }
 
 // Confere o arquivo de backup antes de restaurar.
@@ -87,6 +112,13 @@ function registrarRotasDeGestao(router, { client }) {
     });
   }));
 
+  // ---------------------------------------------------------------- painel de erros
+  // Últimos erros e avisos do bot e do site, guardados na memória desde que o bot ligou.
+  router.get('/erros', assincrono(async (req, res) => {
+    await acessoDoResponsavel(req, req.query.guildId);
+    res.json({ registros: ultimosRegistros(150), ligadoHaMs: Math.round(process.uptime() * 1000) });
+  }));
+
   // ---------------------------------------------------------------- tópicos do Discord
   router.get('/topicos', assincrono(async (req, res) => {
     await acessoDoResponsavel(req, req.query.guildId);
@@ -120,7 +152,14 @@ function registrarRotasDeGestao(router, { client }) {
     const logins = recentes.filter(item => ehMembro(item.usuarioId)).slice(0, 150);
     const pessoas = await resolverPessoas(client, acesso.guild, logins.map(item => item.usuarioId));
     res.json({
-      logins: logins.map(item => ({ usuarioId: item.usuarioId, nome: pessoas[item.usuarioId]?.nome || item.nome, ip: item.ip, agente: item.agente, em: item.em })),
+      logins: logins.map((item) => {
+        const membro = acesso.guild.members.cache.get(item.usuarioId) || buscados?.get(item.usuarioId);
+        return {
+          usuarioId: item.usuarioId, nome: pessoas[item.usuarioId]?.nome || item.nome, ip: item.ip, agente: item.agente, em: item.em,
+          ipNovo: Boolean(item.ipNovo),
+          staff: Boolean(membro && papeisDoMembro(membro, acesso.config).staff)
+        };
+      }),
       pessoas
     });
   }));
@@ -143,7 +182,8 @@ function registrarRotasDeGestao(router, { client }) {
         channels: { ...(config?.channels || {}) },
         roles: { ...(config?.roles || {}) },
         manutencao: Boolean(config?.manutencaoDenuncia),
-        bloqueio: config?.bloquearReivindicacaoComPendentes !== false
+        bloqueio: config?.bloquearReivindicacaoComPendentes !== false,
+        somenteLeitura: Boolean(config?.siteSomenteLeitura)
       },
       // null = o servidor usa o padrão do site.
       configSite: site.personalizada ? { categorias: site.categorias, slaHoras: site.slaHoras, respostasProntas: site.respostasProntas } : null,
@@ -192,8 +232,24 @@ function registrarRotasDeGestao(router, { client }) {
     const staffIds = [...new Set(cargos.flatMap(id => [...(guild.roles.cache.get(id)?.members.keys() || [])]))];
 
     const metas = montarMetas(meta?.minimoSemanal || 0, staffIds, porPessoa);
-    const pessoas = await resolverPessoas(client, guild, metas.linhas.map(linha => linha.id));
-    return { ...metas, desde, linhas: metas.linhas.map(linha => ({ ...linha, nome: pessoas[linha.id]?.nome || 'Staff', avatar: pessoas[linha.id]?.avatar || null })) };
+    // Qualidade: decisões dos últimos 30 dias, quantas foram revertidas e a nota das avaliações.
+    const decisoes = await ModerationAction.find({ guildId: guild.id, action: { $in: ['aceita', 'recusada'] }, timestamp: { $gte: new Date(Date.now() - 30 * DIA_MS) } })
+      .sort({ timestamp: 1 }).limit(20000).select('moderatorId action denunciaId').lean();
+    const revertidas = contarRevertidas(decisoes);
+    const perfis = await StaffProfile.find({ guildId: guild.id, userId: { $in: [...revertidas.keys()] } }).lean().catch(() => []);
+    const notaDe = new Map(perfis.map(perfil => [perfil.userId, perfil]));
+    const idsDaQualidade = [...revertidas.keys()];
+    const pessoas = await resolverPessoas(client, guild, [...metas.linhas.map(linha => linha.id), ...idsDaQualidade].slice(0, 60));
+
+    const qualidade = idsDaQualidade.map((id) => {
+      const { decisoes: total, revertidas: quantas } = revertidas.get(id);
+      const perfil = notaDe.get(id);
+      const avaliacoes = Number(perfil?.feedback?.count || 0);
+      const media = avaliacoes ? Number(perfil.feedback.soma || 0) / avaliacoes : null;
+      return { id, nome: pessoas[id]?.nome || 'Staff', decisoes: total, revertidas: quantas, taxa: total ? quantas / total : 0, nota: media, avaliacoes };
+    }).sort((a, b) => b.taxa - a.taxa || b.revertidas - a.revertidas || b.decisoes - a.decisoes);
+
+    return { ...metas, desde, qualidade, linhas: metas.linhas.map(linha => ({ ...linha, nome: pessoas[linha.id]?.nome || 'Staff', avatar: pessoas[linha.id]?.avatar || null })) };
   }
 
   router.get('/metas', assincrono(async (req, res) => {
@@ -210,11 +266,4 @@ function registrarRotasDeGestao(router, { client }) {
   }));
 }
 
-// Guarda a entrada de alguém no site. Nunca atrapalha o login se o banco falhar.
-function registrarLogin({ usuarioId, nome, ip, agente }) {
-  if (!usuarioId) return;
-  LoginSite.create({ usuarioId, nome: String(nome || '').slice(0, 80), ip: String(ip || '').slice(0, 45), agente: String(agente || '').slice(0, 300) })
-    .catch(erro => console.warn(`[Site] Não foi possível registrar o login: ${erro.message}`));
-}
-
-module.exports = { registrarRotasDeGestao, registrarLogin, montarMetas, lerBackup };
+module.exports = { registrarRotasDeGestao, montarMetas, lerBackup, contarRevertidas };
