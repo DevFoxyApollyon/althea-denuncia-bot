@@ -245,7 +245,7 @@ export function menuLateral() {
         grupo('Ferramentas'),
         itemDeRota('Perfil do jogador', 'usuario', 'jogador'),
         itemDeRota('Ranking', 'trofeu', 'ranking'),
-        itemDeRota('Testes', 'nota', 'teste'),
+        itemDeRota(estado.testesPendentes.obrigatorios ? 'Testes (obrigatório)' : 'Testes', 'nota', 'teste', estado.testesPendentes.total),
         grupo('Comunidade'),
         itemDoChat()
       ]

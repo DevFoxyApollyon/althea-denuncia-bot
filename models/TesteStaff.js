@@ -13,6 +13,10 @@ const testeStaffSchema = new mongoose.Schema({
   notaMinima: { type: Number, default: 70 },
   // Só os publicados aparecem para a staff; rascunho fica só com o responsável.
   ativo: { type: Boolean, default: true },
+  // Obrigatório: sem aprovação em dia neste teste, a staff não reivindica denúncias.
+  obrigatorio: { type: Boolean, default: false },
+  // Por quantos dias a aprovação vale. 0 = não vence.
+  validadeDias: { type: Number, default: 0, min: 0, max: 730 },
   perguntas: [{
     _id: false,
     id: { type: String, required: true },

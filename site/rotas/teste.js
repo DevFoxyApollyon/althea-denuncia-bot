@@ -10,6 +10,8 @@ const TesteStaff = require('../../models/TesteStaff');
 const TesteResposta = require('../../models/TesteResposta');
 const { acessoAoServidor } = require('../acesso');
 const { analisarMusica } = require('./chatSala');
+const { enviarPush } = require('../push');
+const { situacaoNoTeste, pendenciasDeTeste, esquecerPendencias } = require('../../utils/testesObrigatorios');
 const { resolverPessoas, ErroHttp, assincrono, criarLimitador } = require('./comum');
 
 const MAX_PERGUNTAS = 40;
@@ -59,7 +61,13 @@ function validarTeste(entrada) {
   const titulo = texto(entrada?.titulo, 80);
   if (!titulo) throw new Error('Dê um título ao teste.');
 
-  return { titulo, instrucoes: texto(entrada?.instrucoes, 600), video, notaMinima, ativo: entrada?.ativo !== false, perguntas };
+  const validadeDias = Math.round(Number(entrada?.validadeDias) || 0);
+  if (validadeDias < 0 || validadeDias > 730) throw new Error('A validade deve ficar entre 0 (não vence) e 730 dias.');
+
+  return {
+    titulo, instrucoes: texto(entrada?.instrucoes, 600), video, notaMinima,
+    ativo: entrada?.ativo !== false, obrigatorio: entrada?.obrigatorio === true, validadeDias, perguntas
+  };
 }
 
 // Corrige as respostas ({ idDaPergunta: posição escolhida }).
@@ -102,6 +110,19 @@ function registrarRotasDoTeste(router, { client }) {
 
   const testesDoServidor = (guildId) => TesteStaff.find({ guildId }).sort({ criadoEm: 1, _id: 1 }).lean();
 
+  // Teste publicado: quem ativou as notificações do navegador e é da staff recebe o aviso.
+  // No site, o menu "Testes" passa a mostrar quantos a pessoa tem para fazer.
+  function avisarTesteNovo(acesso, id, teste) {
+    const cargos = [acesso.config.roles?.administrador, acesso.config.roles?.responsavel_admin].filter(Boolean);
+    const staff = [...new Set(cargos.flatMap(cargo => [...(acesso.guild.roles.cache.get(cargo)?.members.keys() || [])]))];
+    enviarPush(staff, {
+      titulo: teste.obrigatorio ? 'Teste obrigatório para a staff' : 'Teste novo para a staff',
+      corpo: `${teste.titulo} (${acesso.guild.name})`,
+      url: `/#/teste/${id}`,
+      tag: `teste-${id}`
+    }).catch(erro => console.warn(`[Testes] Não foi possível avisar a staff do teste novo: ${erro.message}`));
+  }
+
   async function testeDoServidor(guildId, id) {
     if (!mongoose.isValidObjectId(id)) throw new ErroHttp(404, 'Teste não encontrado.');
     const teste = await TesteStaff.findOne({ _id: id, guildId }).lean();
@@ -128,11 +149,14 @@ function registrarRotasDoTeste(router, { client }) {
           id,
           titulo: teste.titulo,
           ativo: teste.ativo !== false,
+          obrigatorio: Boolean(teste.obrigatorio),
+          validadeDias: teste.validadeDias || 0,
           perguntas: teste.perguntas.length,
           comVideo: teste.perguntas.filter(pergunta => pergunta.video).length + (teste.video ? 1 : 0),
           notaMinima: teste.notaMinima,
           responderam: ultimas.length,
-          aprovados: ultimas.filter(item => item.aprovado).length,
+          aprovados: ultimas.filter(item => situacaoNoTeste(teste, item).situacao === 'aprovado').length,
+          vencidos: ultimas.filter(item => situacaoNoTeste(teste, item).situacao === 'vencido').length,
           atualizadoEm: teste.atualizadoEm
         };
       })
@@ -152,8 +176,8 @@ function registrarRotasDoTeste(router, { client }) {
     const resultados = ultimasPorPessoa(respostas);
 
     res.json({
-      teste: { id: String(teste._id), titulo: teste.titulo, instrucoes: teste.instrucoes, video: teste.video, notaMinima: teste.notaMinima, ativo: teste.ativo !== false, perguntas: teste.perguntas },
-      resultados,
+      teste: { id: String(teste._id), titulo: teste.titulo, instrucoes: teste.instrucoes, video: teste.video, notaMinima: teste.notaMinima, ativo: teste.ativo !== false, obrigatorio: Boolean(teste.obrigatorio), validadeDias: teste.validadeDias || 0, perguntas: teste.perguntas },
+      resultados: resultados.map(item => ({ ...item, ...situacaoNoTeste(teste, item) })),
       pessoas: await resolverPessoas(client, acesso.guild, resultados.map(item => item.usuarioId))
     });
   }));
@@ -169,15 +193,18 @@ function registrarRotasDoTeste(router, { client }) {
     }
     const dados = { ...teste, atualizadoPor: req.usuario.id, atualizadoEm: new Date() };
 
+    esquecerPendencias(acesso.guild.id);
     const id = req.body?.id;
     if (id) {
-      await testeDoServidor(acesso.guild.id, id);
+      const anterior = await testeDoServidor(acesso.guild.id, id);
       await TesteStaff.updateOne({ _id: id, guildId: acesso.guild.id }, { $set: dados });
+      if (teste.ativo && anterior.ativo === false) avisarTesteNovo(acesso, String(id), teste);
       return res.json({ ok: true, id: String(id), mensagem: teste.ativo ? 'Teste salvo. A staff já pode responder.' : 'Teste salvo como rascunho. A staff ainda não vê.' });
     }
 
     if (await TesteStaff.countDocuments({ guildId: acesso.guild.id }) >= MAX_TESTES) throw new ErroHttp(400, `Cada servidor pode ter até ${MAX_TESTES} testes. Apague um para criar outro.`);
     const criado = await TesteStaff.create({ guildId: acesso.guild.id, ...dados });
+    if (teste.ativo) avisarTesteNovo(acesso, String(criado._id), teste);
     res.status(201).json({ ok: true, id: String(criado._id), mensagem: teste.ativo ? 'Teste criado. A staff já pode responder.' : 'Teste criado como rascunho. A staff ainda não vê.' });
   }));
 
@@ -185,6 +212,7 @@ function registrarRotasDoTeste(router, { client }) {
     const acesso = await exigir(req, req.query.guildId, 'responsavel');
     const teste = await testeDoServidor(acesso.guild.id, req.params.id);
     await TesteStaff.deleteOne({ _id: teste._id });
+    esquecerPendencias(acesso.guild.id);
     await TesteResposta.deleteMany({ guildId: acesso.guild.id, testeId: String(teste._id) });
     res.json({ ok: true, mensagem: `Teste "${teste.titulo}" apagado, com os resultados dele.` });
   }));
@@ -200,6 +228,7 @@ function registrarRotasDoTeste(router, { client }) {
     res.json({
       testes: todos.filter(teste => teste.ativo !== false && teste.perguntas?.length).map((teste) => {
         const id = String(teste._id);
+        const ultima = minhas.find(item => testeDaResposta(item, maisAntigo) === id);
         return {
           id,
           titulo: teste.titulo,
@@ -207,10 +236,20 @@ function registrarRotasDoTeste(router, { client }) {
           perguntas: teste.perguntas.length,
           comVideo: Boolean(teste.video) || teste.perguntas.some(pergunta => pergunta.video),
           notaMinima: teste.notaMinima,
-          ultima: resumoDaResposta(minhas.find(item => testeDaResposta(item, maisAntigo) === id))
+          obrigatorio: Boolean(teste.obrigatorio),
+          validadeDias: teste.validadeDias || 0,
+          ultima: resumoDaResposta(ultima),
+          ...situacaoNoTeste(teste, ultima)
         };
       })
     });
+  }));
+
+  // Quantos testes a pessoa tem para fazer (nunca fez, reprovou ou a aprovação venceu): vira o número no menu.
+  router.get('/teste/pendentes', assincrono(async (req, res) => {
+    const acesso = await exigir(req, req.query.guildId, 'staff');
+    const { total, obrigatorios } = await pendenciasDeTeste(acesso.guild.id, req.usuario.id);
+    res.json({ total, obrigatorios: obrigatorios.length });
   }));
 
   // Um teste como a staff vê: sem a alternativa certa.
@@ -232,8 +271,11 @@ function registrarRotasDoTeste(router, { client }) {
       instrucoes: teste.instrucoes,
       video: teste.video,
       notaMinima: teste.notaMinima,
+      obrigatorio: Boolean(teste.obrigatorio),
+      validadeDias: teste.validadeDias || 0,
       perguntas: teste.perguntas.map(({ id, texto, video, opcoes }) => ({ id, texto, video: video || '', opcoes })),
-      ultima: resumoDaResposta(ultima)
+      ultima: resumoDaResposta(ultima),
+      ...situacaoNoTeste(teste, ultima)
     });
   }));
 
@@ -249,7 +291,8 @@ function registrarRotasDoTeste(router, { client }) {
 
     const resultado = corrigir(teste, respostas);
     const salva = await TesteResposta.create({ guildId: acesso.guild.id, testeId: String(teste._id), usuarioId: req.usuario.id, ...resultado });
-    res.status(201).json({ ok: true, resultado: resumoDaResposta(salva) });
+    esquecerPendencias(acesso.guild.id, req.usuario.id);
+    res.status(201).json({ ok: true, resultado: resumoDaResposta(salva), ...situacaoNoTeste(teste, salva) });
   }));
 }
 

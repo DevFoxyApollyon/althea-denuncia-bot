@@ -13,6 +13,7 @@ const ChatModeracao = require('../../models/ChatModeracao');
 const { handleStatusButton, handlePunishmentModal, handleClaimButton } = require('../../Handlers/handlerStatusButton');
 const { handleExportButton } = require('../../Handlers/exportDenuncia');
 const { bloquearReivindicacaoSeHouverPendentes } = require('../../utils/avisoPendentesAnteriores');
+const { bloquearReivindicacaoSemTeste } = require('../../utils/testesObrigatorios');
 const { acessoAoServidor } = require('../acesso');
 const { criarInteracaoSite, resultadoDaInteracao } = require('../interacaoSite');
 const {
@@ -53,7 +54,7 @@ function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico,
     if (acao === 'reivindicar') {
       interacao = criarInteracaoSite({ ...base, customId: 'reivindicar' });
       // Mesma checagem que o evento do Discord faz antes do botão.
-      if (!await bloquearReivindicacaoSeHouverPendentes(interacao)) await handleClaimButton(interacao);
+      if (!await bloquearReivindicacaoSemTeste(interacao) && !await bloquearReivindicacaoSeHouverPendentes(interacao)) await handleClaimButton(interacao);
     } else if (acao === 'aceitar') {
       const campos = {
         acusadoId: String(req.body?.acusadoId || '').trim(),

@@ -2,6 +2,7 @@ const { MessageFlags } = require('discord.js');
 const interactionHandler = require('./interactionHandler');
 const { advancedMonitor } = require('../utils/advancedMonitoring');
 const { bloquearReivindicacaoSeHouverPendentes } = require('../utils/avisoPendentesAnteriores');
+const { bloquearReivindicacaoSemTeste } = require('../utils/testesObrigatorios');
 
 function registerInteractionEvents(client, log) {
     client.on('interactionCreate', async interaction => {
@@ -9,6 +10,8 @@ function registerInteractionEvents(client, log) {
             const startTime = Date.now();
 
             if (interaction.isButton() && interaction.customId === 'reivindicar') {
+                // Teste obrigatório da staff ainda sem aprovação em dia.
+                if (await bloquearReivindicacaoSemTeste(interaction)) return;
                 if (await bloquearReivindicacaoSeHouverPendentes(interaction)) return;
             }
 

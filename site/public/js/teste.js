@@ -16,6 +16,31 @@ const porcento = (item) => Math.round((item.acertos / item.total) * 100);
 const linkDoVideo = (id) => (id ? `https://youtu.be/${id}` : '');
 const voltar = (rotulo, destino) => el('button', { class: 'voltar discreto', type: 'button', onclick: () => ir(destino) }, icone('voltar'), rotulo);
 
+const DIA_MS = 24 * 60 * 60 * 1000;
+const SITUACOES = {
+  novo: { rotulo: 'Não feito', selo: 'pendente' },
+  aprovado: { rotulo: 'Aprovado', selo: 'aceita' },
+  reprovado: { rotulo: 'Reprovado', selo: 'recusada' },
+  vencido: { rotulo: 'Vencido', selo: 'analise' }
+};
+// "vence em 5 dias", só quando falta uma semana ou menos.
+function avisoDeValidade(teste) {
+  if (teste.situacao !== 'aprovado' || !teste.venceEm) return null;
+  const dias = Math.ceil((new Date(teste.venceEm).getTime() - Date.now()) / DIA_MS);
+  return dias <= 7 ? (dias <= 1 ? 'vence amanhã' : `vence em ${dias} dias`) : null;
+}
+
+// Número no menu "Testes": o que a pessoa tem para fazer.
+export async function carregarTestesPendentes() {
+  if (!estado.guildId) return;
+  const guildId = estado.guildId;
+  const dados = await api(`/api/teste/pendentes?${parametros()}`).catch(() => null);
+  if (!dados || estado.guildId !== guildId) return;
+  const mudou = dados.total !== estado.testesPendentes.total || dados.obrigatorios !== estado.testesPendentes.obrigatorios;
+  estado.testesPendentes = dados;
+  if (mudou && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) desenhar();
+}
+
 // ---------------------------------------------------------------- staff: lista
 export async function carregarTeste(id) {
   const guildId = estado.guildId;
@@ -39,7 +64,8 @@ function listaDeTestes() {
   const testes = estado.testes;
   if (!testes) return el('main', { class: 'principal' }, el('div', { class: 'teste' }, blocoAviso() || carregador('Carregando os testes')));
 
-  const feitos = testes.filter(teste => teste.ultima?.aprovado).length;
+  const feitos = testes.filter(teste => teste.situacao === 'aprovado').length;
+  const travam = testes.filter(teste => teste.obrigatorio && teste.situacao !== 'aprovado');
   return el('main', { class: 'principal' },
     el('div', { class: 'teste' },
       el('header', null,
@@ -48,23 +74,29 @@ function listaDeTestes() {
           ? `Escolha um teste para fazer. Cada um é enviado e corrigido em separado. Você foi aprovado em ${feitos} de ${testes.length}.`
           : 'Os testes que o responsável montar aparecem aqui.')),
       blocoAviso(),
+      travam.length > 0 && el('p', { class: 'teste-trava', role: 'status' }, icone('cadeado'),
+        travam.length === 1
+          ? `Você só volta a reivindicar denúncias depois de ser aprovado no teste obrigatório "${travam[0].titulo}".`
+          : `Você só volta a reivindicar denúncias depois de ser aprovado nos ${travam.length} testes obrigatórios abaixo.`),
       !testes.length
         ? el('div', { class: 'vazio alto' }, el('h3', null, 'Ainda não há teste'), el('p', null, 'O responsável deste servidor ainda não publicou nenhum teste.'))
         : el('ul', { class: 'testes-lista' }, testes.map((teste) => {
-          const situacao = !teste.ultima ? 'novo' : teste.ultima.aprovado ? 'aprovado' : 'reprovado';
+          const situacao = teste.situacao;
+          const validade = avisoDeValidade(teste);
           return el('li', null, el('button', { class: `teste-cartao ${situacao}`, type: 'button', onclick: () => ir(`#/teste/${teste.id}`) },
             el('span', { class: 'teste-cartao-texto' },
-              el('strong', null, teste.titulo),
+              el('strong', null, teste.titulo, teste.obrigatorio && el('span', { class: 'teste-etiqueta' }, 'Obrigatório')),
               teste.instrucoes && el('span', { class: 'teste-cartao-sub' }, teste.instrucoes),
               el('small', null, [
                 teste.perguntas === 1 ? '1 pergunta' : `${teste.perguntas} perguntas`,
                 teste.comVideo && 'com vídeo',
-                `passa com ${teste.notaMinima}%`
+                `passa com ${teste.notaMinima}%`,
+                teste.validadeDias > 0 && `vale por ${teste.validadeDias} dias`
               ].filter(Boolean).join(', '))),
             el('span', { class: 'teste-cartao-situacao' },
-              situacao === 'novo'
-                ? el('span', { class: 'selo pendente' }, 'Não feito')
-                : [el('strong', null, `${porcento(teste.ultima)}%`), el('span', { class: `selo ${teste.ultima.aprovado ? 'aceita' : 'recusada'}` }, teste.ultima.aprovado ? 'Aprovado' : 'Reprovado')]),
+              teste.ultima && el('strong', null, `${porcento(teste.ultima)}%`),
+              el('span', { class: `selo ${SITUACOES[situacao].selo}` }, SITUACOES[situacao].rotulo),
+              validade && el('small', { class: 'teste-vence' }, validade)),
             icone('avancar')));
         }))));
 }
@@ -78,8 +110,11 @@ async function enviarTeste(botao) {
     return desenhar();
   }
   await executar(botao, async () => {
-    const { resultado } = await enviarJson(`/api/teste/${teste.id}/respostas`, { guildId: estado.guildId, respostas: estado.respostasTeste });
+    const { resultado, situacao, venceEm } = await enviarJson(`/api/teste/${teste.id}/respostas`, { guildId: estado.guildId, respostas: estado.respostasTeste });
     teste.ultima = resultado;
+    teste.situacao = situacao;
+    teste.venceEm = venceEm;
+    carregarTestesPendentes();
     teste.refazendo = false;
     estado.respostasTeste = {};
     estado.testes = null;
@@ -90,12 +125,15 @@ async function enviarTeste(botao) {
 
 function resultadoDoTeste(teste) {
   const ultima = teste.ultima;
-  return el('section', { class: `cartao teste-resultado ${ultima.aprovado ? 'aprovado' : 'reprovado'}` },
+  const vencido = teste.situacao === 'vencido';
+  return el('section', { class: `cartao teste-resultado ${ultima.aprovado && !vencido ? 'aprovado' : 'reprovado'}` },
     el('span', { class: 'teste-nota' }, `${porcento(ultima)}%`),
     el('div', null,
-      el('h2', null, ultima.aprovado ? 'Aprovado' : 'Não foi desta vez'),
-      el('p', null, `Você acertou ${ultima.acertos} de ${ultima.total}. Para passar é preciso ${teste.notaMinima}%.`),
-      el('p', { class: 'sub' }, `Enviado em ${formatarData(ultima.em)}.`)),
+      el('h2', null, vencido ? 'Aprovação vencida' : ultima.aprovado ? 'Aprovado' : 'Não foi desta vez'),
+      el('p', null, vencido
+        ? `Sua aprovação valia por ${teste.validadeDias} dias e venceu em ${formatarData(teste.venceEm)}. Faça o teste de novo.`
+        : `Você acertou ${ultima.acertos} de ${ultima.total}. Para passar é preciso ${teste.notaMinima}%.`),
+      el('p', { class: 'sub' }, `Enviado em ${formatarData(ultima.em)}.${!vencido && teste.venceEm ? ` Vale até ${formatarData(teste.venceEm)}.` : ''}`)),
     el('button', {
       type: 'button',
       onclick: () => {
@@ -120,6 +158,7 @@ export function telaTeste() {
       voltar('Todos os testes', '#/teste'),
       el('header', null,
         el('h1', null, teste.titulo),
+        teste.obrigatorio && el('p', { class: 'teste-etiquetas' }, el('span', { class: 'teste-etiqueta' }, 'Obrigatório'), 'Sem aprovação em dia neste teste, você não reivindica denúncias.'),
         teste.instrucoes && el('p', { class: 'sub texto-livre' }, teste.instrucoes)),
       blocoAviso(),
       teste.ultima && !teste.refazendo && resultadoDoTeste(teste),
@@ -159,7 +198,7 @@ export function telaTeste() {
 }
 
 // ---------------------------------------------------------------- responsável: lista
-const TESTE_NOVO = () => ({ id: null, titulo: '', instrucoes: '', video: '', notaMinima: 70, ativo: true, perguntas: [{ texto: '', video: '', opcoes: ['', '', '', ''], correta: -1 }] });
+const TESTE_NOVO = () => ({ id: null, titulo: '', instrucoes: '', video: '', notaMinima: 70, ativo: true, obrigatorio: false, validadeDias: 0, perguntas: [{ texto: '', video: '', opcoes: ['', '', '', ''], correta: -1 }] });
 
 export async function carregarTesteAdmin(id) {
   const guildId = estado.guildId;
@@ -210,14 +249,15 @@ function listaDeTestesAdmin() {
         : el('ul', { class: 'testes-lista' }, testes.map(teste => el('li', null,
           el('button', { class: `teste-cartao ${teste.ativo ? '' : 'rascunho'}`, type: 'button', onclick: () => ir(`#/teste-admin/${teste.id}`) },
             el('span', { class: 'teste-cartao-texto' },
-              el('strong', null, teste.titulo),
+              el('strong', null, teste.titulo, teste.obrigatorio && el('span', { class: 'teste-etiqueta' }, 'Obrigatório')),
               el('small', null, [
                 teste.perguntas === 1 ? '1 pergunta' : `${teste.perguntas} perguntas`,
                 teste.comVideo ? (teste.comVideo === 1 ? '1 vídeo' : `${teste.comVideo} vídeos`) : 'sem vídeo',
-                `passa com ${teste.notaMinima}%`
+                `passa com ${teste.notaMinima}%`,
+                teste.validadeDias > 0 ? `vale por ${teste.validadeDias} dias` : 'não vence'
               ].join(', '))),
             el('span', { class: 'teste-cartao-situacao' },
-              el('small', null, teste.responderam ? `${teste.aprovados} de ${teste.responderam} aprovados` : 'ninguém respondeu'),
+              el('small', null, teste.responderam ? `${teste.aprovados} de ${teste.responderam} aprovados${teste.vencidos ? `, ${teste.vencidos} vencido(s)` : ''}` : 'ninguém respondeu'),
               el('span', { class: `selo ${teste.ativo ? 'aceita' : 'pendente'}` }, teste.ativo ? 'Publicado' : 'Rascunho')),
             icone('avancar')))))));
 }
@@ -337,8 +377,14 @@ export function telaTesteAdmin() {
   if (!dados) return el('main', { class: 'principal' }, el('div', { class: 'teste' }, blocoAviso() || carregador('Carregando o teste')));
 
   const { teste, resultados, pessoas } = dados;
-  const aprovados = resultados.filter(item => item.aprovado).length;
+  const aprovados = resultados.filter(item => (item.situacao || (item.aprovado ? 'aprovado' : 'reprovado')) === 'aprovado').length;
   const novo = !teste.id;
+  // Quais perguntas a equipe mais erra, pela tentativa mais recente de cada pessoa.
+  const maisErradas = teste.perguntas
+    .map((pergunta, indice) => ({ numero: indice + 1, texto: pergunta.texto, erros: resultados.filter(item => item.erradas?.includes(pergunta.id)).length }))
+    .filter(item => item.erros > 0)
+    .sort((a, b) => b.erros - a.erros)
+    .slice(0, 5);
 
   return el('main', { class: 'principal' },
     el('div', { class: 'teste teste-admin' },
@@ -367,7 +413,16 @@ export function telaTesteAdmin() {
             type: 'checkbox', id: 'teste-ativo', checked: teste.ativo,
             onchange: (evento) => { teste.ativo = evento.target.checked; }
           }),
-          el('span', null, el('strong', null, 'Publicado'), el('small', null, 'Desmarcado, o teste fica como rascunho e a staff não vê.')))),
+          el('span', null, el('strong', null, 'Publicado'), el('small', null, 'Desmarcado, o teste fica como rascunho e a staff não vê. Ao publicar, a staff é avisada.'))),
+        el('label', { class: 'teste-publicado' },
+          el('input', {
+            type: 'checkbox', id: 'teste-obrigatorio', checked: teste.obrigatorio,
+            onchange: (evento) => { teste.obrigatorio = evento.target.checked; }
+          }),
+          el('span', null, el('strong', null, 'Obrigatório para atender'), el('small', null, 'Quem não tiver aprovação em dia neste teste não consegue reivindicar denúncias, no Discord nem no site. Não vale para o responsável.'))),
+        el('div', { class: 'campo teste-validade' }, el('label', { for: 'teste-validade' }, 'Validade da aprovação (dias)'),
+          campo(teste, 'validadeDias', { id: 'teste-validade', rotulo: 'Validade da aprovação em dias', tipo: 'number', min: '0', max: '730' }),
+          el('p', { class: 'dica' }, 'Depois desse prazo a aprovação vence e a pessoa precisa refazer. Use 0 para não vencer.'))),
 
       el('h2', { class: 'teste-secao' }, `Perguntas (${teste.perguntas.length})`),
       el('ol', { class: 'teste-perguntas' }, teste.perguntas.map((pergunta, indice) => editorDePergunta(pergunta, indice, teste.perguntas))),
@@ -392,7 +447,22 @@ export function telaTesteAdmin() {
                 nomeColorido(pessoa?.nome || 'Staff', pessoa?.cor),
                 el('small', null, `${item.acertos} de ${item.total}, ${formatarData(item.em)}${item.tentativas > 1 ? `, ${item.tentativas} tentativas` : ''}`)),
               el('strong', null, `${porcento(item)}%`),
-              el('span', { class: `selo ${item.aprovado ? 'aceita' : 'recusada'}` }, item.aprovado ? 'Aprovado' : 'Reprovado'));
+              el('span', { class: `selo ${SITUACOES[item.situacao || (item.aprovado ? 'aprovado' : 'reprovado')].selo}` }, SITUACOES[item.situacao || (item.aprovado ? 'aprovado' : 'reprovado')].rotulo));
           }))
-          : el('p', { class: 'sub' }, 'Ninguém respondeu ainda.'))));
+          : el('p', { class: 'sub' }, 'Ninguém respondeu ainda.')),
+
+      !novo && resultados.length > 0 && el('section', { class: 'cartao' },
+        el('h2', null, 'Perguntas que a equipe mais erra'),
+        el('p', { class: 'sub' }, 'Conta a tentativa mais recente de cada pessoa. Serve para saber o que precisa de treino.'),
+        maisErradas.length
+          ? el('ol', { class: 'teste-erradas' }, maisErradas.map((item) => {
+            const parte = Math.round(item.erros / resultados.length * 100);
+            const cheio = el('span');
+            cheio.style.width = `${parte}%`;
+            return el('li', null,
+              el('span', { class: 'teste-numero' }, String(item.numero)),
+              el('div', null, el('strong', null, item.texto), el('div', { class: 'topicos-barra', role: 'img', 'aria-label': `${parte}% erraram` }, cheio)),
+              el('span', { class: 'teste-erros' }, el('strong', null, `${parte}%`), el('small', null, `${item.erros} de ${resultados.length} erraram`)));
+          }))
+          : el('p', { class: 'sub' }, 'Ninguém errou nenhuma pergunta na última tentativa.'))));
 }

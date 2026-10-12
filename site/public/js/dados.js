@@ -2,7 +2,7 @@
 import { conversaNoFim, rolarConversaParaOFim } from './acoes.js';
 import { carregarAvisos } from './avisos.js';
 import { carregarChat, carregarNovasDoChat } from './chat.js';
-import { carregarTeste, carregarTesteAdmin } from './teste.js';
+import { carregarTeste, carregarTesteAdmin, carregarTestesPendentes } from './teste.js';
 import { carregarPainelDoBot } from './bot.js';
 import { carregarLogins, carregarMetas, carregarSaude } from './gestao.js';
 import { carregarConfigDoSite } from './config.js';
@@ -140,6 +140,7 @@ export function carregarArea() {
     : ['minhas'];
   carregarNovasDoChat();
   carregarAvisos();
+  if (papeisAtuais().staff) carregarTestesPendentes();
   ouvirListas();
   return Promise.all(escopos.map(carregarLista));
 }

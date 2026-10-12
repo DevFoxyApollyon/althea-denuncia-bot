@@ -112,6 +112,7 @@ export const estado = {
   testeAdmin: null,
   testes: null,
   testesAdmin: null,
+  testesPendentes: { total: 0, obrigatorios: 0 },
   avisosSite: [],
   textoAviso: '',
   chatNovas: { total: 0, mencoes: 0 },

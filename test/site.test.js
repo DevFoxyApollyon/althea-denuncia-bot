@@ -528,3 +528,24 @@ test('metas da staff: conta atendimentos da semana e aponta quem está abaixo', 
   assert.equal(lido.minimoSemanal, 12);
   assert.equal(lido.configSite, null);
 });
+
+test('testes obrigatórios: situação da pessoa considera reprovação e validade', () => {
+  const { situacaoNoTeste } = require('../utils/testesObrigatorios');
+  const agora = Date.UTC(2026, 9, 12);
+  const dia = 24 * 60 * 60 * 1000;
+  const ha = (dias) => new Date(agora - dias * dia);
+
+  assert.equal(situacaoNoTeste({ validadeDias: 0 }, null, agora).situacao, 'novo');
+  assert.equal(situacaoNoTeste({ validadeDias: 30 }, { aprovado: false, em: ha(1) }, agora).situacao, 'reprovado');
+  assert.equal(situacaoNoTeste({ validadeDias: 0 }, { aprovado: true, em: ha(900) }, agora).situacao, 'aprovado', 'sem validade, não vence');
+  const emDia = situacaoNoTeste({ validadeDias: 30 }, { aprovado: true, em: ha(10) }, agora);
+  assert.equal(emDia.situacao, 'aprovado');
+  assert.equal(emDia.venceEm.getTime(), agora + 20 * dia);
+  assert.equal(situacaoNoTeste({ validadeDias: 30 }, { aprovado: true, em: ha(31) }, agora).situacao, 'vencido');
+
+  const { validarTeste } = require('../site/rotas/teste');
+  const base = { titulo: 'T', notaMinima: 70, perguntas: [{ texto: 'x', opcoes: ['a', 'b'], correta: 0 }] };
+  assert.equal(validarTeste(base).obrigatorio, false);
+  assert.equal(validarTeste({ ...base, obrigatorio: true, validadeDias: '90' }).validadeDias, 90);
+  assert.throws(() => validarTeste({ ...base, validadeDias: 5000 }), /validade/);
+});
