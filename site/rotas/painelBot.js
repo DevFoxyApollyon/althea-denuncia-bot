@@ -4,13 +4,14 @@ const express = require('express');
 const { ChannelType } = require('discord.js');
 const Config = require('../../models/Config');
 const { atualizarMensagemDenuncia } = require('../../commands/denuncia');
-const { cachePanelConfig, bloqueioPendentesAtivo } = require('../../commands/painel');
+const { cachePanelConfig, bloqueioPendentesAtivo, alertaMotivoCriticoAtivo } = require('../../commands/painel');
 const { getUsuariosIsentos, salvarUsuariosIsentos, normalizarIds } = require('../../utils/usuariosIsentos');
 const { acessoAoServidor, limparCacheDeAcesso } = require('../acesso');
 const { resolverPessoas, ErroHttp, assincrono } = require('./comum');
+const { obterTabela } = require('../../services/ponteSamp/motivos');
 
 // Canais do próprio servidor (escolhidos numa lista) e de outros servidores (pelo ID).
-const CANAIS_LOCAIS = ['pc', 'mobile', 'logs', 'log', 'backup', 'armazem', 'analysis', 'topDaily'];
+const CANAIS_LOCAIS = ['pc', 'mobile', 'logs', 'log', 'backup', 'armazem', 'analysis', 'topDaily', 'relatorioPunicoes'];
 const CANAIS_EXTERNOS = ['registro', 'cloud', 'canalDenuncia'];
 const CANAIS_OBRIGATORIOS = ['pc', 'mobile', 'logs'];
 const CARGOS = ['permitido', 'pc', 'administrador', 'responsavel_admin'];
@@ -64,6 +65,7 @@ function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, ca
     manutencaoDenuncia: entrada?.manutencao === true,
     bloquearReivindicacaoComPendentes: entrada?.bloqueio !== false,
     siteSomenteLeitura: entrada?.somenteLeitura === true,
+    alertaMotivoCritico: entrada?.alertaCritico !== false,
     isentos
   };
 }
@@ -76,7 +78,11 @@ function registrarRotasDoPainelDoBot(router, { client }) {
   }
 
   async function montar(guild) {
-    const [config, isentos] = await Promise.all([Config.findOne({ guildId: guild.id }).lean(), getUsuariosIsentos(true)]);
+    const [config, isentos, motivos] = await Promise.all([
+      Config.findOne({ guildId: guild.id }).lean(),
+      getUsuariosIsentos(true),
+      obterTabela().catch(() => ({ tabela: [], propria: false }))
+    ]);
     const pessoas = await resolverPessoas(client, guild, isentos);
 
     return {
@@ -86,6 +92,7 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         manutencao: Boolean(config?.manutencaoDenuncia),
         bloqueio: bloqueioPendentesAtivo(config),
         somenteLeitura: Boolean(config?.siteSomenteLeitura),
+        alertaCritico: alertaMotivoCriticoAtivo(config),
         isentos: isentos.map(id => ({ id, nome: pessoas[id]?.nome || null }))
       },
       canais: [...guild.channels.cache.values()]
@@ -101,7 +108,12 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         const canal = client.channels.cache.get(config?.channels?.[chave]);
         return [chave, canal ? `#${canal.name} em ${canal.guild?.name || 'outro servidor'}` : null];
       })),
-      atualizado: config ? { em: config.lastUpdated || null, por: config.updatedBy || null } : null
+      atualizado: config ? { em: config.lastUpdated || null, por: config.updatedBy || null } : null,
+      // Tabela de motivos da ponte com o jogo (só leitura aqui; a mesma em todos os servidores).
+      motivosPonte: {
+        propria: motivos.propria,
+        itens: motivos.tabela.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.filter(s => s !== t.nome), grupo: t.grupo }))
+      }
     };
   }
 
@@ -138,7 +150,7 @@ async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos 
   }
 
   const quem = member.user?.tag || usuarioId;
-  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
+  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
   for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
   for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
 

@@ -179,6 +179,61 @@ Collection que armazena **feedback temporário** de denúncias.
 
 ---
 
+## 🎮 Ponte com a gamemode (banco secundário)
+
+Protocolo em [`PONTE_GAMEMODE.md`](PONTE_GAMEMODE.md). Retenção em `utils/retencaoDados.js`.
+
+### 📄 PonteConexaoGm (`ponteconexoesgm`, permanente)
+Credencial de uma gamemode. Criada só pelo dono (`/ponte gamemode criar`).
+```javascript
+{
+  guildId: String,
+  nome: String,
+  segredoCifrado: { iv, tag, dados },  // AES-256-GCM com PONTE_CHAVE_MESTRA; o texto do segredo nunca é guardado
+  ultimos4: String,                    // final do segredo, para reconhecer no painel
+  ipsPermitidos: [String],             // vazio = qualquer IP (o painel avisa)
+  status: 'ativa' | 'revogada',
+  pausada: Boolean,                    // selo inválido pausa; /ponte gamemode retomar solta
+  criadoPor: String, criadoEm: Date,
+  ultimoContatoEm: Date, ultimoIp: String, versaoInclude: String, modoTesteInformado: Boolean,
+  revogadoEm: Date, revogadoPor: String
+}
+// Índice: { guildId: 1, status: 1 }
+```
+
+### 📄 PontePedidoGm (`pontepedidosgm`, 90 dias)
+Um pedido por alvo enviado à gamemode. "Reenviar" um incerto cria outro com `rodada + 1`.
+```javascript
+{
+  punicaoId, alvoId, rodada: Number, denunciaId, guildId, conexaoId,
+  tipo: 'ban' | 'cadeia' | 'desbanir' | 'soltar',
+  conta: Number, nick: String, tempo: Number, avisos: Number, somar: Boolean,
+  motivo: String,          // ASCII, termina com " [DC]"
+  aprovadoPor: String,     // nome de quem clicou em "Enviar ao jogo" (sem acento)
+  teste: Boolean,          // gm.modoTeste da guild no envio
+  confirmadoPor: [{ id, nome, em }],
+  status: 'aprovado' | 'entregue' | 'aplicada' | 'simulada' | 'recusada' | 'erro' | 'incerto' | 'cancelado',
+  codigo: String,          // código da gamemode (OK, JA_BANIDO, TIMEOUT_GAMEMODE...)
+  emitidoEm: Number,       // unix (s) da entrega; entra no selo
+  entregueEm: Date, leaseAte: Date, entregas: Number, devolucoes: Number,
+  resultado: { nome, organizacao, conta },
+  alertaIncertoEm: Date, mensagemIncerto: { canalId, msgId },
+  resolvidoPor: { id, nome, em },
+  criadoEm: Date
+}
+// Índices: único { punicaoId, alvoId, rodada }; { guildId, status, criadoEm }; { status, leaseAte }
+```
+
+### Campos novos em models existentes
+- **PonteServidor:** `executor` (`pc` | `gamemode` | `ambos`, padrão `pc`) e
+  `gm: { pausado, maxBanDias (30), permitirPermanente (true), maxCadeiaMin (300), maxAvisos (3), modoTeste (true) }`.
+- **PontePunicao:** `executor` (`''` | `pc` | `gamemode`) e `mensagemGm: { canalId, msgId }` (embed "🎮 Punição para o jogo").
+- **PonteUso.acao:** `gm_busca`, `gm_resultado`, `gm_auth_falhou`, `gm_selo_invalido`, `gm_enviar`, `gm_cancelar`,
+  `gm_incerto_ok`, `gm_incerto_reenviar`, `gm_credencial`, `gm_config`.
+- **Config:** `alertaMotivoCritico` (padrão `true`): marca o responsável no tópico em zaralho, dark RP, hack e mods proibidos.
+
+---
+
 ## 🔄 Relações entre Collections
 
 ```

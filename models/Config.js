@@ -19,12 +19,16 @@ const configSchema = new mongoose.Schema({
     cloud: { type: String, required: false, default: '' },
     canalDenuncia: { type: String, required: false, default: '' },
     analysis: { type: String, required: false, default: '' },
-    topDaily: { type: String, required: false, default: '' }
+    topDaily: { type: String, required: false, default: '' },
+    // Histórico das punições aplicadas pelo painel do jogo (vazio: usa o Log Admin).
+    relatorioPunicoes: { type: String, required: false, default: '' }
   },
   manutencaoDenuncia: { type: Boolean, default: false },
   bloquearReivindicacaoComPendentes: { type: Boolean, default: true },
   // Site só para consulta: ninguém (fora o responsável) envia ou altera nada por ele.
   siteSomenteLeitura: { type: Boolean, default: false },
+  // Marca o responsável no tópico quando o motivo é crítico (zaralho, dark RP, hack, mods proibidos).
+  alertaMotivoCritico: { type: Boolean, default: true },
   roles: {
     permitido: { type: String, required: false, default: '' },
     pc: { type: String, required: false, default: '' },

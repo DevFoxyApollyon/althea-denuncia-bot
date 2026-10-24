@@ -17,11 +17,13 @@ const {
   manageStatusMessages
 } = require('./mensagensStatus');
 const { Logger } = require('../../utils/logger');
+const { registrarAceite } = require('../../services/ponteSamp/aceite');
 
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 
 const { CODIGOS_ESPERADOS: DM_IGNORED_CODES, dmPausada, registrarErroDeDM, avisosExtrasLigados } = require('../../utils/dmSegura');
 const _logButtonLocks = new Set();
+const TRAVA_EXPIRA_MS = 2 * 60 * 1000;
 
 async function updateDenunciaStatus(denunciaId, {
   status,
@@ -91,9 +93,13 @@ async function handleStatusButton(interaction, status) {
     const denuncia = await Denuncia.findOneAndUpdate(
       {
         threadId: interaction.channel.id,
-        processingLock: { $ne: true },
+        // Modal fechado sem enviar não avisa o bot: a trava expira sozinha.
+        $or: [
+          { processingLock: { $ne: true } },
+          { processingLockEm: { $lt: new Date(Date.now() - TRAVA_EXPIRA_MS) } },
+        ],
       },
-      { $set: { processingLock: true } },
+      { $set: { processingLock: true, processingLockEm: new Date() } },
       { new: true, sort: { createdAt: -1 } }
     );
 
@@ -557,11 +563,22 @@ async function handleLogAceitarButton(interaction, denuncia) {
     }
 
     const confirmation = ` ||${getBrasiliaDateTime()}|| por ${interaction.user}`;
-    await interaction.message.edit({
+    const mensagemEditada = await interaction.message.edit({
       content: `${interaction.message.content}${confirmation}`,
       components: []
     });
-    await interaction.editReply({ content: '✅ Cadeia staff aceita' }).catch(() => {});
+    // Ponte com o jogo: entra na fila do painel. Nunca quebra o aceite (erros ficam no serviço).
+    const ponte = await registrarAceite({
+      client: interaction.client,
+      denuncia,
+      origem: 'canal_staff',
+      staff: { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username },
+      canalMensagem: mensagemEditada
+    }).catch(() => null);
+    const linhaPonte = ponte?.jaExistia
+      ? `\nℹ️ Já está no painel do jogo (aceita por ${ponte.aceitoPor || 'outra pessoa'}).`
+      : ponte?.criado ? '\n🎮 Enviada para o painel do jogo.' : '';
+    await interaction.editReply({ content: `✅ Cadeia staff aceita${linhaPonte}` }).catch(() => {});
     setTimeout(() => {
       interaction.deleteReply().catch((error) => {
         if (error?.code !== 10008 && error?.code !== 10062) {

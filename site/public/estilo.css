@@ -1145,7 +1145,8 @@ button.discreto { border-color: transparent; background: transparent; color: var
 :root:not([data-tema="claro"]) button.discreto { background: transparent; border-color: transparent; }
 .formulario .aviso.info { margin-top: 10px; background: var(--analise-fundo); color: var(--analise); }
 
-.config { display: grid; gap: 16px; max-width: 980px; margin-inline: auto; }
+.config { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 980px; margin-inline: auto; }
+.config > * { min-width: 0; }
 .config-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .config-topo h1 { font-family: var(--fonte-impacto); font-size: clamp(22px, 2.4vw, 28px); text-transform: uppercase; letter-spacing: .02em; }
 .config .cartao > .sub { margin: -6px 0 14px; max-width: 78ch; }
@@ -2661,4 +2662,44 @@ button.teste-cartao.rascunho { border-style: dashed; }
   .contra-voce li button { flex-wrap: wrap; gap: 6px 12px; }
   .contra-voce li button > span:first-child { flex-basis: 100%; }
   .picos { gap: 2px; }
+}
+
+/* Motivos de punição (ponte com o jogo) */
+.motivo-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 10px; margin-top: 14px; }
+.motivo-item { display: grid; align-content: start; gap: 8px; padding: 10px 12px 12px; border: 1px solid var(--linha); border-left: 3px solid var(--analise); border-radius: var(--raio); background: var(--elevada); min-width: 0; }
+.motivo-item.cadeia { border-left-color: var(--reivindicacao); }
+.motivo-item.permanente { border-left-color: var(--recusada); }
+.motivo-topo { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "nome apagar" "resumo resumo"; gap: 4px 8px; align-items: center; }
+.motivo-nome { grid-area: nome; width: 100%; min-width: 0; font-weight: 650; text-transform: uppercase; }
+.motivo-topo .so-icone { grid-area: apagar; }
+.motivo-resumo { grid-area: resumo; color: var(--texto-2); font-size: 12.5px; }
+.motivo-item.permanente .motivo-resumo { color: var(--recusada); }
+.motivo-campos { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, .7fr); gap: 8px; }
+.motivo-campo { display: grid; gap: 4px; min-width: 0; }
+.motivo-campo > span { color: var(--texto-3); font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.motivo-item input, .motivo-item select, :root:not([data-tema="claro"]) .motivo-item input, :root:not([data-tema="claro"]) .motivo-item select { width: 100%; min-width: 0; height: 36px; min-height: 36px; padding: 0 10px; border: 1px solid var(--linha-forte); border-radius: 6px; background: var(--superficie); box-shadow: none; color: var(--texto); }
+.motivo-item .motivo-nome, :root:not([data-tema="claro"]) .motivo-item .motivo-nome { height: 34px; min-height: 34px; border-color: transparent; background: transparent; padding-inline: 6px; font-size: 15px; }
+.motivo-item .motivo-nome:hover, .motivo-item .motivo-nome:focus, :root:not([data-tema="claro"]) .motivo-item .motivo-nome:focus { border-color: var(--linha-forte); background: var(--superficie); }
+.motivo-resumo { padding-inline: 6px; }
+.motivo-campo.largo { grid-column: 1 / -1; }
+.config .cartao > button { margin-top: 12px; }
+@media (max-width: 760px) {
+  .motivo-adicionar { width: 100%; }
+}
+
+/* Celular: o motivo quebra em até duas linhas para o selo de prioridade não sumir;
+   a barra de abas mostra um degradê no lado que ainda tem abas escondidas. */
+@media (max-width: 860px) {
+  .celula-texto > strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .menu-itens.mais-direita { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  .menu-itens.mais-esquerda { -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%); mask-image: linear-gradient(90deg, transparent, #000 15%); }
+  .menu-itens.mais-esquerda.mais-direita { -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent); mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent); }
+}
+@media (max-width: 860px) {
+  /* linha da fila: motivo em cima, status e prazo embaixo, nada espremido a 0px */
+  .linha > .linha-abrir { flex: 1 1 100%; min-width: 0; }
+  .linha-abrir { grid-template-columns: minmax(0, 1fr); grid-template-areas: "motivo" "status" "ref"; }
+  .linha-abrir .caso-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-self: start; min-width: 0; }
+  .linha-abrir .caso-ref { padding-left: 0; }
+  .linha-abrir .caso-motivo { min-width: 0; }
 }

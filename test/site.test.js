@@ -67,6 +67,18 @@ test('SLA: infrações graves têm prioridade alta e prazo menor', () => {
   assert.ok(SLA_HORAS.alta < SLA_HORAS.normal);
 });
 
+test('alerta de motivo crítico: marca o responsável só com a opção ligada', async () => {
+  const { alertarMotivoCritico } = require('../utils/alertaMotivoCritico');
+  const enviados = [];
+  const thread = { send: async (msg) => enviados.push(msg) };
+  const roles = { responsavel_admin: '200000000000000003' };
+  assert.equal(await alertarMotivoCritico({ config: { roles }, thread, motivo: 'zaralho no centro' }), true);
+  assert.equal(await alertarMotivoCritico({ config: { roles, alertaMotivoCritico: false }, thread, motivo: 'zaralho no centro' }), false);
+  assert.equal(await alertarMotivoCritico({ config: { roles }, thread, motivo: 'anti rp' }), false);
+  assert.equal(enviados.length, 1);
+  assert.equal(enviados[0].content, '<@&200000000000000003>');
+});
+
 test('identificação: separa os IDs do acusado', () => {
   const { idsDoAcusado } = require('../site/rotas/identificacao');
   assert.deepEqual(idsDoAcusado('1039+2471'), ['1039', '2471']);
@@ -403,6 +415,8 @@ test('painel do bot: valida canais, cargos e isentos antes de salvar', () => {
   const limpo = validarPainel(entrada(), servidor);
   assert.equal(limpo.manutencaoDenuncia, true);
   assert.equal(limpo.bloquearReivindicacaoComPendentes, true);
+  assert.equal(limpo.alertaMotivoCritico, true, 'alerta de motivo crítico fica ligado se não vier');
+  assert.equal(validarPainel({ ...entrada(), alertaCritico: false }, servidor).alertaMotivoCritico, false);
   assert.equal(limpo.channels.backup, '900000000000000009', 'valor que não mudou é mantido mesmo fora do servidor');
   assert.equal(limpo.channels.analysis, '');
   assert.deepEqual(limpo.isentos, ['123456789012345678']);
@@ -476,8 +490,26 @@ test('proteção do site: limita, bloqueia quem insiste e libera depois', () => 
   relogio += 31_000;
   assert.equal(protecao.avaliar('3.3.3.3').permitido, true, 'bloqueio acaba sozinho');
 
-  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '10.0.0.1' }), '9.9.9.9');
-  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '<script>' }, ip: '10.0.0.1' }), '10.0.0.1');
+  // Pela Cloudflare (162.158.x.x / 2606:4700::) o cabeçalho vale; direto, não (não dá para falsificar o IP).
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '162.158.1.2' }), '9.9.9.9');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '2001:db8::1' }, ip: '::ffff:162.158.1.2' }), '2001:db8::1');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '2606:4700::1' }), '9.9.9.9');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '10.0.0.1' }), '10.0.0.1');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '::ffff:203.0.113.5' }), '203.0.113.5');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '<script>' }, ip: '162.158.1.2' }), '162.158.1.2');
+  assert.equal(ipDoCliente({ headers: {}, ip: undefined, socket: {} }), 'desconhecido');
+
+  // Proxy extra (outra camada da hospedagem) só por configuração.
+  const original = process.env.SITE_PROXIES_CONFIAVEIS;
+  try {
+    process.env.SITE_PROXIES_CONFIAVEIS = '10.0.0.0/8, 192.168.0.9';
+    assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '10.1.2.3' }), '9.9.9.9');
+    assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '192.168.0.9' }), '9.9.9.9');
+    assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '192.168.0.10' }), '192.168.0.10');
+  } finally {
+    if (original === undefined) delete process.env.SITE_PROXIES_CONFIAVEIS;
+    else process.env.SITE_PROXIES_CONFIAVEIS = original;
+  }
 });
 
 test('proteção do site: enxurrada de pedidos recebe 429 e o site segue respondendo', async () => {
@@ -489,6 +521,9 @@ test('proteção do site: enxurrada de pedidos recebe 429 e o site segue respond
   });
   const servidor = app.listen(0);
   const base = `http://127.0.0.1:${servidor.address().port}`;
+  // O teste faz o papel da Cloudflare: só assim o cf-connecting-ip separa os visitantes.
+  const original = process.env.SITE_PROXIES_CONFIAVEIS;
+  process.env.SITE_PROXIES_CONFIAVEIS = '127.0.0.1';
   try {
     const pedir = (ip) => fetch(`${base}/logo.png`, { headers: { 'cf-connecting-ip': ip } }).then(async (r) => { await r.arrayBuffer(); return r; });
     const respostas = [];
@@ -498,6 +533,8 @@ test('proteção do site: enxurrada de pedidos recebe 429 e o site segue respond
     assert.ok(respostas.find(r => r.status === 429).headers.get('retry-after'));
     assert.equal((await pedir('8.8.8.8')).status, 200, 'quem não está atacando continua entrando');
   } finally {
+    if (original === undefined) delete process.env.SITE_PROXIES_CONFIAVEIS;
+    else process.env.SITE_PROXIES_CONFIAVEIS = original;
     servidor.close();
   }
 });

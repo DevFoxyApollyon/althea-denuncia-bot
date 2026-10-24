@@ -8,6 +8,9 @@ const { limparCacheDeAcesso, acompanharMudancasDeAcesso } = require('./acesso');
 const { iniciarPush } = require('./push');
 const { criarProtecao, ajustarServidor, ipDoCliente } = require('./protecao');
 const sessoes = require('./sessoes');
+const { criarApiJogo } = require('./ponte/apiJogo');
+const { criarApiGamemode } = require('./ponte/apiGamemode');
+const { criarAdmin } = require('./ponte/admin');
 const {
   COOKIE_SESSAO,
   COOKIE_ESTADO,
@@ -127,6 +130,13 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
   // recusar cedo quem pede demais (ver site/protecao.js).
   app.use(criarProtecao({}, { log }).middleware);
 
+  // API do script do jogo: o Lua não manda Origin nem usa a sessão do site,
+  // então fica antes da checagem de Origin. Autentica só por token (ver site/ponte/apiJogo.js).
+  app.use('/ponte/api', criarApiJogo({ client, log }));
+  // API da gamemode (protocolo gm/v1): também sem Origin; autentica por HMAC na query
+  // sobre o corpo cru (ver site/ponte/apiGamemode.js).
+  app.use('/ponte/gm/v1', criarApiGamemode({ client, log }));
+
   // Requisições que alteram dados só são aceitas quando partem do próprio site.
   app.use((req, res, next) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
@@ -149,7 +159,9 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
 
   app.get('/auth/entrar', (req, res) => {
     const estado = crypto.randomBytes(24).toString('base64url');
-    res.cookie(COOKIE_ESTADO, criarToken({ estado }, config.segredo, DURACAO_ESTADO_MS), opcoesCookie(config.seguro, DURACAO_ESTADO_MS));
+    // Volta ao painel do dono depois do login. Só /admin é aceito (nada de redirecionamento aberto).
+    const voltarPara = req.query.destino === '/admin' ? '/admin' : undefined;
+    res.cookie(COOKIE_ESTADO, criarToken({ estado, destino: voltarPara }, config.segredo, DURACAO_ESTADO_MS), opcoesCookie(config.seguro, DURACAO_ESTADO_MS));
 
     const destino = new URL('https://discord.com/oauth2/authorize');
     destino.search = new URLSearchParams({
@@ -183,7 +195,7 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
       res.cookie(COOKIE_SESSAO, sessao, opcoesCookie(config.seguro, DURACAO_SESSAO_MS));
       // Registro de logins, visível ao responsável.
       aoEntrar({ usuarioId: perfil.id, nome: perfil.global_name || perfil.username, ip: ipDoCliente(req), agente: req.get('User-Agent'), sid });
-      res.redirect(302, '/');
+      res.redirect(302, guardado.destino === '/admin' ? '/admin' : '/');
     } catch (erro) {
       log.warn(`Login pelo site falhou: ${erro.message}`);
       res.redirect(302, '/?erro=login');
@@ -199,6 +211,9 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
 
   // Público: a tela de login mostra o nome e o ícone do servidor.
   app.get('/api/site', (req, res) => res.json(infoPublicaDoSite(client)));
+
+  // Painel do dono (ponte com o jogo). Fica depois da checagem de Origin.
+  app.use('/admin', criarAdmin({ client, config, log }));
 
   app.use('/api', criarRotas({ client }));
   app.use('/api', (req, res, next) => next(new ErroHttp(404, 'Rota não encontrada.')));

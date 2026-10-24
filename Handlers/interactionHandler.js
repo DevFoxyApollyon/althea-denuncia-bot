@@ -20,6 +20,11 @@ const {
 } = require('../Handlers/handlerStatusButton');
 
 const { handleExportButton } = require('../Handlers/exportDenuncia');
+const { MODAL_TEMPLATES, handlePonteTemplatesModal, MODAL_MOTIVOS, handlePonteMotivosModal } = require('../commands/ponte');
+const { handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm } = require('./ponteGamemode');
+const { BOTAO_INCERTO_OK, BOTAO_INCERTO_REENVIAR } = require('../services/ponteSamp/incertosGm');
+const { MODAL_LIMITES, handleLimitesGmModal } = require('../commands/ponteGamemode');
+const { BOTAO_ENVIAR, BOTAO_EDITAR, BOTAO_CANCELAR, MENU_ALVO, MODAL_ALVO } = require('../services/ponteSamp/discordGm');
 
 const {
   handleCorrigirDenunciaButton,
@@ -40,7 +45,8 @@ const {
   cachePanelConfig,
   getPanelConfig,
   getPanelExemptUsers,
-  bloqueioPendentesAtivo
+  bloqueioPendentesAtivo,
+  alertaMotivoCriticoAtivo
 } = require('../commands/painel');
 
 const { handleStatusButtons } = require('../commands/status');
@@ -69,6 +75,7 @@ async function handlePanelModalSubmit(interaction) {
         config.channels.pc = fields.getTextInputValue('pc_channel').trim();
         config.channels.mobile = fields.getTextInputValue('mobile_channel').trim();
         config.channels.logs = fields.getTextInputValue('logs_channel').trim();
+        config.channels.relatorioPunicoes = fields.getTextInputValue('relatorio_punicoes_channel').trim();
         break;
       case 'channels_modal_2':
         config.channels.log = fields.getTextInputValue('log_admin_channel').trim();
@@ -207,6 +214,24 @@ async function handlePanelMenu(interaction) {
       }).catch(() => {});
       break;
     }
+    case 'toggle_critical_alert': {
+      const alertaMotivoCritico = !alertaMotivoCriticoAtivo(config);
+      await interaction.deferUpdate();
+      const configAtualizada = await Config.findOneAndUpdate(
+        { guildId: interaction.guild.id },
+        { $set: { alertaMotivoCritico, lastUpdated: new Date(), updatedBy: interaction.user.tag } },
+        { new: true, upsert: true }
+      );
+      cachePanelConfig(interaction.guild.id, configAtualizada);
+      await atualizarPainelMensagem(interaction, configAtualizada);
+      await interaction.followUp({
+        content: alertaMotivoCritico
+          ? '🚨 O alerta de motivo crítico foi ativado: o responsável volta a ser marcado no tópico (zaralho, dark RP, hack, mods proibidos).'
+          : '⚪ O alerta de motivo crítico foi desativado: o responsável não é mais marcado nesses motivos.',
+        flags: [64]
+      }).catch(() => {});
+      break;
+    }
     case 'view_config': {
       await interaction.deferUpdate();
       const config = await Config.findOne({ guildId: interaction.guild.id });
@@ -319,7 +344,12 @@ const ROTAS = {
     },
     prefixos: [
       ['log_aceitar_', handleLogButton],
-      ['log_recusar_', handleLogButton]
+      ['log_recusar_', handleLogButton],
+      [BOTAO_ENVIAR, handleEnviarGm],
+      [BOTAO_EDITAR, handleEditarGm],
+      [BOTAO_CANCELAR, handleCancelarGm],
+      [BOTAO_INCERTO_OK, handleIncertoGm],
+      [BOTAO_INCERTO_REENVIAR, handleIncertoGm]
     ]
   },
   modal: {
@@ -334,11 +364,15 @@ const ROTAS = {
       channels_modal_3: handlePanelModalSubmit,
       roles_modal_1: handlePanelModalSubmit,
       roles_modal_2: handlePanelModalSubmit,
-      global_exempt_users_modal: handleGlobalExemptUsersSubmit
+      global_exempt_users_modal: handleGlobalExemptUsersSubmit,
+      [MODAL_TEMPLATES]: handlePonteTemplatesModal,
+      [MODAL_MOTIVOS]: handlePonteMotivosModal,
+      [MODAL_LIMITES]: handleLimitesGmModal
     },
     prefixos: [
       ['feedback:modal:', handleFeedbackModalSubmit],
-      ['corrigir_modal_aceite_', handleSalvarCorrigirDenuncia]
+      ['corrigir_modal_aceite_', handleSalvarCorrigirDenuncia],
+      [MODAL_ALVO, handleModalAlvoGm]
     ]
   },
   menu: {
@@ -346,7 +380,8 @@ const ROTAS = {
       panel_menu: handlePanelMenu
     },
     prefixos: [
-      ['feedback:select:', handleFeedbackSelect]
+      ['feedback:select:', handleFeedbackSelect],
+      [MENU_ALVO, handleMenuAlvoGm]
     ]
   }
 };

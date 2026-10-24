@@ -11,7 +11,7 @@ const archiver = require('archiver');
 
 const RAIZ = path.join(__dirname, '..');
 const SAIDA = path.join(RAIZ, 'althea-squarecloud.zip');
-const FORA_DO_ZIP = ['node_modules/**', '.git/**', '.env', '.env.*', '*.zip', '.bash*', 'test/**', 'tttt/**'];
+const FORA_DO_ZIP = ['node_modules/**', '.git/**', '.env', '.env.*', '*.zip', '.bash*', 'test/**', 'tttt/**', 'gamemode/**'];
 
 function lerConfig() {
   const texto = fs.readFileSync(path.join(RAIZ, 'squarecloud.app'), 'utf8');

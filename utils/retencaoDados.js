@@ -26,7 +26,12 @@ const COLECOES_PERMANENTES = [
   'staffprofiles',    // nota de atendimento acumulada de cada staff
   'testestaffs',      // teste da staff montado pelo responsável
   'metastaffs',       // meta de atendimentos da staff
-  'usuarios'          // vínculo entre a conta do Discord e o ID do jogo
+  'usuarios',         // vínculo entre a conta do Discord e o ID do jogo
+  'ponteservidores',  // guilds com a ponte do jogo ativada
+  'pontecodigos',     // códigos de ativação da ponte
+  'ponteinstalacoes', // PCs autorizados na ponte (hash do token)
+  'pontemotivos',     // tabela de motivos da ponte (a mesma para todos os servidores)
+  'ponteconexoesgm'   // credenciais da ponte com a gamemode (segredo cifrado)
 ];
 
 // Prazo em dias, contado da criação do registro. O que não está aqui (nem nas
@@ -36,7 +41,10 @@ const PRAZOS_EM_DIAS = {
   moderationactions: 30,   // ações da staff (rank e auditoria)
   acessocasos: 15,         // quem abriu cada caso pelo site
   loginsites: 30,          // entradas no site (quem, quando e de qual IP)
-  rascunhodenuncias: 15    // denúncia começada e não enviada
+  rascunhodenuncias: 15,   // denúncia começada e não enviada
+  pontepunicoes: 45,       // fila de punições do jogo (mesmo tempo da denúncia)
+  ponteusos: 90,           // auditoria da ponte do jogo
+  pontepedidosgm: 90       // pedidos enviados à gamemode (um por alvo)
 };
 
 // O prazo fica no próprio modelo:

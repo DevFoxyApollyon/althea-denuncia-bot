@@ -4,6 +4,7 @@ import { carregarAvisos } from './avisos.js';
 import { carregarChat, carregarNovasDoChat } from './chat.js';
 import { carregarTeste, carregarTesteAdmin, carregarTestesPendentes } from './teste.js';
 import { carregarPainelDoBot } from './bot.js';
+import { carregarMotivosPonte } from './motivos.js';
 import { carregarLogins, carregarMetas, carregarSaude } from './gestao.js';
 import { carregarRascunhoDaConta } from './nova.js';
 import { carregarSessoes } from './sessoes.js';
@@ -305,6 +306,7 @@ export async function aoMudarRota() {
     if (rota.tipo === 'identificar') carregarNaoIdentificadas();
     if (rota.tipo === 'config') carregarConfigDoSite();
     if (rota.tipo === 'bot') carregarPainelDoBot();
+    if (rota.tipo === 'motivos') carregarMotivosPonte();
     if (rota.tipo === 'saude') carregarSaude();
     if (rota.tipo === 'logins') carregarLogins();
     if (rota.tipo === 'metas') carregarMetas();

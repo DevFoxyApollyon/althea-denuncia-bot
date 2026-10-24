@@ -26,6 +26,7 @@ const GRUPOS_DE_CANAIS = [
       { chave: 'log', nome: 'Log administrativo', explica: 'Registro das ações da staff (análise, aceite, recusa), dos alertas de muitas denúncias contra o mesmo jogador e das mensagens apagadas nos tópicos.' },
       { chave: 'analysis', nome: 'Em análise', explica: 'Lista das denúncias que estão em análise. A mensagem sai daqui quando a denúncia é decidida.' },
       { chave: 'topDaily', nome: 'Top diário', explica: 'O ranking diário da staff é enviado neste canal.' },
+      { chave: 'relatorioPunicoes', nome: 'Relatório de punições', explica: 'Histórico das punições aplicadas pelo painel do jogo (organização, nick, ID e link da denúncia). Sem este canal, vai para o Log administrativo.' },
       { chave: 'backup', nome: 'Backup', explica: 'Recebe o arquivo com a conversa e as provas quando a denúncia é finalizada. Usado quando não há canal Cloud.' },
       { chave: 'armazem', nome: 'Armazém', explica: 'Cada denúncia nova ganha uma cópia (tópico espelho) neste canal.' }
     ]
@@ -66,6 +67,7 @@ function aplicar(dados) {
     manutencao: dados.valores.manutencao,
     bloqueio: dados.valores.bloqueio,
     somenteLeitura: Boolean(dados.valores.somenteLeitura),
+    alertaCritico: dados.valores.alertaCritico !== false,
     isentos: dados.valores.isentos.map(item => item.id).join('\n')
   };
   estado.painelBot = { ...dados, edicao: valores, salvo: JSON.stringify(valores) };
@@ -181,6 +183,25 @@ function resumo(rotulo, valor, detalhe, tom, alvo) {
   }, el('span', null, rotulo), el('strong', null, valor), el('small', null, detalhe));
 }
 
+// Motivos de punição da ponte com o jogo: só leitura (quem edita é o dono do bot,
+// no /admin ou com /ponte motivos, porque a tabela é a mesma em todos os servidores).
+function cartaoDeMotivos(motivos) {
+  if (!motivos?.itens?.length) return null;
+  const grupos = new Map();
+  for (const item of motivos.itens) {
+    if (!grupos.has(item.grupo)) grupos.set(item.grupo, []);
+    grupos.get(item.grupo).push(item);
+  }
+  return el('section', { class: 'cartao', id: 'bot-motivos' },
+    cabecalho('arquivo', 'Motivos de punição (jogo)',
+      'Tabela usada pelo painel do jogo para escolher a punição pelo motivo do aceite. É a mesma em todos os servidores; administradores e responsáveis alteram em Motivos de punição.',
+      { texto: `${motivos.itens.length} motivos${motivos.propria ? ' · personalizada' : ''}` }),
+    el('p', { class: 'bot-ajuda' }, 'Vários motivos na mesma denúncia: banimentos somam dias e avisos; permanente vence tudo (vira /blackban); banimento vence cadeia. Todo motivo vai com [DC] no fim.'),
+    [...grupos.entries()].map(([grupo, itens]) => el('div', { class: 'campo' },
+      el('strong', null, grupo),
+      el('p', { class: 'bot-ajuda' }, itens.map(item => (item.sinonimos.length ? `${item.nome} (${item.sinonimos.join(', ')})` : item.nome)).join(' · ')))));
+}
+
 export function telaPainelDoBot() {
   const painel = estado.painelBot;
 
@@ -196,6 +217,7 @@ export function telaPainelDoBot() {
     edicao.manutencao !== antes.manutencao,
     edicao.bloqueio !== antes.bloqueio,
     edicao.somenteLeitura !== antes.somenteLeitura,
+    edicao.alertaCritico !== antes.alertaCritico,
     edicao.isentos.trim() !== antes.isentos.trim(),
     ...todosOsCanais.map(item => edicao.channels[item.chave] !== antes.channels[item.chave]),
     ...CARGOS.map(item => edicao.roles[item.chave] !== antes.roles[item.chave])
@@ -233,7 +255,10 @@ export function telaPainelDoBot() {
           { valor: edicao.bloqueio, mudou: edicao.bloqueio !== antes.bloqueio }),
         linha({ nome: 'Site em modo somente leitura', explica: 'Ligado, o site fica só para consulta: ninguém abre denúncia, envia mensagem, escreve no chat nem decide caso por ele. Só o responsável continua podendo alterar. O bot no Discord segue funcionando normalmente. Serve para manutenção sem tirar o site do ar.' },
           'bot-leitura', interruptor(edicao, 'somenteLeitura', 'bot-leitura', { ligado: 'Só consulta', desligado: 'Site normal' }), null,
-          { valor: !edicao.somenteLeitura, mudou: edicao.somenteLeitura !== antes.somenteLeitura })),
+          { valor: !edicao.somenteLeitura, mudou: edicao.somenteLeitura !== antes.somenteLeitura }),
+        linha({ nome: 'Alerta de motivo crítico', explica: 'Ligado, o bot marca o cargo de responsável no tópico da denúncia quando o motivo é zaralho, dark RP, hack ou mods proibidos. Desligado, a denúncia abre normalmente, sem marcar ninguém.' },
+          'bot-alerta-critico', interruptor(edicao, 'alertaCritico', 'bot-alerta-critico', { ligado: 'Marca o responsável', desligado: 'Sem marcação' }), null,
+          { valor: edicao.alertaCritico, mudou: edicao.alertaCritico !== antes.alertaCritico })),
 
       GRUPOS_DE_CANAIS.map((grupo, indice) => el('section', { class: 'cartao', id: indice ? null : 'bot-canais' },
         cabecalho(indice ? 'documento' : 'balao', grupo.titulo, grupo.texto, contar(grupo.itens, edicao.channels)),
@@ -290,6 +315,8 @@ export function telaPainelDoBot() {
             oninput: (evento) => { edicao.isentos = evento.target.value; },
             onchange: () => desenhar()
           }))),
+
+      cartaoDeMotivos(painel.motivosPonte),
 
       cartaoDeBackup(carregarPainelDoBot),
 

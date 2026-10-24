@@ -18,9 +18,15 @@ function detectarMotivosCriticos(motivo) {
     return MOTIVOS_CRITICOS.filter((m) => m.regex.test(texto)).map((m) => m.nome);
 }
 
+// Ligado por padrão; o responsável desliga no /painel ou no Painel do bot do site.
+function alertaMotivoCriticoAtivo(config) {
+    return config?.alertaMotivoCritico !== false;
+}
+
 // Marca os cargos dentro do tópico da denúncia quando o motivo é crítico.
 async function alertarMotivoCritico({ config, thread, motivo }) {
     try {
+        if (!alertaMotivoCriticoAtivo(config)) return false;
         const categorias = detectarMotivosCriticos(motivo);
         if (!categorias.length) return false;
 
@@ -42,4 +48,4 @@ async function alertarMotivoCritico({ config, thread, motivo }) {
     }
 }
 
-module.exports = { alertarMotivoCritico, detectarMotivosCriticos };
+module.exports = { alertarMotivoCritico, alertaMotivoCriticoAtivo, detectarMotivosCriticos };

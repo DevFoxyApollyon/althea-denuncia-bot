@@ -255,6 +255,7 @@ const painelDoBot = {
     manutencao: false,
     bloqueio: true,
     somenteLeitura: false,
+    alertaCritico: true,
     isentos: [{ id: '200000000000000200', nome: 'Lucas Prado' }]
   },
   canais: [
@@ -264,9 +265,21 @@ const painelDoBot = {
   ],
   cargos: [{ id: '24', nome: 'Responsável', cor: '#e84fd0' }, { id: '23', nome: 'Administrador', cor: '#5bc0eb' }, { id: '21', nome: 'Autenticado PC' }, { id: '22', nome: 'Autenticado Mobile' }],
   externos: { registro: '#registro em Althea Cloud', cloud: '#cloud em Althea Cloud', canalDenuncia: null },
-  atualizado: { em: horas(30), por: 'rafael (site)' }
+  atualizado: { em: horas(30), por: 'rafael (site)' },
+  // Tabela de motivos da ponte com o jogo (padrão de constantes.js).
+  motivosPonte: {
+    propria: false,
+    itens: require('../services/ponteSamp/validacao').ITENS_TABELA.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.slice(1), grupo: t.grupo }))
+  }
 };
 app.get('/api/painel-bot', (req, res) => res.json(painelDoBot));
+const motivosPrevia = { propria: false, tabela: require('../services/ponteSamp/validacao').ITENS_TABELA.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.slice(1), cmd: t.cmd, tempo: t.tempo, avisos: t.avisos, grupo: t.grupo })) };
+app.get('/api/motivos-ponte', (req, res) => res.json(motivosPrevia));
+app.post('/api/motivos-ponte', express.json(), (req, res) => {
+  motivosPrevia.propria = req.body.tabela.length > 0;
+  if (req.body.tabela.length) motivosPrevia.tabela = req.body.tabela.map(m => ({ ...m, grupo: '' }));
+  res.json({ ok: true, mensagem: 'Motivos salvos (prévia).', ...motivosPrevia });
+});
 
 // Sessões da conta, erros recentes e rascunho na conta (dados de exemplo).
 let sessoesDaConta = [
@@ -363,7 +376,7 @@ app.post('/api/backup', express.json(), (req, res) => {
   res.json({ ok: true, mensagem: 'Backup restaurado (prévia, nada foi gravado).' });
 });
 app.post('/api/painel-bot', express.json(), (req, res) => {
-  Object.assign(painelDoBot.valores, { channels: req.body.channels, roles: req.body.roles, manutencao: req.body.manutencao === true, bloqueio: req.body.bloqueio !== false, somenteLeitura: req.body.somenteLeitura === true });
+  Object.assign(painelDoBot.valores, { channels: req.body.channels, roles: req.body.roles, manutencao: req.body.manutencao === true, bloqueio: req.body.bloqueio !== false, somenteLeitura: req.body.somenteLeitura === true, alertaCritico: req.body.alertaCritico !== false });
   res.json({ ok: true, mensagem: 'Painel do bot salvo (prévia, nada foi gravado).', ...painelDoBot });
 });
 

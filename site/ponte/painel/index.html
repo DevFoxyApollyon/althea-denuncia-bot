@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Althea · Ponte do jogo</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script type="module" src="/admin/admin.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Ponte do jogo</h1>
+    <nav>
+      <button type="button" data-aba="servidores" class="ativa">Servidores</button>
+      <button type="button" data-aba="instalacoes">Instalações</button>
+      <button type="button" data-aba="gamemode">Gamemode</button>
+      <button type="button" data-aba="uso">Uso e auditoria</button>
+      <button type="button" data-aba="codigos">Códigos</button>
+      <button type="button" data-aba="motivos">Motivos</button>
+    </nav>
+  </header>
+  <main>
+    <p id="aviso" role="status"></p>
+
+    <section id="aba-servidores">
+      <table><thead><tr><th>Servidor</th><th>ID</th><th>Ativo</th><th>Ativado em</th><th>PCs</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="aba-instalacoes" hidden>
+      <table><thead><tr><th>PC</th><th>Servidor</th><th>Status</th><th>Criado por</th><th>Último uso</th><th>IP</th><th>HWID</th><th>Token</th><th>Online</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="aba-gamemode" hidden>
+      <h2>Credenciais</h2>
+      <p class="dica">Online: a gamemode buscou pedidos nos últimos 30 segundos. Criar e renovar credenciais é pelo Discord (<code>/ponte gamemode criar</code>), porque o segredo só aparece uma vez.</p>
+      <p id="gm-sem-ip" class="alerta" hidden></p>
+      <table id="gm-conexoes"><thead><tr><th>Servidor</th><th>Nome</th><th>Status</th><th>Online</th><th>Último contato</th><th>IP</th><th>Include</th><th>Teste no jogo</th><th>IPs permitidos</th><th>Credencial</th><th>Executor</th><th></th></tr></thead><tbody></tbody></table>
+
+      <h2>Pedidos recentes</h2>
+      <form id="filtro-pedidos">
+        <label>Status <select name="status"><option value="">todos</option></select></label>
+        <label>Guild <input name="guildId" inputmode="numeric" placeholder="ID"></label>
+        <button type="submit">Filtrar</button>
+      </form>
+      <table id="gm-pedidos"><thead><tr><th>Criado</th><th>Servidor</th><th>Alvo</th><th>Punição</th><th>Motivo</th><th>Aprovado por</th><th>Status</th><th>Código</th><th>Entregas</th><th>Resultado</th></tr></thead><tbody></tbody></table>
+
+      <h2>Auditoria (gm_*)</h2>
+      <table id="gm-uso"><thead><tr><th>Quando</th><th>Servidor</th><th>Ação</th><th>IP</th><th>Detalhes</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="aba-uso" hidden>
+      <form id="filtro-uso">
+        <label>Guild <input name="guildId" inputmode="numeric" placeholder="ID"></label>
+        <label>Ação <select name="acao"><option value="">todas</option></select></label>
+        <button type="submit">Filtrar</button>
+      </form>
+      <table><thead><tr><th>Quando</th><th>Servidor</th><th>Ação</th><th>Conta</th><th>Comando</th><th>IP</th><th>Detalhes</th></tr></thead><tbody></tbody></table>
+      <button type="button" id="mais-uso">Carregar mais</button>
+    </section>
+
+    <section id="aba-motivos" hidden>
+      <p class="dica">Vale para todos os servidores. Sinônimos separados por vírgula. Tempban em dias (0 = permanente, vira /blackban); cadeia em minutos. <span id="motivos-situacao"></span></p>
+      <table><thead><tr><th>Motivo</th><th>Sinônimos</th><th>Tipo</th><th>Tempo</th><th>Avisos</th><th></th></tr></thead><tbody></tbody></table>
+      <div class="acoes">
+        <button type="button" id="motivo-novo">+ Adicionar motivo</button>
+        <button type="button" id="motivos-salvar">Salvar motivos</button>
+        <button type="button" id="motivos-padrao" class="perigo">Restaurar padrão</button>
+      </div>
+    </section>
+
+    <section id="aba-codigos" hidden>
+      <form id="gerar-codigo">
+        <label>Validade (dias) <input name="validadeDias" type="number" min="1" max="365"></label>
+        <label>Limite de PCs <input name="limitePcs" type="number" min="1" max="50"></label>
+        <button type="submit">Gerar código</button>
+      </form>
+      <p id="codigo-novo"></p>
+      <table><thead><tr><th>Final</th><th>Criado em</th><th>Expira</th><th>Limite</th><th>Usado em</th><th>Servidor</th><th>Situação</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+  </main>
+</body>
+</html>

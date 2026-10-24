@@ -1,0 +1,77 @@
+{
+  "protocolo": "gm/v1",
+  "segredo": "a3f1c9e2b7d84f60a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718",
+  "requisicoes": [
+    {
+      "metodo": "GET",
+      "caminho": "/ponte/gm/v1/pedidos",
+      "ts": 1800000006,
+      "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "corpo": "",
+      "canonico": "GET\n/ponte/gm/v1/pedidos\n1800000006\n0f1e2d3c4b5a69788796a5b4c3d2e1f0\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "assinatura": "fc9065737bd5ccb9f7ade98e799d104152d0094e8121576b19909b1babebe9cd"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/ponte/gm/v1/resultados/65f0a1b2c3d4e5f6a7b8c9d0",
+      "ts": 1800000008,
+      "nonce": "1a2b3c4d5e6f708192a3b4c5d6e7f809",
+      "corpo": "{\"status\":\"aplicada\",\"codigo\":\"OK\",\"nome\":\"Fulano_Tal\",\"organizacao\":\"Policia Militar [6]\",\"conta\":472860}",
+      "canonico": "POST\n/ponte/gm/v1/resultados/65f0a1b2c3d4e5f6a7b8c9d0\n1800000008\n1a2b3c4d5e6f708192a3b4c5d6e7f809\na5075a2d9c1f5e6d9ecf880f22692d26290d301bc9cb5927680df597091a4757",
+      "assinatura": "15fd47bcd8dfe036655204615208e4fb34ead51c4dbdb029dbef4dd99bde0c67"
+    }
+  ],
+  "pedidos": [
+    {
+      "pedido": {
+        "id": "65f0a1b2c3d4e5f6a7b8c9d0",
+        "tipo": "ban",
+        "conta": 472860,
+        "nick": "",
+        "tempo": 5,
+        "avisos": 1,
+        "somar": true,
+        "motivo": "DM + RK [DC]",
+        "aprovadoPor": "joao.staff",
+        "emitidoEm": 1800000006,
+        "teste": false
+      },
+      "canonico": "pedido\n65f0a1b2c3d4e5f6a7b8c9d0|ban|472860||5|1|1|DM + RK [DC]|joao.staff|1800000006|0",
+      "selo": "60f2a7b6125f23536dff23a989780fce4effb913543dad7e82bfa7c581aaf74f"
+    },
+    {
+      "pedido": {
+        "id": "65f0a1b2c3d4e5f6a7b8c9d1",
+        "tipo": "cadeia",
+        "conta": 0,
+        "nick": "Fulano_Tal",
+        "tempo": 120,
+        "avisos": 0,
+        "somar": false,
+        "motivo": "MIX [DC]",
+        "aprovadoPor": "Maria_Resp",
+        "emitidoEm": 1800000006,
+        "teste": true
+      },
+      "canonico": "pedido\n65f0a1b2c3d4e5f6a7b8c9d1|cadeia|0|Fulano_Tal|120|0|0|MIX [DC]|Maria_Resp|1800000006|1",
+      "selo": "f41a9b7a06bae64102baebde1b96db4f34c9d2bd652ca19526b824ba85b54d35"
+    },
+    {
+      "pedido": {
+        "id": "65f0a1b2c3d4e5f6a7b8c9d2",
+        "tipo": "desbanir",
+        "conta": 472860,
+        "nick": "",
+        "tempo": 0,
+        "avisos": 0,
+        "somar": false,
+        "motivo": "Revisao da denuncia [DC]",
+        "aprovadoPor": "joao.staff",
+        "emitidoEm": 1800000100,
+        "teste": false
+      },
+      "canonico": "pedido\n65f0a1b2c3d4e5f6a7b8c9d2|desbanir|472860||0|0|0|Revisao da denuncia [DC]|joao.staff|1800000100|0",
+      "selo": "4cc45b317ceeda8937dedb0e8eb2f7a255caccd8bd3dce33bfa1028d3dd1a9ed"
+    }
+  ]
+}

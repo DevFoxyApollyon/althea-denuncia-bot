@@ -170,6 +170,28 @@ Os comandos com `!` continuam funcionando.
 | `/denuncia` | `!denuncia` | Responsável Admin | Publica/atualiza a mensagem de abertura de denúncias |
 | `/rank [periodo]` | `!rank [mensal\|semanal\|hoje]` | Administrador e Responsável Admin | Ranking de atendimento da staff |
 | `/status` | `!status` | Administrador do servidor | Diagnóstico do bot |
+| `/ponte gamemode criar\|listar\|revogar\|renovar` | — | Dono do bot (`OWNER_DISCORD_ID`) | Credenciais da gamemode (o segredo sai uma vez, em anexo) |
+| `/ponte gamemode pausar\|retomar\|executor\|limites` | — | Responsável Admin | Modo gamemode do servidor |
+
+---
+
+## 🎮 Ponte com a gamemode
+
+Além do PC da staff (mod Lua), a própria gamemode do servidor pode aplicar as punições
+aceitas no Discord. Ela **busca** os pedidos no Althea (`/ponte/gm/v1`, HMAC na query) e
+devolve o resultado; o Althea nunca chama o servidor do jogo.
+
+- **Especificação do protocolo:** [`doc/PONTE_GAMEMODE.md`](doc/PONTE_GAMEMODE.md).
+- **Include Pawn e instalação na gamemode:** [`gamemode/LEIA-ME.md`](gamemode/LEIA-ME.md) (a pasta `gamemode/` não vai para a hospedagem).
+- **No `.env`:** `PONTE_CHAVE_MESTRA` (base64 de 32 bytes) cifra os segredos. Sem ela, a API responde 503.
+- **Fluxo:** aceite da denúncia → embed "🎮 Punição para o jogo" no Relatório de punições → um
+  responsável clica em **Enviar ao jogo** → a gamemode busca, aplica e responde → o embed mostra
+  o resultado de cada alvo. Sem resposta, o pedido vira **incerto** e vai para o Log Admin, onde
+  um responsável decide ("foi aplicada" ou "reenviar"): nada é reenviado sozinho.
+- **Quem aplica** é escolhido por servidor: `pc` (padrão), `gamemode` ou `ambos`
+  (`/ponte gamemode executor`). O modo teste vem ligado: a gamemode só simula até ser desligado
+  em `/ponte gamemode limites`.
+- **Painel do dono:** aba Gamemode no `/admin` (credenciais, pedidos recentes e auditoria `gm_*`).
 
 ---
 
@@ -206,10 +228,10 @@ As configurações no principal também têm retenção de seis meses.
 
 Este projeto utiliza discord.js v14.
 
-Algumas dependências indiretas (como undici) reportam vulnerabilidades moderadas via npm audit.
+Na versão 3.12.0, `npm audit fix` (sem `--force`) atualizou `body-parser` e `undici` e o
+`npm audit` passou a mostrar 0 vulnerabilidades.
 
-Aplicar npm audit fix --force causaria downgrade do discord.js e quebraria o projeto.
-Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto prático no uso real do bot.
+Nunca use `npm audit fix --force`: ele faria downgrade do discord.js e quebraria o projeto.
 
 ## 🗺️ Roadmap
 - [ ] Internacionalização (EN)

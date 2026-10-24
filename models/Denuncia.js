@@ -148,9 +148,13 @@ const denunciaSchema = new mongoose.Schema({
   motivoAceite: { 
     type: String
   },
-  dataPunicao: { 
+  dataPunicao: {
     type: String
   },
+  // Trava contra cliques simultâneos nos botões de status. Sem estes campos no
+  // schema o mongoose descartava o $set e a trava nunca travava.
+  processingLock: { type: Boolean, default: false },
+  processingLockEm: { type: Date, default: null },
   claimedBy: {
     type: String,
     default: null

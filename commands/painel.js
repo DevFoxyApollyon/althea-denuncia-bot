@@ -11,6 +11,7 @@ const {
 const Config = require('../models/Config');
 const { getConfig } = require('../utils/configCache');
 const { getUsuariosIsentos, salvarUsuariosIsentos, normalizarIds } = require('../utils/usuariosIsentos');
+const { alertaMotivoCriticoAtivo } = require('../utils/alertaMotivoCritico');
 require('dotenv').config();
  
 const MESSAGE_TIMEOUT = 5 * 60 * 1000; 
@@ -93,11 +94,17 @@ function createChannelsModal1(currentConfig = null) {
     .setPlaceholder('Canal onde a equipe acompanha as denúncias')
     .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)
     .setValue(currentConfig?.channels?.logs || '');
+  const relatorio = new TextInputBuilder()
+    .setCustomId('relatorio_punicoes_channel').setLabel('ID do Relatório de punições (opcional)')
+    .setPlaceholder('Histórico das punições aplicadas no jogo')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.channels?.relatorioPunicoes || '');
 
   return modal.addComponents(
     new ActionRowBuilder().addComponents(pc),
     new ActionRowBuilder().addComponents(mobile),
-    new ActionRowBuilder().addComponents(logs)
+    new ActionRowBuilder().addComponents(logs),
+    new ActionRowBuilder().addComponents(relatorio)
   );
 }
 
@@ -235,15 +242,17 @@ async function saveChannels1(interaction) {
   const pcId = fields.getTextInputValue('pc_channel');
   const mobileId = fields.getTextInputValue('mobile_channel');
   const logsId = fields.getTextInputValue('logs_channel');
+  const relatorioId = fields.getTextInputValue('relatorio_punicoes_channel').trim();
 
-  if (!guild.channels.cache.has(pcId) || !guild.channels.cache.has(mobileId) || !guild.channels.cache.has(logsId)) {
+  if (!guild.channels.cache.has(pcId) || !guild.channels.cache.has(mobileId) || !guild.channels.cache.has(logsId)
+    || (relatorioId && !guild.channels.cache.has(relatorioId))) {
     return interaction.reply({ content: '❌ Um ou mais IDs de canal não existem neste servidor.', flags: [64] });
   }
 
   await Config.findOneAndUpdate(
     { guildId: guild.id },
     { 
-      $set: { 'channels.pc': pcId, 'channels.mobile': mobileId, 'channels.logs': logsId },
+      $set: { 'channels.pc': pcId, 'channels.mobile': mobileId, 'channels.logs': logsId, 'channels.relatorioPunicoes': relatorioId },
       lastUpdated: new Date(), updatedBy: getCurrentUser(interaction)
     },
     { upsert: true }
@@ -323,6 +332,10 @@ function bloqueioPendentesAtivo(config) {
   return config?.bloquearReivindicacaoComPendentes !== false;
 }
 
+const textoAlertaCritico = (config) => (alertaMotivoCriticoAtivo(config)
+  ? '🟢 **Marcação do responsável ativada**'
+  : '⚪ **Marcação do responsável desativada**');
+
 function buildPanelEmbed(interaction, config, exemptUsers = []) {
   const maintenance = Boolean(config?.manutencaoDenuncia);
   const bloqueioAtivo = bloqueioPendentesAtivo(config);
@@ -381,6 +394,11 @@ function buildPanelEmbed(interaction, config, exemptUsers = []) {
         name: '⏳ Pendências anteriores',
         value: bloqueioAtivo ? '🟢 **Bloqueio ativado**' : '⚪ **Bloqueio desativado**',
         inline: true
+      },
+      {
+        name: '🚨 Alerta de motivo crítico',
+        value: textoAlertaCritico(config),
+        inline: true
       }
     )
     .setFooter({ text: 'Selecione uma categoria abaixo para editar' })
@@ -404,7 +422,8 @@ async function atualizarPainelCategoria(interaction, category, config) {
     edit_channels_1: ['📌 Canais principais', [
       `🖥️ PC: ${getChannelName(interaction, config?.channels?.pc)}`,
       `📱 Mobile: ${getChannelName(interaction, config?.channels?.mobile)}`,
-      `🧾 Cadeia Staff: ${getChannelName(interaction, config?.channels?.logs)}`
+      `🧾 Cadeia Staff: ${getChannelName(interaction, config?.channels?.logs)}`,
+      `📑 Relatório de punições: ${getChannelName(interaction, config?.channels?.relatorioPunicoes)}`
     ].join('\n'), 'Canais usados para receber as denúncias.'],
     edit_channels_2: ['📦 Canais administrativos', [
       `📋 Log Admin: ${getChannelName(interaction, config?.channels?.log)}`,
@@ -445,11 +464,12 @@ async function createPanelSelectMenu(interaction, currentConfig = null) {
   const options = [
     { label: 'Ver configurações', value: 'view_config', description: 'Visualizar o estado atual do servidor', emoji: '📋' },
     { label: 'Usuários isentos', value: 'edit_exempt_users', description: 'Lista global de usuários sem bloqueios', emoji: '🛡️' },
-    { label: 'Canais principais', value: 'edit_channels_1', description: 'PC, Mobile e Cadeia Staff', emoji: '📌' },
+    { label: 'Canais principais', value: 'edit_channels_1', description: 'PC, Mobile, Cadeia Staff e Relatório de punições', emoji: '📌' },
     { label: 'Canais administrativos', value: 'edit_channels_2', description: 'Log, backup, armazém, análise e top diário', emoji: '🛠️' },
     { label: 'Canais externos', value: 'edit_channels_3', description: 'Registro, cloud e canal fixo de denúncias', emoji: '🌐' },
     { label: 'Manutenção de denúncias', value: 'toggle_maintenance', description: currentConfig?.manutencaoDenuncia ? 'Desativar manutenção' : 'Ativar manutenção', emoji: '🛠️' },
     { label: 'Bloqueio de pendências anteriores', value: 'toggle_pending_claim_block', description: bloqueioPendentesAtivo(currentConfig) ? 'Desativar neste servidor' : 'Ativar neste servidor', emoji: '⏳' },
+    { label: 'Alerta de motivo crítico', value: 'toggle_critical_alert', description: alertaMotivoCriticoAtivo(currentConfig) ? 'Parar de marcar o responsável (zaralho, hack...)' : 'Voltar a marcar o responsável (zaralho, hack...)', emoji: '🚨' },
     { label: 'Cargos principais', value: 'edit_roles_1', description: 'Cargos Mobile e PC', emoji: '👥' },
     { label: 'Cargos administrativos', value: 'edit_roles_2', description: 'Administrador e responsável', emoji: '🧑‍💼' }
   ];
@@ -500,7 +520,8 @@ async function abrirPainel(message, { negar, enviar }) {
           `☁️ **Cloud externo** ${getExternalChannelName(config?.channels?.cloud)}`,
           `📣 **Canal de denúncias** ${getExternalChannelName(config?.channels?.canalDenuncia)}`,
           `🔎 **Análise** ${getChannelName(message, config?.channels?.analysis)}`,
-          `🏆 **Top Diário** ${getChannelName(message, config?.channels?.topDaily)}`
+          `🏆 **Top Diário** ${getChannelName(message, config?.channels?.topDaily)}`,
+          `📑 **Relatório de punições** ${getChannelName(message, config?.channels?.relatorioPunicoes)}`
         ].join('\n'),
         inline: false
       },
@@ -529,6 +550,11 @@ async function abrirPainel(message, { negar, enviar }) {
         value: bloqueioPendentesAtivo(config)
           ? '🟢 **Bloqueio ativado neste servidor**'
           : '⚪ **Bloqueio desativado neste servidor**',
+        inline: false
+      },
+      {
+        name: '🚨 Alerta de motivo crítico',
+        value: textoAlertaCritico(config),
         inline: false
       },
     )
@@ -586,7 +612,8 @@ async function showConfig(interaction, currentConfig = null) {
         `☁️ **Cloud externo** ${getExternalChannelName(config.channels.cloud)}`,
         `📣 **Canal de denúncias** ${getExternalChannelName(config.channels.canalDenuncia)}`,
         `🔎 **Análise** ${getChannelName(interaction, config.channels.analysis)}`,
-        `🏆 **Top Diário** ${getChannelName(interaction, config.channels.topDaily)}`
+        `🏆 **Top Diário** ${getChannelName(interaction, config.channels.topDaily)}`,
+        `📑 **Relatório de punições** ${getChannelName(interaction, config.channels.relatorioPunicoes)}`
       ].join('\n') },
       { name: '🎖️ Cargos', value: [
         `📱 **Mobile** ${getRoleName(interaction, config.roles.permitido)}`,
@@ -596,6 +623,7 @@ async function showConfig(interaction, currentConfig = null) {
       ].join('\n') },
       { name: '🛠️ Estado do sistema', value: config.manutencaoDenuncia ? '🔴 **Denúncias em manutenção**' : '🟢 **Denúncias disponíveis**' },
       { name: '⏳ Pendências anteriores', value: bloqueioPendentesAtivo(config) ? '🟢 **Bloqueio ativado neste servidor**' : '⚪ **Bloqueio desativado neste servidor**' },
+      { name: '🚨 Alerta de motivo crítico', value: textoAlertaCritico(config) },
       { name: '🕒 Auditoria', value: `Última atualização: <t:${Math.floor(new Date(config.lastUpdated || Date.now()).getTime() / 1000)}:R>\nResponsável: **${config.updatedBy || 'Sistema'}**` }
     );
 
@@ -623,6 +651,7 @@ module.exports = {
   atualizarPainelMensagem,
   atualizarPainelCategoria,
   bloqueioPendentesAtivo,
+  alertaMotivoCriticoAtivo,
   cachePanelExemptUsers,
   getPanelExemptUsers
 };

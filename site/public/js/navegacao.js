@@ -238,6 +238,7 @@ export function menuLateral() {
       grupo('Ajustes'),
       itemDeRota('Configurações do site', 'ajustes', 'config'),
       itemDeRota('Painel do bot', 'escudo', 'bot'),
+      itemDeRota('Motivos de punição', 'nota', 'motivos'),
       itemDeRota('Saúde do bot', 'grafico', 'saude')
     ]
     : estado.area === 'staff'
@@ -246,6 +247,7 @@ export function menuLateral() {
         itemDaVista('atendimentos'),
         grupo('Ferramentas'),
         itemDeRota('Perfil do jogador', 'usuario', 'jogador'),
+        itemDeRota('Motivos de punição', 'nota', 'motivos'),
         itemDeRota('Ranking', 'trofeu', 'ranking'),
         itemDeRota(estado.testesPendentes.obrigatorios ? 'Testes (obrigatório)' : 'Testes', 'nota', 'teste', estado.testesPendentes.total),
         grupo('Comunidade'),

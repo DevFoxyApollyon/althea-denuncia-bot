@@ -17,6 +17,7 @@ export function rotaAtual() {
   if (tipo === 'teste-admin') return { tipo: 'teste-admin', id: id ? decodeURIComponent(id) : undefined };
   if (tipo === 'avisos') return { tipo: 'avisos' };
   if (tipo === 'bot') return { tipo: 'bot' };
+  if (tipo === 'motivos') return { tipo: 'motivos' };
   if (tipo === 'saude') return { tipo: 'saude' };
   if (tipo === 'logins') return { tipo: 'logins' };
   if (tipo === 'metas') return { tipo: 'metas' };

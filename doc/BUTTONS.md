@@ -107,6 +107,39 @@ Disponíveis após criar uma denúncia.
 
 ---
 
+## 🎮 Ponte com a gamemode
+
+Só o cargo `responsavel_admin` usa estes botões. Regra de negócio em `services/ponteSamp/discordGm.js`
+e `services/ponteSamp/incertosGm.js`; handlers em `Handlers/ponteGamemode.js` (rotas por prefixo em
+`Handlers/interactionHandler.js`).
+
+### Embed "🎮 Punição para o jogo" (Relatório de punições)
+| customId | Tipo | O que faz |
+|---|---|---|
+| `ponte_gm_enviar:<punicaoId>` | botão | Confere os limites `gm.*`, cria um pedido por alvo e tira a punição da fila do PC |
+| `ponte_gm_editar:<punicaoId>` | botão | Um alvo: abre o modal. Vários: abre o menu de alvos |
+| `ponte_gm_alvo:<punicaoId>` | menu | Escolhe o alvo e abre o modal |
+| `ponte_gm_modal:<punicaoId>:<alvoId>:<versao>` | modal | Tipo, tempo, avisos e motivo (trava por `versao`) |
+| `ponte_gm_cancelar:<punicaoId>` | botão | Antes do envio: cancela a punição. Depois: cancela o que a gamemode ainda não buscou |
+
+### Aviso de incerto (Log Admin)
+| customId | O que faz |
+|---|---|
+| `ponte_gm_incerto_ok:<pedidoId>` | "✅ Foi aplicada": grava o resultado e fecha a punição se não faltar alvo |
+| `ponte_gm_incerto_reenviar:<pedidoId>` | "🔁 Não foi aplicada, reenviar": cancela o pedido e cria outro (rodada + 1) |
+
+### Modal de `/ponte gamemode limites`
+| customId | Campos |
+|---|---|
+| `ponte_gm_limites_modal` | `maxBanDias`, `maxCadeiaMin`, `maxAvisos`, `permitirPermanente` (sim/não), `modoTeste` (sim/não) |
+
+### Painel `/painel`
+| valor do menu | O que faz |
+|---|---|
+| `toggle_critical_alert` | Liga/desliga a marcação do responsável em motivo crítico (zaralho, dark RP, hack, mods proibidos) |
+
+---
+
 ## 📋 Estrutura de customId
 
 Padrão: `[acao]_[tipo]_[id]`

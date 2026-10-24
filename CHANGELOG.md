@@ -6,6 +6,28 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.12.0] - 2026-10-23
+### ✨ Novidades
+- Ponte direta com a gamemode (protocolo gm/v1, `doc/PONTE_GAMEMODE.md`): a gamemode busca as punições aprovadas em `/ponte/gm/v1` e devolve o resultado, sem PC ligado. Autenticação por HMAC na query, nonce, relógio, lista de IPs e bloqueio por falhas; cada pedido vai selado.
+- Embed "🎮 Punição para o jogo" no Relatório de punições, com **Enviar ao jogo**, **Editar** e **Cancelar** (só o responsável). O embed mostra o resultado de cada alvo (aplicada, simulada, recusada, incerto).
+- Pedido sem resposta vira **incerto** e vai para o Log Admin com "Foi aplicada" e "Não foi aplicada, reenviar". Nada é reenviado sozinho.
+- Alertas: selo inválido (DM ao dono e canal de alertas; a conexão é pausada), IP bloqueado por falhas de autenticação e pedido devolvido mais de 5 vezes.
+- `/ponte gamemode`: `criar`, `listar`, `revogar`, `renovar` (só o dono; a credencial sai uma vez, em anexo) e `pausar`, `retomar`, `executor`, `limites` (responsável).
+- Executor por servidor: PC (padrão), gamemode ou os dois. No modo gamemode o PC recebe 409 ao executar.
+- Aba Gamemode no `/admin`: credenciais (online, IP, include, IPs permitidos), pedidos recentes e auditoria `gm_*`.
+- Alerta de motivo crítico (zaralho, dark RP, hack, mods proibidos) pode ser ligado e desligado no `/painel` e no Painel do bot do site.
+- Variáveis novas no `.env`: `PONTE_CHAVE_MESTRA` e `SITE_PROXIES_CONFIAVEIS` (opcional).
+
+### 🔧 Correções
+- Segurança: o cabeçalho `cf-connecting-ip` só vale para pedidos que chegam pela Cloudflare. Antes, qualquer um podia trocar o próprio IP e fugir do limite e do bloqueio do site.
+- `npm audit fix`: `body-parser` 1.20.9 e `undici` 6.29.1 (0 vulnerabilidades).
+- A liberação de "execução presa" do PC não mexe mais em punições enviadas à gamemode.
+
+### 📦 Pacote
+- `gamemode/**` fica fora do zip da SquareCloud.
+
+---
+
 ## [3.5.0] - 2026-10-10
 ### ✨ Novidades
 - A fila e as outras listas do site se atualizam na hora quando uma denúncia muda no Discord ou no site.

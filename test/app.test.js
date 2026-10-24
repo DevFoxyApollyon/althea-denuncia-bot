@@ -94,7 +94,7 @@ test('todo botão, menu e modal criado no código tem rota', () => {
 test('comandos de barra têm definição válida e nomes únicos', () => {
   const { comandos } = require('../commands/slash');
   const nomes = comandos.map(comando => comando.data.toJSON().name);
-  assert.deepEqual([...nomes].sort(), ['denuncia', 'painel', 'rank', 'status']);
+  assert.deepEqual([...nomes].sort(), ['ativar', 'denuncia', 'instalacao', 'painel', 'ponte', 'ponte-codigo', 'rank', 'status']);
   for (const comando of comandos) {
     assert.equal(typeof comando.executar, 'function', comando.data.name);
     assert.ok(comando.data.toJSON().description.length <= 100);
@@ -175,4 +175,24 @@ test('site: mensagem publicada pelo site volta a ser de quem enviou', () => {
 
   const registro = { ...doBot, conteudo: '📌 O administrador <@657014871228940336> reivindicou esta denúncia.' };
   assert.equal(atribuirAutoriaDoSite(registro), registro, 'registros do bot não mudam');
+});
+
+test('comando já registrado igual ao do código não é editado de novo a cada inicialização', async () => {
+  const { ApplicationCommand, Client } = require('discord.js');
+  const { comandos, registrarComandosNoServidor } = require('../commands/slash');
+  const client = new Client({ intents: [] });
+  // Como a API devolve os comandos já salvos.
+  const salvos = comandos.map(({ data }, i) => {
+    const def = JSON.parse(JSON.stringify(data.toJSON()));
+    const cmd = new ApplicationCommand(client, { ...def, id: String(i + 1), application_id: '9', version: '1', nsfw: false, default_member_permissions: def.default_member_permissions ?? null });
+    cmd.edit = async () => { editados++; };
+    return cmd;
+  });
+  let editados = 0;
+  let criados = 0;
+  const guild = { commands: { fetch: async () => salvos, create: async () => { criados++; } } };
+  await registrarComandosNoServidor(guild);
+  assert.equal(editados, 0);
+  assert.equal(criados, 0);
+  client.destroy();
 });

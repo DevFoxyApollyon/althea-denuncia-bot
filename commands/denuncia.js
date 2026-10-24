@@ -6,7 +6,9 @@ const {
     MessageFlags,
     ModalBuilder,
     TextInputBuilder,
-    TextInputStyle
+    TextInputStyle,
+    LabelBuilder,
+    FileUploadBuilder
 } = require('discord.js');
 
 const { garantirAvisoNoTopo } = require('../Handlers/leiaAvisoHandler');
@@ -304,6 +306,35 @@ async function handleDenunciaSlash(interaction) {
     }
 }
 
+function lerAnexosDoModal(interaction) {
+    // Campo ausente (discord.js antigo ou modal aberto antes da atualização) => sem anexos.
+    try {
+        return [...(interaction.fields.getUploadedFiles('anexos_input')?.values() ?? [])];
+    } catch {
+        return [];
+    }
+}
+
+async function enviarAnexosNoTopico(thread, anexos, autor) {
+    // Um por mensagem: se um passar do limite do servidor, os outros ainda chegam.
+    for (const anexo of anexos) {
+        const nome = anexo.name || `anexo-${anexo.id}`;
+        try {
+            await thread.send({
+                content: `📎 Prova anexada por ${autor}`,
+                files: [{ attachment: anexo.url, name: nome }],
+                allowedMentions: { parse: [] }
+            });
+        } catch (error) {
+            console.warn(`Não foi possível reenviar o anexo ${nome} no tópico:`, error.message);
+            await thread.send({
+                content: `⚠️ Não foi possível anexar **${nome}** (provavelmente grande demais para este servidor). ${autor}, envie o arquivo direto aqui no tópico.`,
+                allowedMentions: { users: [autor.id] }
+            }).catch(() => {});
+        }
+    }
+}
+
 async function handleDenunciaSubmit(interaction, platform) {
     let confirmacaoEnviada = false;
     try {
@@ -391,6 +422,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         const acusado = interaction.fields.getTextInputValue('acusado_input');
         const motivo  = interaction.fields.getTextInputValue('motivo_input');
         let provas    = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
+        const anexos  = lerAnexosDoModal(interaction);
 
         if (!/^[a-zA-Z0-9+ ]+$/.test(acusado)) {
             return await interaction.editReply({ content: '❌ O campo **Acusado** só pode conter letras, números e o símbolo "+" para múltiplos IDs.' });
@@ -606,6 +638,9 @@ async function handleDenunciaSubmit(interaction, platform) {
                 } }
             );
         }
+
+        // Depois dos espelhos salvos: o messageCreate registra e espelha cada anexo como as demais mensagens do tópico.
+        await enviarAnexosNoTopico(thread, anexos, interaction.user);
 
         try {
             const TRES_HORAS_MS = 3 * 60 * 60 * 1000;
@@ -845,6 +880,22 @@ async function openDenunciaModal(interaction, platform) {
             new ActionRowBuilder().addComponents(motivoInput),
             new ActionRowBuilder().addComponents(provasInput)
         );
+
+        // Upload no modal exige discord.js >= 14.23; em versão antiga o formulário abre sem esse campo.
+        if (LabelBuilder && FileUploadBuilder) {
+            modal.addLabelComponents(
+                new LabelBuilder()
+                    .setLabel('Vídeos / imagens (opcional)')
+                    .setDescription('Até 10 arquivos — serão enviados no tópico da denúncia')
+                    .setFileUploadComponent(
+                        new FileUploadBuilder()
+                            .setCustomId('anexos_input')
+                            .setRequired(false)
+                            .setMinValues(0)
+                            .setMaxValues(10)
+                    )
+            );
+        }
 
         await interaction.showModal(modal);
 

@@ -5,11 +5,11 @@ module.exports = [
     { ignores: ['node_modules/**'] },
     js.configs.recommended,
     {
-        files: ['site/public/**/*.js'],
+        files: ['site/public/**/*.js', 'site/ponte/painel/**/*.js'],
         languageOptions: { sourceType: 'module', globals: { ...globals.browser } }
     },
     {
-        ignores: ['site/public/**'],
+        ignores: ['site/public/**', 'site/ponte/painel/**'],
         languageOptions: {
             ecmaVersion: 2023,
             sourceType: 'commonjs',

@@ -1,0 +1,150 @@
+/* Painel do dono da ponte (/admin). Mesma identidade do site: verde, cartões, abas em pílula. */
+:root {
+  --fundo: #f2f4f1;
+  --painel: #ffffff;
+  --elevada: #f2f4f1;
+  --texto: #131b17;
+  --suave: #4b5951;
+  --fraca: #76837b;
+  --borda: #e1e6e2;
+  --borda-forte: #c5cec8;
+  --destaque: #15803d;
+  --destaque-suave: rgb(21 128 61 / 10%);
+  --sobre-destaque: #ffffff;
+  --ok: #116a32;
+  --perigo: #b3261e;
+  --perigo-suave: #fce6e4;
+  --sombra: 0 1px 2px rgb(20 30 25 / 6%), 0 10px 28px rgb(20 30 25 / 8%);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #0d1210;
+    --painel: #131a17;
+    --elevada: #1a2320;
+    --texto: #e9efeb;
+    --suave: #a5b3ab;
+    --fraca: #74837b;
+    --borda: #232f2a;
+    --borda-forte: #34443d;
+    --destaque: #3ecf6e;
+    --destaque-suave: rgb(62 207 110 / 12%);
+    --sobre-destaque: #05140b;
+    --ok: #5bdc85;
+    --perigo: #ff918a;
+    --perigo-suave: #3a1b1b;
+    --sombra: 0 1px 2px rgb(0 0 0 / 30%), 0 12px 32px rgb(0 0 0 / 28%);
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 14.5px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  background: var(--fundo);
+  color: var(--texto);
+}
+:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; border-radius: 6px; }
+
+header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 14px 24px;
+  background: color-mix(in srgb, var(--painel) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--borda);
+}
+h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+h1::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--destaque);
+  box-shadow: 0 0 0 4px var(--destaque-suave);
+}
+nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px; border-radius: 999px; background: var(--elevada); border: 1px solid var(--borda); }
+nav button { border: 0; border-radius: 999px; background: transparent; color: var(--suave); padding: 6px 16px; }
+nav button:hover { color: var(--texto); background: var(--destaque-suave); }
+nav button.ativa { background: var(--destaque); color: var(--sobre-destaque); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 25%); }
+
+main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+section { background: var(--painel); border: 1px solid var(--borda); border-radius: 14px; box-shadow: var(--sombra); padding: 16px; overflow-x: auto; }
+
+button {
+  font: inherit;
+  padding: 7px 14px;
+  border: 1px solid var(--borda-forte);
+  border-radius: 8px;
+  background: var(--painel);
+  color: var(--texto);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .05s;
+}
+button:hover { border-color: var(--destaque); background: var(--destaque-suave); }
+button:active { transform: translateY(1px); }
+button[type=submit], #motivos-salvar { background: var(--destaque); border-color: var(--destaque); color: var(--sobre-destaque); font-weight: 600; }
+button[type=submit]:hover, #motivos-salvar:hover { filter: brightness(1.08); background: var(--destaque); }
+button.perigo { color: var(--perigo); border-color: color-mix(in srgb, var(--perigo) 40%, var(--borda)); }
+button.perigo:hover { background: var(--perigo-suave); border-color: var(--perigo); }
+
+input, select { font: inherit; padding: 7px 10px; border: 1px solid var(--borda-forte); border-radius: 8px; background: var(--elevada); color: var(--texto); }
+input:focus, select:focus { border-color: var(--destaque); outline: 0; box-shadow: 0 0 0 3px var(--destaque-suave); }
+label { display: grid; gap: 4px; color: var(--suave); font-size: 12.5px; font-weight: 600; }
+
+form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--borda); }
+
+table { width: 100%; border-collapse: separate; border-spacing: 0; }
+th, td { padding: 10px 12px; border-bottom: 1px solid var(--borda); text-align: left; white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--painel); color: var(--fraca); font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+tbody tr { transition: background .12s; }
+tbody tr:hover { background: var(--destaque-suave); }
+tbody tr:last-child td { border-bottom: 0; }
+td.detalhes { white-space: normal; max-width: 320px; word-break: break-word; color: var(--suave); font: 12px/1.45 ui-monospace, "Cascadia Mono", monospace; }
+.online { color: var(--ok); font-weight: 600; }
+.atencao { color: var(--perigo); font-weight: 600; }
+td.botoes button + button { margin-left: 6px; }
+h2 { margin: 24px 0 10px; font-size: 15px; font-weight: 650; }
+#aba-gamemode h2:first-child { margin-top: 0; }
+.alerta { margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--perigo); border-radius: 8px; background: var(--perigo-suave); color: var(--perigo); font-weight: 600; }
+code { font: 12.5px ui-monospace, "Cascadia Mono", monospace; }
+
+#aviso { margin: 0 0 16px; padding: 10px 14px; border: 1px solid var(--borda-forte); border-left: 3px solid var(--destaque); border-radius: 8px; background: var(--painel); }
+#aviso:empty, #codigo-novo:empty { display: none; }
+#codigo-novo {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px dashed var(--destaque);
+  border-radius: 10px;
+  background: var(--destaque-suave);
+  color: var(--ok);
+  font: 600 18px ui-monospace, "Cascadia Mono", monospace;
+  letter-spacing: .04em;
+  user-select: all;
+}
+#mais-uso { margin-top: 16px; }
+#aba-motivos td input, #aba-motivos td select { width: 100%; min-width: 60px; }
+#aba-motivos td input[type=number] { max-width: 90px; }
+.dica { margin: 0 0 14px; color: var(--suave); font-size: 13px; }
+#motivos-situacao { color: var(--destaque); font-weight: 600; }
+.acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--borda); }
+
+@media (max-width: 640px) {
+  header { padding: 12px 16px; }
+  main { padding: 16px; }
+  nav { width: 100%; border-radius: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

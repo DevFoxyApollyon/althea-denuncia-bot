@@ -2,6 +2,7 @@
 import { telaIdentificar } from './abertas.js';
 import { faixaDeAvisos, telaAvisos } from './avisos.js';
 import { telaPainelDoBot } from './bot.js';
+import { telaMotivosPonte } from './motivos.js';
 import { telaLogins, telaMetas, telaSaude } from './gestao.js';
 import { telaSessoes } from './sessoes.js';
 import { telaDetalhe } from './caso.js';
@@ -48,6 +49,8 @@ export function desenhar() {
   const cursor = ativo?.selectionStart;
   const rolagens = ['.principal', '.conversa'].map(seletor => [seletor, raiz.querySelector(seletor)?.scrollTop]);
   const casoAnterior = raiz.querySelector('.caso')?.dataset.id;
+  const abasAntes = raiz.querySelector('.menu-itens')?.scrollLeft;
+  const abaAntes = raiz.querySelector('.menu-itens [aria-current="page"]')?.textContent;
 
   let conteudo;
   if (!estado.usuario) {
@@ -73,6 +76,7 @@ export function desenhar() {
               : rota.tipo === 'jogador' && papeisAtuais().staff ? telaJogador()
               : rota.tipo === 'config' && papeisAtuais().responsavel ? telaConfig()
               : rota.tipo === 'bot' && papeisAtuais().responsavel ? telaPainelDoBot()
+              : rota.tipo === 'motivos' && papeisAtuais().staff ? telaMotivosPonte()
               : rota.tipo === 'sessoes' ? telaSessoes()
               : rota.tipo === 'saude' && papeisAtuais().responsavel ? telaSaude()
               : rota.tipo === 'logins' && papeisAtuais().responsavel ? telaLogins()
@@ -104,6 +108,8 @@ export function desenhar() {
     else if (typeof topo === 'number') alvo.scrollTop = topo;
   }
 
+  ajustarAbas(abasAntes, abaAntes);
+
   if (foco) {
     const alvo = document.getElementById(foco);
     if (alvo && alvo.type !== 'file') {
@@ -113,6 +119,25 @@ export function desenhar() {
       }
     }
   }
+}
+
+// Barra de abas do celular: mantém a rolagem entre redesenhos, mostra a aba atual
+// quando ela muda e marca os lados que ainda têm abas escondidas (degradê no CSS).
+function ajustarAbas(rolagem, abaAntes) {
+  const abas = raiz.querySelector('.menu-itens');
+  if (!abas) return;
+  if (typeof rolagem === 'number') abas.scrollLeft = rolagem;
+  const ativa = abas.querySelector('[aria-current="page"]');
+  if (ativa && ativa.textContent !== abaAntes && abas.scrollWidth > abas.clientWidth) {
+    const inicio = ativa.getBoundingClientRect().left - abas.getBoundingClientRect().left + abas.scrollLeft;
+    abas.scrollLeft = inicio - (abas.clientWidth - ativa.offsetWidth) / 2;
+  }
+  const marcar = () => {
+    abas.classList.toggle('mais-esquerda', abas.scrollLeft > 4);
+    abas.classList.toggle('mais-direita', abas.scrollLeft + abas.clientWidth < abas.scrollWidth - 4);
+  };
+  marcar();
+  abas.addEventListener('scroll', marcar, { passive: true });
 }
 
 export async function iniciar() {

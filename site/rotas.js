@@ -15,6 +15,7 @@ const { registrarRotasDaSala } = require('./rotas/chatSala');
 const { registrarRotasDoTeste } = require('./rotas/teste');
 const { registrarRotasDeAvisos } = require('./rotas/avisos');
 const { registrarRotasDoPainelDoBot } = require('./rotas/painelBot');
+const { registrarRotasDeMotivosDaPonte } = require('./rotas/motivosPonte');
 const { registrarRotasDeGestao } = require('./rotas/gestao');
 const { registrarRotasDeRascunho } = require('./rotas/rascunho');
 const { registrarRotasDeSessoes } = require('./sessoes');
@@ -74,6 +75,7 @@ function criarRotas({ client }) {
   registrarRotasDoTeste(router, contexto);
   registrarRotasDeAvisos(router, contexto);
   registrarRotasDoPainelDoBot(router, contexto);
+  registrarRotasDeMotivosDaPonte(router, contexto);
   registrarRotasDeGestao(router, contexto);
   registrarRotasDeRascunho(router, contexto);
   registrarRotasDeSessoes(router);
