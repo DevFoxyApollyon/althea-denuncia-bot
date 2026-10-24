@@ -312,7 +312,7 @@ app.delete('/api/rascunho', (req, res) => {
 // Ferramentas do responsável (dados de exemplo).
 const limpezaDeTopicos = { rodando: false, fechados: 0, previstos: 0, terminouEm: null };
 const topicos = [
-  { id: '9', nome: 'Althea Cloud', ativos: 962, limite: 1000, deDenuncias: 940, antigos: 310 },
+  { id: '9', nome: 'Althea Cloud', ativos: 962, limite: 1000, deDenuncias: 940, antigos: 310, deOutrosCanais: 14 },
   { id: '1', nome: 'Brasil RolePlay', ativos: 412, limite: 1000, deDenuncias: 380, antigos: 12 },
   { id: '2', nome: 'Brasil Roleplay - 2', ativos: 88, limite: 1000, deDenuncias: 70, antigos: 0 }
 ];

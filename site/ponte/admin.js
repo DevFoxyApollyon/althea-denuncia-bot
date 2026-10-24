@@ -13,7 +13,9 @@ const PontePedidoGm = require('../../models/PontePedidoGm');
 const gestao = require('../../services/ponteSamp/gestao');
 const motivos = require('../../services/ponteSamp/motivos');
 const { reclassificarFila } = require('../../services/ponteSamp/aceite');
-const { ACOES_USO, STATUS_PEDIDO_GM } = require('../../services/ponteSamp/constantes');
+const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE } = require('../../services/ponteSamp/constantes');
+const { chaveMestraConfigurada, impressaoDaChave } = require('../../services/ponteSamp/cifra');
+const { trocarChaveMestra } = require('../../services/ponteSamp/chaveMestra');
 const { criarToken, lerToken } = require('../sessao');
 const { criarLimitador } = require('../rotas/comum');
 
@@ -23,7 +25,8 @@ const ONLINE_MS = 90 * 1000;
 // A gamemode busca a cada 10 s com a fila vazia.
 const ONLINE_GM_MS = 30 * 1000;
 
-function criarAdmin({ client, config, log }) {
+// arquivoEnv: só nos testes (a troca da chave mestra grava no .env do projeto).
+function criarAdmin({ client, config, log, arquivoEnv }) {
   const router = express.Router();
   const limite = criarLimitador(120, 60 * 1000);
   const naoExiste = (res) => res.status(404).json({ erro: 'Rota não encontrada.' });
@@ -204,6 +207,63 @@ function criarAdmin({ client, config, log }) {
       teste: p.teste, status: p.status, codigo: p.codigo, entregas: p.entregas, devolucoes: p.devolucoes,
       criadoEm: p.criadoEm, entregueEm: p.entregueEm, resultado: p.resultado, resolvidoPor: p.resolvidoPor?.nome || ''
     })));
+  }));
+
+  // Chave mestra da ponte com a gamemode: só a impressão (8 letras do SHA-256) sai daqui.
+  router.get('/api/chave', rota(async (req, res) => {
+    res.json({ configurada: chaveMestraConfigurada(), impressao: impressaoDaChave(), credenciais: await PonteConexaoGm.countDocuments({}) });
+  }));
+
+  // Gera a chave (ou troca a atual) e recifra os segredos das credenciais. A chave nova
+  // aparece só nesta resposta, para o dono colar no .env do PC.
+  router.post('/api/chave/trocar', rota(async (req, res) => {
+    if (req.body?.confirmar !== 'TROCAR') return res.status(400).json({ erro: 'Confirme digitando TROCAR.' });
+    const r = await trocarChaveMestra({ arquivo: arquivoEnv });
+    if (r.erro) return res.status(409).json({ erro: r.erro });
+    await PonteUso.create({
+      acao: 'gm_credencial',
+      detalhes: { sub: 'chave_mestra', via: 'admin', por: req.usuario.id, impressao: r.impressao, recifradas: r.recifradas, ilegiveis: r.ilegiveis, envGravado: r.envGravado }
+    }).catch(() => {});
+    log?.info?.(`Chave mestra da ponte trocada pelo dono (impressão ${r.impressao}, ${r.recifradas} credencial(is) recifrada(s)).`);
+    res.json({ ok: true, ...r });
+  }));
+
+  // Guia de instalação: em que passo cada servidor está (chave, executor, credencial, contato, modo teste).
+  router.get('/api/gamemode/guia', rota(async (req, res) => {
+    const [servidores, conexoes, pedidos] = await Promise.all([
+      PonteServidor.find({ ativo: true }, { guildId: 1, executor: 1, gm: 1 }).lean(),
+      PonteConexaoGm.find({ status: 'ativa' }, { guildId: 1, ultimoContatoEm: 1, versaoInclude: 1, modoTesteInformado: 1, ipsPermitidos: 1, pausada: 1 }).lean(),
+      PontePedidoGm.aggregate([{ $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }])
+    ]);
+    const agora = Date.now();
+    const porStatus = (guildId, status) => pedidos.find(p => p._id.guildId === guildId && p._id.status === status)?.total || 0;
+    res.json({
+      chaveMestra: chaveMestraConfigurada(),
+      versaoInclude: VERSAO_INCLUDE,
+      servidores: servidores.map(s => {
+        const daGuild = conexoes.filter(c => c.guildId === s.guildId);
+        const contato = daGuild.map(c => c.ultimoContatoEm).filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
+        return {
+          guildId: s.guildId,
+          nome: nomeGuild(s.guildId),
+          executor: s.executor || 'pc',
+          pausado: s.gm?.pausado === true,
+          modoTesteBot: s.gm?.modoTeste !== false,
+          permitirPermanente: s.gm?.permitirPermanente !== false,
+          credenciais: daGuild.length,
+          semIp: daGuild.some(c => !(c.ipsPermitidos || []).length),
+          pausadas: daGuild.filter(c => c.pausada).length,
+          ultimoContatoEm: contato,
+          online: !!contato && agora - new Date(contato).getTime() < ONLINE_GM_MS,
+          versaoInclude: daGuild.find(c => c.versaoInclude)?.versaoInclude || '',
+          // Algum contato informou modo teste ligado no jogo (null: ainda sem contato).
+          modoTesteJogo: daGuild.some(c => c.modoTesteInformado === true) ? true : daGuild.some(c => c.modoTesteInformado === false) ? false : null,
+          aplicadas: porStatus(s.guildId, 'aplicada'),
+          simuladas: porStatus(s.guildId, 'simulada'),
+          incertos: porStatus(s.guildId, 'incerto')
+        };
+      })
+    });
   }));
 
   router.use((req, res) => naoExiste(res));

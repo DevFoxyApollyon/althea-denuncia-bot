@@ -17,7 +17,8 @@ const ESPERA_INICIAL_MS = 60 * 1000;
 // conta no limite, e volta sozinho quando o bot manda uma mensagem nova nele.
 const ARQUIVAR_APOS_MINUTOS = 60;
 const STATUS_FECHADOS = ['finalizada'];
-// Tópico parado nos canais de denúncia e de espelho há mais tempo que isto é fechado, seja de quem for.
+// Tópico aberto há mais tempo que isto é fechado, seja de quem for: trancado nos canais de
+// denúncia e de espelho; só arquivado nos outros canais (volta sozinho se alguém escrever).
 const IDADE_MAXIMA_MS = 7 * 24 * 60 * 60 * 1000;
 
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -73,7 +74,8 @@ const LIMITE_DE_TOPICOS_ATIVOS = 1000;
 //   - espelhos (armazém e registro), em qualquer canal em que estejam: o canal
 //     configurado pode ter mudado e os tópicos antigos ficam no anterior;
 //   - o tópico da própria denúncia, quando ela já está finalizada;
-//   - qualquer outro tópico dos canais de denúncia aberto há 7 dias ou mais.
+//   - qualquer outro tópico dos canais de denúncia aberto há 7 dias ou mais;
+//   - qualquer tópico de outro canal do servidor aberto há 7 dias ou mais (só arquiva).
 async function classificarTopicos(client, agora = Date.now()) {
   const configs = await Config.find({}).select('channels.armazem channels.registro channels.pc channels.mobile').lean();
   const canaisEspelho = new Set(configs.flatMap(config => [config.channels?.armazem, config.channels?.registro]).filter(Boolean));
@@ -114,13 +116,17 @@ async function classificarTopicos(client, agora = Date.now()) {
       const idadeMs = agora - (topico.createdTimestamp || agora);
       // Sem registro no banco, só é espelho se estiver num canal de espelho ou tiver nome de espelho.
       const espelhoSemRegistro = !achado && ehEspelhoSemRegistro(topico);
-      // Qualquer outro tópico desses canais aberto há 7 dias ou mais também é fechado.
-      const antigo = !achado && !espelhoSemRegistro && canaisDeDenuncia.has(topico.parentId) && idadeMs >= IDADE_MAXIMA_MS;
-      if (!achado && !espelhoSemRegistro && !antigo) continue;
+      // Qualquer outro tópico aberto há 7 dias ou mais também é fechado: trancado nos canais
+      // de denúncia; nos outros canais, só arquivado (não conta no limite e reabre com mensagem nova).
+      const semDono = !achado && !espelhoSemRegistro && idadeMs >= IDADE_MAXIMA_MS;
+      const antigo = semDono && canaisDeDenuncia.has(topico.parentId);
+      const outro = semDono && !antigo;
+      if (!achado && !espelhoSemRegistro && !semDono) continue;
 
-      const tipo = antigo ? 'antigo' : achado?.tipo || (canaisDeRegistro.has(topico.parentId) ? 'registro' : 'armazem');
+      const tipo = antigo ? 'antigo' : outro ? 'outro' : achado?.tipo || (canaisDeRegistro.has(topico.parentId) ? 'registro' : 'armazem');
       let destino;
       if (tipo === 'antigo') destino = 'trancar';
+      else if (tipo === 'outro') destino = 'arquivar';
       // O tópico da denúncia só é mexido aqui quando ela já foi finalizada.
       else if (tipo === 'denuncia') destino = STATUS_FECHADOS.includes(achado.denuncia.status) ? 'trancar' : null;
       else destino = destinoDoEspelho(achado?.denuncia, topico.createdTimestamp || 0, agora);
@@ -137,7 +143,7 @@ const limpeza = { rodando: false, fechados: 0, previstos: 0, terminouEm: null };
 // Fecha o que a classificação mandou fechar. Com soAntigos, só mexe nos
 // tópicos abertos há 7 dias ou mais (o botão "limpar agora" do painel).
 async function limparEspelhosAbertos(client, { soAntigos = false } = {}) {
-  const porCanal = { armazem: 0, registro: 0, denuncia: 0, antigo: 0 };
+  const porCanal = { armazem: 0, registro: 0, denuncia: 0, antigo: 0, outro: 0 };
   if (limpeza.rodando) return { ativos: 0, fechados: 0, porCanal, ocupado: true };
 
   limpeza.rodando = true;
@@ -153,8 +159,10 @@ async function limparEspelhosAbertos(client, { soAntigos = false } = {}) {
       let fechadosAqui = 0;
       for (const { topico, tipo, destino } of aFechar(servidor)) {
         try {
+          // Tópico de outro canal: só arquiva, sem trancar e sem mudar o tempo de arquivamento dele.
+          if (tipo === 'outro') await topico.setArchived(true, 'Tópico aberto há 7 dias ou mais arquivado para liberar tópicos ativos.');
           // Tópico com 7 dias ou mais é sempre trancado, mesmo sendo espelho de denúncia em andamento.
-          if (destino === 'trancar' || soAntigos) await fecharTopico(topico, 'Tópico de denúncia fechado pela limpeza.');
+          else if (destino === 'trancar' || soAntigos) await fecharTopico(topico, 'Tópico de denúncia fechado pela limpeza.');
           else await topico.edit({ archived: true, autoArchiveDuration: ARQUIVAR_APOS_MINUTOS, reason: 'Espelho arquivado para liberar tópicos ativos.' });
           fechadosAqui += 1;
           limpeza.fechados += 1;
@@ -165,7 +173,7 @@ async function limparEspelhosAbertos(client, { soAntigos = false } = {}) {
         // Devagar, para não bater no limite de requisições do Discord.
         await esperar(PAUSA_ENTRE_TOPICOS_MS);
       }
-      if (servidor.itens.length) console.log(`[Espelhos] ${servidor.guild.name}: ${servidor.total} tópico(s) ativo(s) no servidor, ${servidor.itens.length} de denúncias/espelhos, ${fechadosAqui} fechado(s).`);
+      if (servidor.itens.length) console.log(`[Espelhos] ${servidor.guild.name}: ${servidor.total} tópico(s) ativo(s) no servidor, ${servidor.itens.length} para a limpeza, ${fechadosAqui} fechado(s).`);
       ativos += servidor.itens.length;
     }
     resumoGuardado = null;
@@ -186,8 +194,9 @@ async function resumoDosTopicos(client, { forcar = false } = {}) {
     nome: servidor.guild.name,
     ativos: servidor.total,
     limite: LIMITE_DE_TOPICOS_ATIVOS,
-    deDenuncias: servidor.itens.length,
-    antigos: servidor.itens.filter(item => item.destino && item.idadeMs >= IDADE_MAXIMA_MS).length
+    deDenuncias: servidor.itens.filter(item => item.tipo !== 'outro').length,
+    antigos: servidor.itens.filter(item => item.destino && item.idadeMs >= IDADE_MAXIMA_MS).length,
+    deOutrosCanais: servidor.itens.filter(item => item.tipo === 'outro').length
   })).sort((a, b) => b.ativos - a.ativos);
   resumoGuardado = { em: Date.now(), dados: { servidores, conferidoEm: new Date() } };
   return { ...resumoGuardado.dados, limpeza: { ...limpeza } };
@@ -201,7 +210,7 @@ function iniciarLimpezaDeEspelhos(client) {
     try {
       const { ativos, fechados, porCanal, ocupado } = await limparEspelhosAbertos(client);
       if (ocupado) return;
-      if (ativos) console.log(`[Espelhos] Total: ${fechados} tópico(s) fechado(s): ${porCanal.registro} no registro, ${porCanal.armazem} no armazém ${porCanal.denuncia} de denúncias finalizadas e ${porCanal.antigo} aberto(s) há 7 dias ou mais.`);
+      if (ativos) console.log(`[Espelhos] Total: ${fechados} tópico(s) fechado(s): ${porCanal.registro} no registro, ${porCanal.armazem} no armazém, ${porCanal.denuncia} de denúncias finalizadas, ${porCanal.antigo} aberto(s) há 7 dias ou mais nos canais de denúncia e ${porCanal.outro} arquivado(s) em outros canais.`);
     } catch (erro) {
       console.warn(`[Espelhos] Falha na limpeza dos tópicos espelho: ${erro.message}`);
     } finally {

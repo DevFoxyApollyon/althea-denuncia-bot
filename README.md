@@ -183,6 +183,7 @@ devolve o resultado; o Althea nunca chama o servidor do jogo.
 
 - **Especificação do protocolo:** [`doc/PONTE_GAMEMODE.md`](doc/PONTE_GAMEMODE.md).
 - **Include Pawn e instalação na gamemode:** [`gamemode/LEIA-ME.md`](gamemode/LEIA-ME.md) (a pasta `gamemode/` não vai para a hospedagem).
+- **Guia para os devs do servidor (servidor de teste):** [`doc/GUIA_SERVIDOR_TESTE.md`](doc/GUIA_SERVIDOR_TESTE.md).
 - **No `.env`:** `PONTE_CHAVE_MESTRA` (base64 de 32 bytes) cifra os segredos. Sem ela, a API responde 503.
 - **Fluxo:** aceite da denúncia → embed "🎮 Punição para o jogo" no Relatório de punições → um
   responsável clica em **Enviar ao jogo** → a gamemode busca, aplica e responde → o embed mostra

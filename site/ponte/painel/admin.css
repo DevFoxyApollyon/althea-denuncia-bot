@@ -119,6 +119,13 @@ h2 { margin: 24px 0 10px; font-size: 15px; font-weight: 650; }
 #aba-gamemode h2:first-child { margin-top: 0; }
 .alerta { margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--perigo); border-radius: 8px; background: var(--perigo-suave); color: var(--perigo); font-weight: 600; }
 code { font: 12.5px ui-monospace, "Cascadia Mono", monospace; }
+pre { margin: 8px 0; padding: 12px 14px; border: 1px solid var(--borda); border-radius: 8px; background: var(--elevada); overflow-x: auto; }
+pre code { white-space: pre; }
+ol.passos { margin: 0 0 8px; padding-left: 22px; display: grid; gap: 10px; max-width: 900px; }
+ol.passos .dica { margin: 6px 0 0; }
+a { color: var(--destaque); }
+.chave { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
+#chave-nova pre code { user-select: all; }
 
 #aviso { margin: 0 0 16px; padding: 10px 14px; border: 1px solid var(--borda-forte); border-left: 3px solid var(--destaque); border-radius: 8px; background: var(--painel); }
 #aviso:empty, #codigo-novo:empty { display: none; }

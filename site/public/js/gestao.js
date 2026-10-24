@@ -44,7 +44,7 @@ export async function carregarSaude({ atualizarTopicos = false } = {}) {
 async function limparTopicos(botao, antigos) {
   const confirmado = await confirmar({
     titulo: 'Fechar os tópicos antigos?',
-    texto: `Serão trancados e arquivados ${antigos} tópico(s) de denúncia e de espelho abertos há 7 dias ou mais. Tópicos mais novos e os de denúncias ainda abertas não são mexidos. O bot fecha cerca de um por segundo.`,
+    texto: `Serão fechados ${antigos} tópico(s) abertos há 7 dias ou mais: os de denúncia e de espelho são trancados e arquivados; os dos outros canais só são arquivados e voltam sozinhos se alguém escrever neles. Tópicos mais novos e os de denúncias ainda abertas não são mexidos. O bot fecha cerca de um por segundo.`,
     rotulo: 'Limpar agora'
   });
   if (!confirmado) return;
@@ -86,8 +86,8 @@ function blocoDeTopicos() {
     limpeza.rodando
       ? el('p', { class: 'saude-andamento', role: 'status' }, `Limpeza em andamento: ${limpeza.fechados} de ${limpeza.previstos} tópico(s) fechado(s).`)
       : el('p', { class: 'sub' }, antigos
-        ? `"Limpar agora" fecha ${antigos} tópico(s) de denúncia e de espelho abertos há 7 dias ou mais.`
-        : 'Nenhum tópico de denúncia ou de espelho aberto há 7 dias ou mais.'),
+        ? `"Limpar agora" fecha ${antigos} tópico(s) abertos há 7 dias ou mais, em qualquer canal do servidor.`
+        : 'Nenhum tópico aberto há 7 dias ou mais.'),
 
     el('ul', { class: 'topicos-lista' }, dados.servidores.map((servidor) => {
       const parte = Math.min(100, Math.round(servidor.ativos / servidor.limite * 100));
@@ -97,7 +97,7 @@ function blocoDeTopicos() {
           el('strong', null, servidor.nome),
           el('span', null, `${servidor.ativos} de ${servidor.limite}`)),
         barra(parte, `${parte}% do limite`),
-        el('small', null, `${servidor.deDenuncias} de denúncias e espelhos, ${servidor.antigos} com 7 dias ou mais.`));
+        el('small', null, `${servidor.deDenuncias} de denúncias e espelhos, ${servidor.antigos} com 7 dias ou mais (${servidor.deOutrosCanais || 0} em outros canais).`));
     })),
     dados.conferidoEm && el('p', { class: 'sub saude-rodape' }, `Conferido em ${formatarData(dados.conferidoEm)}.`));
 }

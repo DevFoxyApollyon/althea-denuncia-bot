@@ -125,7 +125,8 @@ function registrarRotasDeGestao(router, { client }) {
     res.json(await resumoDosTopicos(client, { forcar: req.query.atualizar === '1' }));
   }));
 
-  // Fecha só os tópicos de denúncia e espelho abertos há 7 dias ou mais. Roda
+  // Fecha os tópicos abertos há 7 dias ou mais, em qualquer canal (nos que não são de
+  // denúncia, só arquiva). Roda
   // por trás: um por segundo, para não bater no limite do Discord.
   router.post('/topicos/limpar', express.json({ limit: '4kb' }), assincrono(async (req, res) => {
     await acessoDoResponsavel(req, req.body?.guildId);
@@ -135,7 +136,7 @@ function registrarRotasDeGestao(router, { client }) {
     limparEspelhosAbertos(client, { soAntigos: true })
       .then(({ fechados }) => console.log(`[Espelhos] Limpeza pedida pelo site por ${req.usuario.id}: ${fechados} tópico(s) com 7 dias ou mais fechado(s).`))
       .catch(erro => console.warn(`[Espelhos] Limpeza pedida pelo site falhou: ${erro.message}`));
-    res.json({ ok: true, mensagem: 'Limpeza iniciada. Só os tópicos abertos há 7 dias ou mais são fechados.' });
+    res.json({ ok: true, mensagem: 'Limpeza iniciada. Só os tópicos abertos há 7 dias ou mais são fechados (nos outros canais, só arquivados).' });
   }));
 
   // ---------------------------------------------------------------- registro de logins

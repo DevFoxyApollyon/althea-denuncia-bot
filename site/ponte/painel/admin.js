@@ -108,6 +108,20 @@ function preencher(secao, linhas) {
   tbody.replaceChildren(...linhas);
 }
 
+// O que falta para o servidor aplicar pela gamemode, na ordem do guia.
+function proximoPasso(s, chaveMestra) {
+  if (!chaveMestra) return 'Passo 1: colocar PONTE_CHAVE_MESTRA no .env e reiniciar o bot.';
+  if (s.executor === 'pc') return 'Passo 1: /ponte gamemode executor tipo: Gamemode.';
+  if (!s.credenciais) return 'Passo 1: /ponte gamemode criar nome:';
+  if (!s.ultimoContatoEm) return 'Passo 2: instalar o include e o althea_credenciais.txt na gamemode.';
+  if (!s.online) return 'A gamemode parou de buscar: conferir o servidor (rcon althea status).';
+  if (s.pausado || s.pausadas) return 'Pausada: /ponte gamemode retomar (se foi selo inválido, conferir a credencial antes).';
+  if (s.incertos) return 'Resolver os incertos no Log Admin.';
+  if (s.modoTesteBot || s.modoTesteJogo) return 'Em teste: quando conferir, desligar o modo teste no bot e no jogo.';
+  if (s.semIp) return 'Funcionando. Falta restringir os IPs da credencial.';
+  return '✅ Aplicando de verdade.';
+}
+
 // Linha sem a coluna de botões.
 function linhaSimples(celulas) {
   const tr = linha(celulas);
@@ -166,6 +180,28 @@ const carregadores = {
       data(u.em), u.guild || u.guildId, u.acao, u.ip, { texto: u.detalhes ? JSON.stringify(u.detalhes) : '', classe: 'detalhes' }
     ])));
   },
+  async guia() {
+    const [{ chaveMestra, versaoInclude, servidores }, chave] = await Promise.all([api('/gamemode/guia'), api('/chave')]);
+    $('#chave-situacao').textContent = chave.configurada
+      ? `Configurada · impressão ${chave.impressao} · ${chave.credenciais} credencial(is)`
+      : 'Não configurada: a API da gamemode responde 503.';
+    $('#chave-situacao').className = chave.configurada ? 'online' : 'atencao';
+    $('#chave-trocar').textContent = chave.configurada ? 'Trocar chave' : 'Gerar chave';
+    $('#guia-versao').textContent = versaoInclude;
+    $('#guia-chave').hidden = chaveMestra;
+    $('#guia-chave').textContent = chaveMestra ? '' : '⚠️ PONTE_CHAVE_MESTRA não está no .env do bot: a API da gamemode responde 503 e não dá para criar credencial. Comece pelo passo 1.';
+
+    $('#guia-servidores tbody').replaceChildren(...servidores.map(s => linhaSimples([
+      s.nome || s.guildId,
+      { texto: s.executor, classe: s.executor === 'pc' ? 'atencao' : '' },
+      { texto: s.credenciais ? `${s.credenciais} ativa(s)${s.semIp ? ' · qualquer IP' : ''}` : 'nenhuma', classe: s.credenciais ? '' : 'atencao' },
+      { texto: s.online ? '● online' : s.ultimoContatoEm ? `○ offline desde ${data(s.ultimoContatoEm)}` : 'nunca conectou', classe: s.online ? 'online' : 'atencao' },
+      s.modoTesteBot ? 'ligado' : 'desligado',
+      s.modoTesteJogo === null ? '—' : s.modoTesteJogo ? 'ligado' : 'desligado',
+      `${s.aplicadas} aplicada(s) · ${s.simuladas} simulada(s)${s.incertos ? ` · ${s.incertos} incerto(s)` : ''}`,
+      { texto: proximoPasso(s, chaveMestra), classe: 'detalhes' }
+    ])));
+  },
   async uso(continuar = false) {
     const filtro = new FormData($('#filtro-uso'));
     const params = new URLSearchParams();
@@ -212,6 +248,23 @@ async function iniciar() {
   const statusPedido = $('#filtro-pedidos select');
   for (const status of STATUS_PEDIDO) statusPedido.append(new Option(status, status));
   $('#filtro-pedidos').addEventListener('submit', (e) => { e.preventDefault(); carregar('gamemode'); });
+  $('#chave-trocar').addEventListener('click', async () => {
+    const texto = prompt('A chave nova vale na hora e as credenciais são recifradas. Depois você precisa colar a chave no .env do seu PC antes do próximo pacote.\n\nDigite TROCAR para continuar:');
+    if (texto !== 'TROCAR') return;
+    try {
+      const r = await post('/chave/trocar', { confirmar: 'TROCAR' });
+      $('#chave-linha').textContent = `PONTE_CHAVE_MESTRA=${r.chave}`;
+      $('#chave-resumo').textContent = [
+        `Impressão nova: ${r.impressao}.`,
+        `${r.recifradas} credencial(is) recifrada(s).`,
+        r.ilegiveis ? `${r.ilegiveis} credencial(is) já estavam ilegíveis e precisam ser renovadas no Discord.` : '',
+        r.envGravado ? 'Gravada também no .env da hospedagem.' : 'Não foi possível gravar no .env da hospedagem: ela vale até o bot reiniciar. Coloque no .env e suba o pacote.'
+      ].filter(Boolean).join(' ');
+      $('#chave-nova').hidden = false;
+      aviso('Chave mestra trocada.');
+      carregar('guia');
+    } catch (e) { aviso(e.message); }
+  });
   for (const botao of document.querySelectorAll('nav button')) botao.addEventListener('click', () => trocarAba(botao.dataset.aba));
 
   $('#filtro-uso').addEventListener('submit', (e) => { e.preventDefault(); ultimoUso = null; carregar('uso'); });

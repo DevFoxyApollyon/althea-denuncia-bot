@@ -719,3 +719,42 @@ test('punição parada na fila: avisa uma vez e só de novo depois de 2 horas', 
   await avisarParadas(clienteFalso, agora);
   assert.ok((await m.PontePunicao.findById(punicao._id).lean()).alertaParadaEm > new Date(agora - 60 * 1000), 'avisou de novo depois de 2h');
 });
+
+// ---------- limpeza de tópicos ----------
+
+const DIA = 24 * 60 * 60 * 1000;
+
+// Tópico falso que registra o que a limpeza fez com ele.
+function topico(id, parentId, dias, nome = `tópico ${id}`) {
+  const feito = [];
+  return {
+    id, name: nome, parentId, createdTimestamp: Date.now() - dias * DIA, archived: false, locked: false, feito,
+    isThread: () => true,
+    guild: { channels: { cache: new Map() } },
+    setLocked: async () => { feito.push('trancou'); },
+    setArchived: async () => { feito.push('arquivou'); },
+    edit: async () => { feito.push('arquivou-espelho'); }
+  };
+}
+
+test('limpeza: tópico de 7 dias ou mais em qualquer canal é fechado; nos outros canais só arquiva', async () => {
+  const Config = require('../models/Config');
+  await Config.create({ guildId: '50000', channels: { pc: 'canal-pc', mobile: 'canal-mobile' } });
+  const doCanalDeDenuncia = topico('t1', 'canal-pc', 8);
+  const deOutroCanal = topico('t2', 'canal-geral', 10);
+  const novoEmOutroCanal = topico('t3', 'canal-geral', 2);
+  const threads = new Map([doCanalDeDenuncia, deOutroCanal, novoEmOutroCanal].map(t => [t.id, t]));
+  const guild = { id: '50000', name: 'Servidor', channels: { fetchActiveThreads: async () => ({ threads }), cache: new Map() } };
+  const client = { guilds: { cache: new Map([['50000', guild]]) } };
+
+  const { resumoDosTopicos, limparEspelhosAbertos } = require('../utils/espelhos');
+  const [resumo] = (await resumoDosTopicos(client, { forcar: true })).servidores;
+  assert.deepEqual([resumo.ativos, resumo.antigos, resumo.deOutrosCanais, resumo.deDenuncias], [3, 2, 1, 1]);
+
+  const { fechados, porCanal } = await limparEspelhosAbertos(client, { soAntigos: true });
+  assert.equal(fechados, 2);
+  assert.deepEqual([porCanal.antigo, porCanal.outro], [1, 1]);
+  assert.deepEqual(doCanalDeDenuncia.feito, ['trancou', 'arquivou'], 'canal de denúncia: tranca e arquiva');
+  assert.deepEqual(deOutroCanal.feito, ['arquivou'], 'outro canal: só arquiva, sem trancar');
+  assert.deepEqual(novoEmOutroCanal.feito, [], 'mais novo que 7 dias: não mexe');
+});

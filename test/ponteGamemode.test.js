@@ -1100,3 +1100,89 @@ test('/admin gamemode: pedidos recentes com filtro por status e auditoria gm_*',
     assert.ok(uso.every(u => u.acao.startsWith('gm_')));
   });
 });
+
+test('/admin guia da gamemode: só o dono; situação de cada servidor sem segredo', async () => {
+  const { conexao } = await guildGm('100000000000000893');
+  await m.PonteConexaoGm.updateOne({ _id: conexao._id }, { $set: { ultimoContatoEm: new Date(), versaoInclude: '1.0.0', modoTesteInformado: true } });
+  await punicaoComPedidos('100000000000000893', 2, { status: 'simulada' });
+  await m.PonteServidor.updateOne({ guildId: '100000000000000894' }, { $set: { ativo: true, executor: 'pc' } }, { upsert: true });
+  await comAdmin(async (pedir) => {
+    assert.equal((await pedir('/gamemode/guia', { usuario: '123' })).status, 404);
+    const { status, corpo } = await pedir('/gamemode/guia');
+    assert.equal(status, 200);
+    assert.equal(corpo.chaveMestra, true);
+    assert.equal(corpo.versaoInclude, require('../services/ponteSamp/constantes').VERSAO_INCLUDE_GM);
+    const pronto = corpo.servidores.find(s => s.guildId === '100000000000000893');
+    assert.deepEqual(
+      [pronto.executor, pronto.credenciais, pronto.semIp, pronto.online, pronto.modoTesteBot, pronto.modoTesteJogo, pronto.simuladas, pronto.versaoInclude],
+      ['gamemode', 1, true, true, true, true, 2, '1.0.0']
+    );
+    const doPc = corpo.servidores.find(s => s.guildId === '100000000000000894');
+    assert.deepEqual([doPc.executor, doPc.credenciais, doPc.online, doPc.modoTesteJogo], ['pc', 0, false, null]);
+    assert.equal(JSON.stringify(corpo).includes('segredo'), false);
+  });
+});
+
+test('versão do include no bot é a mesma do ALTHEA_VERSAO do .inc', () => {
+  const inc = require('node:fs').readFileSync(require('node:path').join(__dirname, '../gamemode/althea_ponte/althea_ponte.inc'), 'utf8');
+  assert.equal(inc.match(/#define ALTHEA_VERSAO "([^"]+)"/)[1], require('../services/ponteSamp/constantes').VERSAO_INCLUDE_GM);
+});
+
+// ---------- Chave mestra pelo /admin ----------
+
+test('chave mestra: a linha do .env é trocada ou criada sem mexer no resto', () => {
+  const { comChave } = require('../services/ponteSamp/chaveMestra');
+  assert.equal(comChave('A=1\nPONTE_CHAVE_MESTRA=velha\nB=2\n', 'nova'), 'A=1\nPONTE_CHAVE_MESTRA=nova\nB=2\n');
+  assert.equal(comChave('A=1\n', 'nova'), 'A=1\nPONTE_CHAVE_MESTRA=nova\n');
+  assert.equal(comChave('', 'nova'), 'PONTE_CHAVE_MESTRA=nova\n');
+});
+
+test('/admin troca a chave mestra: credenciais continuam valendo e a chave só sai uma vez', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const arquivoEnv = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'althea-')), '.env');
+  fs.writeFileSync(arquivoEnv, 'DISCORD_TOKEN=x\nPONTE_CHAVE_MESTRA=antiga\n');
+  const anterior = process.env.PONTE_CHAVE_MESTRA;
+
+  const { conexao, segredo } = await guildGm('895');
+  assert.equal((await chamar(conexao, segredo, '/pedidos')).status, 200);
+
+  const { criarAdmin } = require('../site/ponte/admin');
+  const app = express();
+  app.use((req, res, next) => { req.usuario = { id: req.get('X-Usuario'), nome: 'Dono' }; req.sid = 's'; next(); });
+  app.use('/admin', criarAdmin({ client: null, config: { segredo: 'z'.repeat(40) }, log: null, arquivoEnv }));
+  const servidor = app.listen(0);
+  const url = `http://127.0.0.1:${servidor.address().port}/admin/api`;
+  const pedir = (caminho, opcoes = {}) => fetch(`${url}${caminho}`, {
+    method: opcoes.metodo || 'GET',
+    headers: { 'X-Usuario': opcoes.usuario || DONO, 'Content-Type': 'application/json', ...(opcoes.csrf ? { 'X-CSRF': opcoes.csrf } : {}) },
+    body: opcoes.corpo ? JSON.stringify(opcoes.corpo) : undefined
+  }).then(async r => ({ status: r.status, corpo: await r.json() }));
+  try {
+    const antes = (await pedir('/chave')).corpo;
+    assert.equal(antes.configurada, true);
+    assert.equal(antes.impressao, cifra.impressaoDaChave(anterior));
+    assert.equal(JSON.stringify(antes).includes(anterior), false, 'a chave em si nunca sai no GET');
+    assert.equal((await pedir('/chave', { usuario: '123' })).status, 404);
+
+    const { csrf } = (await pedir('/csrf')).corpo;
+    assert.equal((await pedir('/chave/trocar', { metodo: 'POST', corpo: {}, csrf })).status, 400, 'sem TROCAR');
+    const r = await pedir('/chave/trocar', { metodo: 'POST', corpo: { confirmar: 'TROCAR' }, csrf });
+    assert.equal(r.status, 200);
+    assert.notEqual(r.corpo.chave, anterior);
+    assert.equal(Buffer.from(r.corpo.chave, 'base64').length, 32);
+    assert.equal(r.corpo.envGravado, true);
+    assert.ok(r.corpo.recifradas >= 1);
+    assert.equal(process.env.PONTE_CHAVE_MESTRA, r.corpo.chave, 'vale na hora');
+    assert.equal(fs.readFileSync(arquivoEnv, 'utf8'), `DISCORD_TOKEN=x\nPONTE_CHAVE_MESTRA=${r.corpo.chave}\n`);
+    assert.equal((await pedir('/chave')).corpo.impressao, r.corpo.impressao);
+    assert.ok(!(await m.PonteUso.find({ acao: 'gm_credencial', 'detalhes.sub': 'chave_mestra' }).lean()).some(u => JSON.stringify(u).includes(r.corpo.chave)), 'auditoria sem a chave');
+  } finally {
+    servidor.close();
+  }
+
+  // A mesma credencial (mesmo segredo no servidor do jogo) continua autenticando.
+  assert.equal((await chamar(conexao, segredo, '/pedidos')).status, 200);
+  assert.equal(cifra.decifrar((await m.PonteConexaoGm.findById(conexao._id).lean()).segredoCifrado), segredo);
+});
