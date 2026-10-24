@@ -65,7 +65,7 @@ const LIMITE_PCS_PADRAO = 3;
 
 const STATUS_PUNICAO = ['aceita', 'executando', 'aplicada', 'cancelada'];
 const STATUS_INSTALACAO = ['ativa', 'revogada', 'bloqueada'];
-const ACOES_USO = ['fila', 'editar', 'executar', 'aplicar', 'cancelar', 'auth_falhou', 'hwid_diferente', 'guild_inativa', 'ping', 'codigo_negado', 'retirar', 'remover', 'limpar', 'regras', 'nota', 'relatorio',
+const ACOES_USO = ['fila', 'editar', 'executar', 'aplicar', 'cancelar', 'auth_falhou', 'hwid_diferente', 'guild_inativa', 'ping', 'codigo_negado', 'retirar', 'remover', 'limpar', 'regras', 'nota', 'relatorio', 'ativar', 'apagar',
   'gm_busca', 'gm_resultado', 'gm_auth_falhou', 'gm_selo_invalido', 'gm_enviar', 'gm_cancelar',
   'gm_incerto_ok', 'gm_incerto_reenviar', 'gm_credencial', 'gm_config'];
 

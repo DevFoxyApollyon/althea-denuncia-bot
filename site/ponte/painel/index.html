@@ -2,7 +2,9 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1210" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f2f4f1" media="(prefers-color-scheme: light)">
   <meta name="robots" content="noindex">
   <title>Althea · Ponte do jogo</title>
   <link rel="stylesheet" href="/admin/admin.css">
@@ -10,14 +12,19 @@
 </head>
 <body>
   <header>
-    <h1>Ponte do jogo</h1>
-    <a class="voltar" href="/">← Voltar ao site</a>
-    <nav>
-      <button type="button" data-aba="servidores" class="ativa">Servidores</button>
-      <button type="button" data-aba="instalacoes">Instalações</button>
+    <div class="topo">
+      <div class="marca">
+        <h1>Ponte do jogo</h1>
+        <span id="papel" class="selo"></span>
+      </div>
+      <a class="voltar" href="/">← Voltar ao site</a>
+    </div>
+    <nav aria-label="Seções do painel">
+      <button type="button" data-aba="geral" class="ativa">Visão geral</button>
       <button type="button" data-aba="gamemode">Gamemode</button>
-      <button type="button" data-aba="guia">Instalar na gamemode</button>
-      <button type="button" data-aba="uso">Uso e auditoria</button>
+      <button type="button" data-aba="guia">Instalar</button>
+      <button type="button" data-aba="instalacoes">PCs</button>
+      <button type="button" data-aba="uso">Auditoria</button>
       <button type="button" data-aba="codigos">Códigos</button>
       <button type="button" data-aba="motivos">Motivos</button>
       <button type="button" data-aba="acessos" class="so-dono" hidden>Acessos</button>
@@ -26,11 +33,30 @@
   <main>
     <p id="aviso" role="status"></p>
 
-    <section id="aba-servidores">
-      <table><thead><tr><th>Servidor</th><th>ID</th><th>Ativo</th><th>Ativado em</th><th>PCs</th><th></th></tr></thead><tbody></tbody></table>
+    <section id="aba-geral" class="sem-moldura">
+      <div id="numeros" class="numeros" aria-label="Resumo"></div>
+
+      <div class="duas-colunas">
+        <div class="bloco">
+          <div class="bloco-topo">
+            <h2>Servidores</h2>
+            <span class="dica" id="servidores-total"></span>
+          </div>
+          <div id="lista-servidores" class="cartoes"></div>
+        </div>
+
+        <div class="bloco">
+          <div class="bloco-topo">
+            <h2>Atividade recente</h2>
+            <button type="button" class="leve" data-aba-link="uso">Ver tudo</button>
+          </div>
+          <ol id="atividade" class="atividade"></ol>
+        </div>
+      </div>
     </section>
 
     <section id="aba-instalacoes" hidden>
+      <h2>PCs da staff (mod Lua)</h2>
       <table><thead><tr><th>PC</th><th>Servidor</th><th>Status</th><th>Criado por</th><th>Último uso</th><th>IP</th><th>HWID</th><th>Token</th><th>Online</th><th></th></tr></thead><tbody></tbody></table>
     </section>
 
@@ -114,6 +140,7 @@ public OnRconCommand(cmd[]) { if (Althea_ComandoRcon(cmd)) return 1; /* ... */ }
     </section>
 
     <section id="aba-uso" hidden>
+      <h2>Uso e auditoria</h2>
       <form id="filtro-uso">
         <label>Guild <input name="guildId" inputmode="numeric" placeholder="ID"></label>
         <label>Ação <select name="acao"><option value="">todas</option></select></label>
@@ -124,6 +151,7 @@ public OnRconCommand(cmd[]) { if (Althea_ComandoRcon(cmd)) return 1; /* ... */ }
     </section>
 
     <section id="aba-acessos" hidden>
+      <h2>Quem abre este painel</h2>
       <p class="dica">Quem estiver aqui abre este painel e vê o link "Painel da ponte" no menu do site. Só você (dono do bot) gerencia esta lista, troca a chave mestra, gera códigos e desativa servidores.</p>
       <form id="novo-acesso">
         <label>ID do Discord <input name="userId" inputmode="numeric" pattern="[0-9]{15,21}" placeholder="657014871228940336" required></label>
@@ -133,6 +161,7 @@ public OnRconCommand(cmd[]) { if (Althea_ComandoRcon(cmd)) return 1; /* ... */ }
     </section>
 
     <section id="aba-motivos" hidden>
+      <h2>Tabela de motivos</h2>
       <p class="dica">Vale para todos os servidores. Sinônimos separados por vírgula. Tempban em dias (0 = permanente, vira /blackban); cadeia em minutos. <span id="motivos-situacao"></span></p>
       <table><thead><tr><th>Motivo</th><th>Sinônimos</th><th>Tipo</th><th>Tempo</th><th>Avisos</th><th></th></tr></thead><tbody></tbody></table>
       <div class="acoes">
@@ -143,6 +172,7 @@ public OnRconCommand(cmd[]) { if (Althea_ComandoRcon(cmd)) return 1; /* ... */ }
     </section>
 
     <section id="aba-codigos" hidden>
+      <h2>Códigos de ativação</h2>
       <form id="gerar-codigo" class="so-dono" hidden>
         <label>Validade (dias) <input name="validadeDias" type="number" min="1" max="365"></label>
         <label>Limite de PCs <input name="limitePcs" type="number" min="1" max="50"></label>

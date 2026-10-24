@@ -101,10 +101,10 @@ async function salvar(botao) {
   });
 }
 
-// Situação da linha: "ok" (configurada), "vazio" (opcional sem valor) ou
+// Situação da linha: "ok" (configurada), "desligado" (opcional sem valor; não usar "vazio", que é a classe dos estados vazios do site) ou
 // "falta" (obrigatória sem valor). "mudou" marca o que ainda não foi salvo.
 function linha({ nome, obrigatorio, explica }, id, controle, extra, { valor = true, mudou = false } = {}) {
-  const situacao = valor ? 'ok' : obrigatorio ? 'falta' : 'vazio';
+  const situacao = valor ? 'ok' : obrigatorio ? 'falta' : 'desligado';
   return el('div', { class: `bot-linha ${situacao}${mudou ? ' mudou' : ''}` },
     el('div', { class: 'bot-rotulo' },
       el('label', { for: id },

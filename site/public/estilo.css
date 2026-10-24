@@ -1967,6 +1967,10 @@ button, a.botao { min-height: 32px; padding: 0 12px; border-radius: var(--raio);
 .so-icone { width: 32px; min-height: 32px; padding: 0; }
 
 input[type="text"], input[type="search"], input[type="number"], select, textarea { min-height: 32px; border-radius: var(--raio); font-size: 13.5px; }
+/* Select: a altura mínima centraliza o texto. Com o respiro de 8 px em cima e embaixo, o
+   texto (e mais ainda nome de servidor com emoji, como 👑) era cortado. */
+select { padding-block: 0; }
+.menu-servidor { min-height: 38px; }
 :root:not([data-tema="claro"]) input[type="text"], :root:not([data-tema="claro"]) input[type="search"], :root:not([data-tema="claro"]) input[type="number"],
 :root:not([data-tema="claro"]) select, :root:not([data-tema="claro"]) textarea, :root:not([data-tema="claro"]) .compositor { border-color: var(--linha-forte); background: var(--trilho); box-shadow: none; }
 :root:not([data-tema="claro"]) input:focus-visible, :root:not([data-tema="claro"]) select:focus-visible, :root:not([data-tema="claro"]) textarea:focus-visible { outline: none; border-color: var(--marca); box-shadow: 0 0 0 3px var(--marca-suave); }

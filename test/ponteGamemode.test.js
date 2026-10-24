@@ -1219,3 +1219,61 @@ test('/admin acessos: o dono libera alguém pelo ID; a pessoa entra, mas não fa
     assert.ok(await m.PonteUso.exists({ acao: 'gm_config', 'detalhes.sub': 'acesso_admin_adicionar', 'detalhes.userId': AMIGO }));
   });
 });
+
+// ---------- /admin: quem ativou e último uso ----------
+
+test('/admin servidores: mostra quem ativou e o último uso (sem contar a rotina)', async () => {
+  const GUILD = '100000000000000896';
+  await m.PonteServidor.updateOne({ guildId: GUILD }, { $set: { ativo: true, ativadoEm: new Date(), ativadoPor: DONO } }, { upsert: true });
+  const { conexao } = await guildGm(GUILD);
+  // Datas à frente: a atividade mostra os 25 mais recentes e os outros testes acabaram de registrar.
+  await m.PonteUso.create([
+    { guildId: GUILD, acao: 'ativar', em: new Date(Date.now() + 10e3), detalhes: { por: DONO, nome: 'Foxy' } },
+    { guildId: GUILD, acao: 'gm_enviar', em: new Date(Date.now() + 20e3), detalhes: { por: '300000000000000001', nome: 'João Staff' } },
+    { guildId: GUILD, acao: 'gm_resultado', em: new Date(Date.now() + 30e3), detalhes: { conexaoId: String(conexao._id) } },
+    // Rotina: não conta como último uso.
+    { guildId: GUILD, acao: 'gm_busca', em: new Date(Date.now() + 40e3), detalhes: { conexaoId: String(conexao._id) } }
+  ]);
+  await comAdmin(async (pedir) => {
+    const servidor = (await pedir('/servidores')).corpo.find(s => s.guildId === GUILD);
+    assert.equal(servidor.ativadoPor.id, DONO);
+    assert.equal(servidor.ultimoUso.acao, 'gm_resultado');
+    assert.deepEqual(servidor.ultimoUso.quem, { tipo: 'gamemode', nome: `GM ${GUILD}` });
+    assert.equal(servidor.executor, 'gamemode');
+
+    const atividade = (await pedir('/atividade')).corpo.filter(a => a.guildId === GUILD);
+    assert.deepEqual(atividade.map(a => a.acao), ['gm_resultado', 'gm_enviar', 'ativar']);
+    assert.deepEqual(atividade[1].quem, { tipo: 'pessoa', nome: 'João Staff', id: '300000000000000001' });
+    assert.equal((await pedir('/atividade', { usuario: '123' })).status, 404);
+  });
+});
+
+// ---------- /admin: apagar PC e código ----------
+
+test('/admin apaga PC e código de vez (só o dono) e registra na auditoria', async () => {
+  const gestao = require('../services/ponteSamp/gestao');
+  const PonteInstalacao = require('../models/PonteInstalacao');
+  const PonteCodigo = require('../models/PonteCodigo');
+  const AMIGO = '300000000000000779';
+  await guildGm('897');
+  const { instalacao } = await gestao.criarInstalacao({ guildId: '897', nome: 'PC velho', criadoPor: DONO });
+  const { doc: codigo } = await gestao.criarCodigo({ criadoPor: DONO });
+  await comAdmin(async (pedir) => {
+    const { csrf } = (await pedir('/csrf')).corpo;
+    await pedir('/acessos', { metodo: 'POST', corpo: { userId: AMIGO }, csrf });
+    const doAmigo = (await pedir('/csrf', { usuario: AMIGO })).corpo.csrf;
+    assert.equal((await pedir(`/instalacoes/${instalacao._id}/apagar`, { usuario: AMIGO, metodo: 'POST', csrf: doAmigo })).status, 403, 'liberado não apaga');
+    assert.equal((await pedir(`/codigos/${codigo._id}/apagar`, { usuario: AMIGO, metodo: 'POST', csrf: doAmigo })).status, 403);
+
+    assert.equal((await pedir(`/instalacoes/${instalacao._id}/apagar`, { metodo: 'POST', csrf })).corpo.ok, true);
+    assert.equal((await pedir(`/instalacoes/${instalacao._id}/apagar`, { metodo: 'POST', csrf })).corpo.ok, false, 'já apagado');
+    assert.equal(await PonteInstalacao.exists({ _id: instalacao._id }), null);
+    assert.equal((await pedir(`/codigos/${codigo._id}/apagar`, { metodo: 'POST', csrf })).corpo.ok, true);
+    assert.equal(await PonteCodigo.exists({ _id: codigo._id }), null);
+    assert.equal((await pedir('/codigos/xyz/apagar', { metodo: 'POST', csrf })).status, 400);
+
+    const registro = await m.PonteUso.findOne({ acao: 'apagar', 'detalhes.sub': 'apagar_pc', 'detalhes.id': String(instalacao._id) }).lean();
+    assert.deepEqual([registro.guildId, registro.detalhes.item, registro.detalhes.por], ['897', 'PC velho', DONO]);
+    await pedir(`/acessos/${AMIGO}/remover`, { metodo: 'POST', csrf });
+  });
+});

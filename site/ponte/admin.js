@@ -65,15 +65,73 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   });
   const idValido = (id) => mongoose.isValidObjectId(id);
 
+  // Nome de quem fez algo, pelo ID do Discord (cache do bot; se não tiver, pergunta ao Discord).
+  async function nomesDe(ids) {
+    const unicos = [...new Set(ids.filter(id => /^\d{15,21}$/.test(String(id || ''))))];
+    const pares = await Promise.all(unicos.map(async (id) => {
+      const usuario = client?.users?.cache?.get(id) || await client?.users?.fetch?.(id).catch(() => null);
+      return [id, usuario?.globalName || usuario?.username || ''];
+    }));
+    return new Map(pares);
+  }
+
+  // Quem fez cada registro da auditoria: o PC, a gamemode ou a pessoa do Discord.
+  async function autoresDe(registros) {
+    const instalacoes = [...new Set(registros.map(u => u.instalacaoId && String(u.instalacaoId)).filter(Boolean))];
+    const conexoes = [...new Set(registros.map(u => u.detalhes?.conexaoId).filter(id => idValido(id)))];
+    const [pcs, gms, nomes] = await Promise.all([
+      instalacoes.length ? PonteInstalacao.find({ _id: { $in: instalacoes } }, { nome: 1 }).lean() : [],
+      conexoes.length ? PonteConexaoGm.find({ _id: { $in: conexoes } }, { nome: 1 }).lean() : [],
+      nomesDe(registros.map(u => u.detalhes?.por || u.detalhes?.userId))
+    ]);
+    const nomePc = new Map(pcs.map(p => [String(p._id), p.nome]));
+    const nomeGm = new Map(gms.map(c => [String(c._id), c.nome]));
+    return (u) => {
+      if (u.instalacaoId && nomePc.has(String(u.instalacaoId))) return { tipo: 'pc', nome: nomePc.get(String(u.instalacaoId)) };
+      const por = u.detalhes?.por;
+      if (u.detalhes?.nome || por) return { tipo: 'pessoa', nome: u.detalhes?.nome || nomes.get(por) || por, id: por || '' };
+      if (nomeGm.has(String(u.detalhes?.conexaoId))) return { tipo: 'gamemode', nome: nomeGm.get(String(u.detalhes.conexaoId)) };
+      return { tipo: '', nome: '' };
+    };
+  }
+
+  // Ações que acontecem sozinhas o tempo todo: não contam como "último uso" nem entram na atividade.
+  const ACOES_ROTINA = ['ping', 'fila', 'gm_busca', 'relatorio'];
+
   router.get('/api/servidores', rota(async (req, res) => {
-    const [servidores, contagem] = await Promise.all([
+    const [servidores, contagem, ultimos] = await Promise.all([
       PonteServidor.find().sort({ ativadoEm: -1 }).limit(500).lean(),
-      PonteInstalacao.aggregate([{ $match: { status: 'ativa' } }, { $group: { _id: '$guildId', total: { $sum: 1 } } }])
+      PonteInstalacao.aggregate([{ $match: { status: 'ativa' } }, { $group: { _id: '$guildId', total: { $sum: 1 } } }]),
+      PonteUso.aggregate([
+        { $match: { guildId: { $ne: '' }, acao: { $nin: ACOES_ROTINA } } },
+        { $sort: { em: -1 } },
+        { $group: { _id: '$guildId', registro: { $first: '$$ROOT' } } }
+      ])
     ]);
     const pcs = new Map(contagem.map(c => [c._id, c.total]));
-    res.json(servidores.map(s => ({
-      guildId: s.guildId, nome: nomeGuild(s.guildId), ativo: s.ativo, ativadoEm: s.ativadoEm,
-      limitePcs: s.limitePcs, pcs: pcs.get(s.guildId) || 0
+    const ultimoPorGuild = new Map(ultimos.map(u => [u._id, u.registro]));
+    const [autor, ativadores] = await Promise.all([
+      autoresDe([...ultimoPorGuild.values()]),
+      nomesDe(servidores.map(s => s.ativadoPor))
+    ]);
+    res.json(servidores.map(s => {
+      const ultimo = ultimoPorGuild.get(s.guildId);
+      return {
+        guildId: s.guildId, nome: nomeGuild(s.guildId), ativo: s.ativo, ativadoEm: s.ativadoEm,
+        ativadoPor: s.ativadoPor ? { id: s.ativadoPor, nome: ativadores.get(s.ativadoPor) || '' } : null,
+        limitePcs: s.limitePcs, pcs: pcs.get(s.guildId) || 0, executor: s.executor || 'pc',
+        ultimoUso: ultimo ? { em: ultimo.em, acao: ultimo.acao, quem: autor(ultimo) } : null
+      };
+    }));
+  }));
+
+  // O que aconteceu por último na ponte, em todos os servidores (sem as ações de rotina).
+  router.get('/api/atividade', rota(async (req, res) => {
+    const lista = await PonteUso.find({ acao: { $nin: ACOES_ROTINA } }).sort({ em: -1 }).limit(25).lean();
+    const autor = await autoresDe(lista);
+    res.json(lista.map(u => ({
+      em: u.em, guildId: u.guildId, guild: nomeGuild(u.guildId), acao: u.acao, quem: autor(u),
+      contaId: u.contaId, nick: u.nick, comando: u.comando, sub: u.detalhes?.sub || ''
     })));
   }));
 
@@ -86,10 +144,11 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
 
   router.get('/api/instalacoes', rota(async (req, res) => {
     const lista = await PonteInstalacao.find().sort({ criadoEm: -1 }).limit(500).lean();
+    const nomes = await nomesDe(lista.map(i => i.criadoPor));
     const agora = Date.now();
     res.json(lista.map(i => ({
       id: String(i._id), nome: i.nome, guildId: i.guildId, guild: nomeGuild(i.guildId), status: i.status,
-      criadoPor: i.criadoPor, criadoEm: i.criadoEm, ultimoUsoEm: i.ultimoUsoEm, ultimoIp: i.ultimoIp,
+      criadoPor: nomes.get(i.criadoPor) || i.criadoPor, criadoEm: i.criadoEm, ultimoUsoEm: i.ultimoUsoEm, ultimoIp: i.ultimoIp,
       hwid: i.hwidHash ? i.hwidHash.slice(0, 8) : '', ultimos4: i.ultimos4, versaoScript: i.versaoScript,
       online: !!i.ultimoPingEm && agora - new Date(i.ultimoPingEm).getTime() < ONLINE_MS
     })));
@@ -151,6 +210,22 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     log?.info?.(`Tabela de motivos da ponte salva pelo site (${salvo.tabela.length} motivos).`);
     res.json({ ok: true, propria: salvo.propria, total: salvo.tabela.length });
   }));
+
+  // Apagar de vez um PC ou um código (some da lista). O PC apagado perde o token na hora,
+  // como se fosse revogado. Fica registrado na auditoria quem apagou o quê.
+  const apagar = (Modelo, tipo, campos) => rota(async (req, res) => {
+    if (!idValido(req.params.id)) return res.status(400).json({ erro: 'ID inválido.' });
+    const doc = await Modelo.findOneAndDelete({ _id: req.params.id }, { projection: campos }).lean();
+    if (doc) {
+      await PonteUso.create({
+        guildId: doc.guildId || doc.usadoPorGuild || '', acao: 'apagar',
+        detalhes: { sub: `apagar_${tipo}`, id: req.params.id, item: doc.nome || (doc.ultimos4 ? `…${doc.ultimos4}` : ''), por: req.usuario.id }
+      }).catch(() => {});
+    }
+    res.json({ ok: !!doc });
+  });
+  router.post('/api/instalacoes/:id/apagar', soDono, apagar(PonteInstalacao, 'pc', { nome: 1, guildId: 1, ultimos4: 1 }));
+  router.post('/api/codigos/:id/apagar', soDono, apagar(PonteCodigo, 'codigo', { ultimos4: 1, usadoPorGuild: 1 }));
 
   router.post('/api/codigos/:id/expirar', soDono, rota(async (req, res) => {
     if (!idValido(req.params.id)) return res.status(400).json({ erro: 'ID inválido.' });

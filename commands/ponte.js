@@ -52,6 +52,11 @@ async function handleAtivarSlash(interaction) {
   });
   if (erro) return interaction.editReply(`❌ ${erro}`);
   log.info(`Ponte ativada em ${interaction.guild.name} (${interaction.guild.id}) por ${interaction.user.tag}`);
+  // Aparece no painel do dono (/admin) como quem ativou a ponte neste servidor.
+  await PonteUso.create({
+    guildId: interaction.guild.id, acao: 'ativar',
+    detalhes: { por: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username }
+  }).catch(() => {});
   return interaction.editReply(`✅ Ponte com o jogo ativada. Limite: ${servidor.limitePcs} PC(s). Agora use \`/instalacao nova\`.`);
 }
 
