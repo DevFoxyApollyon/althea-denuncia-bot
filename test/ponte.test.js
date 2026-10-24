@@ -743,18 +743,24 @@ test('limpeza: tópico de 7 dias ou mais em qualquer canal é fechado; nos outro
   const doCanalDeDenuncia = topico('t1', 'canal-pc', 8);
   const deOutroCanal = topico('t2', 'canal-geral', 10);
   const novoEmOutroCanal = topico('t3', 'canal-geral', 2);
-  const threads = new Map([doCanalDeDenuncia, deOutroCanal, novoEmOutroCanal].map(t => [t.id, t]));
+  const denunciaAbertaAntiga = topico('t4', 'canal-pc', 9);
+  const denunciaAbertaNova = topico('t5', 'canal-pc', 3);
+  const Denuncia = require('../models/Denuncia');
+  await Denuncia.collection.insertMany([{ guildId: '50000', threadId: 't4', status: 'pendente' }, { guildId: '50000', threadId: 't5', status: 'pendente' }]);
+  const threads = new Map([doCanalDeDenuncia, deOutroCanal, novoEmOutroCanal, denunciaAbertaAntiga, denunciaAbertaNova].map(t => [t.id, t]));
   const guild = { id: '50000', name: 'Servidor', channels: { fetchActiveThreads: async () => ({ threads }), cache: new Map() } };
   const client = { guilds: { cache: new Map([['50000', guild]]) } };
 
   const { resumoDosTopicos, limparEspelhosAbertos } = require('../utils/espelhos');
   const [resumo] = (await resumoDosTopicos(client, { forcar: true })).servidores;
-  assert.deepEqual([resumo.ativos, resumo.antigos, resumo.deOutrosCanais, resumo.deDenuncias], [3, 2, 1, 1]);
+  assert.deepEqual([resumo.ativos, resumo.antigos, resumo.deOutrosCanais, resumo.deDenuncias], [5, 3, 1, 3]);
 
   const { fechados, porCanal } = await limparEspelhosAbertos(client, { soAntigos: true });
-  assert.equal(fechados, 2);
-  assert.deepEqual([porCanal.antigo, porCanal.outro], [1, 1]);
+  assert.equal(fechados, 3);
+  assert.deepEqual([porCanal.antigo, porCanal.outro, porCanal.denuncia], [1, 1, 1]);
   assert.deepEqual(doCanalDeDenuncia.feito, ['trancou', 'arquivou'], 'canal de denúncia: tranca e arquiva');
   assert.deepEqual(deOutroCanal.feito, ['arquivou'], 'outro canal: só arquiva, sem trancar');
   assert.deepEqual(novoEmOutroCanal.feito, [], 'mais novo que 7 dias: não mexe');
+  assert.deepEqual(denunciaAbertaAntiga.feito, ['trancou', 'arquivou'], 'denúncia aberta com 7 dias ou mais: tranca e arquiva');
+  assert.deepEqual(denunciaAbertaNova.feito, [], 'denúncia aberta recente: não mexe');
 });

@@ -44,7 +44,7 @@ export async function carregarSaude({ atualizarTopicos = false } = {}) {
 async function limparTopicos(botao, antigos) {
   const confirmado = await confirmar({
     titulo: 'Fechar os tópicos antigos?',
-    texto: `Serão fechados ${antigos} tópico(s) abertos há 7 dias ou mais: os de denúncia e de espelho são trancados e arquivados; os dos outros canais só são arquivados e voltam sozinhos se alguém escrever neles. Tópicos mais novos e os de denúncias ainda abertas não são mexidos. O bot fecha cerca de um por segundo.`,
+    texto: `Serão fechados ${antigos} tópico(s) abertos há 7 dias ou mais: os de denúncia (mesmo ainda abertas) e de espelho são trancados e arquivados; os dos outros canais só são arquivados e voltam sozinhos se alguém escrever neles. Tópicos mais novos que 7 dias não são mexidos. O bot fecha cerca de um por segundo.`,
     rotulo: 'Limpar agora'
   });
   if (!confirmado) return;

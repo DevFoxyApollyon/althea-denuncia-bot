@@ -73,7 +73,7 @@ const LIMITE_DE_TOPICOS_ATIVOS = 1000;
 // o que a limpeza faria com ele:
 //   - espelhos (armazém e registro), em qualquer canal em que estejam: o canal
 //     configurado pode ter mudado e os tópicos antigos ficam no anterior;
-//   - o tópico da própria denúncia, quando ela já está finalizada;
+//   - o tópico da própria denúncia: finalizada, ou aberta há 7 dias ou mais;
 //   - qualquer outro tópico dos canais de denúncia aberto há 7 dias ou mais;
 //   - qualquer tópico de outro canal do servidor aberto há 7 dias ou mais (só arquiva).
 async function classificarTopicos(client, agora = Date.now()) {
@@ -127,8 +127,8 @@ async function classificarTopicos(client, agora = Date.now()) {
       let destino;
       if (tipo === 'antigo') destino = 'trancar';
       else if (tipo === 'outro') destino = 'arquivar';
-      // O tópico da denúncia só é mexido aqui quando ela já foi finalizada.
-      else if (tipo === 'denuncia') destino = STATUS_FECHADOS.includes(achado.denuncia.status) ? 'trancar' : null;
+      // Tópico da denúncia: trancado quando ela foi finalizada ou está aberta há 7 dias ou mais.
+      else if (tipo === 'denuncia') destino = STATUS_FECHADOS.includes(achado.denuncia.status) || idadeMs >= IDADE_MAXIMA_MS ? 'trancar' : null;
       else destino = destinoDoEspelho(achado?.denuncia, topico.createdTimestamp || 0, agora);
 
       servidor.itens.push({ topico, tipo, destino, idadeMs });
@@ -210,7 +210,7 @@ function iniciarLimpezaDeEspelhos(client) {
     try {
       const { ativos, fechados, porCanal, ocupado } = await limparEspelhosAbertos(client);
       if (ocupado) return;
-      if (ativos) console.log(`[Espelhos] Total: ${fechados} tópico(s) fechado(s): ${porCanal.registro} no registro, ${porCanal.armazem} no armazém, ${porCanal.denuncia} de denúncias finalizadas, ${porCanal.antigo} aberto(s) há 7 dias ou mais nos canais de denúncia e ${porCanal.outro} arquivado(s) em outros canais.`);
+      if (ativos) console.log(`[Espelhos] Total: ${fechados} tópico(s) fechado(s): ${porCanal.registro} no registro, ${porCanal.armazem} no armazém, ${porCanal.denuncia} de denúncias (finalizadas ou abertas há 7 dias ou mais), ${porCanal.antigo} aberto(s) há 7 dias ou mais nos canais de denúncia e ${porCanal.outro} arquivado(s) em outros canais.`);
     } catch (erro) {
       console.warn(`[Espelhos] Falha na limpeza dos tópicos espelho: ${erro.message}`);
     } finally {
