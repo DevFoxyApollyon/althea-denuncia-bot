@@ -182,7 +182,7 @@ aceitas no Discord. Ela **busca** os pedidos no Althea (`/ponte/gm/v1`, HMAC na 
 devolve o resultado; o Althea nunca chama o servidor do jogo.
 
 - **Especificação do protocolo:** [`doc/PONTE_GAMEMODE.md`](doc/PONTE_GAMEMODE.md).
-- **Include Pawn e instalação na gamemode:** [`gamemode/LEIA-ME.md`](gamemode/LEIA-ME.md) (a pasta `gamemode/` não vai para a hospedagem).
+- **Include Pawn:** fica fora deste repositório (é dos devs do servidor). A versão 1.0.0 está na tag [`v3.12.0`](https://github.com/DevFoxyApollyon/althea-denuncia-bot/tree/v3.12.0/gamemode); os testes usam só a cópia dos vetores em `test/fixtures/vetores_protocolo_gm.json`.
 - **Guia para os devs do servidor (servidor de teste):** [`doc/GUIA_SERVIDOR_TESTE.md`](doc/GUIA_SERVIDOR_TESTE.md).
 - **No `.env`:** `PONTE_CHAVE_MESTRA` (base64 de 32 bytes) cifra os segredos. Sem ela, a API responde 503.
 - **Fluxo:** aceite da denúncia → embed "🎮 Punição para o jogo" no Relatório de punições → um

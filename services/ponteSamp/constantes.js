@@ -87,8 +87,8 @@ const LIMITES_GM_PADRAO = Object.freeze({
 // Versão mais nova do mod Lua (ponte_denuncias.lua). O mod compara com a dele e avisa a staff quando está atrás.
 const VERSAO_MOD_ATUAL = '1.8.4';
 
-// Versão do include da gamemode (ALTHEA_VERSAO em gamemode/althea_ponte/althea_ponte.inc).
-// A pasta gamemode/ não vai para a hospedagem, então o valor fica aqui.
+// Versão do include da gamemode (ALTHEA_VERSAO em althea_ponte/althea_ponte.inc).
+// O include fica fora do bot (pasta althea-gamemode); ao lançar versão nova dele, atualize aqui.
 const VERSAO_INCLUDE_GM = '1.0.0';
 
 module.exports = {

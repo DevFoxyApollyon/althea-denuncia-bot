@@ -23,7 +23,7 @@ const MODAL_ALVO = 'ponte_gm_modal:';
 
 const EXECUTORES_GM = ['gamemode', 'ambos'];
 
-// A mesma regra do Alt_MotivoValido do include (gamemode/althea_ponte/althea_util.inc):
+// A mesma regra do Alt_MotivoValido do include (althea_ponte/althea_util.inc, fora do bot):
 // 1 a 60 caracteres deste conjunto, sem "/" nem espaço no começo.
 const RE_MOTIVO_GM = /^(?![/ ])[A-Za-z0-9 .,:;!?()[\]\-_+#*@&/]{1,60}$/;
 const motivoGmValido = (motivo) => RE_MOTIVO_GM.test(String(motivo)) && String(motivo).endsWith(' [DC]');

@@ -9,7 +9,8 @@ const { iniciarMongoMemoria } = require('./helpers/mongoMemoria');
 process.env.PONTE_SAMP_ATIVA = '1';
 process.env.PONTE_CHAVE_MESTRA = crypto.randomBytes(32).toString('base64');
 
-const vetores = require('../gamemode/teste/vetores_protocolo.json');
+// Cópia de gamemode/teste/vetores_protocolo.json (o include fica fora do bot, em althea-gamemode).
+const vetores = require('./fixtures/vetores_protocolo_gm.json');
 const protocolo = require('../services/ponteSamp/protocoloGm');
 const cifra = require('../services/ponteSamp/cifra');
 const { PRAZOS_EM_DIAS, CAMPO_RETENCAO, COLECOES_PERMANENTES } = require('../utils/retencaoDados');
@@ -1121,11 +1122,6 @@ test('/admin guia da gamemode: só o dono; situação de cada servidor sem segre
     assert.deepEqual([doPc.executor, doPc.credenciais, doPc.online, doPc.modoTesteJogo], ['pc', 0, false, null]);
     assert.equal(JSON.stringify(corpo).includes('segredo'), false);
   });
-});
-
-test('versão do include no bot é a mesma do ALTHEA_VERSAO do .inc', () => {
-  const inc = require('node:fs').readFileSync(require('node:path').join(__dirname, '../gamemode/althea_ponte/althea_ponte.inc'), 'utf8');
-  assert.equal(inc.match(/#define ALTHEA_VERSAO "([^"]+)"/)[1], require('../services/ponteSamp/constantes').VERSAO_INCLUDE_GM);
 });
 
 // ---------- Chave mestra pelo /admin ----------
