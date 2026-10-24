@@ -11,6 +11,7 @@
 <body>
   <header>
     <h1>Ponte do jogo</h1>
+    <a class="voltar" href="/">← Voltar ao site</a>
     <nav>
       <button type="button" data-aba="servidores" class="ativa">Servidores</button>
       <button type="button" data-aba="instalacoes">Instalações</button>
@@ -19,6 +20,7 @@
       <button type="button" data-aba="uso">Uso e auditoria</button>
       <button type="button" data-aba="codigos">Códigos</button>
       <button type="button" data-aba="motivos">Motivos</button>
+      <button type="button" data-aba="acessos" class="so-dono" hidden>Acessos</button>
     </nav>
   </header>
   <main>
@@ -121,6 +123,15 @@ public OnRconCommand(cmd[]) { if (Althea_ComandoRcon(cmd)) return 1; /* ... */ }
       <button type="button" id="mais-uso">Carregar mais</button>
     </section>
 
+    <section id="aba-acessos" hidden>
+      <p class="dica">Quem estiver aqui abre este painel e vê o link "Painel da ponte" no menu do site. Só você (dono do bot) gerencia esta lista, troca a chave mestra, gera códigos e desativa servidores.</p>
+      <form id="novo-acesso">
+        <label>ID do Discord <input name="userId" inputmode="numeric" pattern="[0-9]{15,21}" placeholder="657014871228940336" required></label>
+        <button type="submit">Adicionar</button>
+      </form>
+      <table><thead><tr><th>Pessoa</th><th>ID do Discord</th><th>Adicionada em</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+
     <section id="aba-motivos" hidden>
       <p class="dica">Vale para todos os servidores. Sinônimos separados por vírgula. Tempban em dias (0 = permanente, vira /blackban); cadeia em minutos. <span id="motivos-situacao"></span></p>
       <table><thead><tr><th>Motivo</th><th>Sinônimos</th><th>Tipo</th><th>Tempo</th><th>Avisos</th><th></th></tr></thead><tbody></tbody></table>
@@ -132,7 +143,7 @@ public OnRconCommand(cmd[]) { if (Althea_ComandoRcon(cmd)) return 1; /* ... */ }
     </section>
 
     <section id="aba-codigos" hidden>
-      <form id="gerar-codigo">
+      <form id="gerar-codigo" class="so-dono" hidden>
         <label>Validade (dias) <input name="validadeDias" type="number" min="1" max="365"></label>
         <label>Limite de PCs <input name="limitePcs" type="number" min="1" max="50"></label>
         <button type="submit">Gerar código</button>

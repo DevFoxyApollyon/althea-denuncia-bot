@@ -1920,6 +1920,9 @@ h1, h2, h3, .marca-texto strong, .numero-texto strong, .caso-ref strong, .caso-n
 .menu { gap: 10px; padding: 12px 8px; }
 .menu-item, :root:not([data-tema="claro"]) .menu-item { min-height: 34px; padding: 0 10px; gap: 10px; border-radius: var(--raio); font-size: 13.5px; font-weight: 500; color: var(--texto-2); }
 .menu-item .icone { width: 16px; height: 16px; }
+/* Link do menu (Painel da ponte) com a mesma cara dos botões. */
+a.menu-item, :root:not([data-tema="claro"]) a.menu-item { display: flex; align-items: center; text-decoration: none; color: var(--texto-2); }
+a.menu-item:hover { color: var(--texto); }
 :root:not([data-tema="claro"]) .menu-item[aria-current="page"],
 :root:not([data-tema="claro"]) .area-staff .menu-item[aria-current="page"],
 :root:not([data-tema="claro"]) .area-admin .menu-item[aria-current="page"] { background: var(--elevada); border-color: transparent; color: var(--texto); font-weight: 600; box-shadow: none; }

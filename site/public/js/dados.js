@@ -237,6 +237,7 @@ export async function atualizarAcesso() {
     estado.usuario = dados.usuario;
     estado.servidores = dados.servidores;
     estado.visaoAdmin = dados.visaoAdmin;
+    estado.painelPonte = dados.painelPonte === true;
 
     // Saiu (ou foi removido) do servidor que estava aberto: recomeça do zero.
     if (!dados.servidores.some(servidor => servidor.id === estado.guildId)) return location.reload();

@@ -152,6 +152,7 @@ export async function iniciar() {
     estado.usuario = dados.usuario;
     estado.servidores = dados.servidores;
     estado.visaoAdmin = dados.visaoAdmin;
+    estado.painelPonte = dados.painelPonte === true;
     // Volta para o servidor em que a pessoa estava na última visita.
     const salvo = lerPreferencia(CHAVE_SERVIDOR);
     estado.guildId = dados.servidores.find(servidor => servidor.id === salvo)?.id || dados.servidores[0]?.id || null;

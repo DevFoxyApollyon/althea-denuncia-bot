@@ -54,6 +54,8 @@ export const estado = {
   usuario: null,
   servidores: [],
   visaoAdmin: false,
+  // Dono do bot ou liberado por ele: link do painel da ponte (/admin) no menu.
+  painelPonte: false,
   categoria: 'todas',
   guildId: null,
   area: 'jogador',

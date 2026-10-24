@@ -8,6 +8,8 @@ const punicaoGm = (p) => {
   return p.avisos ? `${base} + ${p.avisos} aviso(s)` : base;
 };
 let csrf = '';
+// Dono do bot (OWNER_DISCORD_ID). Quem ele liberou vê o painel, mas não os botões só do dono.
+let dono = false;
 let ultimoUso = null;
 
 const $ = (sel) => document.querySelector(sel);
@@ -134,7 +136,7 @@ const carregadores = {
     const lista = await api('/servidores');
     preencher('servidores', lista.map(s => linha(
       [s.nome || '?', s.guildId, s.ativo ? 'sim' : 'não', data(s.ativadoEm), `${s.pcs}/${s.limitePcs}`],
-      s.ativo && { texto: 'Desativar', confirmar: `Desativar a ponte em ${s.nome || s.guildId}?`, executar: () => post(`/servidores/${s.guildId}/desativar`), recarregar: 'servidores' }
+      dono && s.ativo && { texto: 'Desativar', confirmar: `Desativar a ponte em ${s.nome || s.guildId}?`, executar: () => post(`/servidores/${s.guildId}/desativar`), recarregar: 'servidores' }
     )));
   },
   async instalacoes() {
@@ -202,6 +204,13 @@ const carregadores = {
       { texto: proximoPasso(s, chaveMestra), classe: 'detalhes' }
     ])));
   },
+  async acessos() {
+    const lista = await api('/acessos');
+    preencher('acessos', lista.map(a => linha(
+      [a.nome || '(nome não encontrado)', a.userId, data(a.adicionadoEm)],
+      { texto: 'Remover', confirmar: `Tirar o acesso de ${a.nome || a.userId} ao painel?`, executar: () => post(`/acessos/${a.userId}/remover`), recarregar: 'acessos' }
+    )));
+  },
   async uso(continuar = false) {
     const filtro = new FormData($('#filtro-uso'));
     const params = new URLSearchParams();
@@ -226,7 +235,7 @@ const carregadores = {
       const situacao = c.usadoEm ? 'usado' : c.expirado || (c.expiraEm && new Date(c.expiraEm) < new Date()) ? 'expirado' : 'disponível';
       return linha(
         [`…${c.ultimos4}`, data(c.criadoEm), data(c.expiraEm), c.limitePcs || 'padrão', data(c.usadoEm), c.guild || c.usadoPorGuild || '—', situacao],
-        situacao === 'disponível' && { texto: 'Expirar', confirmar: 'Expirar este código?', executar: () => post(`/codigos/${c.id}/expirar`), recarregar: 'codigos' }
+        dono && situacao === 'disponível' && { texto: 'Expirar', confirmar: 'Expirar este código?', executar: () => post(`/codigos/${c.id}/expirar`), recarregar: 'codigos' }
       );
     }));
   }
@@ -290,7 +299,19 @@ async function iniciar() {
     try { await put('/motivos', { tabela: [] }); aviso('Tabela padrão restaurada.'); carregar('motivos'); } catch (e) { aviso(e.message); }
   });
 
-  try { ({ csrf } = await api('/csrf')); } catch (e) { aviso(e.message); }
+  try { ({ csrf, dono } = await api('/csrf')); } catch (e) { aviso(e.message); }
+  for (const elemento of document.querySelectorAll('.so-dono')) elemento.hidden = !dono;
+  $('#chave-trocar').hidden = !dono;
+  $('#novo-acesso').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const { userId } = Object.fromEntries(new FormData(e.target));
+    try {
+      const r = await post('/acessos', { userId: userId.trim() });
+      aviso(r.encontrado ? `Acesso liberado para ${r.nome}.` : 'Acesso liberado. O bot não achou o nome dessa conta: confira se o ID está certo.');
+      e.target.reset();
+      carregar('acessos');
+    } catch (erro) { aviso(erro.message); }
+  });
   carregar('servidores');
 }
 

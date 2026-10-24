@@ -224,6 +224,14 @@ Um pedido por alvo enviado à gamemode. "Reenviar" um incerto cria outro com `ro
 // Índices: único { punicaoId, alvoId, rodada }; { guildId, status, criadoEm }; { status, leaseAte }
 ```
 
+### 📄 PonteAcessoAdmin (`ponteacessosadmin`, permanente)
+Pessoas que o dono liberou no painel da ponte (`/admin` → Acessos), pelo ID do Discord.
+```javascript
+{ userId: String /* único */, nome: String, adicionadoPor: String, adicionadoEm: Date }
+```
+Elas abrem o painel e veem o link "Painel da ponte" no menu do site. Gerenciar acessos, trocar a chave
+mestra, gerar/expirar códigos e desativar servidores continuam só com o dono (`OWNER_DISCORD_ID`).
+
 ### Campos novos em models existentes
 - **PonteServidor:** `executor` (`pc` | `gamemode` | `ambos`, padrão `pc`) e
   `gm: { pausado, maxBanDias (30), permitirPermanente (true), maxCadeiaMin (300), maxAvisos (3), modoTeste (true) }`.

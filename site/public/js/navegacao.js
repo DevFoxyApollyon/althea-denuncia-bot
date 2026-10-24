@@ -262,6 +262,14 @@ export function menuLateral() {
         itemDeRota('Sugestões', 'lampada', 'sugestoes')
       ];
 
+  // Painel da ponte com o jogo: página à parte (/admin), só para o dono do bot e quem ele liberou.
+  if (estado.painelPonte) {
+    itens.push(
+      grupo('Dono do bot'),
+      el('a', { class: 'menu-item', href: '/admin' }, icone('escudo'), el('span', null, 'Painel da ponte'))
+    );
+  }
+
   return el('nav', { class: 'menu', 'aria-label': 'Navegação principal' },
     estado.servidores.length > 1 && el('select', {
       class: 'menu-servidor',

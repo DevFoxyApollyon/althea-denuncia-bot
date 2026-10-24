@@ -61,7 +61,7 @@ app.get('/api/site', (req, res) => res.json({ nome: 'Brasil RolePlay', icone: nu
 
 app.get('/api/eu', (req, res) => {
   if (semLogin(req)) return res.status(401).json({ erro: 'Entre com sua conta do Discord para continuar.' });
-  res.json({ usuario, visaoAdmin: true, servidores: [{ id: '1', nome: 'Brasil RolePlay', icone: null, limiteUploadMb: 9, manutencao: false, categorias: configVisivel('1').categorias, slaHoras: configVisivel('1').slaHoras, respostasProntas: configVisivel('1').respostasProntas, apelido: 'Rafael Monteiro 1187', avatar: null, papeis: req.get('Referer')?.includes('jogador') ? { ...papeis, staff: false, responsavel: false, administrador: false } : papeis },
+  res.json({ usuario, visaoAdmin: true, painelPonte: true, servidores: [{ id: '1', nome: 'Brasil RolePlay', icone: null, limiteUploadMb: 9, manutencao: false, categorias: configVisivel('1').categorias, slaHoras: configVisivel('1').slaHoras, respostasProntas: configVisivel('1').respostasProntas, apelido: 'Rafael Monteiro 1187', avatar: null, papeis: req.get('Referer')?.includes('jogador') ? { ...papeis, staff: false, responsavel: false, administrador: false } : papeis },
     { id: '2', nome: '🏆 Brasil Roleplay - 2', icone: null, limiteUploadMb: 9, manutencao: true, categorias: configVisivel('2').categorias, slaHoras: configVisivel('2').slaHoras, respostasProntas: [], apelido: 'Rafael Monteiro 1187', avatar: null, papeis: { podeDenunciarPC: true } }] });
 });
 

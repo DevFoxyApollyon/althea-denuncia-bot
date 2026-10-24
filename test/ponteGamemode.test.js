@@ -1182,3 +1182,40 @@ test('/admin troca a chave mestra: credenciais continuam valendo e a chave só s
   assert.equal((await chamar(conexao, segredo, '/pedidos')).status, 200);
   assert.equal(cifra.decifrar((await m.PonteConexaoGm.findById(conexao._id).lean()).segredoCifrado), segredo);
 });
+
+// ---------- Acessos ao /admin ----------
+
+test('/admin acessos: o dono libera alguém pelo ID; a pessoa entra, mas não faz o que é só do dono', async () => {
+  process.env.OWNER_DISCORD_ID = DONO;
+  const AMIGO = '300000000000000777';
+  const { podeAbrirPainel } = require('../services/ponteSamp/acessoAdmin');
+  await comAdmin(async (pedir) => {
+    assert.equal((await pedir('/servidores', { usuario: AMIGO })).status, 404, 'antes de liberar: nem sabe que existe');
+    assert.equal(await podeAbrirPainel(AMIGO), false);
+    assert.equal(await podeAbrirPainel(DONO), true);
+
+    const { csrf } = (await pedir('/csrf')).corpo;
+    assert.equal((await pedir('/csrf')).corpo.dono, true);
+    assert.equal((await pedir('/acessos', { metodo: 'POST', corpo: { userId: 'abc' }, csrf })).status, 400);
+    assert.match((await pedir('/acessos', { metodo: 'POST', corpo: { userId: DONO }, csrf })).corpo.erro, /dono/);
+    assert.equal((await pedir('/acessos', { metodo: 'POST', corpo: { userId: AMIGO }, csrf })).corpo.ok, true);
+    assert.match((await pedir('/acessos', { metodo: 'POST', corpo: { userId: AMIGO }, csrf })).corpo.erro, /já tem acesso/);
+    assert.deepEqual((await pedir('/acessos')).corpo.map(a => a.userId), [AMIGO]);
+    assert.equal(await podeAbrirPainel(AMIGO), true);
+
+    // A pessoa liberada usa o painel...
+    assert.equal((await pedir('/servidores', { usuario: AMIGO })).status, 200);
+    assert.equal((await pedir('/gamemode/conexoes', { usuario: AMIGO })).status, 200);
+    const doAmigo = (await pedir('/csrf', { usuario: AMIGO })).corpo;
+    assert.equal(doAmigo.dono, false);
+    // ...mas não o que é só do dono.
+    for (const [caminho, corpo] of [['/acessos', { userId: '300000000000000778' }], ['/codigos', {}], ['/chave/trocar', { confirmar: 'TROCAR' }], ['/servidores/100000000000000001/desativar', {}]]) {
+      assert.equal((await pedir(caminho, { usuario: AMIGO, metodo: 'POST', corpo, csrf: doAmigo.csrf })).status, 403, caminho);
+    }
+    assert.equal((await pedir('/acessos', { usuario: AMIGO })).status, 403);
+
+    assert.equal((await pedir(`/acessos/${AMIGO}/remover`, { metodo: 'POST', csrf })).corpo.ok, true);
+    assert.equal((await pedir('/servidores', { usuario: AMIGO })).status, 404, 'removido: perde o acesso na hora');
+    assert.ok(await m.PonteUso.exists({ acao: 'gm_config', 'detalhes.sub': 'acesso_admin_adicionar', 'detalhes.userId': AMIGO }));
+  });
+});

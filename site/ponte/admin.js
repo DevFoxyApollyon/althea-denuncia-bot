@@ -1,6 +1,7 @@
 // Painel web do dono do bot (/admin): servidores, PCs, gamemode, auditoria e códigos da ponte.
-// Só abre para OWNER_DISCORD_ID logado no site; para qualquer outro responde 404,
-// para não revelar que a rota existe. O token de um PC nunca abre este painel.
+// Abre para OWNER_DISCORD_ID e para as pessoas que ele liberou (aba Acessos); para qualquer
+// outro responde 404, para não revelar que a rota existe. O token de um PC nunca abre este painel.
+// Só o dono: gerenciar acessos, trocar a chave mestra, gerar/expirar códigos e desativar servidores.
 const express = require('express');
 const path = require('path');
 const mongoose = require('mongoose');
@@ -16,6 +17,7 @@ const { reclassificarFila } = require('../../services/ponteSamp/aceite');
 const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE } = require('../../services/ponteSamp/constantes');
 const { chaveMestraConfigurada, impressaoDaChave } = require('../../services/ponteSamp/cifra');
 const { trocarChaveMestra } = require('../../services/ponteSamp/chaveMestra');
+const acessos = require('../../services/ponteSamp/acessoAdmin');
 const { criarToken, lerToken } = require('../sessao');
 const { criarLimitador } = require('../rotas/comum');
 
@@ -32,19 +34,21 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   const naoExiste = (res) => res.status(404).json({ erro: 'Rota não encontrada.' });
   const nomeGuild = (id) => client?.guilds?.cache?.get(id)?.name || '';
 
-  router.use((req, res, next) => {
-    if (!req.usuario || !gestao.ehDono(req.usuario.id)) return naoExiste(res);
+  router.use(async (req, res, next) => {
+    if (!req.usuario || !(await acessos.podeAbrirPainel(req.usuario.id))) return naoExiste(res);
     if (!limite(req.usuario.id)) return res.status(429).json({ erro: 'Muitas requisições. Aguarde um minuto.' });
+    req.dono = gestao.ehDono(req.usuario.id);
     res.set('Cache-Control', 'no-store');
     next();
   });
+  const soDono = (req, res, next) => (req.dono ? next() : res.status(403).json({ erro: 'Só o dono do bot pode fazer isso.' }));
 
   router.get('/', (req, res) => res.sendFile(path.join(PASTA, 'index.html')));
   router.get(['/admin.js', '/admin.css'], (req, res) => res.sendFile(path.join(PASTA, path.basename(req.path))));
 
   router.use('/api', express.json({ limit: '8kb' }));
   router.get('/api/csrf', (req, res) => {
-    res.json({ csrf: criarToken({ sid: req.sid, csrf: true }, config.segredo, DURACAO_CSRF_MS) });
+    res.json({ csrf: criarToken({ sid: req.sid, csrf: true }, config.segredo, DURACAO_CSRF_MS), dono: req.dono });
   });
 
   // A checagem de Origin do app já cobre os POSTs; o token CSRF é uma segunda barreira.
@@ -73,7 +77,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     })));
   }));
 
-  router.post('/api/servidores/:guildId/desativar', rota(async (req, res) => {
+  router.post('/api/servidores/:guildId/desativar', soDono, rota(async (req, res) => {
     if (!/^\d{5,25}$/.test(req.params.guildId)) return res.status(400).json({ erro: 'ID inválido.' });
     const s = await gestao.desativarGuild({ guildId: req.params.guildId, por: req.usuario.id });
     log?.info?.(`Ponte desativada pelo dono em ${req.params.guildId}`);
@@ -124,7 +128,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     })));
   }));
 
-  router.post('/api/codigos', rota(async (req, res) => {
+  router.post('/api/codigos', soDono, rota(async (req, res) => {
     const validadeDias = Number(req.body?.validadeDias) || null;
     const limitePcs = Number(req.body?.limitePcs) || null;
     if ((validadeDias && (validadeDias < 1 || validadeDias > 365)) || (limitePcs && (limitePcs < 1 || limitePcs > 50))) {
@@ -148,7 +152,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     res.json({ ok: true, propria: salvo.propria, total: salvo.tabela.length });
   }));
 
-  router.post('/api/codigos/:id/expirar', rota(async (req, res) => {
+  router.post('/api/codigos/:id/expirar', soDono, rota(async (req, res) => {
     if (!idValido(req.params.id)) return res.status(400).json({ erro: 'ID inválido.' });
     const r = await PonteCodigo.updateOne({ _id: req.params.id, usadoEm: null }, { $set: { expirado: true } });
     res.json({ ok: r.matchedCount === 1 });
@@ -209,6 +213,27 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     })));
   }));
 
+  // Pessoas liberadas no painel (pelo ID do Discord). Só o dono vê e mexe.
+  router.get('/api/acessos', soDono, rota(async (req, res) => {
+    const lista = await acessos.listarAcessos();
+    res.json(lista.map(a => ({ userId: a.userId, nome: a.nome, adicionadoEm: a.adicionadoEm })));
+  }));
+
+  router.post('/api/acessos', soDono, rota(async (req, res) => {
+    const userId = String(req.body?.userId || '').trim();
+    const usuario = /^\d{15,21}$/.test(userId) && client?.users ? await client.users.fetch(userId).catch(() => null) : null;
+    const r = await acessos.adicionarAcesso({ userId, nome: usuario?.globalName || usuario?.username || '', por: req.usuario.id });
+    if (r.erro) return res.status(400).json({ erro: r.erro });
+    await PonteUso.create({ acao: 'gm_config', detalhes: { sub: 'acesso_admin_adicionar', userId, por: req.usuario.id } }).catch(() => {});
+    res.json({ ok: true, nome: r.acesso.nome, encontrado: !!usuario });
+  }));
+
+  router.post('/api/acessos/:userId/remover', soDono, rota(async (req, res) => {
+    const ok = await acessos.removerAcesso(req.params.userId);
+    if (ok) await PonteUso.create({ acao: 'gm_config', detalhes: { sub: 'acesso_admin_remover', userId: req.params.userId, por: req.usuario.id } }).catch(() => {});
+    res.json({ ok });
+  }));
+
   // Chave mestra da ponte com a gamemode: só a impressão (8 letras do SHA-256) sai daqui.
   router.get('/api/chave', rota(async (req, res) => {
     res.json({ configurada: chaveMestraConfigurada(), impressao: impressaoDaChave(), credenciais: await PonteConexaoGm.countDocuments({}) });
@@ -216,7 +241,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
 
   // Gera a chave (ou troca a atual) e recifra os segredos das credenciais. A chave nova
   // aparece só nesta resposta, para o dono colar no .env do PC.
-  router.post('/api/chave/trocar', rota(async (req, res) => {
+  router.post('/api/chave/trocar', soDono, rota(async (req, res) => {
     if (req.body?.confirmar !== 'TROCAR') return res.status(400).json({ erro: 'Confirme digitando TROCAR.' });
     const r = await trocarChaveMestra({ arquivo: arquivoEnv });
     if (r.erro) return res.status(409).json({ erro: r.erro });

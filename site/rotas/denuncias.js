@@ -16,6 +16,7 @@ const { contemPalavraProibida, contemLinkProibido } = require('../../utils/strik
 const { handleDenunciaSubmit } = require('../../commands/denuncia');
 const { atualizarTextoDeStatus } = require('../../utils/atualizarStatus');
 const { servidoresDoUsuario, acessoAoServidor, relacaoComDenuncia } = require('../acesso');
+const { podeAbrirPainel } = require('../../services/ponteSamp/acessoAdmin');
 const { criarInteracaoSite, resultadoDaInteracao } = require('../interacaoSite');
 const {
   STATUS_ABERTOS,
@@ -101,9 +102,14 @@ function bateComABusca(denuncia, termo) {
 
 function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTopico, podeEscrever, podeEnviarArquivo, podeAbrirDenuncia }) {
   router.get('/eu', assincrono(async (req, res) => {
-    const servidores = await servidoresDoUsuario(client, req.usuario.id);
+    const [servidores, painelPonte] = await Promise.all([
+      servidoresDoUsuario(client, req.usuario.id),
+      // Dono do bot e quem ele liberou: o menu mostra o link do painel da ponte (/admin).
+      podeAbrirPainel(req.usuario.id).catch(() => false)
+    ]);
     res.json({
       usuario: req.usuario,
+      painelPonte,
       visaoAdmin: servidores.some(({ guild, papeis }) =>
         papeis.responsavel && guild.id !== SERVIDOR_OCULTO_VISAO_ADMIN
       ),
