@@ -86,8 +86,6 @@ const pontePunicaoSchema = new mongoose.Schema({
     por: { type: String, default: '' },
     em: { type: Date, default: null }
   },
-  // Quando a staff foi avisada no Discord de que esta punição ficou parada na fila.
-  alertaParadaEm: { type: Date, default: null },
   criadoEm: { type: Date, default: Date.now }
 });
 

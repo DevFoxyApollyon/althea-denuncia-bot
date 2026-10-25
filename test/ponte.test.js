@@ -703,23 +703,6 @@ test('relatório: conta por aceitante e por PC e ignora o que é mais velho que 
   assert.equal(montarRelatorio([], 7, agora).total.esperaMediaMin, null);
 });
 
-test('punição parada na fila: avisa uma vez e só de novo depois de 2 horas', async () => {
-  const { avisarParadas } = require('../services/ponteSamp/paradas');
-  await guildAtiva('9830');
-  const { punicao } = await m.aceite.registrarAceite({ client: clienteFalso, denuncia: denunciaFalsa('9830', '70'), origem: 'canal_staff', staff: { id: '1', nome: 'x' } });
-  const agora = Date.now();
-
-  assert.equal(await avisarParadas(clienteFalso, agora), 0); // acabou de chegar: não está parada
-  await m.PontePunicao.updateOne({ _id: punicao._id }, { $set: { aceitoEm: new Date(agora - 45 * 60 * 1000) } });
-  await avisarParadas(clienteFalso, agora);
-  const marcada = (await m.PontePunicao.findById(punicao._id).lean()).alertaParadaEm;
-  assert.ok(marcada, 'ficou marcada como avisada');
-  assert.equal(await avisarParadas(clienteFalso, agora + 60 * 1000), 0); // não repete logo em seguida
-  await m.PontePunicao.updateOne({ _id: punicao._id }, { $set: { alertaParadaEm: new Date(agora - 3 * 3600 * 1000) } });
-  await avisarParadas(clienteFalso, agora);
-  assert.ok((await m.PontePunicao.findById(punicao._id).lean()).alertaParadaEm > new Date(agora - 60 * 1000), 'avisou de novo depois de 2h');
-});
-
 // ---------- limpeza de tópicos ----------
 
 const DIA = 24 * 60 * 60 * 1000;

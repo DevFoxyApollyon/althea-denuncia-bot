@@ -35,7 +35,6 @@ const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 const { iniciarPoller } = require('./jobs/nicknamePoller');
 const { iniciarLimpezaContasDuplicadas } = require('./jobs/Limparcontasduplicadas');
 const { iniciarAvisoReivindicacao } = require('./jobs/avisoReivindicacao');
-const { iniciarAvisoParadas } = require('./services/ponteSamp/paradas');
 const { iniciarJobGamemode } = require('./services/ponteSamp/incertosGm');
 const { iniciarLimpezaDeEspelhos } = require('./utils/espelhos');
 const { registerMemberEvents } = require('./Handlers/memberEvents');
@@ -146,7 +145,6 @@ client.once('clientReady', async (readyClient) => {
 
     iniciarAutoFinalizador(client);
     iniciarAvisoReivindicacao(client);
-    iniciarAvisoParadas(client); // ponte com o jogo: punição aceita que ninguém aplicou
     iniciarJobGamemode(client); // ponte com a gamemode: pedido sem resposta vira incerto e vai para o Log Admin
     servidorDoSite = iniciarSite(client, log);
 
