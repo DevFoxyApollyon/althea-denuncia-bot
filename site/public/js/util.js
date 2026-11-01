@@ -61,8 +61,33 @@ export const ICONES = {
   arquivo: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5',
   cadeado: 'M7 11V8a5 5 0 0 1 10 0v3 M6 11h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z',
   monitor: 'M4 5h16v11H4z M9 20h6 M12 16v4',
+  copiar: 'M9 9h10v11H9z M6 15H5V4h10v1',
   celular: 'M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z M11 18h2'
 };
+
+// Botão pequeno que copia um texto e avisa por um instante que copiou.
+export function botaoCopiar(texto, rotulo = 'Copiar') {
+  const botao = el('button', { class: 'copiar', type: 'button', title: `${rotulo}: ${texto}`, 'aria-label': `${rotulo}: ${texto}` }, icone('copiar'));
+  botao.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(texto);
+    } catch {
+      // Navegador sem permissão para a área de transferência: copia pelo jeito antigo.
+      const campo = el('textarea', { readonly: true }, texto);
+      document.body.append(campo);
+      campo.select();
+      document.execCommand('copy');
+      campo.remove();
+    }
+    botao.classList.add('copiado');
+    botao.replaceChildren(icone('visto'));
+    setTimeout(() => {
+      botao.classList.remove('copiado');
+      botao.replaceChildren(icone('copiar'));
+    }, 1500);
+  });
+  return botao;
+}
 
 export function icone(nome) {
   const svg = document.createElementNS(SVG, 'svg');

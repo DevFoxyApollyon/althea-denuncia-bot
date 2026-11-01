@@ -1246,6 +1246,10 @@ button.discreto { border-color: transparent; background: transparent; color: var
 .aviso.reincidente .icone { width: 18px; height: 18px; flex: none; }
 
 .atalhos-jogador { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.com-copiar { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+button.copiar { display: inline-grid; place-items: center; width: 28px; height: 28px; min-height: 0; padding: 0; border-radius: 8px; color: var(--texto-2); }
+button.copiar .icone { width: 15px; height: 15px; }
+button.copiar.copiado { color: var(--aceita); border-color: var(--aceita); }
 button.atalho-jogador { min-height: 0; padding: 1px 9px; border-radius: 999px; border-color: color-mix(in srgb, var(--marca) 35%, transparent); background: var(--marca-suave); color: var(--marca); font-size: 13px; font-weight: 700; text-transform: none; letter-spacing: 0; }
 :root:not([data-tema="claro"]) button.atalho-jogador { background: var(--marca-suave); border-color: color-mix(in srgb, var(--marca) 35%, transparent); }
 
