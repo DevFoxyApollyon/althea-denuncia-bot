@@ -270,14 +270,25 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
       denuncia.provas,
       ...mensagens.flatMap(mensagem => [mensagem.conteudo, ...mensagem.embeds.map(embed => `${embed.titulo} ${embed.descricao}`)])
     ].join(' '));
+    // As ações da staff marcam quando e por quem cada etapa do caso andou.
+    const acoes = await ModerationAction.find({ denunciaId: String(denuncia._id) }).sort({ timestamp: 1 }).select('moderatorId action timestamp').lean();
+    const ultimaAcao = (...tipos) => acoes.filter(acao => tipos.includes(acao.action)).pop();
+    const analise = ultimaAcao('analise');
+    const decisao = STATUS_DECIDIDOS.includes(denuncia.status) ? ultimaAcao('aceita', 'recusada') : null;
+    const etapas = {
+      aberta: { em: denuncia.dataCriacao },
+      reivindicada: denuncia.claimedAt ? { em: denuncia.claimedAt, por: denuncia.claimedBy || null } : null,
+      analise: analise ? { em: analise.timestamp, por: analise.moderatorId } : null,
+      decisao: decisao ? { em: decisao.timestamp, por: decisao.moderatorId } : null
+    };
+
     // Só o painel da staff recebe notas internas, auditoria e histórico do acusado.
-    const [notas, acoes, historicoAcusado] = fila
+    const [notas, historicoAcusado] = fila
       ? await Promise.all([
         NotaInterna.find({ denunciaId: denuncia._id }).sort({ criadaEm: 1 }).lean(),
-        ModerationAction.find({ denunciaId: String(denuncia._id) }).sort({ timestamp: 1 }).select('moderatorId action timestamp').lean(),
         historicoDoAcusado(denuncia)
       ])
-      : [[], [], null];
+      : [[], null];
 
     // Só o responsável vê quem abriu o caso pelo site.
     const acessos = fila && acesso.papeis.responsavel
@@ -287,7 +298,7 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
     const pessoas = await resolverPessoas(client, acesso.guild, [
       ...acessos.map(item => item.usuarioId),
       ...notas.map(nota => nota.autorId),
-      ...acoes.map(acao => acao.moderatorId),
+      ...(fila ? acoes : [analise, decisao].filter(Boolean)).map(acao => acao.moderatorId),
       denuncia.claimedBy,
       denuncia.criadoPor,
       ...mensagens.map(mensagem => mensagem.autorId),
@@ -305,6 +316,7 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
         motivoAceite: denuncia.motivoAceite || null,
         dataPunicao: denuncia.dataPunicao || null,
         responsavel,
+        etapas,
         linkDiscord: `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`,
         aberta: STATUS_ABERTOS.includes(denuncia.status),
         parte: denuncia.criadoPor === req.usuario.id ? 'denunciante'

@@ -95,6 +95,12 @@ app.get('/api/denuncias/:id', (req, res) => {
       motivoAceite: decidida ? 'Anti-RP: 3 dias de banimento' : null,
       dataPunicao: decidida ? '08/10/2026' : null,
       responsavel: denuncia.claimedBy ? 'Lucas Prado' : null,
+      etapas: {
+        aberta: { em: denuncia.dataCriacao },
+        reivindicada: denuncia.claimedBy ? { em: horas(25), por: denuncia.claimedBy } : null,
+        analise: denuncia.status !== 'pendente' ? { em: horas(2.5), por: '200' } : null,
+        decisao: ['aceita', 'recusada', 'finalizada'].includes(denuncia.status) ? { em: horas(1), por: '200' } : null
+      },
       linkDiscord: 'https://discord.com/channels/1/2/3'
     },
     mensagens: denuncia.status === 'pendente' ? [] : mensagens,

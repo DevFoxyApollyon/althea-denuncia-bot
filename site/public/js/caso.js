@@ -62,11 +62,30 @@ export function andamento(denuncia) {
     ETAPAS.map((nome, indice) => {
       const situacao = indice < atual ? 'feita' : indice === atual ? 'atual' : 'futura';
       const rotulo = indice === 3 && atual === 3 ? ROTULOS_STATUS[denuncia.status] : nome;
+      const etapa = denuncia.etapas?.[CHAVES_DAS_ETAPAS[indice]];
+      // O nome só aparece quando muda de uma etapa para a outra.
+      const anterior = CHAVES_DAS_ETAPAS.slice(0, indice).map(chave => denuncia.etapas?.[chave]?.por).filter(Boolean).pop();
       return el('li', { class: situacao, 'aria-current': situacao === 'atual' ? 'step' : null },
         el('span', { class: 'andamento-ponto' }, situacao === 'feita' && icone('visto')),
-        el('span', { class: 'andamento-nome' }, rotulo));
+        el('span', { class: 'andamento-nome' }, rotulo),
+        situacao !== 'futura' && etapa?.em && detalheDaEtapa({ em: etapa.em, por: etapa.por !== anterior ? etapa.por : null }));
     }));
 }
+
+const CHAVES_DAS_ETAPAS = ['aberta', 'reivindicada', 'analise', 'decisao'];
+
+// Quando a etapa aconteceu e, nas etapas da staff, quem fez.
+function detalheDaEtapa({ em, por }) {
+  const data = new Date(em);
+  const hoje = new Date().toDateString() === data.toDateString();
+  const quando = hoje ? formatoHora.format(data) : `${formatoDiaCurto.format(data)}, ${formatoHora.format(data)}`;
+  const nome = por && estado.detalhe?.pessoas?.[por]?.nome;
+  return el('span', { class: 'andamento-detalhe' },
+    el('time', { datetime: em, title: formatarData(em) }, quando),
+    nome && el('span', { class: 'andamento-quem', title: nome }, nome));
+}
+
+const formatoDiaCurto = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' });
 
 export function anexo(item) {
   if (item.tipo.startsWith('image/')) {

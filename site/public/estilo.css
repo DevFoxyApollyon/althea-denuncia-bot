@@ -443,7 +443,7 @@ button.numero[aria-pressed="true"] { border-color: var(--marca); box-shadow: 0 0
 .andamento.recusada { --cor-atual: var(--recusada); }
 .andamento.finalizada { --cor-atual: var(--finalizada); }
 
-.andamento li { position: relative; display: grid; gap: 8px; padding-right: 12px; color: var(--texto-3); font-size: 13px; font-weight: 550; }
+.andamento li { position: relative; display: grid; align-content: start; gap: 8px; padding-right: 12px; color: var(--texto-3); font-size: 13px; font-weight: 550; }
 .andamento li::after { content: ""; position: absolute; top: 10px; left: 30px; right: 6px; height: 2px; border-radius: 2px; background: var(--linha-forte); }
 .andamento li:last-child::after { display: none; }
 .andamento li.feita::after { background: var(--texto-2); }
@@ -456,6 +456,8 @@ button.numero[aria-pressed="true"] { border-color: var(--marca); box-shadow: 0 0
 .andamento li.feita { color: var(--texto-2); }
 .andamento li.feita .andamento-ponto { border-color: var(--texto-2); background: var(--texto-2); color: var(--fundo); }
 .andamento li.atual { color: var(--texto); font-weight: 650; }
+.andamento-detalhe { display: grid; gap: 1px; margin-top: -4px; color: var(--texto-3); font-size: 12px; font-weight: 450; font-variant-numeric: tabular-nums; min-width: 0; }
+.andamento-quem { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .andamento li.atual .andamento-ponto { border-color: var(--cor-atual); background: var(--cor-atual); box-shadow: 0 0 0 4px color-mix(in srgb, var(--cor-atual) 20%, transparent); }
 
 .caso-corpo { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 22px; align-items: start; }
@@ -697,6 +699,8 @@ button.numero[aria-pressed="true"] { border-color: var(--marca); box-shadow: 0 0
   .dado { grid-template-columns: 84px minmax(0, 1fr); }
   .compositor-enviar { padding: 0 10px; }
   .registro { margin-left: 0; }
+  .evento::before, .evento::after { display: none; }
+  .evento { justify-content: center; }
   .entrada-passos { display: none; }
   .marca-texto span { display: none; }
 }
