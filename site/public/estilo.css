@@ -557,24 +557,35 @@ button.numero[aria-pressed="true"] { border-color: var(--marca); box-shadow: 0 0
 .abre-perfil:hover strong, .abre-perfil:focus-visible strong { text-decoration: underline; }
 .abre-perfil:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; border-radius: var(--raio); }
 
-.dialogo.perfil-dc { position: relative; width: min(380px, calc(100vw - 32px)); padding: 0; overflow: hidden; }
-.perfil-dc-fechar { position: absolute; top: 8px; right: 8px; z-index: 1; width: 30px; height: 30px; padding: 0; border-radius: 50%; border: 0; background: rgb(0 0 0 / 45%); color: #fff; font-size: 20px; line-height: 1; }
-.perfil-dc-corpo { display: grid; gap: 14px; padding-bottom: 18px; }
+.dialogo.perfil-dc { position: relative; width: min(400px, calc(100vw - 32px)); max-height: min(88vh, 720px); padding: 0; overflow: auto; overscroll-behavior: contain; }
+.perfil-dc-fechar { position: absolute; top: 10px; right: 10px; z-index: 2; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; border: 0; background: rgb(0 0 0 / 50%); color: #fff; font-size: 20px; line-height: 1; cursor: pointer; }
+.perfil-dc-corpo { display: grid; padding-bottom: 16px; }
 .perfil-dc-carregando { padding: 28px 22px; color: var(--texto-2); }
-.perfil-dc-topo { height: 96px; background: var(--marca-suave) center / cover no-repeat; }
-.perfil-dc-cabeca { display: flex; align-items: flex-end; gap: 12px; margin-top: -44px; padding: 0 18px; }
-.perfil-dc-cabeca .avatar.grande { flex: none; box-shadow: 0 0 0 4px var(--superficie); }
-.perfil-dc-nomes { min-width: 0; padding-bottom: 2px; }
-.perfil-dc-nomes h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 18px; }
-.perfil-dc-nomes p { margin: 2px 0 0; color: var(--texto-2); font-size: 13px; overflow-wrap: anywhere; }
-.perfil-dc-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 6px; background: var(--fundo); border: 1px solid var(--linha); color: var(--texto-2); font-size: 12px; font-weight: 650; }
+.perfil-dc-topo { height: 110px; background: var(--marca-suave) center / cover no-repeat; }
+.perfil-dc-cabeca { height: 44px; padding: 0 16px; }
+.perfil-dc-cabeca .avatar.perfil-dc-foto { width: 88px; height: 88px; margin-top: -44px; font-size: 28px; border: 6px solid var(--superficie); box-shadow: none; background-color: var(--superficie); }
+.perfil-dc-nomes { padding: 10px 16px 0; min-width: 0; }
+.perfil-dc-nomes h2 { margin: 0; font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
+.perfil-dc-nomes p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 0; color: var(--texto-2); font-size: 14px; }
+.perfil-dc-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 4px; background: var(--fundo); border: 1px solid var(--linha); color: var(--texto); font-size: 12px; font-weight: 700; }
 .perfil-dc-tag img { width: 14px; height: 14px; }
-.perfil-dc-insignias, .perfil-dc-corpo > .dados, .perfil-dc-cargos { margin: 0 18px; }
-.perfil-dc-insignias { display: flex; flex-wrap: wrap; gap: 6px; }
-.perfil-dc-cargos h3 { margin: 0 0 8px; font-size: 13px; color: var(--texto-2); }
-.perfil-dc-cargos > div { display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow: auto; }
-.perfil-dc-cargo { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; background: var(--fundo); border: 1px solid var(--linha); font-size: 12.5px; }
-.perfil-dc-cargo i { width: 10px; height: 10px; border-radius: 50%; background: var(--texto-3); }
+.perfil-dc-caixa { display: grid; gap: 14px; margin: 14px 16px 0; padding: 14px; border-radius: var(--raio); background: var(--fundo); }
+.perfil-dc-secao h3 { margin: 0 0 8px; color: var(--texto-2); font-size: 11.5px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.perfil-dc-datas { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.perfil-dc-datas div { display: grid; gap: 2px; }
+.perfil-dc-datas span { color: var(--texto-3); font-size: 12px; }
+.perfil-dc-datas strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.perfil-dc-lista { display: flex; flex-wrap: wrap; gap: 6px; max-height: 200px; overflow: auto; }
+.perfil-dc-cargo { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 8px; border-radius: 4px; background: var(--superficie); border: 1px solid var(--linha); font-size: 12.5px; overflow-wrap: anywhere; }
+.perfil-dc-cargo i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--texto-3); }
+.perfil-dc-id { margin: 0; color: var(--texto-3); font-size: 11.5px; font-variant-numeric: tabular-nums; user-select: all; }
+
+/* No celular o perfil abre de baixo para cima, ocupando a largura toda. */
+@media (max-width: 520px) {
+  .dialogo.perfil-dc { width: 100vw; max-width: 100vw; max-height: 88vh; margin: auto 0 0; border-radius: 16px 16px 0 0; border-bottom: 0; }
+  .perfil-dc-topo { height: 96px; }
+  .perfil-dc-corpo { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
 .responsavel span { color: var(--texto-3); font-size: 12.5px; }
 .responsavel strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

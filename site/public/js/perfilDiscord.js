@@ -26,32 +26,37 @@ function corDoCargo(cor) {
 
 const data = (valor) => (valor ? formatarData(valor).replace(/ às .*/, '') : null);
 
+// Uma seção do cartão, com título pequeno em cima, como no perfil do Discord.
+const secao = (titulo, ...conteudo) => el('section', { class: 'perfil-dc-secao' }, el('h3', null, titulo), conteudo);
+
 function conteudo(perfil) {
-  const linha = (rotulo, valor) => valor && el('div', { class: 'dado' }, el('dt', null, rotulo), el('dd', null, valor));
   const insignias = perfil.insignias.map(nome => INSIGNIAS[nome]).filter(Boolean);
   const topo = el('div', { class: 'perfil-dc-topo' });
   if (perfil.banner) topo.style.backgroundImage = `url("${perfil.banner}")`;
-  else if (perfil.corDestaque) topo.style.background = perfil.corDestaque;
+  else if (perfil.corDestaque) topo.style.backgroundColor = perfil.corDestaque;
+
+  const datas = el('div', { class: 'perfil-dc-datas' },
+    el('div', null, el('span', null, 'Discord'), el('strong', null, data(perfil.contaCriadaEm))),
+    el('div', null, el('span', null, 'Este servidor'), el('strong', null, perfil.noServidor ? data(perfil.entrouEm) : 'Saiu do servidor')),
+    perfil.impulsionaDesde && el('div', null, el('span', null, 'Impulsiona desde'), el('strong', null, data(perfil.impulsionaDesde))));
 
   return [
     topo,
     el('div', { class: 'perfil-dc-cabeca' },
-      avatar({ id: perfil.id, nome: perfil.nome, url: perfil.avatar, classe: 'grande' }),
-      el('div', { class: 'perfil-dc-nomes' },
-        el('h2', null, nomeColorido(perfil.nome, perfil.cor),
-          perfil.tag && el('span', { class: 'perfil-dc-tag', title: 'Tag do servidor' },
-            perfil.tag.insignia && el('img', { src: perfil.tag.insignia, alt: '' }), perfil.tag.texto),
-          perfil.bot && el('span', { class: 'marcador' }, 'BOT')),
-        el('p', null, `@${perfil.usuario}`, perfil.nomeGlobal && perfil.nomeGlobal !== perfil.nome ? ` · ${perfil.nomeGlobal}` : ''))),
-    insignias.length > 0 && el('div', { class: 'perfil-dc-insignias' }, insignias.map(nome => el('span', { class: 'marcador' }, nome))),
-    el('dl', { class: 'dados' },
-      linha('Conta criada', data(perfil.contaCriadaEm)),
-      linha('No servidor desde', perfil.noServidor ? data(perfil.entrouEm) : 'Não está mais no servidor'),
-      linha('Impulsiona desde', data(perfil.impulsionaDesde)),
-      linha('ID', el('code', null, perfil.id))),
-    perfil.cargos.length > 0 && el('section', { class: 'perfil-dc-cargos' },
-      el('h3', null, `Cargos (${perfil.cargos.length})`),
-      el('div', null, perfil.cargos.map(cargo => el('span', { class: 'perfil-dc-cargo' }, corDoCargo(cargo.cor), cargo.nome))))
+      avatar({ id: perfil.id, nome: perfil.nome, url: perfil.avatar, classe: 'perfil-dc-foto' })),
+    el('div', { class: 'perfil-dc-nomes' },
+      el('h2', null, nomeColorido(perfil.nome, perfil.cor)),
+      el('p', null,
+        el('span', null, `@${perfil.usuario}`),
+        perfil.tag && el('span', { class: 'perfil-dc-tag', title: 'Tag do servidor' },
+          perfil.tag.insignia && el('img', { src: perfil.tag.insignia, alt: '' }), perfil.tag.texto),
+        perfil.bot && el('span', { class: 'marcador' }, 'BOT'))),
+    el('div', { class: 'perfil-dc-caixa' },
+      insignias.length > 0 && secao('Insígnias', el('div', { class: 'perfil-dc-lista' }, insignias.map(nome => el('span', { class: 'perfil-dc-cargo' }, nome)))),
+      secao('Membro desde', datas),
+      perfil.cargos.length > 0 && secao(`Cargos · ${perfil.cargos.length}`,
+        el('div', { class: 'perfil-dc-lista' }, perfil.cargos.map(cargo => el('span', { class: 'perfil-dc-cargo' }, corDoCargo(cargo.cor), cargo.nome)))),
+      el('p', { class: 'perfil-dc-id' }, `ID ${perfil.id}`))
   ];
 }
 
