@@ -1,9 +1,11 @@
 // Em qual banco cada modelo fica e por quanto tempo seus registros duram.
 //
-// Banco principal: tudo o que é do dia a dia das denúncias (denúncias,
-// mensagens, ações da staff, strikes, chat, configurações).
-// Banco secundário: o vínculo entre Discord e ID do jogo, as notificações do
-// navegador e as sugestões.
+// Banco principal: o que é do bot (denúncias, ações da staff, strikes,
+// configurações do bot).
+// Banco secundário: o que é do site (chat, acessos, avisos, logins, rascunhos,
+// configurações do site, testes, metas, notas internas), as mensagens das
+// denúncias, o vínculo entre Discord e ID do jogo, as notificações do
+// navegador, as sugestões e a ponte com o jogo.
 const mongoose = require('mongoose');
 const secondaryConnection = require('./secondaryDb');
 const primaryConnection = require('./primaryDb');

@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Cada entrada no site pela conta do Discord: quem, quando e de qual IP.
 // Também é a lista de sessões da pessoa: cada login tem um identificador que
@@ -24,4 +24,4 @@ const loginSiteSchema = new mongoose.Schema({
 loginSiteSchema.index({ em: -1 });
 loginSiteSchema.index({ usuarioId: 1, em: -1 });
 
-module.exports = model('LoginSite', loginSiteSchema);
+module.exports = modelSecundario('LoginSite', loginSiteSchema);

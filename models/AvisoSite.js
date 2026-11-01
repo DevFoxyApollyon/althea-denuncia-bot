@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Aviso que o responsável publica para todos os membros de um servidor verem
 // no topo do site (manutenção, evento, mudança de regra).
@@ -16,4 +16,4 @@ const avisoSiteSchema = new mongoose.Schema({
 
 avisoSiteSchema.index({ guildId: 1, criadoEm: -1 });
 
-module.exports = model('AvisoSite', avisoSiteSchema);
+module.exports = modelSecundario('AvisoSite', avisoSiteSchema);

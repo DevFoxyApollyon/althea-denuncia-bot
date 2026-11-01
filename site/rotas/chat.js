@@ -9,7 +9,7 @@ const ChatFixada = require('../../models/ChatFixada');
 const InscricaoPush = require('../../models/InscricaoPush');
 const { avisarMudanca, ouvirMudancas } = require('../../utils/eventosDenuncia');
 const { contemPalavraProibida, contemLinkProibido } = require('../../utils/strikeWords');
-const { primaryConnection } = require('../../utils/persistencia');
+const { secondaryConnection } = require('../../utils/persistencia');
 const { adicionarMeses } = require('../../utils/retencaoDados');
 const { acessoAoServidor } = require('../acesso');
 const { enviarPush } = require('../push');
@@ -57,7 +57,7 @@ function ehFlood(chave, texto, agora = Date.now()) {
   return rapidas >= FLOOD.mensagens || repetiu;
 }
 
-const arquivosDoChat = () => new mongoose.mongo.GridFSBucket(primaryConnection.db, { bucketName: 'chatArquivos' });
+const arquivosDoChat = () => new mongoose.mongo.GridFSBucket(secondaryConnection.db, { bucketName: 'chatArquivos' });
 
 function guardarArquivo(dados, nome, guildId) {
   return new Promise((resolve, reject) => {

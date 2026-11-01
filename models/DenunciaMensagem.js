@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Mensagens dos tópicos de denúncia. Ficavam embutidas em Denuncia.mensagens,
 // o que fazia o documento crescer sem limite a cada mensagem do tópico.
@@ -37,4 +37,4 @@ const denunciaMensagemSchema = new mongoose.Schema({
 
 denunciaMensagemSchema.index({ threadId: 1, mensagemId: 1 }, { unique: true });
 
-module.exports = model('DenunciaMensagem', denunciaMensagemSchema);
+module.exports = modelSecundario('DenunciaMensagem', denunciaMensagemSchema);

@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Registro do que a staff fez no chat do site (apagar mensagem, castigo,
 // banimento e remoção de punição). Aparece na auditoria do responsável.
@@ -18,4 +18,4 @@ const chatModeracaoSchema = new mongoose.Schema({
 
 chatModeracaoSchema.index({ guildId: 1, em: -1 });
 
-module.exports = model('ChatModeracao', chatModeracaoSchema);
+module.exports = modelSecundario('ChatModeracao', chatModeracaoSchema);

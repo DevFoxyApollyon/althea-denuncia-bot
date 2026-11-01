@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Denúncia que a pessoa começou a escrever e ainda não enviou. Fica guardada
 // na conta dela, para continuar em outro aparelho. Um por pessoa e servidor;
@@ -17,4 +17,4 @@ const rascunhoDenunciaSchema = new mongoose.Schema({
 
 rascunhoDenunciaSchema.index({ usuarioId: 1, guildId: 1 }, { unique: true });
 
-module.exports = model('RascunhoDenuncia', rascunhoDenunciaSchema);
+module.exports = modelSecundario('RascunhoDenuncia', rascunhoDenunciaSchema);

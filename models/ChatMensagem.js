@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Mensagens do chat do site, um por servidor. Somem sozinhas após seis meses.
 const chatMensagemSchema = new mongoose.Schema({
@@ -36,4 +36,4 @@ const chatMensagemSchema = new mongoose.Schema({
 
 chatMensagemSchema.index({ guildId: 1, criadaEm: -1 });
 
-module.exports = model('ChatMensagem', chatMensagemSchema);
+module.exports = modelSecundario('ChatMensagem', chatMensagemSchema);

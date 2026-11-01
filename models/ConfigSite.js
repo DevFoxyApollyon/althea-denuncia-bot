@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { modelPermanente } = require('../utils/persistencia');
+const { modelSecundarioPermanente } = require('../utils/persistencia');
 
 // Categorias e respostas prontas definidos pelo responsável no
 // site, por servidor. Sem documento, valem os padrões de site/categorias.js.
@@ -20,4 +20,4 @@ const configSiteSchema = new mongoose.Schema({
   atualizadoPor: { type: String, default: null }
 }, { timestamps: true });
 
-module.exports = modelPermanente('ConfigSite', configSiteSchema);
+module.exports = modelSecundarioPermanente('ConfigSite', configSiteSchema);

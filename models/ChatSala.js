@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { modelPermanente } = require('../utils/persistencia');
+const { modelSecundarioPermanente } = require('../utils/persistencia');
 
 // Ajustes do chat de cada servidor, definidos pela staff: modo lento, chat
 // fechado.
@@ -11,4 +11,4 @@ const chatSalaSchema = new mongoose.Schema({
   fechado: { type: Boolean, default: false }
 });
 
-module.exports = modelPermanente('ChatSala', chatSalaSchema);
+module.exports = modelSecundarioPermanente('ChatSala', chatSalaSchema);

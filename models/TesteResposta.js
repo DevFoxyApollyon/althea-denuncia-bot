@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Cada vez que alguém da staff envia um teste.
 const testeRespostaSchema = new mongoose.Schema({
@@ -19,4 +19,4 @@ const testeRespostaSchema = new mongoose.Schema({
 testeRespostaSchema.index({ guildId: 1, usuarioId: 1, em: -1 });
 testeRespostaSchema.index({ guildId: 1, testeId: 1, em: -1 });
 
-module.exports = model('TesteResposta', testeRespostaSchema);
+module.exports = modelSecundario('TesteResposta', testeRespostaSchema);

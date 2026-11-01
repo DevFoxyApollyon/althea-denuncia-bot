@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Mensagem do chat que um membro sinalizou para a staff olhar.
 const chatSinalizacaoSchema = new mongoose.Schema({
@@ -18,4 +18,4 @@ const chatSinalizacaoSchema = new mongoose.Schema({
 chatSinalizacaoSchema.index({ mensagemId: 1, por: 1 }, { unique: true });
 chatSinalizacaoSchema.index({ guildId: 1, resolvidaEm: 1, em: -1 });
 
-module.exports = model('ChatSinalizacao', chatSinalizacaoSchema);
+module.exports = modelSecundario('ChatSinalizacao', chatSinalizacaoSchema);

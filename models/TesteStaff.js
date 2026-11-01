@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { modelPermanente } = require('../utils/persistencia');
+const { modelSecundarioPermanente } = require('../utils/persistencia');
 
 // Testes que o responsável monta para a staff de um servidor. Cada servidor
 // pode ter vários, cada um com título próprio, respondido e corrigido em separado.
@@ -32,7 +32,7 @@ const testeStaffSchema = new mongoose.Schema({
   criadoEm: { type: Date, default: Date.now }
 });
 
-const TesteStaff = modelPermanente('TesteStaff', testeStaffSchema);
+const TesteStaff = modelSecundarioPermanente('TesteStaff', testeStaffSchema);
 
 // Antes era um teste só por servidor, com um índice único no banco que impede
 // criar o segundo. Ele é removido uma vez; se já não existe, nada acontece.

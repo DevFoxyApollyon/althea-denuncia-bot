@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { modelPermanente } = require('../utils/persistencia');
+const { modelSecundarioPermanente } = require('../utils/persistencia');
 
 // Aviso fixado no topo do chat do site (regras, evento do dia). Um por
 // servidor. Guarda uma cópia do texto, então continua valendo mesmo depois
@@ -12,4 +12,4 @@ const chatFixadaSchema = new mongoose.Schema({
   em: { type: Date, default: Date.now }
 });
 
-module.exports = modelPermanente('ChatFixada', chatFixadaSchema);
+module.exports = modelSecundarioPermanente('ChatFixada', chatFixadaSchema);

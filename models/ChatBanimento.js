@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { modelPermanente } = require('../utils/persistencia');
+const { modelSecundarioPermanente } = require('../utils/persistencia');
 
 // Quem a staff proibiu de escrever no chat do site, por servidor. A pessoa
 // continua lendo as mensagens. Com "expiraEm" é um castigo (acaba sozinho na
@@ -17,4 +17,4 @@ chatBanimentoSchema.index({ guildId: 1, usuarioId: 1 }, { unique: true });
 // O banco apaga o castigo quando o prazo vence (banimentos não têm prazo).
 chatBanimentoSchema.index({ expiraEm: 1 });
 
-module.exports = modelPermanente('ChatBanimento', chatBanimentoSchema);
+module.exports = modelSecundarioPermanente('ChatBanimento', chatBanimentoSchema);

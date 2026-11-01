@@ -30,6 +30,7 @@ const { setupRankJobs } = require('./jobs/rankJobs');
 const { primaryConnection, secondaryConnection } = require('./utils/persistencia');
 const { prepararRetencaoNoBanco } = require('./utils/retencaoDados');
 const { migrarPonteParaSecundario } = require('./services/ponteSamp/migracao');
+const { migrarSiteParaSecundario } = require('./utils/migrarSiteParaSecundario');
 const Config = require('./models/Config');
 const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 const { iniciarPoller } = require('./jobs/nicknamePoller');
@@ -70,6 +71,10 @@ client.rest.on('rateLimited', (info) => {
 Promise.all([primaryConnection.asPromise(), secondaryConnection.asPromise()])
     .then(async () => {
         log.success('Bancos principal e secundário conectados.');
+        // Antes de entrar no Discord: o site e as mensagens das denúncias passam a
+        // morar no secundário, e os dados antigos precisam estar lá antes do uso.
+        await migrarSiteParaSecundario(primaryConnection.db, secondaryConnection.db)
+            .catch(err => log.error('Não foi possível copiar o site para o banco secundário: ' + err.message));
         client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
 
         // Os prazos de cada coleção (ver utils/retencaoDados.js) são aplicados em

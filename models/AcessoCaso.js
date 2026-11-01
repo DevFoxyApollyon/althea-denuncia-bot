@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Quem abriu cada caso pelo site, para auditoria do responsável.
 const acessoCasoSchema = new mongoose.Schema({
@@ -14,4 +14,4 @@ const acessoCasoSchema = new mongoose.Schema({
 
 acessoCasoSchema.index({ denunciaId: 1, em: -1 });
 
-module.exports = model('AcessoCaso', acessoCasoSchema);
+module.exports = modelSecundario('AcessoCaso', acessoCasoSchema);

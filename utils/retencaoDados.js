@@ -32,7 +32,8 @@ const COLECOES_PERMANENTES = [
   'ponteinstalacoes', // PCs autorizados na ponte (hash do token)
   'pontemotivos',     // tabela de motivos da ponte (a mesma para todos os servidores)
   'ponteconexoesgm',  // credenciais da ponte com a gamemode (segredo cifrado)
-  'ponteacessosadmin' // pessoas liberadas pelo dono no painel da ponte (/admin)
+  'ponteacessosadmin', // pessoas liberadas pelo dono no painel da ponte (/admin)
+  'migracoes'         // marca das cópias de um banco para o outro já feitas
 ];
 
 // Prazo em dias, contado da criação do registro. O que não está aqui (nem nas

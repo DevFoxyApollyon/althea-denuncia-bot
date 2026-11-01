@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 // Anotações da staff sobre um caso. Só aparecem no painel da staff do site:
 // não vão para o tópico do Discord nem para o denunciante.
@@ -13,4 +13,4 @@ const notaInternaSchema = new mongoose.Schema({
   expiraEm: { type: Date, default: null, index: true }
 });
 
-module.exports = model('NotaInterna', notaInternaSchema);
+module.exports = modelSecundario('NotaInterna', notaInternaSchema);

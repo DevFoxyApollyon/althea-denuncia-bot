@@ -220,10 +220,19 @@ test('retenção: prazos por coleção e em qual banco cada modelo fica', () => 
   assert.equal(Denuncia.schema.path('dataRetencaoAte'), undefined);
   assert.ok(Strike.schema.indexes().some(([campos, opcoes]) => campos.updatedAt === 1 && opcoes.expireAfterSeconds === 86400));
 
-  // Só o vínculo com o Discord, as notificações e as sugestões ficam no secundário.
-  for (const nome of ['Usuario', 'ChavePush', 'InscricaoPush', 'Sugestao']) assert.equal(require(`../models/${nome}`).db, secondaryConnection, nome);
-  for (const nome of ['Denuncia', 'DenunciaMensagem', 'ModerationAction', 'Strike', 'Config', 'GlobalConfig', 'StaffProfile', 'AcessoCaso', 'ChatMensagem']) {
+  // O site e as mensagens das denúncias ficam no secundário; o bot, no principal.
+  const doSecundario = ['Usuario', 'ChavePush', 'InscricaoPush', 'Sugestao', 'DenunciaMensagem', 'AcessoCaso', 'AvisoSite',
+    'ChatBanimento', 'ChatFixada', 'ChatMensagem', 'ChatModeracao', 'ChatSala', 'ChatSinalizacao', 'ConfigSite', 'LoginSite',
+    'RascunhoDenuncia', 'TesteStaff', 'TesteResposta', 'MetaStaff', 'NotaInterna'];
+  for (const nome of doSecundario) assert.equal(require(`../models/${nome}`).db, secondaryConnection, nome);
+  for (const nome of ['Denuncia', 'ModerationAction', 'Strike', 'Config', 'GlobalConfig', 'StaffProfile']) {
     assert.equal(require(`../models/${nome}`).db, primaryConnection, nome);
+  }
+
+  // Toda coleção que o site guarda no secundário entra na mudança do principal.
+  const { COLECOES } = require('../utils/migrarSiteParaSecundario');
+  for (const nome of doSecundario.filter(n => !['Usuario', 'ChavePush', 'InscricaoPush', 'Sugestao'].includes(n))) {
+    assert.ok(COLECOES.includes(require(`../models/${nome}`).collection.name), nome);
   }
 });
 
