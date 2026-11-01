@@ -554,8 +554,11 @@ async function handleDenunciaSubmit(interaction, platform) {
                 thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds]);
                 if (thread) {
                     // O tópico privado não fica preso à mensagem: o link vai no texto.
+                    // A linha em branco no topo (caractere ⠀, que o Discord não
+                    // apaga) separa uma denúncia da outra no canal, já que o
+                    // Discord junta as mensagens seguidas do bot.
                     mainMessage = await channel.send({
-                        content: textoDenuncia.replace('➱ **Status**', `➱ **Tópico**: ${thread}\n➱ **Status**`),
+                        content: `⠀\n${textoDenuncia.replace('➱ **Status**', `➱ **Tópico**: ${thread}\n➱ **Status**`)}`,
                         allowedMentions: { parse: ['users'] }
                     }).catch(async (erro) => {
                         await thread.delete().catch(() => {});
