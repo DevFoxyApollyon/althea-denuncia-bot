@@ -8,7 +8,6 @@ let carregando = null;
 function aplicar(doc) {
   definirConfigDoServidor(doc.guildId, {
     categorias: doc.categorias.map(({ nome, grupo, prioridade, termos }) => ({ nome, grupo: grupo || '', prioridade, termos: [...termos] })),
-    slaHoras: { alta: doc.slaHoras.alta, normal: doc.slaHoras.normal },
     respostasProntas: doc.respostasProntas.map(({ titulo, texto }) => ({ titulo, texto }))
   });
 }
@@ -46,20 +45,11 @@ function validarConfig(entrada) {
   const semTermo = categorias.find(item => !item.termos.length);
   if (semTermo) throw new Error(`A categoria "${semTermo.nome}" precisa de pelo menos um termo com 2 letras ou mais.`);
 
-  const horas = (valor) => Math.round(Number(valor) * 100) / 100;
-  const slaHoras = { alta: horas(entrada?.slaHoras?.alta), normal: horas(entrada?.slaHoras?.normal) };
-  for (const [nome, valor] of Object.entries(slaHoras)) {
-    if (!Number.isFinite(valor) || valor < 0.25 || valor > 720) {
-      throw new Error(`O prazo de prioridade ${nome} deve ficar entre 0,25 e 720 horas.`);
-    }
-  }
-  if (slaHoras.alta > slaHoras.normal) throw new Error('O prazo da prioridade alta não pode ser maior que o da normal.');
-
   const respostasProntas = (Array.isArray(entrada?.respostasProntas) ? entrada.respostasProntas : []).slice(0, 20)
     .map(item => ({ titulo: texto(item?.titulo, 60), texto: texto(item?.texto, 1500) }))
     .filter(item => item.titulo && item.texto);
 
-  return { categorias, slaHoras, respostasProntas };
+  return { categorias, respostasProntas };
 }
 
 async function salvarConfigDoSite(guildId, entrada, usuarioId) {

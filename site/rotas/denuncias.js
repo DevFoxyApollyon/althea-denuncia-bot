@@ -122,7 +122,6 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
         somenteLeitura: Boolean(config?.siteSomenteLeitura),
         // Categorias, prazos e respostas prontas valem por servidor.
         categorias: configVisivel(guild.id).categorias.map(({ nome, grupo, prioridade, termos }) => ({ nome, grupo, prioridade, termos })),
-        slaHoras: configVisivel(guild.id).slaHoras,
         respostasProntas: papeis.staff ? configVisivel(guild.id).respostasProntas : [],
         nome: guild.name,
         icone: guild.iconURL({ size: 64 }) || null,
@@ -208,7 +207,7 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
     else consulta = consulta.limit(fila ? LIMITE_LISTA * 3 : LIMITE_LISTA);
     let denuncias = await consulta.lean();
 
-    // Fila por SLA: infrações de alta prioridade primeiro; dentro de cada grupo, as mais antigas.
+    // Fila: infrações de alta prioridade primeiro; dentro de cada grupo, as mais antigas.
     if (fila) {
       const peso = (denuncia) => (prioridadeDoMotivo(denuncia.motivo, denuncia.guildId) === 'alta' ? 0 : 1);
       denuncias = denuncias

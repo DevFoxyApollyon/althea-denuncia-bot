@@ -1,7 +1,7 @@
 // Constantes e funções compartilhadas pelas rotas do site.
 const Denuncia = require('../../models/Denuncia');
 const AcessoCaso = require('../../models/AcessoCaso');
-const { categoriaDoMotivo, prioridadeDoMotivo, prazoDoSla } = require('../categorias');
+const { categoriaDoMotivo, prioridadeDoMotivo } = require('../categorias');
 
 const STATUS_ABERTOS = ['pendente', 'reivindicacao', 'analise', 'aceita', 'recusada'];
 const LIMITE_LISTA = 100;
@@ -212,8 +212,6 @@ function resumoDaDenuncia(denuncia, relacao) {
     motivo: denuncia.motivo,
     categoria: categoriaDoMotivo(denuncia.motivo, denuncia.guildId),
     prioridade: prioridadeDoMotivo(denuncia.motivo, denuncia.guildId),
-    // SLA: até quando a staff deve reivindicar o caso.
-    prazoSla: prazoDoSla(denuncia.motivo, denuncia.dataCriacao, denuncia.guildId),
     reivindicadaEm: denuncia.claimedAt || null,
     platform: denuncia.platform,
     status: denuncia.status,

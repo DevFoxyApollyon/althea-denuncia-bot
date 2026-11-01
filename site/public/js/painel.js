@@ -15,9 +15,7 @@ import {
   papeisAtuais,
   podeAbrir,
   selo,
-  seloSla,
-  servidorAtual,
-  slaDe
+  servidorAtual
 } from './util.js';
 
 export function cartaoNumero({ rotulo, valor, nomeIcone, tom, filtro }) {
@@ -44,7 +42,6 @@ export function numerosDoPainel() {
     return [
       cartaoNumero({ rotulo: 'Na fila', valor: fila.length, nomeIcone: 'caixa', tom: 'analise' }),
       cartaoNumero({ rotulo: 'Alta prioridade', valor: fila.filter(denuncia => denuncia.prioridade === 'alta').length, nomeIcone: 'alerta', tom: 'recusada' }),
-      cartaoNumero({ rotulo: 'Fora do prazo', valor: fila.filter(denuncia => slaDe(denuncia)?.classe === 'estourado').length, nomeIcone: 'relogio', tom: 'recusada' }),
       cartaoNumero({ rotulo: 'Meus atendimentos abertos', valor: meus.length, nomeIcone: 'escudo', tom: 'reivindicacao' }),
       estado.visaoAdmin && cartaoNumero({ rotulo: 'Casos no total', valor: estado.totalAdmin, nomeIcone: 'grade', tom: 'aceita' })
     ];
@@ -126,7 +123,7 @@ export function tabelaDeCasos() {
             el('span', { class: 'celula-texto' },
               el('strong', null, `Acusado ${denuncia.acusado}`),
               el('span', null, denuncia.relacao === 'acusado' ? 'Você é o acusado' : `Denunciante ${denuncia.denunciante}`))),
-          el('span', { class: 'celula caso-status' }, selo(denuncia.status), staff && seloSla(denuncia)),
+          el('span', { class: 'celula caso-status' }, selo(denuncia.status)),
           icone('avancar')),
         estado.vista === 'fila' && !naBusca && responsavel && denuncia.aberta && el('button', {
           class: 'linha-finalizar perigo',

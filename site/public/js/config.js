@@ -1,4 +1,4 @@
-// Configurações do site, editadas pelo responsável: prazos de SLA, categorias
+// Configurações do site, editadas pelo responsável: categorias
 // e respostas prontas. Valem só para o servidor selecionado.
 import { executar } from './acoes.js';
 import { confirmar } from './confirmacao.js';
@@ -10,7 +10,6 @@ import { api, avisar, el, enviarJson, icone } from './util.js';
 // No formulário os termos de cada categoria ficam num campo só, separados por vírgula.
 const paraEdicao = (config) => ({
   personalizada: config.personalizada,
-  slaHoras: { ...config.slaHoras },
   categorias: config.categorias.map(item => ({ nome: item.nome, grupo: item.grupo || '', prioridade: item.prioridade, termos: item.termos.join(', ') })),
   respostasProntas: config.respostasProntas.map(item => ({ ...item }))
 });
@@ -40,7 +39,6 @@ async function salvar(botao) {
     await aplicarResposta(await enviarJson('/api/config-site', {
       guildId: estado.guildId,
       config: {
-        slaHoras: { alta: Number(edicao.slaHoras.alta), normal: Number(edicao.slaHoras.normal) },
         categorias: edicao.categorias.map(item => ({ ...item, termos: item.termos.split(',') })),
         respostasProntas: edicao.respostasProntas
       }
@@ -110,15 +108,6 @@ export function telaConfig() {
           edicao.personalizada && el('button', { class: 'perigo', type: 'button', onclick: (evento) => restaurar(evento.currentTarget) }, 'Restaurar padrão'),
           el('button', { class: 'primario', type: 'button', onclick: (evento) => salvar(evento.currentTarget) }, 'Salvar configurações'))),
       blocoAviso(),
-
-      el('section', { class: 'cartao' },
-        el('h2', null, 'Prazos de atendimento (SLA)'),
-        el('p', { class: 'sub' }, 'Tempo que a staff tem para reivindicar uma denúncia depois de aberta, em horas.'),
-        el('div', { class: 'config-sla' },
-          el('label', null, el('span', null, 'Alta prioridade'),
-            campo(edicao.slaHoras, 'alta', { rotulo: 'Prazo da alta prioridade, em horas', tipo: 'number', min: '0.25', max: '720', passo: '0.25' })),
-          el('label', null, el('span', null, 'Prioridade normal'),
-            campo(edicao.slaHoras, 'normal', { rotulo: 'Prazo da prioridade normal, em horas', tipo: 'number', min: '0.25', max: '720', passo: '0.25' })))),
 
       el('section', { class: 'cartao' },
         el('h2', null, 'Categorias'),

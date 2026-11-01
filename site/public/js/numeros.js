@@ -111,7 +111,6 @@ export function telaNumeros() {
               cartaoNumero({ rotulo: 'Denúncias no período', valor: numeros.total, nomeIcone: 'documento', tom: 'reivindicacao' }),
               cartaoNumero({ rotulo: 'Taxa de denúncias aceitas', valor: numeros.taxaDeAceite === null ? 'sem dado' : `${Math.round(numeros.taxaDeAceite * 100)}%`, nomeIcone: 'visto', tom: 'aceita' }),
               cartaoNumero({ rotulo: 'Tempo até reivindicar', valor: duracao(numeros.minutosAteReivindicar), nomeIcone: 'relogio', tom: 'analise' }),
-              cartaoNumero({ rotulo: `SLA cumprido (${numeros.foraDoPrazo || 0} fora do prazo agora)`, valor: numeros.slaCumprido === null || numeros.slaCumprido === undefined ? 'sem dado' : `${Math.round(numeros.slaCumprido * 100)}%`, nomeIcone: 'alerta', tom: 'reivindicacao' }),
               cartaoNumero({ rotulo: `Nota média (${numeros.avaliacoes || 0})`, valor: numeros.notaMedia ? `${numeros.notaMedia.toFixed(1)}/10` : 'sem dados', nomeIcone: 'estrela', tom: 'recusada' })),
             el('div', { class: 'numeros-bloco' },
               el('h3', null, 'Denúncias por dia'),

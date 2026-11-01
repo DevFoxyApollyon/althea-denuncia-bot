@@ -42,7 +42,6 @@ import {
   numeroDoCaso,
   rico,
   selo,
-  seloSla,
   servidorAtual,
   soEmojis,
   videoDoYoutube
@@ -607,7 +606,6 @@ export function telaDetalhe() {
               dado('Acusado', areaDaEquipe() && papeis.staff ? atalhosDeJogador(denuncia.acusado) : denuncia.acusado),
               dado('Categoria', denuncia.categoria),
               dado('Prioridade', denuncia.prioridade === 'alta' ? el('span', { class: 'prioridade' }, 'Alta') : 'Normal'),
-              areaDaEquipe() && dado('Prazo (SLA)', seloSla(denuncia)),
               dado('Motivo', denuncia.motivo))),
           el('section', { class: 'cartao' },
             el('h2', null, 'Provas informadas'),

@@ -1,4 +1,4 @@
-// Categorias, prioridade (SLA) e respostas prontas do site.
+// Categorias, prioridade e respostas prontas do site.
 //
 // Os valores abaixo são o padrão. O responsável pode trocá-los pelo site
 // (Admin > Configurações); o que ele salvar fica no banco, por servidor, e
@@ -62,8 +62,6 @@ const PADRAO = {
     { nome: 'Atrapalhar staff ou evento', grupo: 'Conduta', prioridade: 'normal', termos: ['atrapalh'] },
     { nome: 'Conduta de staff', grupo: 'Conduta', prioridade: 'normal', termos: ['abuso de poder', 'conduta de staff', 'abuso de staff'] }
   ],
-  // Prazo, em horas, para a staff reivindicar a denúncia depois de aberta.
-  slaHoras: { alta: 2, normal: 24 },
   respostasProntas: [
     { titulo: 'Pedir mais provas', texto: 'Para seguir com a análise, precisamos de mais provas. Envie o vídeo completo do ocorrido, sem cortes, mostrando o momento da infração.' },
     { titulo: 'Pedir contraprova', texto: 'O acusado tem 24 horas para enviar a contraprova neste tópico. Sem ela, a análise segue com as provas já apresentadas.' },
@@ -116,12 +114,6 @@ function acharCategoria(motivo, guildId) {
 
 const categoriaDoMotivo = (motivo, guildId) => acharCategoria(motivo, guildId)?.nome || OUTROS;
 const prioridadeDoMotivo = (motivo, guildId) => acharCategoria(motivo, guildId)?.prioridade || 'normal';
-const slaHorasDoServidor = (guildId) => configDoServidor(guildId).slaHoras;
-
-function prazoDoSla(motivo, dataCriacao, guildId) {
-  const horas = slaHorasDoServidor(guildId)[prioridadeDoMotivo(motivo, guildId)];
-  return new Date(new Date(dataCriacao).getTime() + horas * 60 * 60 * 1000);
-}
 
 const nomesDasCategorias = (guildId) => configDoServidor(guildId).categorias.map(categoria => categoria.nome);
 
@@ -131,7 +123,6 @@ function configVisivel(guildId) {
   return {
     personalizada: porServidor.has(guildId),
     categorias: config.categorias.map(({ nome, grupo, prioridade, termos }) => ({ nome, grupo: grupo || '', prioridade, termos })),
-    slaHoras: { ...config.slaHoras },
     respostasProntas: config.respostasProntas.map(({ titulo, texto }) => ({ titulo, texto }))
   };
 }
@@ -139,12 +130,9 @@ function configVisivel(guildId) {
 module.exports = {
   PADRAO,
   OUTROS,
-  SLA_HORAS: PADRAO.slaHoras,
   categoriaDoMotivo,
   prioridadeDoMotivo,
-  prazoDoSla,
   nomesDasCategorias,
-  slaHorasDoServidor,
   configVisivel,
   definirConfigDoServidor
 };

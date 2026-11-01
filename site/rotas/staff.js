@@ -6,7 +6,7 @@ const NotaInterna = require('../../models/NotaInterna');
 const ModerationAction = require('../../models/ModerationAction');
 const { avisarMudanca } = require('../../utils/eventosDenuncia');
 const { loadRank } = require('../../commands/rank');
-const { categoriaDoMotivo, prazoDoSla, slaHorasDoServidor, configVisivel, PADRAO } = require('../categorias');
+const { categoriaDoMotivo, configVisivel, PADRAO } = require('../categorias');
 const { salvarConfigDoSite, restaurarConfigDoSite } = require('../configSite');
 const AcessoCaso = require('../../models/AcessoCaso');
 const ChatModeracao = require('../../models/ChatModeracao');
@@ -174,10 +174,6 @@ function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico,
     const porDiaDaSemana = Array(7).fill(0);
     let somaEspera = 0;
     let reivindicadas = 0;
-    let slaAvaliados = 0;
-    let slaCumpridos = 0;
-    let foraDoPrazo = 0;
-    const agora = Date.now();
     const notas = [];
 
     for (const caso of casos) {
@@ -194,16 +190,6 @@ function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico,
         reivindicadas++;
       }
       if (caso.feedbackNota) notas.push(caso.feedbackNota);
-
-      // SLA: conta quem foi reivindicado e quem já estourou o prazo sem ser.
-      const prazo = prazoDoSla(caso.motivo, caso.dataCriacao, acesso.guild.id).getTime();
-      if (caso.claimedAt) {
-        slaAvaliados++;
-        if (new Date(caso.claimedAt).getTime() <= prazo) slaCumpridos++;
-      } else if (agora > prazo) {
-        slaAvaliados++;
-        if (caso.status === 'pendente') foraDoPrazo++;
-      }
     }
 
     const aceitas = porStatus.aceita || 0;
@@ -221,14 +207,11 @@ function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico,
       taxaDeAceite: aceitas + recusadas ? aceitas / (aceitas + recusadas) : null,
       minutosAteReivindicar: reivindicadas ? Math.round(somaEspera / reivindicadas / 60000) : null,
       notaMedia: notas.length ? notas.reduce((soma, nota) => soma + nota, 0) / notas.length : null,
-      avaliacoes: notas.length,
-      slaCumprido: slaAvaliados ? slaCumpridos / slaAvaliados : null,
-      foraDoPrazo,
-      slaHoras: slaHorasDoServidor(acesso.guild.id)
+      avaliacoes: notas.length
     });
   }));
 
-  // Configurações do site (categorias, prazos de SLA e respostas prontas), por servidor.
+  // Configurações do site (categorias e respostas prontas), por servidor.
   router.get('/config-site', assincrono(async (req, res) => {
     const acesso = await acessoAoServidor(client, req.usuario.id, String(req.query.guildId || ''));
     if (!acesso?.papeis.responsavel) throw new ErroHttp(403, 'As configurações são restritas ao responsável.');

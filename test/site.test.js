@@ -53,18 +53,13 @@ test('sessão: token adulterado ou vencido é recusado', () => {
   assert.equal(lerToken('lixo', segredo), null);
 });
 
-test('SLA: infrações graves têm prioridade alta e prazo menor', () => {
-  const { prioridadeDoMotivo, prazoDoSla, SLA_HORAS } = require('../site/categorias');
+test('prioridade: infrações graves têm prioridade alta', () => {
+  const { prioridadeDoMotivo } = require('../site/categorias');
   for (const motivo of ['Mods proibidos', 'zaralho no centro', 'slide em fuga', 'uso de hack']) {
     assert.equal(prioridadeDoMotivo(motivo), 'alta', motivo);
   }
   assert.equal(prioridadeDoMotivo('Anti-RP'), 'normal');
   assert.equal(prioridadeDoMotivo('motivo qualquer'), 'normal');
-
-  const abertura = new Date('2026-10-09T12:00:00Z');
-  assert.equal(prazoDoSla('hack', abertura) - abertura, SLA_HORAS.alta * 3600 * 1000);
-  assert.equal(prazoDoSla('rdm', abertura) - abertura, SLA_HORAS.normal * 3600 * 1000);
-  assert.ok(SLA_HORAS.alta < SLA_HORAS.normal);
 });
 
 test('alerta de motivo crítico: marca o responsável só com a opção ligada', async () => {
@@ -100,15 +95,13 @@ test('categorias: siglas só casam com a palavra inteira', () => {
 
 test('configuração do site: valida e limpa o que o responsável salva', () => {
   const { validarConfig } = require('../site/configSite');
-  const base = { slaHoras: { alta: 1, normal: 12 }, categorias: [{ nome: ' Hack ', prioridade: 'alta', termos: ' hack , Cheat, x' }], respostasProntas: [{ titulo: 'Oi', texto: 'Texto' }, { titulo: '', texto: 'sem título' }] };
+  const base = { categorias: [{ nome: ' Hack ', prioridade: 'alta', termos: ' hack , Cheat, x' }], respostasProntas: [{ titulo: 'Oi', texto: 'Texto' }, { titulo: '', texto: 'sem título' }] };
 
   const limpa = validarConfig(base);
   assert.deepEqual(limpa.categorias, [{ nome: 'Hack', grupo: '', prioridade: 'alta', termos: ['hack', 'cheat'] }]);
   assert.equal(limpa.respostasProntas.length, 1);
 
   assert.throws(() => validarConfig({ ...base, categorias: [] }), /pelo menos uma categoria/);
-  assert.throws(() => validarConfig({ ...base, slaHoras: { alta: 30, normal: 12 } }), /não pode ser maior/);
-  assert.throws(() => validarConfig({ ...base, slaHoras: { alta: 0, normal: 12 } }), /entre 0,25 e 720/);
   assert.throws(() => validarConfig({ ...base, categorias: [{ nome: 'A', termos: 'x' }] }), /pelo menos um termo/);
 });
 

@@ -260,28 +260,6 @@ export function rico(texto, contexto = estado.detalhe || {}) {
   return nos;
 }
 
-export function duracaoCurta(ms) {
-  const minutos = Math.max(1, Math.round(Math.abs(ms) / 60000));
-  if (minutos < 60) return `${minutos} min`;
-  const horas = Math.floor(minutos / 60);
-  if (horas < 48) return `${horas} h${minutos % 60 ? ` ${minutos % 60} min` : ''}`;
-  return `${Math.floor(horas / 24)} dias`;
-}
-
-// Prazo de atendimento (SLA): vale enquanto a denúncia espera alguém reivindicar.
-export function slaDe(denuncia) {
-  if (!denuncia.prazoSla || denuncia.status !== 'pendente') return null;
-  const resta = new Date(denuncia.prazoSla).getTime() - Date.now();
-  if (resta < 0) return { classe: 'estourado', texto: `Atrasada há ${duracaoCurta(resta)}` };
-  const total = new Date(denuncia.prazoSla).getTime() - new Date(denuncia.dataCriacao).getTime();
-  return { classe: resta < total * 0.25 ? 'perto' : 'no-prazo', texto: `Vence em ${duracaoCurta(resta)}` };
-}
-
-export const seloSla = (denuncia) => {
-  const sla = slaDe(denuncia);
-  return sla && el('span', { class: `sla ${sla.classe}` }, icone('relogio'), sla.texto);
-};
-
 export const selo = (status) => el('span', { class: `selo ${status}` }, ROTULOS_STATUS[status] || status);
 
 // "Equipe" cobre o painel da staff e o painel do responsável: nos dois a

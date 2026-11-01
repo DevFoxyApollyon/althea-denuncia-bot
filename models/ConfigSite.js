@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const { modelPermanente } = require('../utils/persistencia');
 
-// Categorias, prazos de SLA e respostas prontas definidos pelo responsável no
+// Categorias e respostas prontas definidos pelo responsável no
 // site, por servidor. Sem documento, valem os padrões de site/categorias.js.
 const configSiteSchema = new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
@@ -12,10 +12,6 @@ const configSiteSchema = new mongoose.Schema({
     prioridade: { type: String, enum: ['alta', 'normal'], default: 'normal' },
     termos: { type: [String], default: [] }
   }],
-  slaHoras: {
-    alta: { type: Number, required: true },
-    normal: { type: Number, required: true }
-  },
   respostasProntas: [{
     _id: false,
     titulo: { type: String, required: true, maxlength: 60 },

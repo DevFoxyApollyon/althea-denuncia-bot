@@ -2,7 +2,7 @@
 // e sem login. Serve para olhar e ajustar o visual.
 //   npm run site:previa  ->  http://localhost:4173
 const express = require('express');
-const { categoriaDoMotivo, prioridadeDoMotivo, prazoDoSla, configVisivel, PADRAO } = require('./categorias');
+const { categoriaDoMotivo, prioridadeDoMotivo, configVisivel, PADRAO } = require('./categorias');
 const path = require('path');
 
 const PORTA = Number(process.env.PREVIA_PORT) || 4173;
@@ -26,7 +26,7 @@ const denuncias = [
   { id: '66f0a1b2c3d4e5f6a7b8c904', acusado: '1187', denunciante: '812', motivo: 'Uso de hack (aimbot) em tiroteio', platform: 'Mobile', status: 'pendente', dataCriacao: horas(5), claimedBy: null, relacao: 'acusado' },
   { id: '66f0a1b2c3d4e5f6a7b8c905', acusado: '3310', denunciante: '1187', motivo: 'Uso de bug para duplicar itens', platform: 'PC', status: 'reivindicacao', dataCriacao: horas(1), claimedBy: '100', relacao: 'denunciante' },
   { id: '66f0a1b2c3d4e5f6a7b8c906', acusado: '907', denunciante: '1187', motivo: 'Metagaming em sequestro', platform: 'PC', status: 'finalizada', dataCriacao: horas(240), claimedBy: '201', relacao: 'denunciante' }
-].map(item => ({ ...item, categoria: categoriaDoMotivo(item.motivo), prioridade: prioridadeDoMotivo(item.motivo), prazoSla: prazoDoSla(item.motivo, item.dataCriacao), reivindicadaEm: null, ultimaAtividade: item.status === 'analise' ? new Date().toISOString() : item.dataCriacao, guildId: '1', guildNome: 'Brasil RolePlay', aberta: ['pendente', 'reivindicacao', 'analise'].includes(item.status) }));
+].map(item => ({ ...item, categoria: categoriaDoMotivo(item.motivo), prioridade: prioridadeDoMotivo(item.motivo), reivindicadaEm: null, ultimaAtividade: item.status === 'analise' ? new Date().toISOString() : item.dataCriacao, guildId: '1', guildNome: 'Brasil RolePlay', aberta: ['pendente', 'reivindicacao', 'analise'].includes(item.status) }));
 
 const mensagem = (id, autorId, autorNome, conteudo, h, extra = {}) => ({
   id, autorId, autorNome, conteudo, dataCriacao: horas(h),
@@ -61,8 +61,8 @@ app.get('/api/site', (req, res) => res.json({ nome: 'Brasil RolePlay', icone: nu
 
 app.get('/api/eu', (req, res) => {
   if (semLogin(req)) return res.status(401).json({ erro: 'Entre com sua conta do Discord para continuar.' });
-  res.json({ usuario, visaoAdmin: true, painelPonte: true, servidores: [{ id: '1', nome: 'Brasil RolePlay', icone: null, limiteUploadMb: 9, manutencao: false, categorias: configVisivel('1').categorias, slaHoras: configVisivel('1').slaHoras, respostasProntas: configVisivel('1').respostasProntas, apelido: 'Rafael Monteiro 1187', avatar: null, papeis: req.get('Referer')?.includes('jogador') ? { ...papeis, staff: false, responsavel: false, administrador: false } : papeis },
-    { id: '2', nome: '🏆 Brasil Roleplay - 2', icone: null, limiteUploadMb: 9, manutencao: true, categorias: configVisivel('2').categorias, slaHoras: configVisivel('2').slaHoras, respostasProntas: [], apelido: 'Rafael Monteiro 1187', avatar: null, papeis: { podeDenunciarPC: true } }] });
+  res.json({ usuario, visaoAdmin: true, painelPonte: true, servidores: [{ id: '1', nome: 'Brasil RolePlay', icone: null, limiteUploadMb: 9, manutencao: false, categorias: configVisivel('1').categorias, respostasProntas: configVisivel('1').respostasProntas, apelido: 'Rafael Monteiro 1187', avatar: null, papeis: req.get('Referer')?.includes('jogador') ? { ...papeis, staff: false, responsavel: false, administrador: false } : papeis },
+    { id: '2', nome: '🏆 Brasil Roleplay - 2', icone: null, limiteUploadMb: 9, manutencao: true, categorias: configVisivel('2').categorias, respostasProntas: [], apelido: 'Rafael Monteiro 1187', avatar: null, papeis: { podeDenunciarPC: true } }] });
 });
 
 app.get('/api/denuncias', (req, res) => {
@@ -535,7 +535,7 @@ app.get('/api/numeros', (req, res) => {
     dias, total: porDia.reduce((s, d) => s + d.total, 0), porDia,
     porCategoria: [['Anti-RP', 41], ['RDM', 33], ['Zaralho', 21], ['VDM', 18], ['Slide', 9], ['Outros', 7]].map(([nome, total]) => ({ nome, total })),
     porStatus: { pendente: 6, reivindicacao: 3, analise: 4, aceita: 58, recusada: 31, finalizada: 27 },
-    taxaDeAceite: 0.65, minutosAteReivindicar: 37, notaMedia: 8.4, avaliacoes: 27, slaCumprido: 0.82, foraDoPrazo: 2
+    taxaDeAceite: 0.65, minutosAteReivindicar: 37, notaMedia: 8.4, avaliacoes: 27
   });
 });
 

@@ -187,7 +187,7 @@ function registrarRotasDeGestao(router, { client }) {
         somenteLeitura: Boolean(config?.siteSomenteLeitura)
       },
       // null = o servidor usa o padrão do site.
-      configSite: site.personalizada ? { categorias: site.categorias, slaHoras: site.slaHoras, respostasProntas: site.respostasProntas } : null,
+      configSite: site.personalizada ? { categorias: site.categorias, respostasProntas: site.respostasProntas } : null,
       minimoSemanal: meta?.minimoSemanal || 0
     });
   }));

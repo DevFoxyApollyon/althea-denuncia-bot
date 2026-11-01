@@ -12,8 +12,6 @@ import {
   icone,
   nomeColorido,
   numeroDoCaso,
-  seloSla,
-  slaDe,
   tempoRelativo
 } from './util.js';
 
@@ -110,7 +108,7 @@ export function telaVisaoGeral() {
 
   const { numeros, ranking, sugestoes, auditoria } = geral;
   const fila = estado.listas.fila;
-  const urgentes = fila.filter(denuncia => denuncia.prioridade === 'alta' || slaDe(denuncia)?.classe === 'estourado').slice(0, 6);
+  const urgentes = fila.filter(denuncia => denuncia.prioridade === 'alta').slice(0, 6);
   const novas = (sugestoes?.sugestoes || []).filter(item => item.status === 'nova');
   const porcento = (valor) => valor === null || valor === undefined ? 'sem dado' : `${Math.round(valor * 100)}%`;
   const bloco = (titulo, acao, conteudo) => el('section', { class: 'cartao' },
@@ -126,8 +124,7 @@ export function telaVisaoGeral() {
       el('div', { class: 'numeros' },
         cartaoNumero({ rotulo: 'Denúncias em 30 dias', valor: numeros?.total ?? 'sem dado', nomeIcone: 'documento', tom: 'reivindicacao' }),
         cartaoNumero({ rotulo: 'Na fila agora', valor: fila.length, nomeIcone: 'caixa', tom: 'analise' }),
-        cartaoNumero({ rotulo: 'Fora do prazo', valor: fila.filter(denuncia => slaDe(denuncia)?.classe === 'estourado').length, nomeIcone: 'relogio', tom: 'recusada' }),
-        cartaoNumero({ rotulo: 'SLA cumprido', valor: porcento(numeros?.slaCumprido), nomeIcone: 'alerta', tom: 'aceita' }),
+        cartaoNumero({ rotulo: 'Alta prioridade', valor: fila.filter(denuncia => denuncia.prioridade === 'alta').length, nomeIcone: 'alerta', tom: 'recusada' }),
         cartaoNumero({ rotulo: 'Taxa de denúncias aceitas', valor: porcento(numeros?.taxaDeAceite), nomeIcone: 'visto', tom: 'aceita' }),
         cartaoNumero({ rotulo: 'Nota média', valor: numeros?.notaMedia ? `${numeros.notaMedia.toFixed(1)}/10` : 'sem dados', nomeIcone: 'estrela', tom: 'analise' })),
 
@@ -137,8 +134,8 @@ export function telaVisaoGeral() {
             ? el('ul', { class: 'atencao' }, urgentes.map(denuncia => el('li', null,
               el('button', { type: 'button', onclick: () => ir(`#/d/${denuncia.id}`) },
                 el('span', null, el('strong', null, denuncia.motivo), el('small', null, `${numeroDoCaso(denuncia.id)}, acusado ${denuncia.acusado}`)),
-                seloSla(denuncia) || el('span', { class: 'prioridade' }, 'Alta')))))
-            : el('p', { class: 'sub' }, 'Nenhum caso de alta prioridade ou fora do prazo na fila.')),
+                el('span', { class: 'prioridade' }, 'Alta')))))
+            : el('p', { class: 'sub' }, 'Nenhum caso de alta prioridade na fila.')),
 
         bloco('Denúncias por dia', verTudo('Ver números', () => ir('#/numeros')),
           numeros?.total ? graficoPorDia(numeros.porDia) : el('p', { class: 'sub' }, 'Nenhuma denúncia nos últimos 30 dias.')),
