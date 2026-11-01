@@ -25,6 +25,9 @@ const denunciaSchema = new mongoose.Schema({
   },
   armazemThreadId: { type: String, default: null, index: true },
   registroThreadId: { type: String, default: null, index: true },
+  // Tópico público aberto na mensagem do canal quando a denúncia de tópico
+  // privado é aceita com acusado fora do banco. O que é escrito nele vai para o privado.
+  topicoPublicoId: { type: String, default: null, index: true },
   denunciante: { 
     type: String, 
     required: true 

@@ -36,8 +36,9 @@ async function fecharTopico(topico, motivo) {
 
 // Fecha os espelhos de uma denúncia. Chamado quando o tópico dela é fechado.
 async function fecharEspelhos(client, denunciaId, motivo = 'Denúncia finalizada.') {
-  const denuncia = await Denuncia.findById(denunciaId).select('armazemThreadId registroThreadId').lean().catch(() => null);
-  const ids = [...new Set([denuncia?.armazemThreadId, denuncia?.registroThreadId].filter(Boolean))];
+  const denuncia = await Denuncia.findById(denunciaId).select('armazemThreadId registroThreadId topicoPublicoId').lean().catch(() => null);
+  // O tópico público da decisão fecha junto com o privado.
+  const ids = [...new Set([denuncia?.armazemThreadId, denuncia?.registroThreadId, denuncia?.topicoPublicoId].filter(Boolean))];
   let fechados = 0;
 
   for (const id of ids) {
@@ -94,11 +95,13 @@ async function classificarTopicos(client, agora = Date.now()) {
     if (!todos.length) continue;
 
     const ids = todos.map(topico => topico.id);
-    const denuncias = await Denuncia.find({ $or: [{ threadId: { $in: ids } }, { armazemThreadId: { $in: ids } }, { registroThreadId: { $in: ids } }] })
-      .select('status threadId armazemThreadId registroThreadId').lean();
+    const denuncias = await Denuncia.find({ $or: [{ threadId: { $in: ids } }, { armazemThreadId: { $in: ids } }, { registroThreadId: { $in: ids } }, { topicoPublicoId: { $in: ids } }] })
+      .select('status threadId armazemThreadId registroThreadId topicoPublicoId').lean();
     const tipoPorTopico = new Map();
     for (const denuncia of denuncias) {
       if (denuncia.threadId) tipoPorTopico.set(denuncia.threadId, { tipo: 'denuncia', denuncia });
+      // O tópico público da decisão segue a mesma regra do tópico da denúncia.
+      if (denuncia.topicoPublicoId) tipoPorTopico.set(denuncia.topicoPublicoId, { tipo: 'denuncia', denuncia });
       if (denuncia.armazemThreadId) tipoPorTopico.set(denuncia.armazemThreadId, { tipo: 'armazem', denuncia });
       if (denuncia.registroThreadId) tipoPorTopico.set(denuncia.registroThreadId, { tipo: 'registro', denuncia });
     }

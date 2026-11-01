@@ -39,6 +39,7 @@ async function abrirTopicoPublicoDoAceite(client, denuncia, { acusadoId, motivo,
     if (!mensagem || mensagem.hasThread) return null;
 
     const publico = await mensagem.startThread({ name: `Denúncia: ${denuncia.denunciante} (decisão)`, autoArchiveDuration: 1440 });
+    if (denuncia._id) await Denuncia.updateOne({ _id: denuncia._id }, { $set: { topicoPublicoId: publico.id } }).catch(() => {});
     await publico.send({
       content: [
         '✅ **Denúncia aceita**',
@@ -48,7 +49,7 @@ async function abrirTopicoPublicoDoAceite(client, denuncia, { acusadoId, motivo,
         `➱ **Data da punição**: \`${dataPunicao}\``,
         staff && `➱ **Aceita por**: ${staff}`,
         '',
-        'As provas ficaram no tópico privado da denúncia. Caso discorde da decisão, procure um responsável por denúncias para pedir uma reanálise.'
+        'As provas ficaram no tópico privado da denúncia. O que for escrito aqui também vai para ele. Caso discorde da decisão, procure um responsável por denúncias para pedir uma reanálise.'
       ].filter(linha => linha !== null && linha !== undefined && linha !== false).join('\n'),
       allowedMentions: { parse: [] }
     });

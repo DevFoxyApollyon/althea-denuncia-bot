@@ -95,10 +95,25 @@ function registerMessageEvents(client, { log, getConfig }) {
         const config = await getConfig(message.guild.id) ?? {};
 
         if (message.channel.isThread?.()) {
-            const denuncia = await Denuncia.findOne({
+            const achada = await Denuncia.findOne({
                 guildId: message.guild.id,
-                threadId: message.channel.id,
-            }).select('guildId threadId messageId armazemThreadId registroThreadId dataExpiracao acusado acusadoUserIds criadoPor claimedBy').lean();
+                $or: [{ threadId: message.channel.id }, { topicoPublicoId: message.channel.id }],
+            }).select('guildId threadId topicoPublicoId messageId armazemThreadId registroThreadId dataExpiracao acusado acusadoUserIds criadoPor claimedBy').lean();
+            const denuncia = achada?.threadId === message.channel.id ? achada : null;
+
+            // Tópico público da decisão: o que as pessoas escrevem nele é copiado
+            // para o tópico privado, que é o registro da denúncia. Ao chegar lá, a
+            // cópia segue o caminho normal (banco, site e espelhos).
+            if (!denuncia && achada && !message.author.bot) {
+                const privado = await buscarCanal(client, achada.threadId);
+                if (privado?.isTextBased?.()) {
+                    const copia = await privado.send(criarPayloadEspelho(message)).catch(error => {
+                        log.warn(`Não foi possível copiar a mensagem do tópico aberto para o privado: ${error.message}`);
+                        return null;
+                    });
+                    if (copia) await enviarAnexosEspelho(privado, message, log);
+                }
+            }
 
             if (denuncia) {
                 await registrarMensagens(denuncia, message)
