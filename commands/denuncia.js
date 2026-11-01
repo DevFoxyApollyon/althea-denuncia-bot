@@ -553,8 +553,9 @@ async function handleDenunciaSubmit(interaction, platform) {
             if (restritoParticipacao) {
                 thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds]);
                 if (thread) {
+                    // O tópico privado não fica preso à mensagem: o link vai no texto.
                     mainMessage = await channel.send({
-                        content: textoDenuncia,
+                        content: textoDenuncia.replace('➱ **Status**', `➱ **Tópico**: ${thread}\n➱ **Status**`),
                         allowedMentions: { parse: ['users'] }
                     }).catch(async (erro) => {
                         await thread.delete().catch(() => {});
