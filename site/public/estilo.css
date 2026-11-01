@@ -508,7 +508,7 @@ button.numero[aria-pressed="true"] { border-color: var(--marca); box-shadow: 0 0
 .registro-corpo { display: grid; gap: 4px; min-width: 0; flex: 1; }
 .evento { display: flex; align-items: center; gap: 12px; margin: 14px 0 0; color: var(--texto-3); font-size: 12.5px; text-align: center; }
 .evento::before, .evento::after { content: ''; flex: 1 1 40px; min-width: 40px; border-top: 1px solid var(--linha); }
-.evento .texto-livre { flex: 0 1 auto; max-width: 70ch; }
+.evento .texto-livre { flex: 0 1 auto; max-width: 70ch; text-wrap: balance; }
 .evento time { font-size: inherit; white-space: nowrap; }
 
 .anexos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }

@@ -122,8 +122,10 @@ export const numeroDoCaso = (id) => `#${String(id).slice(-6).toUpperCase()}`;
 
 export function iniciais(nome) {
   // O apelido do servidor termina com o ID da conta ("Fulano 1039"): ele não entra nas iniciais.
-  const partes = String(nome || '?').trim().split(/\s+/).filter(parte => parte && !/^\d+$/.test(parte));
-  return ((partes[0]?.[0] || '?') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+  // Tags de cargo entre colchetes ("『Mod』", "[ADM]") e símbolos também não.
+  const limpo = String(nome || '').replace(/[『「【\[(（][^』」】\])）]*[』」】\])）]/gu, ' ').replace(/[^\p{L}\p{N}\s]/gu, ' ');
+  const partes = limpo.trim().split(/\s+/).filter(parte => parte && !/^\d+$/.test(parte));
+  return ([...(partes[0] || '?')][0] + (partes.length > 1 ? [...partes[partes.length - 1]][0] : '')).toUpperCase();
 }
 
 // Cor estável por pessoa, usada quando ela não tem foto.
