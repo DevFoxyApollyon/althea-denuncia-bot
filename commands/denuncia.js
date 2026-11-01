@@ -81,6 +81,39 @@ function createStatusButtons() {
     );
 }
 
+// Botão da mensagem no canal de uma denúncia com tópico privado: quem tem o
+// cargo de administrador ou de responsável entra no tópico com um clique.
+function botaoEntrarNoTopico() {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('entrar_topico').setLabel('Entrar no tópico').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
+    );
+}
+
+async function handleEntrarNoTopico(interaction) {
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const config = await getCachedConfig(interaction.guild.id);
+    const cargos = [config?.roles?.administrador, config?.roles?.responsavel_admin].filter(Boolean);
+    const membro = interaction.member;
+    const temCargo = cargos.some(id => membro?.roles?.cache?.has?.(id) || membro?.roles?.includes?.(id));
+    if (!temCargo) {
+        return interaction.editReply('🚫 Só quem tem o cargo de administrador ou de responsável pode entrar por aqui.');
+    }
+
+    const denuncia = await Denuncia.findOne({ guildId: interaction.guild.id, messageId: interaction.message.id }).select('threadId').lean();
+    const topico = denuncia?.threadId ? await interaction.client.channels.fetch(denuncia.threadId).catch(() => null) : null;
+    if (!topico?.isThread?.()) return interaction.editReply('❌ Não encontrei o tópico desta denúncia.');
+
+    // Tópico arquivado não aceita membros novos: reabre antes.
+    if (topico.archived) await topico.setArchived(false).catch(() => {});
+    try {
+        await topico.members.add(interaction.user.id);
+    } catch (erro) {
+        console.warn(`Não foi possível pôr ${interaction.user.id} no tópico ${topico.id}: ${erro.message}`);
+        return interaction.editReply('❌ O Discord não deixou pôr você no tópico. Confira se o bot tem permissão no canal.');
+    }
+    return interaction.editReply(`✅ Você entrou no tópico: ${topico}`);
+}
+
 function createStatusButtonsRow2() {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('add_player').setLabel('Add Player').setEmoji('➕').setStyle(ButtonStyle.Secondary),
@@ -579,6 +612,7 @@ async function handleDenunciaSubmit(interaction, platform) {
                     // Discord junta as mensagens seguidas do bot.
                     mainMessage = await channel.send({
                         content: `⠀\n${textoDenuncia.replace('➱ **Status**', `➱ **Tópico**: ${thread}\n➱ **Status**`)}`,
+                        components: [botaoEntrarNoTopico()],
                         allowedMentions: { parse: ['users'] }
                     }).catch(async (erro) => {
                         await thread.delete().catch(() => {});
@@ -1113,6 +1147,7 @@ module.exports = {
     interactionHasRole,
     handleModalSubmit,
     handleMyDenunciasButton,
+    handleEntrarNoTopico,
     handleConsultaModalSubmit,
     atualizarMensagemDenuncia,
     atualizarStatusNaMensagem,

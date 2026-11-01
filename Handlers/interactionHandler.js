@@ -5,6 +5,7 @@ const {
   handleDenunciaMobile,
   handleModalSubmit, 
   handleMyDenunciasButton,    
+  handleEntrarNoTopico,
   handleConsultaModalSubmit,
   atualizarMensagemDenuncia
 } = require('../commands/denuncia');
@@ -328,6 +329,7 @@ const ROTAS = {
       denuncia_pc: handleDenunciaPC,
       denuncia_mobile: handleDenunciaMobile,
       minhas_denuncias: handleMyDenunciasButton,
+      entrar_topico: handleEntrarNoTopico,
       consulta_denuncias_id: handleMyDenunciasButton,
       reivindicar: handleClaimButton,
       finalizar_denuncia: handleExportButton,
