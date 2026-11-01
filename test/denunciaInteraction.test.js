@@ -78,6 +78,33 @@ test('tópico privado: põe denunciante e acusados; se o Discord recusar alguém
   }
   assert.equal(falha.registro.apagados, 1);
 
+  // Cargos de administrador e responsável: marcados por edição (sem notificar) e
+  // quem o bot já conhece com o cargo entra direto.
+  const mensagens = [];
+  const adicionados = [];
+  const comCargos = {
+    threads: {
+      async create() {
+        return {
+          guild: { roles: { cache: new Map([['300000000000000001', { members: new Map([['400000000000000001', {}]]) }]]) } },
+          members: { async add(id) { adicionados.push(id); } },
+          async send(payload) {
+            const mensagem = { ...payload, apagada: false, async edit(novo) { Object.assign(mensagem, novo); }, async delete() { mensagem.apagada = true; } };
+            mensagens.push(mensagem);
+            return mensagem;
+          },
+          async delete() {}
+        };
+      }
+    }
+  };
+  assert.ok(await criarTopicoPrivado(comCargos, 'x', ['1'], ['300000000000000001', undefined, '300000000000000002']));
+  assert.equal(mensagens.length, 1);
+  assert.equal(mensagens[0].content, '<@&300000000000000001> <@&300000000000000002>');
+  assert.deepEqual(mensagens[0].allowedMentions, { roles: ['300000000000000001', '300000000000000002'] });
+  assert.equal(mensagens[0].apagada, true);
+  assert.deepEqual(adicionados, ['1', '400000000000000001']);
+
   const semPermissao = { threads: { async create() { throw new Error('Missing Permissions'); } } };
   console.warn = () => {};
   try {

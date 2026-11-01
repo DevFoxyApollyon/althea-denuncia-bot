@@ -216,10 +216,29 @@ function validarMotivoTamanho(motivo) {
     return null;
 }
 
+// Põe no tópico privado quem tem os cargos de administrador e responsável. Marcar
+// o cargo numa mensagem coloca os membros dele no tópico; como a marcação entra
+// por edição, ninguém é notificado, e a mensagem é apagada logo depois. Quem o
+// bot já tem em memória com o cargo também é adicionado direto. Falhas aqui não
+// impedem a denúncia: quem tem "Gerenciar tópicos" vê o tópico de todo jeito.
+async function adicionarCargosAoTopico(topico, cargos) {
+    const ids = [...new Set(cargos.filter(id => /^\d{15,21}$/.test(String(id || ''))))];
+    if (!ids.length) return;
+    try {
+        const marcacao = await topico.send({ content: '⠀', allowedMentions: { parse: [] } });
+        await marcacao.edit({ content: ids.map(id => `<@&${id}>`).join(' '), allowedMentions: { roles: ids } });
+        await marcacao.delete().catch(() => {});
+    } catch (erro) {
+        console.warn(`Não foi possível marcar os cargos da staff no tópico privado: ${erro.message}`);
+    }
+    const membros = new Set(ids.flatMap(id => [...(topico.guild?.roles?.cache?.get(id)?.members?.keys?.() || [])]));
+    for (const id of [...membros].slice(0, 50)) await topico.members.add(id).catch(() => {});
+}
+
 // Cria o tópico privado da denúncia e põe cada pessoa nele. Se o Discord não
 // deixar (sem permissão para tópico privado, ou alguém que não vê o canal),
 // apaga o que criou e devolve null para a denúncia abrir em tópico público.
-async function criarTopicoPrivado(canal, nome, membros) {
+async function criarTopicoPrivado(canal, nome, membros, cargos = []) {
     let topico = null;
     try {
         topico = await canal.threads.create({
@@ -230,6 +249,7 @@ async function criarTopicoPrivado(canal, nome, membros) {
             reason: 'Denúncia com acusado identificado: tópico visível só para as partes e a staff.'
         });
         for (const id of [...new Set(membros)]) await topico.members.add(id);
+        await adicionarCargosAoTopico(topico, cargos);
         return topico;
     } catch (erro) {
         console.warn(`Tópico privado não criado, a denúncia abre pública: ${erro.message}`);
@@ -544,14 +564,16 @@ async function handleDenunciaSubmit(interaction, platform) {
         const mirrorThreads = {};
 
         // Com todos os acusados identificados, o tópico é privado: só o
-        // denunciante, os acusados e quem tem "Gerenciar tópicos" (a staff) veem.
+        // denunciante, os acusados, os cargos de administrador e responsável e
+        // quem tem "Gerenciar tópicos" veem.
         // No canal fica a mesma mensagem de sempre. Se o tópico privado não der
         // certo, a denúncia abre pública, como antes.
         let mainMessage;
         let thread;
         try {
             if (restritoParticipacao) {
-                thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds]);
+                thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds],
+                    [config.roles?.administrador, config.roles?.responsavel_admin]);
                 if (thread) {
                     // O tópico privado não fica preso à mensagem: o link vai no texto.
                     // A linha em branco no topo (caractere ⠀, que o Discord não
