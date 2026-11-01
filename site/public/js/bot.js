@@ -68,6 +68,8 @@ function aplicar(dados) {
     bloqueio: dados.valores.bloqueio,
     somenteLeitura: Boolean(dados.valores.somenteLeitura),
     alertaCritico: dados.valores.alertaCritico !== false,
+    esperaDenuncia: dados.valores.esperaDenuncia !== false,
+    esperaReivindicar: Boolean(dados.valores.esperaReivindicar),
     isentos: dados.valores.isentos.map(item => item.id).join('\n')
   };
   estado.painelBot = { ...dados, edicao: valores, salvo: JSON.stringify(valores) };
@@ -218,6 +220,8 @@ export function telaPainelDoBot() {
     edicao.bloqueio !== antes.bloqueio,
     edicao.somenteLeitura !== antes.somenteLeitura,
     edicao.alertaCritico !== antes.alertaCritico,
+    edicao.esperaDenuncia !== antes.esperaDenuncia,
+    edicao.esperaReivindicar !== antes.esperaReivindicar,
     edicao.isentos.trim() !== antes.isentos.trim(),
     ...todosOsCanais.map(item => edicao.channels[item.chave] !== antes.channels[item.chave]),
     ...CARGOS.map(item => edicao.roles[item.chave] !== antes.roles[item.chave])
@@ -258,7 +262,13 @@ export function telaPainelDoBot() {
           { valor: !edicao.somenteLeitura, mudou: edicao.somenteLeitura !== antes.somenteLeitura }),
         linha({ nome: 'Alerta de motivo crítico', explica: 'Ligado, o bot marca o cargo de responsável no tópico da denúncia quando o motivo é zaralho, dark RP, hack ou mods proibidos. Desligado, a denúncia abre normalmente, sem marcar ninguém.' },
           'bot-alerta-critico', interruptor(edicao, 'alertaCritico', 'bot-alerta-critico', { ligado: 'Marca o responsável', desligado: 'Sem marcação' }), null,
-          { valor: edicao.alertaCritico, mudou: edicao.alertaCritico !== antes.alertaCritico })),
+          { valor: edicao.alertaCritico, mudou: edicao.alertaCritico !== antes.alertaCritico }),
+        linha({ nome: 'Espera entre denúncias', explica: 'Ligada, quem acabou de abrir uma denúncia espera 1 minuto para abrir outra, pelo Discord ou pelo site. Desligada, pode abrir uma atrás da outra.' },
+          'bot-espera-denuncia', interruptor(edicao, 'esperaDenuncia', 'bot-espera-denuncia', { ligado: 'Espera 1 minuto', desligado: 'Sem espera' }), null,
+          { valor: edicao.esperaDenuncia, mudou: edicao.esperaDenuncia !== antes.esperaDenuncia }),
+        linha({ nome: 'Espera para reivindicar', explica: 'Ligada, a staff espera 1 minuto depois de reivindicar uma denúncia para reivindicar outra. O cargo de responsável não espera. Desligada, pode reivindicar uma atrás da outra.' },
+          'bot-espera-reivindicar', interruptor(edicao, 'esperaReivindicar', 'bot-espera-reivindicar', { ligado: 'Espera 1 minuto', desligado: 'Sem espera' }), null,
+          { valor: edicao.esperaReivindicar, mudou: edicao.esperaReivindicar !== antes.esperaReivindicar })),
 
       GRUPOS_DE_CANAIS.map((grupo, indice) => el('section', { class: 'cartao', id: indice ? null : 'bot-canais' },
         cabecalho(indice ? 'documento' : 'balao', grupo.titulo, grupo.texto, contar(grupo.itens, edicao.channels)),

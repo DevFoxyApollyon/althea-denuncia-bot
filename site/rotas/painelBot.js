@@ -5,6 +5,7 @@ const { ChannelType } = require('discord.js');
 const Config = require('../../models/Config');
 const { atualizarMensagemDenuncia } = require('../../commands/denuncia');
 const { cachePanelConfig, bloqueioPendentesAtivo, alertaMotivoCriticoAtivo } = require('../../commands/painel');
+const { esperaEntreDenunciasAtiva, esperaEntreReivindicacoesAtiva } = require('../../utils/esperas');
 const { getUsuariosIsentos, salvarUsuariosIsentos, normalizarIds } = require('../../utils/usuariosIsentos');
 const { acessoAoServidor, limparCacheDeAcesso } = require('../acesso');
 const { resolverPessoas, ErroHttp, assincrono } = require('./comum');
@@ -66,6 +67,8 @@ function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, ca
     bloquearReivindicacaoComPendentes: entrada?.bloqueio !== false,
     siteSomenteLeitura: entrada?.somenteLeitura === true,
     alertaMotivoCritico: entrada?.alertaCritico !== false,
+    esperaEntreDenuncias: entrada?.esperaDenuncia !== false,
+    esperaEntreReivindicacoes: entrada?.esperaReivindicar === true,
     isentos
   };
 }
@@ -93,6 +96,8 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         bloqueio: bloqueioPendentesAtivo(config),
         somenteLeitura: Boolean(config?.siteSomenteLeitura),
         alertaCritico: alertaMotivoCriticoAtivo(config),
+        esperaDenuncia: esperaEntreDenunciasAtiva(config),
+        esperaReivindicar: esperaEntreReivindicacoesAtiva(config, guild.id),
         isentos: isentos.map(id => ({ id, nome: pessoas[id]?.nome || null }))
       },
       canais: [...guild.channels.cache.values()]
@@ -150,7 +155,7 @@ async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos 
   }
 
   const quem = member.user?.tag || usuarioId;
-  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
+  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
   for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
   for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
 

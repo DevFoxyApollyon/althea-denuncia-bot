@@ -26,12 +26,12 @@ const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
 const { registrarMensagens, buscarCanal } = require('../utils/denunciaMensagens');
 const { ARQUIVAR_APOS_MINUTOS } = require('../utils/espelhos');
 const { alertarMotivoCritico } = require('../utils/alertaMotivoCritico');
+const { ESPERA_ENTRE_DENUNCIAS_MS, esperaEntreDenunciasAtiva, tempoRestante } = require('../utils/esperas');
 
 require('dotenv').config();
 
 const BUTTON_REFRESH_INTERVAL = 1800000;
 const SUPORTE_BOT_ID = process.env.SUPORTE_BOT_ID;
-const COOLDOWN_MS = 3 * 60 * 1000;
 const PROVAS_TIMEOUT_MS = 5 * 60 * 1000;
 
 const URL_REGEX = /https?:\/\/[^\s]+/gi;
@@ -400,22 +400,18 @@ async function handleDenunciaSubmit(interaction, platform) {
         const userId = interaction.user.id;
         const agora = Date.now();
         const ultimaEnvio = denunciaCooldowns.get(userId);
+        const config = await getCachedConfig(interaction.guild.id);
 
-        if (ultimaEnvio && agora - ultimaEnvio < COOLDOWN_MS) {
-            const restante = Math.ceil((COOLDOWN_MS - (agora - ultimaEnvio)) / 1000);
-            const minutos = Math.floor(restante / 60);
-            const segundos = restante % 60;
-            const tempoFormatado = minutos > 0 ? `${minutos}m ${segundos}s` : `${segundos}s`;
+        // Espera entre uma denúncia e outra (liga e desliga no painel do bot).
+        if (esperaEntreDenunciasAtiva(config) && ultimaEnvio && agora - ultimaEnvio < ESPERA_ENTRE_DENUNCIAS_MS) {
             return await interaction.editReply({
-                content: `⏳ Você precisa aguardar **${tempoFormatado}** antes de enviar outra denúncia.`,
+                content: `⏳ Você precisa aguardar **${tempoRestante(ESPERA_ENTRE_DENUNCIAS_MS - (agora - ultimaEnvio))}** antes de enviar outra denúncia.`,
             });
         }
 
         const guildId  = interaction.guild.id;
         const username = interaction.user.username;
         const nickname = interaction.member?.nickname || null;
-
-        const config = await getCachedConfig(interaction.guild.id);
 
         if (config?.manutencaoDenuncia) {
             return await interaction.editReply({

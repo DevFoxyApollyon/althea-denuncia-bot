@@ -29,6 +29,11 @@ const configSchema = new mongoose.Schema({
   siteSomenteLeitura: { type: Boolean, default: false },
   // Marca o responsável no tópico quando o motivo é crítico (zaralho, dark RP, hack, mods proibidos).
   alertaMotivoCritico: { type: Boolean, default: true },
+  // Espera de 1 minuto entre uma denúncia e outra da mesma pessoa.
+  esperaEntreDenuncias: { type: Boolean, default: true },
+  // Espera de 1 minuto entre uma reivindicação e outra da staff. Sem valor, vale o
+  // que estava no .env (CLAIM_COOLDOWN_GUILD_IDS); ver utils/esperas.js.
+  esperaEntreReivindicacoes: { type: Boolean, default: undefined },
   roles: {
     permitido: { type: String, required: false, default: '' },
     pc: { type: String, required: false, default: '' },

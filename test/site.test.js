@@ -413,6 +413,9 @@ test('painel do bot: valida canais, cargos e isentos antes de salvar', () => {
   assert.equal(limpo.bloquearReivindicacaoComPendentes, true);
   assert.equal(limpo.alertaMotivoCritico, true, 'alerta de motivo crítico fica ligado se não vier');
   assert.equal(validarPainel({ ...entrada(), alertaCritico: false }, servidor).alertaMotivoCritico, false);
+  assert.equal(validarPainel(entrada(), servidor).esperaEntreDenuncias, true, 'espera entre denúncias vem ligada');
+  assert.equal(validarPainel({ ...entrada(), esperaDenuncia: false }, servidor).esperaEntreDenuncias, false);
+  assert.equal(validarPainel({ ...entrada(), esperaReivindicar: true }, servidor).esperaEntreReivindicacoes, true);
   assert.equal(limpo.channels.backup, '900000000000000009', 'valor que não mudou é mantido mesmo fora do servidor');
   assert.equal(limpo.channels.analysis, '');
   assert.deepEqual(limpo.isentos, ['123456789012345678']);
@@ -630,4 +633,19 @@ test('rascunho na conta: só os campos do formulário, dentro do tamanho', () =>
   assert.equal(limpo.invasor, undefined);
   assert.equal(temConteudo(limpo), true);
   assert.equal(temConteudo(limparRascunho({ platform: 'PC', categoria: 'RDM' })), false, 'só plataforma e categoria não é rascunho');
+});
+
+test('esperas: 1 minuto, ligadas e desligadas pelo painel', () => {
+  const { ESPERA_ENTRE_DENUNCIAS_MS, ESPERA_ENTRE_REIVINDICACOES_MS, esperaEntreDenunciasAtiva, esperaEntreReivindicacoesAtiva, tempoRestante } = require('../utils/esperas');
+  assert.equal(ESPERA_ENTRE_DENUNCIAS_MS, 60000);
+  assert.equal(ESPERA_ENTRE_REIVINDICACOES_MS, 60000);
+  assert.equal(esperaEntreDenunciasAtiva({}), true);
+  assert.equal(esperaEntreDenunciasAtiva({ esperaEntreDenuncias: false }), false);
+  assert.equal(esperaEntreReivindicacoesAtiva({ esperaEntreReivindicacoes: true }, '1'), true);
+  assert.equal(esperaEntreReivindicacoesAtiva({ esperaEntreReivindicacoes: false }, '817924556358156360'), false);
+  // Sem escolha no painel, vale a lista antiga do .env.
+  assert.equal(esperaEntreReivindicacoesAtiva({}, '817924556358156360'), true);
+  assert.equal(esperaEntreReivindicacoesAtiva({}, '1'), false);
+  assert.equal(tempoRestante(45000), '45s');
+  assert.equal(tempoRestante(80000), '1m 20s');
 });
