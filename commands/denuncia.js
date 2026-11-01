@@ -88,11 +88,16 @@ function createStatusButtonsRow2() {
     );
 }
 
-function createDenunciaButtons() {
+// Com o site ligado, "Minhas Denúncias" abre a lista no site; sem ele, mostra a
+// lista no próprio Discord.
+function createDenunciaButtons(siteUrl = '') {
+    const minhas = siteUrl
+        ? new ButtonBuilder().setLabel('Minhas Denúncias').setEmoji('📂').setStyle(ButtonStyle.Link).setURL(siteUrl)
+        : new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas Denúncias').setEmoji('📂').setStyle(ButtonStyle.Secondary);
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('denuncia_pc').setLabel('Denúncia PC').setEmoji('🖥️').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('denuncia_mobile').setLabel('Denúncia Mobile').setEmoji('📱').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas Denúncias').setEmoji('📂').setStyle(ButtonStyle.Secondary)
+        minhas
     );
 }
 
@@ -174,9 +179,8 @@ async function atualizarMensagemDenuncia(client, guild, config) {
             ].join('\n'))
             .setFooter({ text: 'Brasil RolePlay' });
 
-    // Com o site ligado, a mensagem ganha um botão que leva direto a ele.
-    const botoes = createDenunciaButtons();
-    if (siteUrl) botoes.addComponents(new ButtonBuilder().setLabel('Abrir o site').setEmoji('🌐').setStyle(ButtonStyle.Link).setURL(siteUrl));
+    // Com o site ligado, "Minhas Denúncias" leva direto a ele.
+    const botoes = createDenunciaButtons(siteUrl);
     const componentes = emManutencao ? [] : [botoes];
     const mensagens = await canalDestino.messages.fetch({ limit: 50 }).catch(() => null);
     const existente = mensagens?.find(message =>
