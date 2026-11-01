@@ -232,7 +232,7 @@ async function adicionarCargosAoTopico(topico, cargos) {
         console.warn(`Não foi possível marcar os cargos da staff no tópico privado: ${erro.message}`);
     }
     const membros = new Set(ids.flatMap(id => [...(topico.guild?.roles?.cache?.get(id)?.members?.keys?.() || [])]));
-    for (const id of [...membros].slice(0, 50)) await topico.members.add(id).catch(() => {});
+    await Promise.all([...membros].slice(0, 50).map(id => topico.members.add(id).catch(() => {})));
 }
 
 // Cria o tópico privado da denúncia e põe cada pessoa nele. Se o Discord não
@@ -248,8 +248,9 @@ async function criarTopicoPrivado(canal, nome, membros, cargos = []) {
             autoArchiveDuration: 1440,
             reason: 'Denúncia com acusado identificado: tópico visível só para as partes e a staff.'
         });
-        for (const id of [...new Set(membros)]) await topico.members.add(id);
-        await adicionarCargosAoTopico(topico, cargos);
+        await Promise.all([...new Set(membros)].map(id => topico.members.add(id)));
+        // A staff entra em segundo plano: a denúncia não espera por isso.
+        adicionarCargosAoTopico(topico, cargos).catch(() => {});
         return topico;
     } catch (erro) {
         console.warn(`Tópico privado não criado, a denúncia abre pública: ${erro.message}`);

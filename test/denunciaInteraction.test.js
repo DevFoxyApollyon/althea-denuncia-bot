@@ -99,6 +99,7 @@ test('tópico privado: põe denunciante e acusados; se o Discord recusar alguém
     }
   };
   assert.ok(await criarTopicoPrivado(comCargos, 'x', ['1'], ['300000000000000001', undefined, '300000000000000002']));
+  await new Promise(resolve => setTimeout(resolve, 20)); // a staff entra em segundo plano
   assert.equal(mensagens.length, 1);
   assert.equal(mensagens[0].content, '<@&300000000000000001> <@&300000000000000002>');
   assert.deepEqual(mensagens[0].allowedMentions, { roles: ['300000000000000001', '300000000000000002'] });
