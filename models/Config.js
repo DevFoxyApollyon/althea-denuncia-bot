@@ -34,6 +34,8 @@ const configSchema = new mongoose.Schema({
   // Espera de 1 minuto entre uma reivindicação e outra da staff. Sem valor, vale o
   // que estava no .env (CLAIM_COOLDOWN_GUILD_IDS); ver utils/esperas.js.
   esperaEntreReivindicacoes: { type: Boolean, default: undefined },
+  // Quantos minutos dura a espera para reivindicar (1 a 60).
+  minutosEntreReivindicacoes: { type: Number, default: 1, min: 1, max: 60 },
   roles: {
     permitido: { type: String, required: false, default: '' },
     pc: { type: String, required: false, default: '' },

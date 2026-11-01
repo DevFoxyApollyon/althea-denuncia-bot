@@ -11,7 +11,7 @@ const { Logger } = require('../../utils/logger');
 
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 
-const { ESPERA_ENTRE_REIVINDICACOES_MS, esperaEntreReivindicacoesAtiva, tempoRestante } = require('../../utils/esperas');
+const { esperaEntreReivindicacoesMs, esperaEntreReivindicacoesAtiva, tempoRestante } = require('../../utils/esperas');
 
 async function handleClaimButton(interaction) {
   try {
@@ -33,14 +33,15 @@ async function handleClaimButton(interaction) {
     // O cooldown é lido do banco (última reivindicação do staff), então continua
     // valendo depois de um restart do bot.
     if (temCooldown) {
+      const espera = esperaEntreReivindicacoesMs(config);
       const ultima = await Denuncia.findOne({
         guildId: interaction.guild.id,
         claimedBy: interaction.user.id,
-        claimedAt: { $gt: new Date(Date.now() - ESPERA_ENTRE_REIVINDICACOES_MS) },
+        claimedAt: { $gt: new Date(Date.now() - espera) },
       }).sort({ claimedAt: -1 }).select('claimedAt').lean();
 
       if (ultima?.claimedAt) {
-        const restante = ESPERA_ENTRE_REIVINDICACOES_MS - (Date.now() - new Date(ultima.claimedAt).getTime());
+        const restante = espera - (Date.now() - new Date(ultima.claimedAt).getTime());
         if (restante > 0) {
           await safeReplyOrEdit(interaction, {
             content: `⏳ Você precisa aguardar **${tempoRestante(restante)}** antes de reivindicar outra denúncia.`,

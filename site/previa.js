@@ -264,6 +264,7 @@ const painelDoBot = {
     alertaCritico: true,
     esperaDenuncia: true,
     esperaReivindicar: false,
+    minutosReivindicar: 1,
     isentos: [{ id: '200000000000000200', nome: 'Lucas Prado' }]
   },
   canais: [
@@ -384,7 +385,7 @@ app.post('/api/backup', express.json(), (req, res) => {
   res.json({ ok: true, mensagem: 'Backup restaurado (prévia, nada foi gravado).' });
 });
 app.post('/api/painel-bot', express.json(), (req, res) => {
-  Object.assign(painelDoBot.valores, { channels: req.body.channels, roles: req.body.roles, manutencao: req.body.manutencao === true, bloqueio: req.body.bloqueio !== false, somenteLeitura: req.body.somenteLeitura === true, alertaCritico: req.body.alertaCritico !== false, esperaDenuncia: req.body.esperaDenuncia !== false, esperaReivindicar: req.body.esperaReivindicar === true });
+  Object.assign(painelDoBot.valores, { channels: req.body.channels, roles: req.body.roles, manutencao: req.body.manutencao === true, bloqueio: req.body.bloqueio !== false, somenteLeitura: req.body.somenteLeitura === true, alertaCritico: req.body.alertaCritico !== false, esperaDenuncia: req.body.esperaDenuncia !== false, esperaReivindicar: req.body.esperaReivindicar === true, minutosReivindicar: Number(req.body.minutosReivindicar) || 1 });
   res.json({ ok: true, mensagem: 'Painel do bot salvo (prévia, nada foi gravado).', ...painelDoBot });
 });
 

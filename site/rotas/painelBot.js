@@ -5,7 +5,7 @@ const { ChannelType } = require('discord.js');
 const Config = require('../../models/Config');
 const { atualizarMensagemDenuncia } = require('../../commands/denuncia');
 const { cachePanelConfig, bloqueioPendentesAtivo, alertaMotivoCriticoAtivo } = require('../../commands/painel');
-const { esperaEntreDenunciasAtiva, esperaEntreReivindicacoesAtiva } = require('../../utils/esperas');
+const { esperaEntreDenunciasAtiva, esperaEntreReivindicacoesAtiva, minutosEntreReivindicacoes, MINUTOS_ENTRE_REIVINDICACOES } = require('../../utils/esperas');
 const { getUsuariosIsentos, salvarUsuariosIsentos, normalizarIds } = require('../../utils/usuariosIsentos');
 const { acessoAoServidor, limparCacheDeAcesso } = require('../acesso');
 const { resolverPessoas, ErroHttp, assincrono } = require('./comum');
@@ -69,8 +69,20 @@ function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, ca
     alertaMotivoCritico: entrada?.alertaCritico !== false,
     esperaEntreDenuncias: entrada?.esperaDenuncia !== false,
     esperaEntreReivindicacoes: entrada?.esperaReivindicar === true,
+    minutosEntreReivindicacoes: minutosValidos(entrada?.minutosReivindicar),
     isentos
   };
+}
+
+// Minutos da espera para reivindicar: vazio vale o padrão; fora do limite é erro.
+function minutosValidos(valor) {
+  if (valor === undefined || valor === null || valor === '') return MINUTOS_ENTRE_REIVINDICACOES.padrao;
+  const minutos = Number(valor);
+  const { minimo, maximo } = MINUTOS_ENTRE_REIVINDICACOES;
+  if (!Number.isInteger(minutos) || minutos < minimo || minutos > maximo) {
+    throw new Error(`O tempo para reivindicar deve ser um número inteiro de ${minimo} a ${maximo} minutos.`);
+  }
+  return minutos;
 }
 
 function registrarRotasDoPainelDoBot(router, { client }) {
@@ -98,6 +110,7 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         alertaCritico: alertaMotivoCriticoAtivo(config),
         esperaDenuncia: esperaEntreDenunciasAtiva(config),
         esperaReivindicar: esperaEntreReivindicacoesAtiva(config, guild.id),
+        minutosReivindicar: minutosEntreReivindicacoes(config),
         isentos: isentos.map(id => ({ id, nome: pessoas[id]?.nome || null }))
       },
       canais: [...guild.channels.cache.values()]
@@ -155,7 +168,7 @@ async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos 
   }
 
   const quem = member.user?.tag || usuarioId;
-  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
+  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
   for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
   for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
 

@@ -416,6 +416,10 @@ test('painel do bot: valida canais, cargos e isentos antes de salvar', () => {
   assert.equal(validarPainel(entrada(), servidor).esperaEntreDenuncias, true, 'espera entre denúncias vem ligada');
   assert.equal(validarPainel({ ...entrada(), esperaDenuncia: false }, servidor).esperaEntreDenuncias, false);
   assert.equal(validarPainel({ ...entrada(), esperaReivindicar: true }, servidor).esperaEntreReivindicacoes, true);
+  assert.equal(validarPainel(entrada(), servidor).minutosEntreReivindicacoes, 1, 'tempo para reivindicar começa em 1 minuto');
+  assert.equal(validarPainel({ ...entrada(), minutosReivindicar: 5 }, servidor).minutosEntreReivindicacoes, 5);
+  assert.throws(() => validarPainel({ ...entrada(), minutosReivindicar: 0 }, servidor), /de 1 a 60 minutos/);
+  assert.throws(() => validarPainel({ ...entrada(), minutosReivindicar: 2.5 }, servidor), /de 1 a 60 minutos/);
   assert.equal(limpo.channels.backup, '900000000000000009', 'valor que não mudou é mantido mesmo fora do servidor');
   assert.equal(limpo.channels.analysis, '');
   assert.deepEqual(limpo.isentos, ['123456789012345678']);
@@ -636,9 +640,11 @@ test('rascunho na conta: só os campos do formulário, dentro do tamanho', () =>
 });
 
 test('esperas: 1 minuto, ligadas e desligadas pelo painel', () => {
-  const { ESPERA_ENTRE_DENUNCIAS_MS, ESPERA_ENTRE_REIVINDICACOES_MS, esperaEntreDenunciasAtiva, esperaEntreReivindicacoesAtiva, tempoRestante } = require('../utils/esperas');
+  const { ESPERA_ENTRE_DENUNCIAS_MS, esperaEntreReivindicacoesMs, esperaEntreDenunciasAtiva, esperaEntreReivindicacoesAtiva, tempoRestante } = require('../utils/esperas');
   assert.equal(ESPERA_ENTRE_DENUNCIAS_MS, 60000);
-  assert.equal(ESPERA_ENTRE_REIVINDICACOES_MS, 60000);
+  assert.equal(esperaEntreReivindicacoesMs({}), 60000, 'sem escolha, 1 minuto');
+  assert.equal(esperaEntreReivindicacoesMs({ minutosEntreReivindicacoes: 5 }), 300000);
+  assert.equal(esperaEntreReivindicacoesMs({ minutosEntreReivindicacoes: 999 }), 3600000, 'no máximo 60 minutos');
   assert.equal(esperaEntreDenunciasAtiva({}), true);
   assert.equal(esperaEntreDenunciasAtiva({ esperaEntreDenuncias: false }), false);
   assert.equal(esperaEntreReivindicacoesAtiva({ esperaEntreReivindicacoes: true }, '1'), true);

@@ -70,6 +70,7 @@ function aplicar(dados) {
     alertaCritico: dados.valores.alertaCritico !== false,
     esperaDenuncia: dados.valores.esperaDenuncia !== false,
     esperaReivindicar: Boolean(dados.valores.esperaReivindicar),
+    minutosReivindicar: Number(dados.valores.minutosReivindicar) || 1,
     isentos: dados.valores.isentos.map(item => item.id).join('\n')
   };
   estado.painelBot = { ...dados, edicao: valores, salvo: JSON.stringify(valores) };
@@ -222,6 +223,7 @@ export function telaPainelDoBot() {
     edicao.alertaCritico !== antes.alertaCritico,
     edicao.esperaDenuncia !== antes.esperaDenuncia,
     edicao.esperaReivindicar !== antes.esperaReivindicar,
+    edicao.minutosReivindicar !== antes.minutosReivindicar,
     edicao.isentos.trim() !== antes.isentos.trim(),
     ...todosOsCanais.map(item => edicao.channels[item.chave] !== antes.channels[item.chave]),
     ...CARGOS.map(item => edicao.roles[item.chave] !== antes.roles[item.chave])
@@ -266,9 +268,20 @@ export function telaPainelDoBot() {
         linha({ nome: 'Espera entre denúncias', explica: 'Ligada, quem acabou de abrir uma denúncia espera 1 minuto para abrir outra, pelo Discord ou pelo site. Desligada, pode abrir uma atrás da outra.' },
           'bot-espera-denuncia', interruptor(edicao, 'esperaDenuncia', 'bot-espera-denuncia', { ligado: 'Espera 1 minuto', desligado: 'Sem espera' }), null,
           { valor: edicao.esperaDenuncia, mudou: edicao.esperaDenuncia !== antes.esperaDenuncia }),
-        linha({ nome: 'Espera para reivindicar', explica: 'Ligada, a staff espera 1 minuto depois de reivindicar uma denúncia para reivindicar outra. O cargo de responsável não espera. Desligada, pode reivindicar uma atrás da outra.' },
-          'bot-espera-reivindicar', interruptor(edicao, 'esperaReivindicar', 'bot-espera-reivindicar', { ligado: 'Espera 1 minuto', desligado: 'Sem espera' }), null,
-          { valor: edicao.esperaReivindicar, mudou: edicao.esperaReivindicar !== antes.esperaReivindicar })),
+        linha({ nome: 'Espera para reivindicar', explica: 'Ligada, a staff espera o tempo escolhido depois de reivindicar uma denúncia para reivindicar outra. O cargo de responsável não espera. Desligada, pode reivindicar uma atrás da outra.' },
+          'bot-espera-reivindicar', interruptor(edicao, 'esperaReivindicar', 'bot-espera-reivindicar', { ligado: `Espera ${edicao.minutosReivindicar} min`, desligado: 'Sem espera' }),
+          edicao.esperaReivindicar && el('label', { class: 'bot-minutos', for: 'bot-minutos-reivindicar' },
+            el('input', {
+              id: 'bot-minutos-reivindicar', type: 'number', min: '1', max: '60', step: '1', inputmode: 'numeric',
+              value: String(edicao.minutosReivindicar),
+              onchange: (evento) => {
+                const minutos = Math.round(Number(evento.target.value));
+                edicao.minutosReivindicar = Math.min(60, Math.max(1, Number.isFinite(minutos) ? minutos : 1));
+                desenhar();
+              }
+            }),
+            el('span', null, 'minuto(s), de 1 a 60')),
+          { valor: edicao.esperaReivindicar, mudou: edicao.esperaReivindicar !== antes.esperaReivindicar || edicao.minutosReivindicar !== antes.minutosReivindicar })),
 
       GRUPOS_DE_CANAIS.map((grupo, indice) => el('section', { class: 'cartao', id: indice ? null : 'bot-canais' },
         cabecalho(indice ? 'documento' : 'balao', grupo.titulo, grupo.texto, contar(grupo.itens, edicao.channels)),
