@@ -43,7 +43,6 @@ import {
   numeroDoCaso,
   rico,
   selo,
-  servidorAtual,
   soEmojis,
   videoDoYoutube
 } from './util.js';
@@ -279,22 +278,7 @@ export function compositor(limiteMb) {
       onclick: (evento) => enviarProva(evento.currentTarget)
     }, icone('enviar'), 'Enviar')));
 
-  // As respostas prontas são as do servidor (editáveis em Admin > Configurações).
-  const respostas = servidorAtual()?.respostasProntas || [];
-
   return el('div', { class: 'compositor-area' },
-    areaDaEquipe() && respostas.length > 0 && el('label', { class: 'respostas-prontas' },
-      el('span', null, 'Resposta pronta'),
-      el('select', {
-        id: 'resposta-pronta',
-        onchange: (evento) => {
-          const texto = respostas[Number(evento.target.value)]?.texto;
-          if (texto) estado.rascunho = texto;
-          desenhar();
-          document.getElementById('mensagem')?.focus();
-        }
-      }, el('option', { value: '' }, 'Escolher…'),
-      respostas.map((item, indice) => el('option', { value: String(indice) }, item.titulo)))),
     caixa,
     el('p', { class: 'dica' }, `Tudo o que você enviar é publicado no tópico do Discord. Até 10 arquivos de ${limiteMb} MB; para vídeos maiores, cole o link do YouTube.`));
 }

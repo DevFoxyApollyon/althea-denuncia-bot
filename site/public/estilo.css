@@ -923,8 +923,6 @@ button, a.botao { text-transform: uppercase; letter-spacing: .055em; font-size: 
 .soltar { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 64px; margin: 0; padding: 14px; border: 1.5px dashed var(--linha-forte); border-radius: var(--raio); color: var(--texto-2); font-weight: 500; text-align: center; cursor: pointer; }
 .soltar:hover { border-color: var(--marca); color: var(--texto); }
 
-.respostas-prontas { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 12.5px; font-weight: 600; color: var(--texto-2); }
-.respostas-prontas select { width: auto; min-height: 32px; padding: 4px 9px; font-size: 13px; }
 
 .presenca { display: flex; align-items: flex-start; gap: 10px; border-color: color-mix(in srgb, var(--analise) 40%, transparent); background: var(--analise-fundo); color: var(--analise); font-size: 13.5px; font-weight: 550; }
 
@@ -1191,8 +1189,6 @@ button.discreto { border-color: transparent; background: transparent; color: var
 .config .cartao > .sub { margin: -6px 0 14px; max-width: 78ch; }
 .config-lista { display: grid; gap: 8px; margin-bottom: 12px; }
 .config-categoria { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr) 160px 34px; gap: 8px; align-items: center; }
-.config-resposta { display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--linha); border-radius: var(--raio); }
-.config-resposta textarea { grid-column: 1 / -1; min-height: 76px; }
 
 @media (max-width: 860px) {
   .config-categoria { grid-template-columns: minmax(0, 1fr) 34px; padding: 10px; border: 1px solid var(--linha); border-radius: var(--raio); }

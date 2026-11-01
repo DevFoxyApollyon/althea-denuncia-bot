@@ -120,9 +120,8 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
         id: guild.id,
         manutencao: Boolean(config?.manutencaoDenuncia),
         somenteLeitura: Boolean(config?.siteSomenteLeitura),
-        // Categorias, prazos e respostas prontas valem por servidor.
+        // As categorias valem por servidor.
         categorias: configVisivel(guild.id).categorias.map(({ nome, grupo, prioridade, termos }) => ({ nome, grupo, prioridade, termos })),
-        respostasProntas: papeis.staff ? configVisivel(guild.id).respostasProntas : [],
         nome: guild.name,
         icone: guild.iconURL({ size: 64 }) || null,
         limiteUploadMb: Math.floor(limiteDeUploadBytes(guild) / 1024 / 1024),

@@ -1,4 +1,4 @@
-// Categorias, prioridade e respostas prontas do site.
+// Categorias e prioridade do site.
 //
 // Os valores abaixo são o padrão. O responsável pode trocá-los pelo site
 // (Admin > Configurações); o que ele salvar fica no banco, por servidor, e
@@ -61,13 +61,6 @@ const PADRAO = {
     { nome: 'Conta falsa', grupo: 'Conduta', prioridade: 'normal', termos: ['conta fake', 'conta falsa', 'multi conta', 'multiconta', 'fake'] },
     { nome: 'Atrapalhar staff ou evento', grupo: 'Conduta', prioridade: 'normal', termos: ['atrapalh'] },
     { nome: 'Conduta de staff', grupo: 'Conduta', prioridade: 'normal', termos: ['abuso de poder', 'conduta de staff', 'abuso de staff'] }
-  ],
-  respostasProntas: [
-    { titulo: 'Pedir mais provas', texto: 'Para seguir com a análise, precisamos de mais provas. Envie o vídeo completo do ocorrido, sem cortes, mostrando o momento da infração.' },
-    { titulo: 'Pedir contraprova', texto: 'O acusado tem 24 horas para enviar a contraprova neste tópico. Sem ela, a análise segue com as provas já apresentadas.' },
-    { titulo: 'Vídeo sem som ou ilegível', texto: 'O vídeo enviado está sem som ou com qualidade que impede a análise. Envie novamente, de preferência pelo YouTube como não listado.' },
-    { titulo: 'Em análise', texto: 'Recebemos as provas e o caso está em análise. Avisaremos por aqui assim que houver uma decisão.' },
-    { titulo: 'Faltam informações', texto: 'Faltam informações para identificar o ocorrido. Informe o horário aproximado, o local e o que aconteceu antes do trecho gravado.' }
   ]
 };
 
@@ -122,8 +115,7 @@ function configVisivel(guildId) {
   const config = configDoServidor(guildId);
   return {
     personalizada: porServidor.has(guildId),
-    categorias: config.categorias.map(({ nome, grupo, prioridade, termos }) => ({ nome, grupo: grupo || '', prioridade, termos })),
-    respostasProntas: config.respostasProntas.map(({ titulo, texto }) => ({ titulo, texto }))
+    categorias: config.categorias.map(({ nome, grupo, prioridade, termos }) => ({ nome, grupo: grupo || '', prioridade, termos }))
   };
 }
 

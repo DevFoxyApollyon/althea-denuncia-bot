@@ -211,7 +211,7 @@ function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico,
     });
   }));
 
-  // Configurações do site (categorias e respostas prontas), por servidor.
+  // Configurações do site (categorias), por servidor.
   router.get('/config-site', assincrono(async (req, res) => {
     const acesso = await acessoAoServidor(client, req.usuario.id, String(req.query.guildId || ''));
     if (!acesso?.papeis.responsavel) throw new ErroHttp(403, 'As configurações são restritas ao responsável.');

@@ -17,7 +17,7 @@ const DIA_MS = 24 * 60 * 60 * 1000;
 const COLECOES_PERMANENTES = [
   'configs',          // configuração do bot em cada servidor (canais, cargos)
   'globalconfigs',    // usuários isentos
-  'configsites',      // categorias, prazos e respostas prontas do site
+  'configsites',      // categorias do site
   'chatsalas',        // modo lento, chat fechado e música do chat
   'chatfixadas',      // aviso fixado do chat
   'chatbanimentos',   // banidos do chat

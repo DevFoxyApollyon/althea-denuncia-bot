@@ -7,8 +7,7 @@ let carregando = null;
 
 function aplicar(doc) {
   definirConfigDoServidor(doc.guildId, {
-    categorias: doc.categorias.map(({ nome, grupo, prioridade, termos }) => ({ nome, grupo: grupo || '', prioridade, termos: [...termos] })),
-    respostasProntas: doc.respostasProntas.map(({ titulo, texto }) => ({ titulo, texto }))
+    categorias: doc.categorias.map(({ nome, grupo, prioridade, termos }) => ({ nome, grupo: grupo || '', prioridade, termos: [...termos] }))
   });
 }
 
@@ -45,11 +44,7 @@ function validarConfig(entrada) {
   const semTermo = categorias.find(item => !item.termos.length);
   if (semTermo) throw new Error(`A categoria "${semTermo.nome}" precisa de pelo menos um termo com 2 letras ou mais.`);
 
-  const respostasProntas = (Array.isArray(entrada?.respostasProntas) ? entrada.respostasProntas : []).slice(0, 20)
-    .map(item => ({ titulo: texto(item?.titulo, 60), texto: texto(item?.texto, 1500) }))
-    .filter(item => item.titulo && item.texto);
-
-  return { categorias, respostasProntas };
+  return { categorias };
 }
 
 async function salvarConfigDoSite(guildId, entrada, usuarioId) {

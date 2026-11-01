@@ -95,11 +95,10 @@ test('categorias: siglas só casam com a palavra inteira', () => {
 
 test('configuração do site: valida e limpa o que o responsável salva', () => {
   const { validarConfig } = require('../site/configSite');
-  const base = { categorias: [{ nome: ' Hack ', prioridade: 'alta', termos: ' hack , Cheat, x' }], respostasProntas: [{ titulo: 'Oi', texto: 'Texto' }, { titulo: '', texto: 'sem título' }] };
+  const base = { categorias: [{ nome: ' Hack ', prioridade: 'alta', termos: ' hack , Cheat, x' }] };
 
   const limpa = validarConfig(base);
   assert.deepEqual(limpa.categorias, [{ nome: 'Hack', grupo: '', prioridade: 'alta', termos: ['hack', 'cheat'] }]);
-  assert.equal(limpa.respostasProntas.length, 1);
 
   assert.throws(() => validarConfig({ ...base, categorias: [] }), /pelo menos uma categoria/);
   assert.throws(() => validarConfig({ ...base, categorias: [{ nome: 'A', termos: 'x' }] }), /pelo menos um termo/);

@@ -1,5 +1,5 @@
 // Configurações do site, editadas pelo responsável: categorias
-// e respostas prontas. Valem só para o servidor selecionado.
+// Valem só para o servidor selecionado.
 import { executar } from './acoes.js';
 import { confirmar } from './confirmacao.js';
 import { desenhar } from './desenho.js';
@@ -11,7 +11,6 @@ import { api, avisar, el, enviarJson, icone } from './util.js';
 const paraEdicao = (config) => ({
   personalizada: config.personalizada,
   categorias: config.categorias.map(item => ({ nome: item.nome, grupo: item.grupo || '', prioridade: item.prioridade, termos: item.termos.join(', ') })),
-  respostasProntas: config.respostasProntas.map(item => ({ ...item }))
 });
 
 export async function carregarConfigDoSite() {
@@ -40,7 +39,6 @@ async function salvar(botao) {
       guildId: estado.guildId,
       config: {
         categorias: edicao.categorias.map(item => ({ ...item, termos: item.termos.split(',') })),
-        respostasProntas: edicao.respostasProntas
       }
     }));
   });
@@ -49,7 +47,7 @@ async function salvar(botao) {
 async function restaurar(botao) {
   const confirmado = await confirmar({
     titulo: 'Restaurar o padrão?',
-    texto: 'As categorias, os prazos e as respostas prontas deste servidor voltam aos valores originais do site. O que você editou aqui é apagado.',
+    texto: 'As categorias deste servidor voltam aos valores originais do site. O que você editou aqui é apagado.',
     rotulo: 'Restaurar padrão',
     perigo: true
   });
@@ -129,20 +127,5 @@ export function telaConfig() {
             edicao.categorias.push({ nome: '', grupo: '', prioridade: 'normal', termos: '' });
             desenhar();
           }
-        }, icone('mais'), 'Adicionar categoria')),
-
-      el('section', { class: 'cartao' },
-        el('h2', null, 'Respostas prontas'),
-        el('p', { class: 'sub' }, 'Textos que a staff insere com um clique na conversa de um caso.'),
-        el('div', { class: 'config-lista' }, edicao.respostasProntas.map((item, indice) => el('div', { class: 'config-resposta' },
-          campo(item, 'titulo', { rotulo: `Título da resposta ${indice + 1}`, exemplo: 'Título', limite: 60 }),
-          remover(edicao.respostasProntas, indice, `Remover a resposta ${item.titulo || indice + 1}`),
-          campo(item, 'texto', { rotulo: `Texto da resposta ${indice + 1}`, exemplo: 'Texto que vai para a conversa', limite: 1500, linhas: 3 })))),
-        el('button', {
-          type: 'button',
-          onclick: () => {
-            edicao.respostasProntas.push({ titulo: '', texto: '' });
-            desenhar();
-          }
-        }, icone('mais'), 'Adicionar resposta'))));
+        }, icone('mais'), 'Adicionar categoria'))));
 }

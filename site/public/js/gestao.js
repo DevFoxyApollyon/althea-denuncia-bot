@@ -324,7 +324,7 @@ async function restaurarBackup(arquivo, aoTerminar) {
   const quando = backup?.geradoEm ? `, feito em ${formatarData(backup.geradoEm)}` : '';
   const confirmado = await confirmar({
     titulo: 'Restaurar este backup?',
-    texto: `O painel do bot (canais, cargos, manutenção e bloqueio), as configurações do site (categorias, prazos e respostas prontas) e a meta da staff deste servidor serão trocados pelos do backup${origem}${quando}. A lista de usuários isentos não muda.`,
+    texto: `O painel do bot (canais, cargos, manutenção e bloqueio), as configurações do site (categorias) e a meta da staff deste servidor serão trocados pelos do backup${origem}${quando}. A lista de usuários isentos não muda.`,
     rotulo: 'Restaurar backup',
     perigo: true
   });
