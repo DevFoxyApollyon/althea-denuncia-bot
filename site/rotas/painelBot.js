@@ -70,6 +70,7 @@ function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, ca
     esperaEntreDenuncias: entrada?.esperaDenuncia !== false,
     esperaEntreReivindicacoes: entrada?.esperaReivindicar === true,
     minutosEntreReivindicacoes: minutosValidos(entrada?.minutosReivindicar),
+    staffNosTopicosPrivados: entrada?.staffNosTopicos !== false,
     isentos
   };
 }
@@ -111,6 +112,7 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         esperaDenuncia: esperaEntreDenunciasAtiva(config),
         esperaReivindicar: esperaEntreReivindicacoesAtiva(config, guild.id),
         minutosReivindicar: minutosEntreReivindicacoes(config),
+        staffNosTopicos: config?.staffNosTopicosPrivados !== false,
         isentos: isentos.map(id => ({ id, nome: pessoas[id]?.nome || null }))
       },
       canais: [...guild.channels.cache.values()]
@@ -168,7 +170,7 @@ async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos 
   }
 
   const quem = member.user?.tag || usuarioId;
-  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
+  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, staffNosTopicosPrivados: novo.staffNosTopicosPrivados, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
   for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
   for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
 

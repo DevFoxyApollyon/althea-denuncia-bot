@@ -71,6 +71,7 @@ function aplicar(dados) {
     esperaDenuncia: dados.valores.esperaDenuncia !== false,
     esperaReivindicar: Boolean(dados.valores.esperaReivindicar),
     minutosReivindicar: Number(dados.valores.minutosReivindicar) || 1,
+    staffNosTopicos: dados.valores.staffNosTopicos !== false,
     isentos: dados.valores.isentos.map(item => item.id).join('\n')
   };
   estado.painelBot = { ...dados, edicao: valores, salvo: JSON.stringify(valores) };
@@ -224,6 +225,7 @@ export function telaPainelDoBot() {
     edicao.esperaDenuncia !== antes.esperaDenuncia,
     edicao.esperaReivindicar !== antes.esperaReivindicar,
     edicao.minutosReivindicar !== antes.minutosReivindicar,
+    edicao.staffNosTopicos !== antes.staffNosTopicos,
     edicao.isentos.trim() !== antes.isentos.trim(),
     ...todosOsCanais.map(item => edicao.channels[item.chave] !== antes.channels[item.chave]),
     ...CARGOS.map(item => edicao.roles[item.chave] !== antes.roles[item.chave])
@@ -281,7 +283,10 @@ export function telaPainelDoBot() {
               }
             }),
             el('span', null, 'minuto(s), de 1 a 60')),
-          { valor: edicao.esperaReivindicar, mudou: edicao.esperaReivindicar !== antes.esperaReivindicar || edicao.minutosReivindicar !== antes.minutosReivindicar })),
+          { valor: edicao.esperaReivindicar, mudou: edicao.esperaReivindicar !== antes.esperaReivindicar || edicao.minutosReivindicar !== antes.minutosReivindicar }),
+        linha({ nome: 'Staff entra nos tópicos privados', explica: 'Ligada, quem tem o cargo de administrador ou de responsável entra sozinho em cada tópico privado novo e já pode usar os botões. Desligada, os tópicos não aparecem na lista da staff: quem tem "Gerenciar tópicos" ainda vê, mas precisa entrar no tópico (ou usar o site) para atender.' },
+          'bot-staff-topicos', interruptor(edicao, 'staffNosTopicos', 'bot-staff-topicos', { ligado: 'Entra sozinha', desligado: 'Não entra' }), null,
+          { valor: edicao.staffNosTopicos, mudou: edicao.staffNosTopicos !== antes.staffNosTopicos })),
 
       GRUPOS_DE_CANAIS.map((grupo, indice) => el('section', { class: 'cartao', id: indice ? null : 'bot-canais' },
         cabecalho(indice ? 'documento' : 'balao', grupo.titulo, grupo.texto, contar(grupo.itens, edicao.channels)),

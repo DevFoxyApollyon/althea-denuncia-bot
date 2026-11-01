@@ -569,8 +569,9 @@ async function handleDenunciaSubmit(interaction, platform) {
         let thread;
         try {
             if (restritoParticipacao) {
-                thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds],
-                    [config.roles?.administrador, config.roles?.responsavel_admin]);
+                // A staff só entra sozinha com a opção ligada no painel do bot.
+                const cargosDaStaff = config.staffNosTopicosPrivados === false ? [] : [config.roles?.administrador, config.roles?.responsavel_admin];
+                thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds], cargosDaStaff);
                 if (thread) {
                     // O tópico privado não fica preso à mensagem: o link vai no texto.
                     // A linha em branco no topo (caractere ⠀, que o Discord não
