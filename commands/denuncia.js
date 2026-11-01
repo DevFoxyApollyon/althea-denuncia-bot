@@ -545,8 +545,8 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         // Com todos os acusados identificados, o tópico é privado: só o
         // denunciante, os acusados e quem tem "Gerenciar tópicos" (a staff) veem.
-        // No canal fica só um aviso, sem os dados da denúncia. Se o tópico
-        // privado não der certo, a denúncia abre pública, como antes.
+        // No canal fica a mesma mensagem de sempre. Se o tópico privado não der
+        // certo, a denúncia abre pública, como antes.
         let mainMessage;
         let thread;
         try {
@@ -554,8 +554,8 @@ async function handleDenunciaSubmit(interaction, platform) {
                 thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds]);
                 if (thread) {
                     mainMessage = await channel.send({
-                        content: `🔒 **Denúncia de \`${denunciante}\` aberta em tópico privado:** ${thread}\nSó o denunciante, o acusado e a staff têm acesso.`,
-                        allowedMentions: { parse: [] }
+                        content: textoDenuncia,
+                        allowedMentions: { parse: ['users'] }
                     }).catch(async (erro) => {
                         await thread.delete().catch(() => {});
                         throw erro;
