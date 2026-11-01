@@ -264,25 +264,10 @@ Denuncia (1) ──→ (1) FeedbackTemp
 
 As collections são criadas automaticamente na primeira execução.
 
-Todos os documentos têm `dataRetencaoAte` e expiram seis meses após a migração
-(para dados já existentes) ou após a criação (para dados novos). Isso inclui
-configurações, usuários, denúncias, auditorias e dados do site. Os anexos GridFS
-do chat são eliminados pelo bucket para remover também seus chunks.
-
-Antes do primeiro deploy com esta mudança, mantenha o bot desligado e rode:
-
-```bash
-npm run db:migrar
-npm run db:migrar -- --aplicar
-```
-
-A primeira execução só simula e detecta conflitos. A segunda copia as
-collections (exceto `configs`) e índices não TTL, verifica os dados no destino e
-preserva a origem sem apagá-la. A collection `configs` continua no banco
-principal (`MONGODB_URI`); mantenha essa variável configurada na hospedagem.
-Só inicie a nova versão depois de confirmar a mensagem de verificação da
-migração. O MongoDB pode demorar até cerca de um minuto para remover documentos vencidos.
-O MongoDB pode demorar até cerca de um minuto para remover documentos vencidos.
+Cada documento tem `dataRetencaoAte` e expira no prazo da sua coleção (ver
+`utils/retencaoDados.js`); as coleções permanentes não expiram. Os anexos GridFS
+do chat são eliminados pelo bucket para remover também seus chunks. O MongoDB
+pode demorar até cerca de um minuto para remover documentos vencidos.
 
 Para resetar:
 ```bash

@@ -10,8 +10,7 @@
     "test": "node --test",
     "site:previa": "node site/previa.js",
     "pacote": "node scripts/pacote-squarecloud.js",
-    "bancos": "node scripts/ver-bancos.js",
-    "db:migrar": "node scripts/migrar-banco-secundario.js"
+    "bancos": "node scripts/ver-bancos.js"
   },
   "engines": {
     "node": ">=18.0.0"

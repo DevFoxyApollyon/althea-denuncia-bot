@@ -601,53 +601,6 @@ test('tabela de motivos é a mesma para todos os servidores e o texto do Discord
   assert.equal((await motivos.salvarTabela([], 'teste')).propria, false); // volta ao padrão
 });
 
-test('ao ligar, a ponte copia do banco principal para o secundário só o que estiver vazio lá', async () => {
-  const { migrarPonteParaSecundario } = require('../services/ponteSamp/migracao');
-  const cliente = mongo.conexao.getClient();
-  const principal = cliente.db('mig_principal');
-  const secundario = cliente.db('mig_secundario');
-  await principal.collection('ponteservidores').insertOne({ guildId: '900', ativo: true });
-  await principal.collection('ponteinstalacoes').insertMany([{ tokenHash: 'a' }, { tokenHash: 'b' }]);
-  await secundario.collection('ponteinstalacoes').insertOne({ tokenHash: 'ja-estava' }); // não sobrescreve
-
-  const copiadas = await migrarPonteParaSecundario(principal, secundario);
-  assert.deepEqual(copiadas, { ponteservidores: 1 });
-  assert.equal(await secundario.collection('ponteservidores').countDocuments(), 1);
-  assert.equal(await secundario.collection('ponteinstalacoes').countDocuments(), 1);
-  assert.equal(await principal.collection('ponteservidores').countDocuments(), 1); // nada apagado
-  assert.deepEqual(await migrarPonteParaSecundario(principal, secundario), {}); // segunda vez não copia de novo
-});
-
-test('ao ligar, o site vai para o banco secundário e sai do principal, uma vez só', async () => {
-  const { migrarSiteParaSecundario } = require('../utils/migrarSiteParaSecundario');
-  const cliente = mongo.conexao.getClient();
-  const principal = cliente.db('site_principal');
-  const secundario = cliente.db('site_secundario');
-  const mensagens = Array.from({ length: 1203 }, (_, i) => ({ conteudo: `m${i}` }));
-  await principal.collection('denunciamensagems').insertMany(mensagens);
-  await principal.collection('chatmensagems').insertOne({ texto: 'oi' });
-  await principal.collection('denuncias').insertOne({ acusado: '1039' }); // é do bot: fica
-  await principal.collection('strikes').insertMany([{ userId: '1' }, { userId: '2' }]);
-  await secundario.collection('chatmensagems').insertOne({ texto: 'nova, já no secundário' });
-
-  const copiadas = await migrarSiteParaSecundario(principal, secundario);
-  assert.deepEqual(copiadas, { chatmensagems: 1, denunciamensagems: 1203, strikes: 2 });
-  assert.equal(await secundario.collection('denunciamensagems').countDocuments(), 1203);
-  assert.equal(await secundario.collection('chatmensagems').countDocuments(), 2);
-  const restantes = (await principal.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name);
-  assert.deepEqual(restantes.filter(n => n !== 'migracoes').sort(), ['denuncias']);
-
-  await principal.collection('chatmensagems').insertOne({ texto: 'não pode ser movida de novo' });
-  assert.equal(await migrarSiteParaSecundario(principal, secundario), null);
-  assert.equal(await principal.collection('chatmensagems').countDocuments(), 1);
-
-  // Mesmo banco nos dois endereços: nada é apagado.
-  const unico = cliente.db('site_unico');
-  await unico.collection('chatmensagems').insertOne({ texto: 'único' });
-  assert.deepEqual(await migrarSiteParaSecundario(unico, unico), {});
-  assert.equal(await unico.collection('chatmensagems').countDocuments(), 1);
-});
-
 test('motivo cadastrado depois do aceite: a fila reclassifica sozinha na próxima atualização', async () => {
   const motivos = require('../services/ponteSamp/motivos');
   await guildAtiva('870');

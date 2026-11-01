@@ -228,12 +228,6 @@ test('retenção: prazos por coleção e em qual banco cada modelo fica', () => 
   for (const nome of ['Denuncia', 'ModerationAction', 'Config', 'GlobalConfig']) {
     assert.equal(require(`../models/${nome}`).db, primaryConnection, nome);
   }
-
-  // Toda coleção que o site guarda no secundário entra na mudança do principal.
-  const movidas = require('../utils/migrarSiteParaSecundario').ETAPAS.flatMap(etapa => etapa.colecoes);
-  for (const nome of doSecundario.filter(n => !['Usuario', 'ChavePush', 'InscricaoPush', 'Sugestao'].includes(n))) {
-    assert.ok(movidas.includes(require(`../models/${nome}`).collection.name), nome);
-  }
 });
 
 test('teste da staff: valida o que o responsável monta e corrige as respostas', () => {

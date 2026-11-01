@@ -29,8 +29,6 @@ const { advancedMonitor } = require('./utils/advancedMonitoring');
 const { setupRankJobs } = require('./jobs/rankJobs');
 const { primaryConnection, secondaryConnection } = require('./utils/persistencia');
 const { prepararRetencaoNoBanco } = require('./utils/retencaoDados');
-const { migrarPonteParaSecundario } = require('./services/ponteSamp/migracao');
-const { migrarSiteParaSecundario } = require('./utils/migrarSiteParaSecundario');
 const Config = require('./models/Config');
 const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 const { iniciarPoller } = require('./jobs/nicknamePoller');
@@ -71,19 +69,12 @@ client.rest.on('rateLimited', (info) => {
 Promise.all([primaryConnection.asPromise(), secondaryConnection.asPromise()])
     .then(async () => {
         log.success('Bancos principal e secundário conectados.');
-        // Antes de entrar no Discord: o site e as mensagens das denúncias passam a
-        // morar no secundário, e os dados antigos precisam estar lá antes do uso.
-        await migrarSiteParaSecundario(primaryConnection.db, secondaryConnection.db)
-            .catch(err => log.error('Não foi possível copiar o site para o banco secundário: ' + err.message));
         client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
 
         // Os prazos de cada coleção (ver utils/retencaoDados.js) são aplicados em
         // segundo plano: percorrer os dois bancos leva tempo e o bot não precisa
         // esperar por isso para ficar online.
         (async () => {
-            // Ponte com o jogo: dados que ainda estavam no principal vão para o secundário.
-            await migrarPonteParaSecundario(primaryConnection.db, secondaryConnection.db)
-                .catch(err => log.error('Não foi possível copiar a ponte para o banco secundário: ' + err.message));
             await prepararRetencaoNoBanco(primaryConnection.db);
             await prepararRetencaoNoBanco(secondaryConnection.db);
             await Config.createIndexes();
