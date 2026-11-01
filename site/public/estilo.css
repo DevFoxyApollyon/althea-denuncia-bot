@@ -550,6 +550,31 @@ button.numero[aria-pressed="true"] { border-color: var(--marca); box-shadow: 0 0
 
 .responsavel { display: flex; align-items: center; gap: 12px; }
 .responsavel div { display: grid; min-width: 0; line-height: 1.3; }
+.responsavel .abre-perfil { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; }
+
+/* Foto e nome que abrem o perfil do Discord. */
+.abre-perfil { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-width: 0; }
+.abre-perfil:hover strong, .abre-perfil:focus-visible strong { text-decoration: underline; }
+.abre-perfil:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; border-radius: var(--raio); }
+
+.dialogo.perfil-dc { position: relative; width: min(380px, calc(100vw - 32px)); padding: 0; overflow: hidden; }
+.perfil-dc-fechar { position: absolute; top: 8px; right: 8px; z-index: 1; width: 30px; height: 30px; padding: 0; border-radius: 50%; border: 0; background: rgb(0 0 0 / 45%); color: #fff; font-size: 20px; line-height: 1; }
+.perfil-dc-corpo { display: grid; gap: 14px; padding-bottom: 18px; }
+.perfil-dc-carregando { padding: 28px 22px; color: var(--texto-2); }
+.perfil-dc-topo { height: 96px; background: var(--marca-suave) center / cover no-repeat; }
+.perfil-dc-cabeca { display: flex; align-items: flex-end; gap: 12px; margin-top: -44px; padding: 0 18px; }
+.perfil-dc-cabeca .avatar.grande { flex: none; box-shadow: 0 0 0 4px var(--superficie); }
+.perfil-dc-nomes { min-width: 0; padding-bottom: 2px; }
+.perfil-dc-nomes h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 18px; }
+.perfil-dc-nomes p { margin: 2px 0 0; color: var(--texto-2); font-size: 13px; overflow-wrap: anywhere; }
+.perfil-dc-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 6px; background: var(--fundo); border: 1px solid var(--linha); color: var(--texto-2); font-size: 12px; font-weight: 650; }
+.perfil-dc-tag img { width: 14px; height: 14px; }
+.perfil-dc-insignias, .perfil-dc-corpo > .dados, .perfil-dc-cargos { margin: 0 18px; }
+.perfil-dc-insignias { display: flex; flex-wrap: wrap; gap: 6px; }
+.perfil-dc-cargos h3 { margin: 0 0 8px; font-size: 13px; color: var(--texto-2); }
+.perfil-dc-cargos > div { display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow: auto; }
+.perfil-dc-cargo { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; background: var(--fundo); border: 1px solid var(--linha); font-size: 12.5px; }
+.perfil-dc-cargo i { width: 10px; height: 10px; border-radius: 50%; background: var(--texto-3); }
 .responsavel span { color: var(--texto-3); font-size: 12.5px; }
 .responsavel strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

@@ -390,6 +390,30 @@ app.get('/api/config-site', (req, res) => res.json({ config: configVisivel('1'),
 app.post('/api/config-site', express.json(), (req, res) => res.json({ ok: true, mensagem: 'Configurações salvas (prévia, nada foi gravado).', config: configVisivel('1') }));
 
 const casoDoPerfil = (d, resultado) => ({ id: d.id, acusado: d.acusado, denunciante: d.denunciante, motivo: d.motivo, categoria: d.categoria, platform: d.platform, status: d.status, resultado, dataCriacao: d.dataCriacao });
+app.get('/api/membros/:id', (req, res) => res.json({
+  id: '200000000000000200',
+  nome: pessoas[req.params.id]?.nome || '『Modᴮᴿᴾ³』 Lobo 740',
+  usuario: 'lobo.brp',
+  nomeGlobal: 'Lobo',
+  avatar: '/logo.png',
+  banner: null,
+  corDestaque: '#2f6f4f',
+  cor: pessoas[req.params.id]?.cor || '#5bc0eb',
+  bot: false,
+  tag: { texto: 'BRP', insignia: null },
+  insignias: ['HypeSquadOnlineHouse2', 'ActiveDeveloper'],
+  contaCriadaEm: '2021-03-14T12:00:00Z',
+  noServidor: true,
+  entrouEm: '2023-07-02T18:30:00Z',
+  impulsionaDesde: '2025-12-01T10:00:00Z',
+  cargos: [
+    { id: '1', nome: 'Moderador', cor: '#5bc0eb' },
+    { id: '2', nome: 'Responsável denúncias', cor: '#e84fd0' },
+    { id: '3', nome: 'PC', cor: null },
+    { id: '4', nome: 'Booster', cor: '#f47fff' }
+  ]
+}));
+
 app.get('/api/jogadores/:conta', (req, res) => res.json({
   conta: req.params.conta,
   chat: { castigos: 2, banimentos: 0, itens: [

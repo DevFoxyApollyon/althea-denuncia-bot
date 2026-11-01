@@ -115,6 +115,45 @@ function registrarRotasDeJogadores(router, { client }) {
     await push.removerInscricao(req.usuario.id, req.body?.endpoint);
     res.json({ ok: true });
   }));
+
+  // Perfil do Discord de um membro do servidor: o mesmo que qualquer membro já
+  // vê ao clicar no nome dele no Discord (cargos, tag, datas e insígnias).
+  router.get('/membros/:userId', assincrono(async (req, res) => {
+    const acesso = await acessoAoServidor(client, req.usuario.id, String(req.query.guildId || ''));
+    if (!acesso) throw new ErroHttp(403, 'Você não faz parte deste servidor.');
+    const userId = String(req.params.userId || '');
+    if (!/^\d{15,21}$/.test(userId)) throw new ErroHttp(400, 'ID do Discord inválido.');
+
+    const membro = await acesso.guild.members.fetch(userId).catch(() => null);
+    // force: o usuário em memória não traz banner, cor de destaque nem tag do servidor.
+    const usuario = await client.users.fetch(userId, { force: true }).catch(() => membro?.user || null);
+    if (!usuario) throw new ErroHttp(404, 'Membro não encontrado.');
+
+    const tag = usuario.primaryGuild?.identityEnabled && usuario.primaryGuild.tag ? usuario.primaryGuild : null;
+    res.json({
+      id: usuario.id,
+      nome: membro?.displayName || usuario.globalName || usuario.username,
+      usuario: usuario.username,
+      nomeGlobal: usuario.globalName || null,
+      avatar: (membro || usuario).displayAvatarURL({ size: 256, extension: 'webp' }),
+      banner: usuario.bannerURL?.({ size: 600, extension: 'webp' }) || null,
+      corDestaque: usuario.hexAccentColor || null,
+      cor: membro?.displayHexColor && membro.displayHexColor !== '#000000' ? membro.displayHexColor : null,
+      bot: Boolean(usuario.bot),
+      tag: tag ? { texto: tag.tag, insignia: usuario.guildTagBadgeURL?.({ size: 32 }) || null } : null,
+      insignias: usuario.flags?.toArray?.() || [],
+      contaCriadaEm: usuario.createdAt,
+      noServidor: Boolean(membro),
+      entrouEm: membro?.joinedAt || null,
+      impulsionaDesde: membro?.premiumSince || null,
+      cargos: membro
+        ? [...membro.roles.cache.values()]
+          .filter(cargo => cargo.id !== acesso.guild.id)
+          .sort((a, b) => b.position - a.position)
+          .map(cargo => ({ id: cargo.id, nome: cargo.name, cor: cargo.hexColor !== '#000000' ? cargo.hexColor : null }))
+        : []
+    });
+  }));
 }
 
 module.exports = { registrarRotasDeJogadores, resultadoDoCaso, resumir };

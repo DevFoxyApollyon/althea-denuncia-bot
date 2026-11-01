@@ -22,6 +22,7 @@ import {
   estado
 } from './estado.js';
 import { atalhosDeJogador } from './jogador.js';
+import { abrirPerfilDiscord } from './perfilDiscord.js';
 import { blocoAviso } from './navegacao.js';
 import { ir } from './rotas.js';
 import {
@@ -193,10 +194,11 @@ export function mensagem(item, { continuacao = false } = {}) {
   }
 
   return el('article', { class: classes },
-    avatar({ id: item.autorId, nome, url: pessoa?.avatar, classe: 'media' }),
+    el('button', { type: 'button', class: 'abre-perfil', title: 'Ver perfil do Discord', onclick: () => abrirPerfilDiscord(item.autorId) },
+      avatar({ id: item.autorId, nome, url: pessoa?.avatar, classe: 'media' })),
     el('div', { class: 'mensagem-corpo' },
       el('header', null,
-        nomeColorido(nome, pessoa?.cor),
+        el('button', { type: 'button', class: 'abre-perfil', onclick: () => abrirPerfilDiscord(item.autorId) }, nomeColorido(nome, pessoa?.cor)),
         propria && el('span', { class: 'marcador voce' }, 'você'),
         hora,
         marcadores),
@@ -588,10 +590,14 @@ export function telaDetalhe() {
             icone('olho'),
             el('span', null, `${estado.presenca.join(', ')} também ${estado.presenca.length === 1 ? 'está' : 'estão'} com este caso aberto.`)),
           (responsavel || denuncia.responsavel) && el('section', { class: 'cartao responsavel' },
+            el('button', {
+              type: 'button', class: 'abre-perfil', title: 'Ver perfil do Discord',
+              onclick: () => abrirPerfilDiscord(denuncia.claimedBy)
+            },
             avatar({ id: denuncia.claimedBy, nome: responsavel?.nome || denuncia.responsavel, url: responsavel?.avatar, classe: 'media' }),
             el('div', null,
               el('span', null, 'Staff responsável'),
-              nomeColorido(responsavel?.nome || denuncia.responsavel, responsavel?.cor))),
+              nomeColorido(responsavel?.nome || denuncia.responsavel, responsavel?.cor)))),
           el('section', { class: 'cartao' },
             el('h2', null, 'Resumo'),
             el('dl', { class: 'dados' },
