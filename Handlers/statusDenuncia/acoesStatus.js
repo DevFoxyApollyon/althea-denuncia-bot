@@ -707,9 +707,10 @@ async function handlePunishmentModal(interaction) {
     const idsAceitos = String(acusadoId).split('+').map((id) => id.trim()).filter(Boolean);
     let acceptedUserIds = [];
     let teveIdAusente = false;
+    let usuariosAceitos = [];
 
     try {
-      const usuariosAceitos = await Promise.all(
+      usuariosAceitos = await Promise.all(
         idsAceitos.map(async (id) => {
           const usuarioAceito = await require('../../models/Usuario').findOne({
             guildId: interaction.guild.id,
@@ -734,8 +735,15 @@ async function handlePunishmentModal(interaction) {
     ].filter(Boolean);
     const restritoParticipacaoAceita = usuarioAceitoIds.length > 0 && !teveIdAusente;
 
+    // Cada acusado identificado é mencionado na mensagem do aceite: a menção avisa
+    // a pessoa e, em tópico privado, também a coloca nele.
+    const acusadoTexto = idsAceitos
+      .map((id, indice) => (usuariosAceitos[indice] ? `${id} <@${usuariosAceitos[indice]}>` : id))
+      .join(' + ') || acusadoId;
+
     const logMessage = await manageStatusMessages(interaction.channel, 'aceita', interaction.user, {
       acusadoId,
+      acusadoTexto,
       motivo,
       dataPunicao,
       messageUrl,

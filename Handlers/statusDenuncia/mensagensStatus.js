@@ -183,7 +183,7 @@ function createStatusMessage(type, user, data = {}) {
     case 'analise':
       return `🔎 Esta denúncia está em análise por ${user} Acusado: (${denunciaData.acusado || 'Não informado'}) Motivo: (${denunciaData.motivo || 'Não informado'}) Link: ${logUrl}`;
     case 'aceita':
-      return `✅ Denúncia aceita por ${user} Acusado: (${data.acusadoId}) Tomará punição por (${data.motivo}) Data ${data.dataPunicao} Link: ${logUrl}`;
+      return `✅ Denúncia aceita por ${user} Acusado: (${data.acusadoTexto || data.acusadoId}) Tomará punição por (${data.motivo}) Data ${data.dataPunicao} Link: ${logUrl}`;
     case 'recusada':
       return `❌ Denúncia recusada por ${user}`;
     default:
