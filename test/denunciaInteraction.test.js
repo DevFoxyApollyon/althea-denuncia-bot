@@ -122,3 +122,14 @@ test('status da denúncia: a linha em branco do fim continua no fim', () => {
   // Sem a linha em branco, nada muda no formato de sempre.
   assert.equal(atualizarTextoDeStatus('➱ **Motivo**: `x`\n➱ **Status**: `Pendente`', 'recusada'), '➱ **Motivo**: `x`\n➱ **Status**: `Recusada ❌`');
 });
+
+test('tópico privado: acusado identificado depois da abertura entra no tópico', async () => {
+  const { ChannelType } = require('discord.js');
+  const { porNoTopicoPrivado } = require('../utils/restricaoTopicos');
+  const adicionados = [];
+  const privado = { type: ChannelType.PrivateThread, members: { async add(id) { if (id === '300000000000000003') throw new Error('Unknown Member'); adicionados.push(id); } } };
+  assert.equal(await porNoTopicoPrivado(privado, ['300000000000000001', '300000000000000001', 'conta-1039', '300000000000000003']), 1);
+  assert.deepEqual(adicionados, ['300000000000000001']);
+  const publico = { type: ChannelType.PublicThread, members: { async add() { throw new Error('não deveria'); } } };
+  assert.equal(await porNoTopicoPrivado(publico, ['300000000000000001']), 0);
+});

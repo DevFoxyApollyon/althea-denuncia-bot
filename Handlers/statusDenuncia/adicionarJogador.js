@@ -1,7 +1,7 @@
 // Botão e modal "Add Player".
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
 const Denuncia = require('../../models/Denuncia');
-const { registrarTopicoRestrito } = require('../../utils/restricaoTopicos');
+const { registrarTopicoRestrito, porNoTopicoPrivado } = require('../../utils/restricaoTopicos');
 const { getConfig: getCachedConfig } = require('../../utils/configCache');
 const { safeDefer, safeReplyOrEdit } = require('./mensagensStatus');
 const { Logger } = require('../../utils/logger');
@@ -164,6 +164,8 @@ async function handleAddPlayerModal(interaction) {
     });
 
     registrarTopicoRestrito(denuncia.threadId, denuncia.criadoPor, updatedIds, true);
+    // Em tópico privado a pessoa também precisa entrar nele para ver e falar.
+    await porNoTopicoPrivado(interaction.channel, [playerUserId]);
 
     const tipoLabel = isDiscordId ? 'Discord' : 'Player';
     const tipoExibicao = isDiscordId ? `<@${playerUserId}>` : `\`${playerId}\``;

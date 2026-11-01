@@ -7,7 +7,7 @@ const { LogManager } = require('../LogManager');
 const { getBrasiliaDate, formatTimeBR, getBrasiliaDateTime } = require('../../utils/dateUtils');
 const { inserirFeedbackMenu, removerFeedbackMenu } = require('../../utils/feedback');
 const { atualizarStatusNaMensagem } = require('../../utils/atualizarStatus');
-const { registrarTopicoRestrito } = require('../../utils/restricaoTopicos');
+const { registrarTopicoRestrito, porNoTopicoPrivado } = require('../../utils/restricaoTopicos');
 const { getConfig: getCachedConfig } = require('../../utils/configCache');
 const {
   safeDefer,
@@ -730,6 +730,8 @@ async function handlePunishmentModal(interaction) {
     });
 
     registrarTopicoRestrito(denuncia.threadId, denuncia.criadoPor, acusadoUserIdsFinal, restritoParticipacaoAceita);
+    // Acusado identificado só no aceite também entra no tópico privado.
+    await porNoTopicoPrivado(interaction.channel, acusadoUserIdsFinal);
 
     const logManager = new LogManager(interaction.client, config);
     const logEmbed = await logManager.createLogEmbed('aceita', interaction.user, interaction.channel.id);

@@ -1,3 +1,4 @@
+const { ChannelType } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const { usuarioIsento } = require('./usuariosIsentos');
 
@@ -51,7 +52,18 @@ async function usuarioAutorizadoNoTopico(threadId, userId) {
     return dados.autorizados.has(userId);
 }
 
+// Num tópico privado só entra quem é colocado nele: acusados identificados
+// depois da abertura (no aceite ou no Add Player) precisam ser adicionados.
+// Em tópico público não faz nada. Devolve quantos entraram.
+async function porNoTopicoPrivado(canal, ids = []) {
+    if (canal?.type !== ChannelType.PrivateThread) return 0;
+    const validos = [...new Set(ids.map(String).filter(id => /^\d{15,21}$/.test(id)))];
+    const resultados = await Promise.all(validos.map(id => canal.members.add(id).then(() => true).catch(() => false)));
+    return resultados.filter(Boolean).length;
+}
+
 module.exports = {
+    porNoTopicoPrivado,
     registrarTopicoRestrito,
     obterRestricaoTopico,
     usuarioAutorizadoNoTopico,
