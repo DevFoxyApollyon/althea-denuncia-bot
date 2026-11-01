@@ -246,6 +246,13 @@ code { padding: 1px 5px; border-radius: 5px; background: var(--elevada); font-fa
 }
 .aplicativo.sem-menu { grid-template-columns: minmax(0, 1fr); }
 
+/* No computador o site tem a altura da tela e quem rola é a área principal. A
+   janela não pode rolar: ao fechar um seletor e redesenhar a página, o navegador
+   rolava a janela e aparecia o fundo vazio embaixo. */
+@media (min-width: 861px) {
+  html:has(.aplicativo), html:has(.aplicativo) body { height: 100%; overflow: hidden; }
+}
+
 /* ---------- barra superior ---------- */
 
 .topo {
