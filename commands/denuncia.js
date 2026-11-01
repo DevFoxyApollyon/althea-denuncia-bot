@@ -111,7 +111,14 @@ async function handleEntrarNoTopico(interaction) {
         console.warn(`Não foi possível pôr ${interaction.user.id} no tópico ${topico.id}: ${erro.message}`);
         return interaction.editReply('❌ O Discord não deixou pôr você no tópico. Confira se o bot tem permissão no canal.');
     }
-    return interaction.editReply(`✅ Você entrou no tópico: ${topico}`);
+    // O Discord não deixa o bot mudar a tela de ninguém: o botão de link leva
+    // ao tópico com um clique.
+    return interaction.editReply({
+        content: `✅ Você entrou no tópico: ${topico}`,
+        components: [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setLabel('Abrir tópico').setEmoji('➡️').setStyle(ButtonStyle.Link).setURL(topico.url)
+        )]
+    });
 }
 
 function createStatusButtonsRow2() {
