@@ -198,7 +198,6 @@ class AdvancedMonitor {
       m => m.timestamp > oneHourAgo
     );
 
-    log.info('Dados antigos de monitoramento limpos.');
   }
 
   generateDetailedReport() {

@@ -156,7 +156,6 @@ async function limparEspelhosAbertos(client, { soAntigos = false } = {}) {
     limpeza.previstos = servidores.reduce((soma, servidor) => soma + aFechar(servidor).length, 0);
 
     for (const servidor of servidores) {
-      let fechadosAqui = 0;
       for (const { topico, tipo, destino } of aFechar(servidor)) {
         try {
           // Tópico de outro canal: só arquiva, sem trancar e sem mudar o tempo de arquivamento dele.
@@ -164,7 +163,6 @@ async function limparEspelhosAbertos(client, { soAntigos = false } = {}) {
           // Tópico com 7 dias ou mais é sempre trancado, mesmo sendo espelho de denúncia em andamento.
           else if (destino === 'trancar' || soAntigos) await fecharTopico(topico, 'Tópico de denúncia fechado pela limpeza.');
           else await topico.edit({ archived: true, autoArchiveDuration: ARQUIVAR_APOS_MINUTOS, reason: 'Espelho arquivado para liberar tópicos ativos.' });
-          fechadosAqui += 1;
           limpeza.fechados += 1;
           porCanal[tipo] += 1;
         } catch (erro) {
@@ -173,7 +171,6 @@ async function limparEspelhosAbertos(client, { soAntigos = false } = {}) {
         // Devagar, para não bater no limite de requisições do Discord.
         await esperar(PAUSA_ENTRE_TOPICOS_MS);
       }
-      if (servidor.itens.length) console.log(`[Espelhos] ${servidor.guild.name}: ${servidor.total} tópico(s) ativo(s) no servidor, ${servidor.itens.length} para a limpeza, ${fechadosAqui} fechado(s).`);
       ativos += servidor.itens.length;
     }
     resumoGuardado = null;
@@ -208,9 +205,7 @@ function iniciarLimpezaDeEspelhos(client) {
     if (rodando) return;
     rodando = true;
     try {
-      const { ativos, fechados, porCanal, ocupado } = await limparEspelhosAbertos(client);
-      if (ocupado) return;
-      if (ativos) console.log(`[Espelhos] Total: ${fechados} tópico(s) fechado(s): ${porCanal.registro} no registro, ${porCanal.armazem} no armazém, ${porCanal.denuncia} de denúncias (finalizadas ou abertas há 7 dias ou mais), ${porCanal.antigo} aberto(s) há 7 dias ou mais nos canais de denúncia e ${porCanal.outro} arquivado(s) em outros canais.`);
+      await limparEspelhosAbertos(client);
     } catch (erro) {
       console.warn(`[Espelhos] Falha na limpeza dos tópicos espelho: ${erro.message}`);
     } finally {
