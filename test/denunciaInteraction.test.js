@@ -114,3 +114,11 @@ test('tópico privado: põe denunciante e acusados; se o Discord recusar alguém
     console.warn = avisoOriginal;
   }
 });
+
+test('status da denúncia: a linha em branco do fim continua no fim', () => {
+  const { atualizarTextoDeStatus } = require('../utils/atualizarStatus');
+  const original = '|| <@1> ||\n➱ **Denunciante**: `1039`\n➱ **Tópico**: <#9>\n➱ **Status**: `Pendente`\n⠀';
+  assert.equal(atualizarTextoDeStatus(original, 'aceita'), '|| <@1> ||\n➱ **Denunciante**: `1039`\n➱ **Tópico**: <#9>\n➱ **Status**: `Aceita ✅`\n⠀');
+  // Sem a linha em branco, nada muda no formato de sempre.
+  assert.equal(atualizarTextoDeStatus('➱ **Motivo**: `x`\n➱ **Status**: `Pendente`', 'recusada'), '➱ **Motivo**: `x`\n➱ **Status**: `Recusada ❌`');
+});
