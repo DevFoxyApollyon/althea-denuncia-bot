@@ -7,8 +7,7 @@ import { ir } from './rotas.js';
 import { lerPreferencia, salvarPreferencia } from './tema.js';
 import { api, el, formatarData, icone, papeisAtuais, servidorAtual } from './util.js';
 
-const CAMPOS_DO_RASCUNHO = ['platform', 'acusado', 'categoria', 'detalhes', 'provas'];
-const semAcento = (texto) => String(texto || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+const CAMPOS_DO_RASCUNHO = ['platform', 'acusado', 'detalhes', 'provas'];
 let consultaPendente = null;
 
 // O que a pessoa já digitou fica guardado no navegador: se ela fechar a página
@@ -23,7 +22,6 @@ export function rascunhoDaDenuncia() {
 export function limparRascunhoDaDenuncia() {
   estado.rascunhoDenuncia = {};
   estado.duplicadas = null;
-  estado.filtroCategoria = '';
   estado.rascunhoDaConta = null;
   salvarPreferencia(CHAVE_RASCUNHO, '{}');
   clearTimeout(esperaDoRascunho);
@@ -103,59 +101,6 @@ function avisoDeDuplicada() {
       dup.suas ? '. Uma delas foi aberta por você: envie as novas provas nela em vez de abrir outra.' : '. Abra outra só se for um fato diferente.'));
 }
 
-// Categorias que combinam com o que foi digitado no filtro: pelo nome, pelo
-// grupo ou por uma sigla ("pg" acha Power gaming).
-function categoriasFiltradas(categorias) {
-  const termo = semAcento(estado.filtroCategoria).trim();
-  if (!termo) return categorias;
-  return categorias.filter(item => [item.nome, item.grupo, ...(item.termos || [])].some(texto => semAcento(texto).includes(termo)));
-}
-
-// Lista de categorias separada por grupo, com um filtro em cima. "Outros" é a
-// opção livre: a pessoa escreve o motivo com as próprias palavras.
-function campoDeCategoria(categorias, rascunho) {
-  const visiveis = categoriasFiltradas(categorias);
-  const grupos = new Map();
-  for (const item of visiveis) {
-    const grupo = item.grupo || 'Categorias';
-    if (!grupos.has(grupo)) grupos.set(grupo, []);
-    grupos.get(grupo).push(item);
-  }
-  const graves = categorias.filter(item => item.prioridade === 'alta').map(item => item.nome);
-  const opcao = (nome, rotulo = nome) => el('option', { value: nome, selected: nome === rascunho.categoria }, rotulo);
-
-  return el('div', { class: 'campo' },
-    el('label', { for: 'categoria' }, 'Categoria'),
-    el('div', { class: 'categoria-escolha' },
-      categorias.length > 8 && el('label', { class: 'busca' },
-        icone('busca'),
-        el('input', {
-          type: 'search',
-          id: 'filtro-categoria-nova',
-          'aria-label': 'Filtrar categorias',
-          placeholder: 'Filtrar: rdm, pg, safe…',
-          value: estado.filtroCategoria,
-          oninput: (evento) => {
-            // O filtro não faz parte do rascunho; só escolhe a categoria.
-            evento.stopPropagation();
-            estado.filtroCategoria = evento.target.value;
-            const achadas = categoriasFiltradas(categorias);
-            if (estado.filtroCategoria.trim() && !achadas.some(item => item.nome === rascunho.categoria)) {
-              rascunho.categoria = achadas[0]?.nome || 'Outros';
-              salvarPreferencia(CHAVE_RASCUNHO, JSON.stringify(rascunho));
-            }
-            desenhar();
-          }
-        })),
-      el('select', { id: 'categoria', name: 'categoria', required: true },
-        el('option', { value: '' }, 'Escolha a infração…'),
-        [...grupos].map(([grupo, itens]) => el('optgroup', { label: grupo }, itens.map(item => opcao(item.nome)))),
-        el('optgroup', { label: 'Não está na lista' }, opcao('Outros', 'Outros (escrever o motivo)')))),
-    estado.filtroCategoria.trim() && !visiveis.length
-      ? el('p', { class: 'dica' }, 'Nenhuma categoria com esse nome. Fica em "Outros": escreva o motivo abaixo.')
-      : graves.length > 0 && el('p', { class: 'dica' }, `Entram na fila como alta prioridade: ${graves.join(', ')}.`));
-}
-
 export function telaNova() {
   const papeis = papeisAtuais();
   const servidor = servidorAtual();
@@ -175,7 +120,6 @@ export function telaNova() {
   }
 
   const rascunho = rascunhoDaDenuncia();
-  const categorias = servidor?.categorias || [];
   const plataformaMarcada = plataformas.includes(rascunho.platform) ? rascunho.platform : plataformas[0];
   const temRascunho = CAMPOS_DO_RASCUNHO.some(campo => campo !== 'platform' && rascunho[campo]);
 
@@ -198,11 +142,9 @@ export function telaNova() {
     }),
     el('p', { class: 'dica' }, 'Para mais de um acusado, separe os IDs com +, como em 1039+2471.'),
     avisoDeDuplicada()),
-  campoDeCategoria(categorias, rascunho),
   el('div', { class: 'campo' },
     el('label', { for: 'detalhes' }, 'Motivo'),
-    el('input', { type: 'text', id: 'detalhes', name: 'detalhes', placeholder: 'Motivo da denúncia', maxlength: '75', value: rascunho.detalhes || '' }),
-    el('p', { class: 'dica' }, 'Obrigatório quando a categoria é "Outros".')),
+    el('input', { type: 'text', id: 'detalhes', name: 'detalhes', placeholder: 'Ex.: RDM na praça central', maxlength: '75', required: true, value: rascunho.detalhes || '' })),
   el('div', { class: 'campo' },
     el('label', { for: 'provas' }, 'Links das provas'),
     el('textarea', { id: 'provas', name: 'provas', placeholder: 'https://youtu.be/…', maxlength: '1000', value: rascunho.provas || '' }),

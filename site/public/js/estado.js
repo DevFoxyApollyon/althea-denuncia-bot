@@ -102,7 +102,6 @@ export const estado = {
   selecionadas: [],
   rascunhoDenuncia: null,
   duplicadas: null,
-  filtroCategoria: '',
   jogador: null,
   chat: null,
   textoChat: '',

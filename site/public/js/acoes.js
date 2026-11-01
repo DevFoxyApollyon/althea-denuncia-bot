@@ -124,14 +124,14 @@ export async function finalizarDenuncia(botao, denuncia) {
 }
 
 export async function abrirDenuncia(botao, formulario) {
-  const { categoria, detalhes = '', ...dados } = Object.fromEntries(new FormData(formulario));
+  const { detalhes = '', ...dados } = Object.fromEntries(new FormData(formulario));
   const descricao = detalhes.trim();
-  if (categoria === 'Outros' && !descricao) {
-    avisar('erro', 'Na categoria "Outros", escreva o motivo.');
+  if (!descricao) {
+    avisar('erro', 'Escreva o motivo da denúncia.');
     return desenhar();
   }
-  // O motivo que vai para o Discord é "Categoria: motivo".
-  const motivo = [categoria !== 'Outros' && categoria, descricao].filter(Boolean).join(': ');
+  // A categoria é tirada do próprio texto do motivo (categoriaDoMotivo no servidor).
+  const motivo = descricao;
   const anexos = estado.anexosNovos;
   await executar(botao, async () => {
     const resultado = await enviarJson('/api/denuncias', { ...dados, motivo, guildId: estado.guildId });
