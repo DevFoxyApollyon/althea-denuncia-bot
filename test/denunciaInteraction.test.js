@@ -133,3 +133,30 @@ test('tópico privado: acusado identificado depois da abertura entra no tópico'
   const publico = { type: ChannelType.PublicThread, members: { async add() { throw new Error('não deveria'); } } };
   assert.equal(await porNoTopicoPrivado(publico, ['300000000000000001']), 0);
 });
+
+test('aceite com acusado fora do banco: abre tópico público na mensagem do canal', async () => {
+  const { ChannelType } = require('discord.js');
+  const { abrirTopicoPublicoDoAceite } = require('../Handlers/statusDenuncia/acoesStatus');
+  const enviados = [];
+  let criado = null;
+  const mensagem = {
+    hasThread: false,
+    async startThread(opcoes) { criado = opcoes; return { async send(payload) { enviados.push(payload); } }; }
+  };
+  const canais = {
+    '900000000000000001': { type: ChannelType.PrivateThread },
+    '900000000000000002': { messages: { async fetch() { return mensagem; } } }
+  };
+  const client = { channels: { async fetch(id) { return canais[id]; } } };
+  const denuncia = { threadId: '900000000000000001', channelId: '900000000000000002', messageId: '1', denunciante: '1039' };
+
+  assert.ok(await abrirTopicoPublicoDoAceite(client, denuncia, { acusadoId: '1039+2471', motivo: 'RDM', dataPunicao: '01/11/2026', staff: '<@5>' }));
+  assert.equal(criado.name, 'Denúncia: 1039 (decisão)');
+  assert.match(enviados[0].content, /Denúncia aceita/);
+  assert.match(enviados[0].content, /`1039\+2471`/);
+  assert.match(enviados[0].content, /RDM/);
+
+  // Tópico público (ou mensagem que já tem tópico): não abre outro.
+  canais['900000000000000001'] = { type: ChannelType.PublicThread };
+  assert.equal(await abrirTopicoPublicoDoAceite(client, denuncia, { acusadoId: '1', motivo: 'x', dataPunicao: 'x' }), null);
+});

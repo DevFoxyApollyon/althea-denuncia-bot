@@ -1,5 +1,5 @@
 // Mudanças de status da denúncia: analisar, aceitar, recusar e punição.
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, MessageFlags, ChannelType } = require('discord.js');
 const { sincronizarBotoes } = require('./botoesStatus');
 const Denuncia = require('../../models/Denuncia');
 const ModerationAction = require('../../models/ModerationAction');
@@ -24,6 +24,40 @@ const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 const { CODIGOS_ESPERADOS: DM_IGNORED_CODES, dmPausada, registrarErroDeDM, avisosExtrasLigados } = require('../../utils/dmSegura');
 const _logButtonLocks = new Set();
 const TRAVA_EXPIRA_MS = 2 * 60 * 1000;
+
+// Aceite com acusado que não está no banco numa denúncia de tópico privado: a
+// pessoa não tem como ser colocada no tópico, e o Discord não deixa um tópico
+// privado virar público. O bot abre então um tópico público na própria
+// mensagem da denúncia no canal, com o resumo da decisão. As provas continuam
+// no tópico privado.
+async function abrirTopicoPublicoDoAceite(client, denuncia, { acusadoId, motivo, dataPunicao, staff }) {
+  try {
+    const privado = denuncia.threadId ? await client.channels.fetch(denuncia.threadId).catch(() => null) : null;
+    if (privado?.type !== ChannelType.PrivateThread) return null;
+    const canal = await client.channels.fetch(denuncia.channelId).catch(() => null);
+    const mensagem = await canal?.messages?.fetch(denuncia.messageId).catch(() => null);
+    if (!mensagem || mensagem.hasThread) return null;
+
+    const publico = await mensagem.startThread({ name: `Denúncia: ${denuncia.denunciante} (decisão)`, autoArchiveDuration: 1440 });
+    await publico.send({
+      content: [
+        '✅ **Denúncia aceita**',
+        `➱ **Denunciante**: \`${denuncia.denunciante}\``,
+        `➱ **Acusado**: \`${acusadoId}\``,
+        `➱ **Motivo da punição**: ${motivo || 'Não informado'}`,
+        `➱ **Data da punição**: \`${dataPunicao}\``,
+        staff && `➱ **Aceita por**: ${staff}`,
+        '',
+        'As provas ficaram no tópico privado da denúncia. Caso discorde da decisão, procure um responsável por denúncias para pedir uma reanálise.'
+      ].filter(linha => linha !== null && linha !== undefined && linha !== false).join('\n'),
+      allowedMentions: { parse: [] }
+    });
+    return publico;
+  } catch (erro) {
+    log.warn(`Não foi possível abrir o tópico público da decisão: ${erro.message}`);
+    return null;
+  }
+}
 
 async function updateDenunciaStatus(denunciaId, {
   status,
@@ -732,6 +766,8 @@ async function handlePunishmentModal(interaction) {
     registrarTopicoRestrito(denuncia.threadId, denuncia.criadoPor, acusadoUserIdsFinal, restritoParticipacaoAceita);
     // Acusado identificado só no aceite também entra no tópico privado.
     await porNoTopicoPrivado(interaction.channel, acusadoUserIdsFinal);
+    // Algum acusado fora do banco: a decisão fica num tópico público na mensagem do canal.
+    if (teveIdAusente) await abrirTopicoPublicoDoAceite(interaction.client, denuncia, { acusadoId, motivo, dataPunicao, staff: `${interaction.user}` });
 
     const logManager = new LogManager(interaction.client, config);
     const logEmbed = await logManager.createLogEmbed('aceita', interaction.user, interaction.channel.id);
@@ -910,6 +946,7 @@ async function registrarAcaoModerador(moderadorId, acao, denunciaId, guildId) {
 }
 
 module.exports = {
+  abrirTopicoPublicoDoAceite,
   handleStatusButton,
   processarAnaliseAutomatica,
   denunciasMap,
