@@ -51,6 +51,8 @@ function ehResumoDaDenuncia(texto) {
 }
 
 const RENOMEOU_TOPICO = /^(?:(?:📌|❌|✅|🔎)\s*[│|]\s*)?Denúncia: [^\n]*$/;
+// Aviso que fica no canal quando a denúncia abre em tópico privado.
+const AVISO_TOPICO_PRIVADO = /^🔒 \*\*Denúncia de /;
 
 const STATUS_DO_FILTRO = {
   andamento: ['pendente', 'reivindicacao', 'analise'],
@@ -262,7 +264,7 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
       // O texto de abertura da denúncia repete o que o resumo ao lado já mostra.
       .filter(mensagem => !(mensagem.doBot && ehResumoDaDenuncia(mensagem.conteudo)))
       // Aviso do Discord de que o bot renomeou o tópico ("📌│Denúncia: 1039").
-      .filter(mensagem => !(mensagem.doBot && RENOMEOU_TOPICO.test(mensagem.conteudo)))
+      .filter(mensagem => !(mensagem.doBot && (RENOMEOU_TOPICO.test(mensagem.conteudo) || AVISO_TOPICO_PRIVADO.test(mensagem.conteudo))))
       // A mensagem com os botões de controle não tem conteúdo para mostrar.
       .filter(mensagem => mensagem.conteudo || mensagem.anexos.length || mensagem.embeds.length);
 
@@ -317,7 +319,10 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
         dataPunicao: denuncia.dataPunicao || null,
         responsavel,
         etapas,
-        linkDiscord: `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`,
+        // O link do tópico abre a conversa direto, seja ele público ou privado.
+        linkDiscord: denuncia.threadId
+          ? `https://discord.com/channels/${denuncia.guildId}/${denuncia.threadId}`
+          : `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`,
         aberta: STATUS_ABERTOS.includes(denuncia.status),
         parte: denuncia.criadoPor === req.usuario.id ? 'denunciante'
           : (denuncia.acusadoUserIds || []).includes(req.usuario.id) ? 'acusado' : null

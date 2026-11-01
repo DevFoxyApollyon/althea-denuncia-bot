@@ -1,5 +1,5 @@
 // Botão "Reivindicar".
-const { MessageFlags, EmbedBuilder } = require('discord.js');
+const { MessageFlags, EmbedBuilder, ChannelType } = require('discord.js');
 const Denuncia = require('../../models/Denuncia');
 const { atualizarStatusNaMensagem } = require('../../utils/atualizarStatus');
 const { getConfig: getCachedConfig } = require('../../utils/configCache');
@@ -101,6 +101,11 @@ async function handleClaimButton(interaction) {
     }
 
     await registrarAcaoModerador(interaction.user.id, 'reivindicar', denuncia._id, interaction.guild.id);
+
+    // Em tópico privado, quem reivindica (inclusive pelo site) entra nele.
+    if (interaction.channel?.type === ChannelType.PrivateThread) {
+      await interaction.channel.members?.add?.(interaction.user.id).catch(() => {});
+    }
 
     const claimMessage = `📌 O administrador ${interaction.user} reivindicou esta denúncia e estará analisando.`;
     await sendOnce(interaction.channel, claimMessage);

@@ -8,7 +8,8 @@ const {
     TextInputBuilder,
     TextInputStyle,
     LabelBuilder,
-    FileUploadBuilder
+    FileUploadBuilder,
+    ChannelType
 } = require('discord.js');
 
 const { garantirAvisoNoTopo } = require('../Handlers/leiaAvisoHandler');
@@ -209,6 +210,28 @@ function validarMotivo(motivo) {
 function validarMotivoTamanho(motivo) {
     if (motivo.trim().length < 2) return '❌ O campo **Motivo** é muito curto. Digite pelo menos 2 caracteres.';
     return null;
+}
+
+// Cria o tópico privado da denúncia e põe cada pessoa nele. Se o Discord não
+// deixar (sem permissão para tópico privado, ou alguém que não vê o canal),
+// apaga o que criou e devolve null para a denúncia abrir em tópico público.
+async function criarTopicoPrivado(canal, nome, membros) {
+    let topico = null;
+    try {
+        topico = await canal.threads.create({
+            name: nome,
+            type: ChannelType.PrivateThread,
+            invitable: false,
+            autoArchiveDuration: 1440,
+            reason: 'Denúncia com acusado identificado: tópico visível só para as partes e a staff.'
+        });
+        for (const id of [...new Set(membros)]) await topico.members.add(id);
+        return topico;
+    } catch (erro) {
+        console.warn(`Tópico privado não criado, a denúncia abre pública: ${erro.message}`);
+        if (topico) await topico.delete().catch(() => {});
+        return null;
+    }
 }
 
 function validarAcusadoVazio(acusado) {
@@ -514,19 +537,37 @@ async function handleDenunciaSubmit(interaction, platform) {
             `➱ **Prova(s)**: ${provas}`
         ].join('\n');
 
-        const mainMessage = await channel.send({
-            content: textoDenuncia,
-            allowedMentions: { parse: ['users'] }
-        });
-
         const mirrorThreads = {};
 
+        // Com todos os acusados identificados, o tópico é privado: só o
+        // denunciante, os acusados e quem tem "Gerenciar tópicos" (a staff) veem.
+        // No canal fica só um aviso, sem os dados da denúncia. Se o tópico
+        // privado não der certo, a denúncia abre pública, como antes.
+        let mainMessage;
         let thread;
         try {
-            thread = await mainMessage.startThread({
-                name: `Denúncia: ${denunciante}`,
-                autoArchiveDuration: 1440
-            });
+            if (restritoParticipacao) {
+                thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds]);
+                if (thread) {
+                    mainMessage = await channel.send({
+                        content: `🔒 **Denúncia de \`${denunciante}\` aberta em tópico privado:** ${thread}\nSó o denunciante, o acusado e a staff têm acesso.`,
+                        allowedMentions: { parse: [] }
+                    }).catch(async (erro) => {
+                        await thread.delete().catch(() => {});
+                        throw erro;
+                    });
+                }
+            }
+            if (!thread) {
+                mainMessage = await channel.send({
+                    content: textoDenuncia,
+                    allowedMentions: { parse: ['users'] }
+                });
+                thread = await mainMessage.startThread({
+                    name: `Denúncia: ${denunciante}`,
+                    autoArchiveDuration: 1440
+                });
+            }
         } catch (e) {
             console.error('Erro ao criar o tópico da denúncia:', e.message);
             await interaction.editReply({
@@ -688,7 +729,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         }
 
         try {
-            const denunciaLink = `https://discord.com/channels/${interaction.guild.id}/${channel.id}/${mainMessage.id}`;
+            const denunciaLink = `https://discord.com/channels/${interaction.guild.id}/${thread.id}`;
             const mensagemDetalhada = [
                 `⚠️ **Você foi denunciado no servidor ${interaction.guild.name}!**`,
                 '',
@@ -1046,5 +1087,6 @@ module.exports = {
     handleMyDenunciasButton,
     handleConsultaModalSubmit,
     atualizarMensagemDenuncia,
-    atualizarStatusNaMensagem
+    atualizarStatusNaMensagem,
+    criarTopicoPrivado
 };
