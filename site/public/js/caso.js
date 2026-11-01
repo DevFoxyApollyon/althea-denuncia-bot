@@ -603,9 +603,9 @@ export function telaDetalhe() {
             el('dl', { class: 'dados' },
               dado('Status', selo(denuncia.status)),
               // Para a staff, cada ID abre o perfil do jogador.
-              dado('Denunciante', areaDaEquipe() && papeis.staff ? atalhosDeJogador(denuncia.denunciante) : denuncia.denunciante),
+              dado('Denunciante', papeis.staff ? atalhosDeJogador(denuncia.denunciante) : denuncia.denunciante),
               dado('Acusado', el('span', { class: 'com-copiar' },
-                areaDaEquipe() && papeis.staff ? atalhosDeJogador(denuncia.acusado) : denuncia.acusado,
+                papeis.staff ? atalhosDeJogador(denuncia.acusado) : denuncia.acusado,
                 botaoCopiar(String(denuncia.acusado).split('+').map(id => id.trim()).filter(Boolean).join(' '), 'Copiar ID do acusado'))),
               dado('Categoria', denuncia.categoria),
               dado('Prioridade', denuncia.prioridade === 'alta' ? el('span', { class: 'prioridade' }, 'Alta') : 'Normal'),
