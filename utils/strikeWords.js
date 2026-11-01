@@ -57,10 +57,17 @@ const {
   PALAVRAS_INTEIRAS_PROIBIDAS_NO_CHAT: PALAVRAS_INTEIRAS_PROIBIDAS
 } = require('./palavrasProibidas');
 
+// Junta letras repetidas ("putaaaa" vira "puta", "gordooo" vira "gordo") para
+// quem estica a palavra não escapar do filtro. A lista passa pelo mesmo
+// tratamento, então palavras com letra dobrada ("arrombado") continuam batendo.
+const juntarLetrasRepetidas = (texto) => String(texto).toLowerCase().replace(/(\p{L})\1+/gu, '$1');
+const PALAVRAS_PROIBIDAS_JUNTAS = [...new Set(PALAVRAS_PROIBIDAS.map(juntarLetrasRepetidas))];
+
 function contemPalavraProibida(texto) {
   if (!texto) return false;
   const lower = texto.toLowerCase();
-  if (PALAVRAS_PROIBIDAS.some(p => lower.includes(p))) return true;
+  const junto = juntarLetrasRepetidas(texto);
+  if (PALAVRAS_PROIBIDAS_JUNTAS.some(p => junto.includes(p))) return true;
   if (PALAVRAS_INTEIRAS_PROIBIDAS.some(r => r.test(lower))) return true;
   return false;
 }
@@ -68,7 +75,7 @@ function contemPalavraProibida(texto) {
 function palavraProibidaUsada(texto) {
   if (!texto) return null;
   const lower = texto.toLowerCase();
-  const encontrada = PALAVRAS_PROIBIDAS.find(p => lower.includes(p));
+  const encontrada = PALAVRAS_PROIBIDAS_JUNTAS.find(p => juntarLetrasRepetidas(texto).includes(p));
   if (encontrada) return encontrada;
   for (const r of PALAVRAS_INTEIRAS_PROIBIDAS) {
     const match = lower.match(r);
@@ -642,6 +649,7 @@ async function verificaEdicao(oldMessage, newMessage, Strike, config) {
 module.exports = {
   PALAVRAS_PROIBIDAS,
   contemPalavraProibida,
+  juntarLetrasRepetidas,
   contemMarcacaoAdmin,
   contemLinkProibido,
   contemEmojiFigurinhaOuGif,

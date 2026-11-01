@@ -20,6 +20,10 @@ const LIMITE_MOTIVO = 100;
 const AVATAR = { size: 64, extension: 'webp' };
 
 // Nome e foto de cada pessoa como aparecem no servidor (apelido e avatar do Discord).
+// Quem não pôs foto no Discord ganha o logo padrão; no site fica melhor com as
+// iniciais, que o avatar() mostra quando não há endereço.
+const fotoPropria = (hash, dono) => (hash ? dono.displayAvatarURL?.(AVATAR) || null : null);
+
 async function resolverPessoas(client, guild, ids) {
   const unicos = [...new Set(ids)].filter(id => /^\d{15,21}$/.test(String(id || ''))).slice(0, 60);
 
@@ -33,12 +37,12 @@ async function resolverPessoas(client, guild, ids) {
     if (membro) {
       // Cor do cargo mais alto, como o Discord pinta o nome (preto = sem cor).
       const cor = membro.displayHexColor && membro.displayHexColor !== '#000000' ? membro.displayHexColor : null;
-      pessoas[id] = { nome: membro.displayName, avatar: membro.displayAvatarURL?.(AVATAR) || null, cor };
+      pessoas[id] = { nome: membro.displayName, avatar: fotoPropria(membro.avatar || membro.user?.avatar, membro), cor };
       return;
     }
     // Não está mais no servidor: mostra o nome da conta.
     const usuario = client.users.cache.get(id) || await client.users.fetch(id).catch(() => null);
-    if (usuario) pessoas[id] = { nome: usuario.globalName || usuario.username, avatar: usuario.displayAvatarURL?.(AVATAR) || null };
+    if (usuario) pessoas[id] = { nome: usuario.globalName || usuario.username, avatar: fotoPropria(usuario.avatar, usuario) };
   }));
   return pessoas;
 }

@@ -14,7 +14,6 @@ const { prioridadeDoMotivo, categoriaDoMotivo, configVisivel } = require('../cat
 const { registrarMensagens } = require('../../utils/denunciaMensagens');
 const { contemPalavraProibida, contemLinkProibido } = require('../../utils/strikeWords');
 const { handleDenunciaSubmit } = require('../../commands/denuncia');
-const { atualizarTextoDeStatus } = require('../../utils/atualizarStatus');
 const { servidoresDoUsuario, acessoAoServidor, relacaoComDenuncia } = require('../acesso');
 const { podeAbrirPainel } = require('../../services/ponteSamp/acessoAdmin');
 const { criarInteracaoSite, resultadoDaInteracao } = require('../interacaoSite');
@@ -50,6 +49,8 @@ function ehResumoDaDenuncia(texto) {
   return ['**Denunciante**:', '**Acusado**:', '**Motivo**:', '**Prova(s)**:']
     .filter(campo => String(texto || '').includes(campo)).length >= 2;
 }
+
+const RENOMEOU_TOPICO = /^(?:(?:📌|❌|✅|🔎)\s*[│|]\s*)?Denúncia: [^\n]*$/;
 
 const STATUS_DO_FILTRO = {
   andamento: ['pendente', 'reivindicacao', 'analise'],
@@ -258,13 +259,10 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
       .map(mensagem => serializarMensagemParaSite(mensagem, String(denuncia._id), botId))
       .map(atribuirAutoriaDoSite)
       .filter(mensagem => !(mensagem.doBot && mensagem.conteudo.startsWith(ATALHO_DO_SITE)))
-      // A abertura da denúncia é publicada duas vezes (no canal e dentro do
-      // tópico). O site mostra só a do canal, que é a que o bot edita.
-      .filter(mensagem => !ehResumoDaDenuncia(mensagem.conteudo) || mensagem.id === denuncia.messageId)
-      // O status dela muda no Discord por edição; aqui ele vem do banco.
-      .map(mensagem => (mensagem.id === denuncia.messageId && ehResumoDaDenuncia(mensagem.conteudo)
-        ? { ...mensagem, conteudo: atualizarTextoDeStatus(mensagem.conteudo, denuncia.status) }
-        : mensagem))
+      // O texto de abertura da denúncia repete o que o resumo ao lado já mostra.
+      .filter(mensagem => !(mensagem.doBot && ehResumoDaDenuncia(mensagem.conteudo)))
+      // Aviso do Discord de que o bot renomeou o tópico ("📌│Denúncia: 1039").
+      .filter(mensagem => !(mensagem.doBot && RENOMEOU_TOPICO.test(mensagem.conteudo)))
       // A mensagem com os botões de controle não tem conteúdo para mostrar.
       .filter(mensagem => mensagem.conteudo || mensagem.anexos.length || mensagem.embeds.length);
 

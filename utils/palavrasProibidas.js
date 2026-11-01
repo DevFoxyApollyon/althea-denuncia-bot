@@ -63,6 +63,8 @@ const CONTEUDO_INVALIDO = [
     'TOMA NO CU','raposa',
     'princesa', 'lixo',
     'vai tomar no cu', 'fdp','macacada','macaco',
+    // Proibido citar no Acusado, Motivo e Provas.
+    'fundador', 'choro', 'gordo', 'gorda',
 ];
 
 // ---------- chat (utils/strikeWords.js) ----------
@@ -86,7 +88,7 @@ const PALAVRAS_PROIBIDAS_NO_CHAT = [
   'tanso', 'tapada', 'tapado', 'traste', 'trouxa',
   'vadia', 'vagabunda', 'vagabundo', 'viado',
   'zé ninguém', 'zé povinho', 'zé ruela',
-  'chorao',
+  'chorao', 'gordo', 'gorda',
 ];
 
 const PALAVRAS_INTEIRAS_PROIBIDAS_NO_CHAT = [

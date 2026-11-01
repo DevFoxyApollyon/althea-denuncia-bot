@@ -8,6 +8,8 @@
 // nova é aceita até a apelação em https://dis.gd/app-quarantine. Nesse caso o
 // bot fica 6 horas sem tentar.
 
+const { log } = require('./logger');
+
 const LIMITE_DE_DMS = 340002;
 const QUARENTENA = 20026;
 // Erros esperados ao mandar DM, que não são falha do bot: DM fechada pelo
@@ -31,6 +33,8 @@ const avisosExtrasLigados = () => ['1', 'true', 'sim'].includes(String(process.e
 function registrarErroDeDM(erro, agora = Date.now()) {
   const pausa = PAUSA_MS[erro?.code];
   if (!pausa) return false;
+  // Avisa no console só quando a pausa começa, para não repetir a cada DM.
+  if (!dmPausada(agora)) log.warn(`DMs pausadas: ${motivoDaFalha(erro)} Nova tentativa às ${new Date(agora + pausa).toLocaleString('pt-BR')}.`);
   pausadoAte = Math.max(pausadoAte, agora + pausa);
   return true;
 }

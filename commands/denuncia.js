@@ -38,11 +38,13 @@ const BROKEN_LINK_REGEX = /\b(?!https?:\/\/)[a-zA-Z]{1,5}:\/\/[^\s]+/gi;
 
 const { PALAVRAS_BLOQUEADAS, PALAVROES, CONTEUDO_INVALIDO } = require('../utils/palavrasProibidas');
 
+const { juntarLetrasRepetidas } = require('../utils/strikeWords');
+
 const PALAVRAS_PROIBIDAS = [...new Set([
     ...PALAVRAS_BLOQUEADAS,
     ...PALAVROES,
     ...CONTEUDO_INVALIDO
-].map(p => p.toLowerCase()))];
+].map(juntarLetrasRepetidas))];
 
 const RISADA_REPETICAO_REGEX = /([a-zA-Zà-úÀ-Ú]{1,3})\1{3,}/i;
 
@@ -186,7 +188,8 @@ async function atualizarMensagemDenuncia(client, guild, config) {
 }
 
 function validarConteudoProibido(texto, nomeCampo) {
-    const lower = texto.toLowerCase();
+    // "putaaaa" e "gordooo" contam como "puta" e "gordo".
+    const lower = juntarLetrasRepetidas(texto);
     const encontrada = PALAVRAS_PROIBIDAS.find(p => {
         const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         return new RegExp(`\\b${escaped}\\b`, 'i').test(lower);
@@ -575,13 +578,15 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         await interaction.editReply({
             content: [
-                `✅ Sua denúncia foi criada com sucesso em ${thread} às \`${dateUtils.getBrasiliaTime()}\`.`,
+                `✅ Sua denúncia foi criada com sucesso às \`${dateUtils.getBrasiliaTime()}\`.`,
+                ...(linkNoSite ? ['', `🌐 **Acompanhe pelo site:** ${linkNoSite}`] : []),
                 '',
                 '⚠️ **Atenção — leia antes de interagir no tópico:**',
-                '• Utilize linguagem respeitosa. Chingamentos e palavras ofensivas resultarão em **punição imediata**.',
+                '• Utilize linguagem respeitosa. Xingamentos e palavras ofensivas resultarão em **punição imediata**.',
                 '• Enviar **imagens ofensivas**, memes ou qualquer conteúdo por brincadeira dentro do tópico resultará em **banimento permanente do servidor**, sem direito a recurso.',
                 '• O tópico é exclusivo para apresentação de provas e contra-provas. Mensagens fora desse contexto serão removidas e o responsável punido.',
-                ...(linkNoSite ? ['', `🌐 **Acompanhe também pelo site:** ${linkNoSite}`] : []),
+                '',
+                `💬 **Tópico no Discord:** ${thread}`,
             ].join('\n')
         });
         confirmacaoEnviada = true;

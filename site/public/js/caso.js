@@ -145,6 +145,13 @@ export function mensagem(item, { continuacao = false } = {}) {
   const hora = el('time', { datetime: item.dataCriacao, title: formatarData(item.dataCriacao) },
     formatoHora.format(new Date(item.dataCriacao)));
 
+  // Avisos curtos do bot ("fulano reivindicou") viram uma linha de evento
+  // discreta no meio da conversa, sem o emoji do Discord na frente.
+  if (item.doBot && !item.embeds.length && !item.anexos.length && !videos.length && !item.conteudo.includes('\n')) {
+    const texto = item.conteudo.replace(/^\p{Extended_Pictographic}️?\s*/u, '');
+    return el('div', { class: 'evento' }, el('span', { class: 'texto-livre' }, rico(texto), ' · ', hora));
+  }
+
   // Mensagens do próprio bot são registros do sistema, não falas de alguém.
   if (item.doBot) {
     return el('div', { class: 'registro' }, el('div', { class: 'registro-corpo' }, corpo), hora);
