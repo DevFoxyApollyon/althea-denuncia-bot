@@ -223,16 +223,16 @@ test('retenção: prazos por coleção e em qual banco cada modelo fica', () => 
   // O site e as mensagens das denúncias ficam no secundário; o bot, no principal.
   const doSecundario = ['Usuario', 'ChavePush', 'InscricaoPush', 'Sugestao', 'DenunciaMensagem', 'AcessoCaso', 'AvisoSite',
     'ChatBanimento', 'ChatFixada', 'ChatMensagem', 'ChatModeracao', 'ChatSala', 'ChatSinalizacao', 'ConfigSite', 'LoginSite',
-    'RascunhoDenuncia', 'TesteStaff', 'TesteResposta', 'MetaStaff', 'NotaInterna'];
+    'RascunhoDenuncia', 'TesteStaff', 'TesteResposta', 'MetaStaff', 'NotaInterna', 'StaffProfile', 'Strike'];
   for (const nome of doSecundario) assert.equal(require(`../models/${nome}`).db, secondaryConnection, nome);
-  for (const nome of ['Denuncia', 'ModerationAction', 'Strike', 'Config', 'GlobalConfig', 'StaffProfile']) {
+  for (const nome of ['Denuncia', 'ModerationAction', 'Config', 'GlobalConfig']) {
     assert.equal(require(`../models/${nome}`).db, primaryConnection, nome);
   }
 
   // Toda coleção que o site guarda no secundário entra na mudança do principal.
-  const { COLECOES } = require('../utils/migrarSiteParaSecundario');
+  const movidas = require('../utils/migrarSiteParaSecundario').ETAPAS.flatMap(etapa => etapa.colecoes);
   for (const nome of doSecundario.filter(n => !['Usuario', 'ChavePush', 'InscricaoPush', 'Sugestao'].includes(n))) {
-    assert.ok(COLECOES.includes(require(`../models/${nome}`).collection.name), nome);
+    assert.ok(movidas.includes(require(`../models/${nome}`).collection.name), nome);
   }
 });
 

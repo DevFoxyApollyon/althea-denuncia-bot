@@ -627,10 +627,11 @@ test('ao ligar, o site vai para o banco secundário e sai do principal, uma vez 
   await principal.collection('denunciamensagems').insertMany(mensagens);
   await principal.collection('chatmensagems').insertOne({ texto: 'oi' });
   await principal.collection('denuncias').insertOne({ acusado: '1039' }); // é do bot: fica
+  await principal.collection('strikes').insertMany([{ userId: '1' }, { userId: '2' }]);
   await secundario.collection('chatmensagems').insertOne({ texto: 'nova, já no secundário' });
 
   const copiadas = await migrarSiteParaSecundario(principal, secundario);
-  assert.deepEqual(copiadas, { chatmensagems: 1, denunciamensagems: 1203 });
+  assert.deepEqual(copiadas, { chatmensagems: 1, denunciamensagems: 1203, strikes: 2 });
   assert.equal(await secundario.collection('denunciamensagems').countDocuments(), 1203);
   assert.equal(await secundario.collection('chatmensagems').countDocuments(), 2);
   const restantes = (await principal.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name);

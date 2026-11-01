@@ -32,4 +32,4 @@ staffProfileSchema.statics.registrarFeedback = function (guildId, userId, nota) 
   );
 };
 
-module.exports = persistencia.modelPermanente('StaffProfile', staffProfileSchema);
+module.exports = persistencia.modelSecundarioPermanente('StaffProfile', staffProfileSchema);

@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { model } = require('../utils/persistencia');
+const { modelSecundario } = require('../utils/persistencia');
 
 const StrikeSchema = new mongoose.Schema({
   userId: { type: String, required: true, index: true },
@@ -42,4 +42,4 @@ StrikeSchema.methods.cleanOldStrikesEmoji = function() {
 // O registro some 24 horas depois da última vez em que foi atualizado.
 StrikeSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 24 * 60 * 60 });
 
-module.exports = model('Strike', StrikeSchema);
+module.exports = modelSecundario('Strike', StrikeSchema);
