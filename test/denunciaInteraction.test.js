@@ -172,3 +172,28 @@ test('aceite com acusado fora do banco: abre tópico público na mensagem do can
   canais['900000000000000001'] = { type: ChannelType.PublicThread };
   assert.equal(await abrirTopicoPublicoDoAceite(client, denuncia, { acusadoId: '1', motivo: 'x', dataPunicao: 'x' }), null);
 });
+
+test('reivindicar: staff não pega denúncia em que é parte nem contra quem a denunciou', async () => {
+  const Denuncia = require('../models/Denuncia');
+  const { conflitoDeInteresse } = require('../Handlers/statusDenuncia/reivindicar');
+  const staff = '500000000000000001';
+  const denuncia = { guildId: '1', criadoPor: '500000000000000002', acusadoUserIds: ['500000000000000003'] };
+
+  const existsOriginal = Denuncia.exists;
+  let filtro = null;
+  try {
+    Denuncia.exists = async (f) => { filtro = f; return null; };
+    assert.match(await conflitoDeInteresse({ ...denuncia, criadoPor: staff }, staff), /denunciante/);
+    assert.match(await conflitoDeInteresse({ ...denuncia, acusadoUserIds: [staff] }, staff), /acusado/);
+    assert.equal(await conflitoDeInteresse(denuncia, staff), null);
+    assert.deepEqual(filtro.criadoPor, { $in: ['500000000000000003'] });
+    assert.equal(filtro.acusadoUserIds, staff);
+
+    Denuncia.exists = async () => ({ _id: 'x' });
+    assert.match(await conflitoDeInteresse(denuncia, staff), /denunciou você/);
+    // Sem acusado identificado não há o que conferir no banco.
+    assert.equal(await conflitoDeInteresse({ ...denuncia, acusadoUserIds: [] }, staff), null);
+  } finally {
+    Denuncia.exists = existsOriginal;
+  }
+});

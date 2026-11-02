@@ -13,6 +13,27 @@ const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
 
 const { esperaEntreReivindicacoesMs, esperaEntreReivindicacoesAtiva, tempoRestante } = require('../../utils/esperas');
 
+const DIAS_CONFLITO = 7;
+
+// Staff não reivindica denúncia em que é parte (denunciante ou acusada), nem
+// denúncia contra quem a denunciou nos últimos 7 dias. Devolve o motivo do
+// bloqueio ou null.
+async function conflitoDeInteresse(denuncia, staffId, agora = Date.now()) {
+  if (!denuncia || !staffId) return null;
+  if (denuncia.criadoPor === staffId) return 'Você é o denunciante desta denúncia.';
+  const acusados = (denuncia.acusadoUserIds || []).filter(Boolean);
+  if (acusados.includes(staffId)) return 'Você é acusado nesta denúncia.';
+  if (!acusados.length) return null;
+
+  const denunciouAStaff = await Denuncia.exists({
+    guildId: denuncia.guildId,
+    criadoPor: { $in: acusados },
+    acusadoUserIds: staffId,
+    dataCriacao: { $gte: new Date(agora - DIAS_CONFLITO * 24 * 60 * 60 * 1000) },
+  });
+  return denunciouAStaff ? `O acusado denunciou você nos últimos ${DIAS_CONFLITO} dias.` : null;
+}
+
 async function handleClaimButton(interaction) {
   try {
     if (!interaction.isRepliable()) return;
@@ -50,6 +71,17 @@ async function handleClaimButton(interaction) {
           return;
         }
       }
+    }
+
+    const atual = await Denuncia.findOne({ threadId: interaction.channel.id })
+      .sort({ createdAt: -1 }).select('guildId criadoPor acusadoUserIds').lean();
+    const conflito = await conflitoDeInteresse(atual, interaction.user.id).catch(() => null);
+    if (conflito) {
+      await safeReplyOrEdit(interaction, {
+        content: `⚖️ ${conflito} Deixe outra pessoa da staff cuidar dela.`,
+        flags: [MessageFlags.Ephemeral],
+      });
+      return;
     }
 
     const denuncia = await Denuncia.findOneAndUpdate(
@@ -152,4 +184,5 @@ async function handleClaimButton(interaction) {
 
 module.exports = {
   handleClaimButton,
+  conflitoDeInteresse,
 };
