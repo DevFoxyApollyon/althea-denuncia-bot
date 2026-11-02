@@ -1,5 +1,6 @@
 // Respostas seguras e mensagens de status nos tópicos, logs e canal de análise.
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ChannelType } = require('discord.js');
+const { botaoEntrarNoTopico, linkDaMensagemPrincipal } = require('../../utils/restricaoTopicos');
 const { getBrasiliaDate, formatTimeBR } = require('../../utils/dateUtils');
 const { createCorrectionButtonRow } = require('../corrigirHandler');
 const { Logger } = require('../../utils/logger');
@@ -281,6 +282,15 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
   let discordLogMessage = null;
   let discordAnalysisMessage = null;
   try {
+    // Tópico privado: para quem não está nele, o link do tópico vira
+    // "#desconhecido". Os canais da staff recebem o link da mensagem principal e
+    // o botão "Entrar no tópico"; no fim do tópico fica o link para compartilhar.
+    const privado = channel?.type === ChannelType.PrivateThread;
+    const linkPrincipal = privado ? linkDaMensagemPrincipal(channel.guild?.id, data.denuncia) : null;
+    if (linkPrincipal) data = { ...data, messageUrl: linkPrincipal };
+    const linhaEntrar = privado ? [botaoEntrarNoTopico(channel.id)] : [];
+    const linhaCompartilhar = linkPrincipal ? `\n🔗 **Link para compartilhar:** ${linkPrincipal}` : '';
+
     const logsChannel = data.logsChannel;
     const logMessageId = data.logMessageId;
     if (logsChannel && logMessageId) {
@@ -303,11 +313,12 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
       await cleanupStatusMessages(channel, 'recusada');
       let newLogMessageId = null;
       if (logsChannel) {
+        const logsPayload = { content: createLogsMessage(newStatus, user, { ...data, denuncia: data.denuncia }), components: linhaEntrar };
         if (discordLogMessage) {
-          await discordLogMessage.edit(createLogsMessage(newStatus, user, { ...data, denuncia: data.denuncia }));
+          await discordLogMessage.edit(logsPayload);
           newLogMessageId = discordLogMessage.id;
         } else {
-          discordLogMessage = await logsChannel.send(createLogsMessage(newStatus, user, { ...data, denuncia: data.denuncia }));
+          discordLogMessage = await logsChannel.send(logsPayload);
           newLogMessageId = discordLogMessage.id;
         }
       }
@@ -317,6 +328,9 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         `Motivo: (${data.denuncia?.motivo || 'Não informado'}) ` +
         `Link: ${data.messageUrl}`;
       discordAnalysisMessage = await sendOnce(statusChannel, analysisMessageContent);
+      if (discordAnalysisMessage && linhaEntrar.length && statusChannel.id !== channel.id) {
+        await discordAnalysisMessage.edit({ components: linhaEntrar }).catch(() => {});
+      }
       const statusMsgContent = createStatusMessage(newStatus, user, {
         ...data,
         logMessage: discordLogMessage,
@@ -338,11 +352,11 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         const logsContent = createLogsMessage(newStatus, user, data);
         try {
           if (discordLogMessage) {
-            await discordLogMessage.edit({ content: logsContent, components: [createLogActionRow(data.denuncia?.messageId || data.messageUrl)] });
+            await discordLogMessage.edit({ content: logsContent, components: [createLogActionRow(data.denuncia?.messageId || data.messageUrl), ...linhaEntrar] });
           } else {
             discordLogMessage = await logsChannel.send({
               content: logsContent,
-              components: [createLogActionRow(data.denuncia?.messageId || data.messageUrl)]
+              components: [createLogActionRow(data.denuncia?.messageId || data.messageUrl), ...linhaEntrar]
             });
           }
         } catch (logError) {
@@ -356,7 +370,7 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         guildId: channel.guild.id,
         logChannelId: logsChannel ? logsChannel.id : null,
         denuncia: data.denuncia,
-      });
+      }) + linhaCompartilhar;
       const statusMessage = await sendOnce(channel, statusMsgContent);
       if (statusMessage) {
         const correctionRow = createCorrectionButtonRow();
@@ -385,7 +399,7 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         guildId: channel.guild.id,
         logChannelId: logsChannel ? logsChannel.id : null,
         denuncia: data.denuncia,
-      });
+      }) + linhaCompartilhar;
       const sentStatusMessage = await sendOnce(channel, statusMsgContent);
       if (sentStatusMessage) {
         await sentStatusMessage.edit({ components: [] }).catch(() => {});

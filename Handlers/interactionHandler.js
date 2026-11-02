@@ -345,6 +345,7 @@ const ROTAS = {
       status_restart_confirm: handleStatusButtons
     },
     prefixos: [
+      ['entrar_topico:', handleEntrarNoTopico],
       ['log_aceitar_', handleLogButton],
       ['log_recusar_', handleLogButton],
       [BOTAO_ENVIAR, handleEnviarGm],

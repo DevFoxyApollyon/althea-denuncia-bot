@@ -197,3 +197,41 @@ test('reivindicar: staff não pega denúncia em que é parte nem contra quem a d
     Denuncia.exists = existsOriginal;
   }
 });
+
+test('tópico privado: canais da staff recebem o link da mensagem principal e o botão de entrar', async () => {
+  const { ChannelType } = require('discord.js');
+  const { manageStatusMessages } = require('../Handlers/statusDenuncia/mensagensStatus');
+  const criarCanal = (id, extra = {}) => {
+    const enviados = [];
+    return {
+      id, enviados, ...extra,
+      isTextBased: () => true,
+      messages: { async fetch() { return { size: 0, find: () => undefined }; } },
+      async send(payload) {
+        const mensagem = { id: `m${enviados.length}`, payload, async edit(novo) { mensagem.editado = novo; } };
+        enviados.push(mensagem);
+        return mensagem;
+      }
+    };
+  };
+  const logs = criarCanal('700000000000000001');
+  const analise = criarCanal('700000000000000002');
+  const topico = criarCanal('700000000000000003', {
+    type: ChannelType.PrivateThread,
+    guild: { id: '700000000000000009', channels: { async fetch(id) { return id === analise.id ? analise : null; } } }
+  });
+  const denuncia = { channelId: '700000000000000004', messageId: '700000000000000005', acusado: '1039', motivo: 'RDM' };
+  const principal = 'https://discord.com/channels/700000000000000009/700000000000000004/700000000000000005';
+
+  await manageStatusMessages(topico, 'analise', '<@1>', {
+    messageUrl: 'https://discord.com/channels/x/700000000000000003/1', logsChannel: logs, analysisChannelId: analise.id, denuncia
+  });
+  const botaoDe = (componentes) => componentes.map(linha => linha.toJSON().components[0].custom_id);
+  assert.ok(logs.enviados[0].payload.content.includes(principal));
+  assert.deepEqual(botaoDe(logs.enviados[0].payload.components), ['entrar_topico:700000000000000003']);
+  assert.ok(analise.enviados[0].payload.includes(principal));
+  assert.deepEqual(botaoDe(analise.enviados[0].editado.components), ['entrar_topico:700000000000000003']);
+
+  await manageStatusMessages(topico, 'recusada', '<@1>', { messageUrl: 'x', denuncia });
+  assert.match(topico.enviados.at(-1).payload, /Link para compartilhar:\*\* https:\/\/discord\.com\/channels\/700000000000000009\/700000000000000004\/700000000000000005/);
+});

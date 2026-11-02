@@ -1,4 +1,4 @@
-const { ChannelType } = require('discord.js');
+const { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const { usuarioIsento } = require('./usuariosIsentos');
 
@@ -62,7 +62,28 @@ async function porNoTopicoPrivado(canal, ids = []) {
     return resultados.filter(Boolean).length;
 }
 
+// Botão "Entrar no tópico" (só administrador e responsável conseguem usar).
+// Com o ID do tópico no botão, ele funciona em qualquer canal: na mensagem
+// principal, no Log Admin e no canal de análise.
+function botaoEntrarNoTopico(threadId = null) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(threadId ? `entrar_topico:${threadId}` : 'entrar_topico')
+            .setLabel('Entrar no tópico').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
+    );
+}
+
+// Link da mensagem da denúncia no canal. Num tópico privado, o link do tópico
+// aparece como "#desconhecido" para quem não está nele; este todos conseguem
+// abrir, e a mensagem tem o botão de entrar.
+function linkDaMensagemPrincipal(guildId, denuncia) {
+    if (!guildId || !denuncia?.channelId || !denuncia?.messageId) return null;
+    return `https://discord.com/channels/${guildId}/${denuncia.channelId}/${denuncia.messageId}`;
+}
+
 module.exports = {
+    botaoEntrarNoTopico,
+    linkDaMensagemPrincipal,
     porNoTopicoPrivado,
     registrarTopicoRestrito,
     obterRestricaoTopico,

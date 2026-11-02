@@ -22,7 +22,7 @@ const { notificarAcusadoPv } = require('../utils/userSyncAndNotify');
 const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('../utils/youtubeUtils');
 const dateUtils = require('../utils/dateUtils');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
-const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
+const { registrarTopicoRestrito, botaoEntrarNoTopico } = require('../utils/restricaoTopicos');
 const { registrarMensagens, buscarCanal } = require('../utils/denunciaMensagens');
 const { ARQUIVAR_APOS_MINUTOS } = require('../utils/espelhos');
 const { alertarMotivoCritico } = require('../utils/alertaMotivoCritico');
@@ -81,14 +81,6 @@ function createStatusButtons() {
     );
 }
 
-// Botão da mensagem no canal de uma denúncia com tópico privado: quem tem o
-// cargo de administrador ou de responsável entra no tópico com um clique.
-function botaoEntrarNoTopico() {
-    return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('entrar_topico').setLabel('Entrar no tópico').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
-    );
-}
-
 async function handleEntrarNoTopico(interaction) {
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
     const config = await getCachedConfig(interaction.guild.id);
@@ -99,7 +91,11 @@ async function handleEntrarNoTopico(interaction) {
         return interaction.editReply('🚫 Só quem tem o cargo de administrador ou de responsável pode entrar por aqui.');
     }
 
-    const denuncia = await Denuncia.findOne({ guildId: interaction.guild.id, messageId: interaction.message.id }).select('threadId').lean();
+    // Botão com o ID do tópico (Log Admin, canal de análise) ou sem ele (mensagem principal).
+    const threadIdDoBotao = String(interaction.customId || '').split(':')[1];
+    const denuncia = await Denuncia.findOne(threadIdDoBotao
+        ? { guildId: interaction.guild.id, threadId: threadIdDoBotao }
+        : { guildId: interaction.guild.id, messageId: interaction.message.id }).select('threadId').lean();
     const topico = denuncia?.threadId ? await interaction.client.channels.fetch(denuncia.threadId).catch(() => null) : null;
     if (!topico?.isThread?.()) return interaction.editReply('❌ Não encontrei o tópico desta denúncia.');
 
@@ -625,7 +621,7 @@ async function handleDenunciaSubmit(interaction, platform) {
                     // Discord junta as mensagens seguidas do bot.
                     mainMessage = await channel.send({
                         content: `${textoDenuncia.replace('➱ **Status**', `➱ **Tópico**: ${thread}\n➱ **Status**`)}\n⠀`,
-                        components: [botaoEntrarNoTopico()],
+                        components: [botaoEntrarNoTopico(thread.id)],
                         allowedMentions: { parse: ['users'] }
                     }).catch(async (erro) => {
                         await thread.delete().catch(() => {});
