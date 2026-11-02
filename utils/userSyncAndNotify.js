@@ -10,17 +10,10 @@ async function syncUserOnNicknameChange(oldMember, newMember) {
             const userId = newMember.id;
             const username = newMember.user.username;
             const nickname = newMember.nickname || null;
-            let conta = null;
-            if (nickname) {
-                const match = nickname.match(/(\d{3,})$/);
-                if (match) {
-                    conta = match[1];
-                } else {
-                    conta = userId; // fallback para userId se não encontrar número
-                }
-            } else {
-                conta = userId; // fallback para userId se não houver nickname
-            }
+            // Nick sem ID do jogo no fim: a conta fica como estava. Gravar o
+            // userId como conta só criava registro para o reparo desfazer.
+            const conta = nickname?.match(/(\d{3,})$/)?.[1] || null;
+            if (!conta) return;
             await Usuario.findOneAndUpdate(
                 { guildId, userId },
                 { $set: { username, nickname, conta, updatedAt: new Date() } },

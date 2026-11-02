@@ -292,7 +292,9 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
     const linkPrincipal = privado ? linkDaMensagemPrincipal(channel.guild?.id, data.denuncia) : null;
     if (linkPrincipal) data = { ...data, messageUrl: linkPrincipal };
     const linhaEntrar = privado ? [botaoEntrarNoTopico(channel.id)] : [];
-    const linhaCompartilhar = linkPrincipal ? `\n🔗 **Link para compartilhar:** ${linkPrincipal}` : '';
+    // O link para compartilhar vai no fim do tópico em toda decisão, privado ou público.
+    const linkParaCompartilhar = linkDaMensagemPrincipal(channel?.guild?.id, data.denuncia);
+    const linhaCompartilhar = linkParaCompartilhar ? `\n🔗 **Link para compartilhar:** ${linkParaCompartilhar}` : '';
 
     const logsChannel = data.logsChannel;
     const logMessageId = data.logMessageId;
