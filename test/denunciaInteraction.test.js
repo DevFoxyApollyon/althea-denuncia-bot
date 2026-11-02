@@ -68,8 +68,20 @@ test('tópico privado: põe denunciante e acusados; se o Discord recusar alguém
   assert.equal(ok.registro.criados[0].invitable, false);
   assert.deepEqual(ok.registro.adicionados, ['1', '2']);
 
-  const falha = criarCanal('2');
+  // Acusado que não vê o canal fica de fora; o tópico continua privado.
+  const acusadoSemAcesso = criarCanal('2');
   const avisoOriginal = console.warn;
+  console.warn = () => {};
+  try {
+    assert.ok(await criarTopicoPrivado(acusadoSemAcesso, 'Denúncia: 1039', ['1', '2']));
+  } finally {
+    console.warn = avisoOriginal;
+  }
+  assert.deepEqual(acusadoSemAcesso.registro.adicionados, ['1']);
+  assert.equal(acusadoSemAcesso.registro.apagados, 0);
+
+  // Denunciante recusado: apaga e volta para público.
+  const falha = criarCanal('1');
   console.warn = () => {};
   try {
     assert.equal(await criarTopicoPrivado(falha, 'Denúncia: 1039', ['1', '2']), null);

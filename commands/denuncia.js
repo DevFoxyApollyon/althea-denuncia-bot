@@ -275,9 +275,11 @@ async function adicionarCargosAoTopico(topico, cargos) {
     await Promise.all([...membros].slice(0, 50).map(id => topico.members.add(id).catch(() => {})));
 }
 
-// Cria o tópico privado da denúncia e põe cada pessoa nele. Se o Discord não
-// deixar (sem permissão para tópico privado, ou alguém que não vê o canal),
-// apaga o que criou e devolve null para a denúncia abrir em tópico público.
+// Cria o tópico privado da denúncia e põe cada pessoa nele. O primeiro da lista
+// é o denunciante: se ele não puder entrar (ou o bot não puder criar tópico
+// privado), apaga o que criou e devolve null para a denúncia abrir em tópico
+// público. Acusado que não vê o canal (Missing Access) fica de fora, como
+// ficaria num tópico público, e a denúncia segue privada.
 async function criarTopicoPrivado(canal, nome, membros, cargos = []) {
     let topico = null;
     try {
@@ -288,7 +290,11 @@ async function criarTopicoPrivado(canal, nome, membros, cargos = []) {
             autoArchiveDuration: 1440,
             reason: 'Denúncia com acusado identificado: tópico visível só para as partes e a staff.'
         });
-        await Promise.all([...new Set(membros)].map(id => topico.members.add(id)));
+        const [denunciante, ...outros] = [...new Set(membros)];
+        await topico.members.add(denunciante);
+        await Promise.all(outros.map(id => topico.members.add(id).catch(erro => {
+            console.warn(`Acusado ${id} não entrou no tópico privado: ${erro.message}`);
+        })));
         // A staff entra em segundo plano: a denúncia não espera por isso.
         adicionarCargosAoTopico(topico, cargos).catch(() => {});
         return topico;

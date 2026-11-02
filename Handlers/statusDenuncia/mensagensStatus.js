@@ -117,6 +117,8 @@ async function sendOnce(channel, content) {
 async function cleanupStatusMessages(targetChannel, cleanupType = 'all') {
   if (!targetChannel?.isTextBased?.()) return;
   try {
+    // Tópico arquivado não deixa apagar mensagens: reabre antes.
+    if (targetChannel.archived) await targetChannel.setArchived(false).catch(() => {});
     let lastId = null;
     for (let i = 0; i < 2; i++) {
       const options = { limit: 100 };
