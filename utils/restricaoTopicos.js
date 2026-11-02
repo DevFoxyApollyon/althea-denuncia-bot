@@ -66,11 +66,14 @@ async function porNoTopicoPrivado(canal, ids = []) {
 // Com o ID do tópico no botão, ele funciona em qualquer canal: na mensagem
 // principal, no Log Admin e no canal de análise.
 function botaoEntrarNoTopico(threadId = null) {
-    return new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId(threadId ? `entrar_topico:${threadId}` : 'entrar_topico')
-            .setLabel('Entrar no tópico').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
-    );
+    return new ActionRowBuilder().addComponents(botaoSoltoEntrarNoTopico(threadId));
+}
+
+// O mesmo botão, para pôr ao lado de outros na mesma linha.
+function botaoSoltoEntrarNoTopico(threadId = null) {
+    return new ButtonBuilder()
+        .setCustomId(threadId ? `entrar_topico:${threadId}` : 'entrar_topico')
+        .setLabel('Entrar no tópico').setEmoji('🔒').setStyle(ButtonStyle.Secondary);
 }
 
 // Link da mensagem da denúncia no canal. Num tópico privado, o link do tópico
@@ -83,6 +86,7 @@ function linkDaMensagemPrincipal(guildId, denuncia) {
 
 module.exports = {
     botaoEntrarNoTopico,
+    botaoSoltoEntrarNoTopico,
     linkDaMensagemPrincipal,
     porNoTopicoPrivado,
     registrarTopicoRestrito,

@@ -7,7 +7,7 @@ const { LogManager } = require('../LogManager');
 const { getBrasiliaDate, formatTimeBR, getBrasiliaDateTime } = require('../../utils/dateUtils');
 const { inserirFeedbackMenu, removerFeedbackMenu } = require('../../utils/feedback');
 const { atualizarStatusNaMensagem } = require('../../utils/atualizarStatus');
-const { registrarTopicoRestrito, porNoTopicoPrivado } = require('../../utils/restricaoTopicos');
+const { registrarTopicoRestrito, porNoTopicoPrivado, botaoEntrarNoTopico } = require('../../utils/restricaoTopicos');
 const { getConfig: getCachedConfig } = require('../../utils/configCache');
 const {
   safeDefer,
@@ -592,7 +592,8 @@ async function handleLogAceitarButton(interaction, denuncia) {
     const config = await validarResponsavelAdminLog(interaction);
     if (!config) return;
 
-    if (!interaction.message.components?.some((row) => row.components?.length)) {
+    const botoes = (interaction.message.components || []).flatMap((row) => row.components || []);
+    if (!botoes.some((botao) => String(botao.customId || '').startsWith('log_'))) {
       await interaction.editReply({ content: 'ℹ️ Esta confirmação já foi processada.' }).catch(() => {});
       return;
     }
@@ -600,7 +601,10 @@ async function handleLogAceitarButton(interaction, denuncia) {
     const confirmation = ` ||${getBrasiliaDateTime()}|| por ${interaction.user}`;
     const mensagemEditada = await interaction.message.edit({
       content: `${interaction.message.content}${confirmation}`,
-      components: []
+      // Saem Aceitar e Recusar; o "Entrar no tópico" (tópico privado) continua.
+      components: botoes.some((botao) => String(botao.customId || '').startsWith('entrar_topico:')) && denuncia.threadId
+        ? [botaoEntrarNoTopico(denuncia.threadId)]
+        : []
     });
     // Ponte com o jogo: entra na fila do painel. Nunca quebra o aceite (erros ficam no serviço).
     const ponte = await registrarAceite({

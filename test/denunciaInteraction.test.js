@@ -232,6 +232,13 @@ test('tópico privado: canais da staff recebem o link da mensagem principal e o 
   assert.ok(analise.enviados[0].payload.includes(principal));
   assert.deepEqual(botaoDe(analise.enviados[0].editado.components), ['entrar_topico:700000000000000003']);
 
+  // Aceita: "Entrar no tópico" ao lado de Aceitar e Recusar no Log Admin.
+  await manageStatusMessages(topico, 'aceita', '<@1>', { messageUrl: 'x', logsChannel: logs, denuncia, acusadoId: '1039', motivo: 'RDM', dataPunicao: '01/11' });
+  const linhaDoLog = logs.enviados.at(-1).payload.components;
+  assert.equal(linhaDoLog.length, 1);
+  assert.deepEqual(linhaDoLog[0].toJSON().components.map(botao => botao.custom_id),
+    ['log_aceitar_700000000000000005', 'log_recusar_700000000000000005', 'entrar_topico:700000000000000003']);
+
   await manageStatusMessages(topico, 'recusada', '<@1>', { messageUrl: 'x', denuncia });
   assert.match(topico.enviados.at(-1).payload, /Link para compartilhar:\*\* https:\/\/discord\.com\/channels\/700000000000000009\/700000000000000004\/700000000000000005/);
 });

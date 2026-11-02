@@ -1,6 +1,6 @@
 // Respostas seguras e mensagens de status nos tópicos, logs e canal de análise.
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ChannelType } = require('discord.js');
-const { botaoEntrarNoTopico, linkDaMensagemPrincipal } = require('../../utils/restricaoTopicos');
+const { botaoEntrarNoTopico, botaoSoltoEntrarNoTopico, linkDaMensagemPrincipal } = require('../../utils/restricaoTopicos');
 const { getBrasiliaDate, formatTimeBR } = require('../../utils/dateUtils');
 const { createCorrectionButtonRow } = require('../corrigirHandler');
 const { Logger } = require('../../utils/logger');
@@ -208,8 +208,9 @@ function createLogsMessage(type, user, data = {}) {
   }
 }
 
-function createLogActionRow(denunciaMessageId, disabled = false) {
-  return new ActionRowBuilder().addComponents(
+// Com o tópico privado, o "Entrar no tópico" fica ao lado de Aceitar e Recusar.
+function createLogActionRow(denunciaMessageId, disabled = false, threadIdPrivado = null) {
+  const linha = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`log_aceitar_${denunciaMessageId}`)
       .setLabel('Aceitar')
@@ -223,6 +224,8 @@ function createLogActionRow(denunciaMessageId, disabled = false) {
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled)
   );
+  if (threadIdPrivado) linha.addComponents(botaoSoltoEntrarNoTopico(threadIdPrivado));
+  return linha;
 }
 
 function createAnalysisUpdateMessage(type, data = {}) {
@@ -352,11 +355,11 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         const logsContent = createLogsMessage(newStatus, user, data);
         try {
           if (discordLogMessage) {
-            await discordLogMessage.edit({ content: logsContent, components: [createLogActionRow(data.denuncia?.messageId || data.messageUrl), ...linhaEntrar] });
+            await discordLogMessage.edit({ content: logsContent, components: [createLogActionRow(data.denuncia?.messageId || data.messageUrl, false, privado ? channel.id : null)] });
           } else {
             discordLogMessage = await logsChannel.send({
               content: logsContent,
-              components: [createLogActionRow(data.denuncia?.messageId || data.messageUrl), ...linhaEntrar]
+              components: [createLogActionRow(data.denuncia?.messageId || data.messageUrl, false, privado ? channel.id : null)]
             });
           }
         } catch (logError) {
