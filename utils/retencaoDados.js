@@ -51,7 +51,9 @@ const PRAZOS_EM_DIAS = {
 // O prazo fica no próprio modelo:
 //  - strikes: 24 horas depois da última atualização (campo "updatedAt");
 //  - denuncias: 45 dias depois de abertas (campo "dataExpiracao").
-const COLECOES_COM_REGRA_PROPRIA = ['strikes', 'denuncias'];
+//  - backups.*: cópias diárias do banco principal; jobs/backupBanco.js guarda
+//    as 7 mais recentes e apaga as outras.
+const COLECOES_COM_REGRA_PROPRIA = ['strikes', 'denuncias', 'backups.files', 'backups.chunks'];
 
 function adicionarMeses(data, meses = MESES_RETENCAO) {
   const resultado = new Date(data);

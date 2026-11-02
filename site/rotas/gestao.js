@@ -10,6 +10,7 @@ const { primaryConnection, secondaryConnection } = require('../../utils/persiste
 const { pausaDeDMs, avisosExtrasLigados } = require('../../utils/dmSegura');
 const { resumoDosTopicos, limparEspelhosAbertos } = require('../../utils/espelhos');
 const { ultimosRegistros } = require('../../utils/registroDeErros');
+const { resumoDosBackups } = require('../../jobs/backupBanco');
 const StaffProfile = require('../../models/StaffProfile');
 const { papeisDoMembro } = require('../acesso');
 const { configVisivel } = require('../categorias');
@@ -90,9 +91,10 @@ function registrarRotasDeGestao(router, { client }) {
     await acessoDoResponsavel(req, req.query.guildId);
     const memoria = process.memoryUsage();
     const limite = new Date(Date.now() - 7 * DIA_MS);
-    const [filaDoFinalizador, abertas] = await Promise.all([
+    const [filaDoFinalizador, abertas, backups] = await Promise.all([
       Denuncia.countDocuments({ status: { $in: STATUS_FINALIZAVEIS }, dataCriacao: { $lte: limite } }).catch(() => null),
-      Denuncia.countDocuments({ status: { $in: ['pendente', 'reivindicacao', 'analise'] } }).catch(() => null)
+      Denuncia.countDocuments({ status: { $in: ['pendente', 'reivindicacao', 'analise'] } }).catch(() => null),
+      resumoDosBackups().catch(() => null)
     ]);
     const pausa = pausaDeDMs();
 
@@ -108,6 +110,7 @@ function registrarRotasDeGestao(router, { client }) {
       ],
       finalizador: { naFila: filaDoFinalizador, abertas },
       dms: { pausadaAte: pausa > Date.now() ? new Date(pausa) : null, avisosExtras: avisosExtrasLigados() },
+      backups,
       agora: new Date()
     });
   }));

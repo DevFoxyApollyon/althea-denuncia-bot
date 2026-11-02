@@ -215,7 +215,7 @@ test('retenção: prazos por coleção e em qual banco cada modelo fica', () => 
   // Denúncias (45 dias) e strikes (24 horas) têm a regra no próprio modelo.
   const Denuncia = require('../models/Denuncia');
   const Strike = require('../models/Strike');
-  assert.deepEqual(COLECOES_COM_REGRA_PROPRIA, ['strikes', 'denuncias']);
+  assert.deepEqual(COLECOES_COM_REGRA_PROPRIA, ['strikes', 'denuncias', 'backups.files', 'backups.chunks']);
   assert.equal(Denuncia.schema.path('dataRetencaoAte'), undefined);
   assert.ok(Strike.schema.indexes().some(([campos, opcoes]) => campos.updatedAt === 1 && opcoes.expireAfterSeconds === 86400));
 

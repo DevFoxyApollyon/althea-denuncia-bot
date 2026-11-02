@@ -67,6 +67,18 @@ function indicador(rotulo, valor, detalhe, tom) {
   return el('div', { class: `saude-item ${tom || ''}` }, el('span', null, rotulo), el('strong', null, valor), detalhe && el('small', null, detalhe));
 }
 
+// Cópia diária do banco principal (denúncias e configurações do bot).
+function indicadorDeBackup(backups) {
+  if (!backups) return indicador('Backup do banco', 'Sem dados', 'Não foi possível consultar as cópias agora.', 'atencao');
+  const { ultima, copias, ultimaFalha } = backups;
+  if (ultimaFalha && (!ultima || new Date(ultimaFalha.em) > new Date(ultima.em))) {
+    return indicador('Backup do banco', 'Falhou', `${formatarData(ultimaFalha.em)}: ${ultimaFalha.erro}`, 'critico');
+  }
+  if (!ultima) return indicador('Backup do banco', 'Nenhuma cópia', 'A primeira cópia sai 1 minuto depois de o bot ligar.', 'atencao');
+  const atrasado = Date.now() - new Date(ultima.em).getTime() > 2 * 24 * 60 * 60 * 1000;
+  return indicador('Backup do banco', formatarData(ultima.em), `${copias} cópia(s) guardada(s), a última com ${ultima.tamanhoKb} KB`, atrasado ? 'atencao' : 'ok');
+}
+
 function blocoDeTopicos() {
   const dados = estado.topicos;
   if (!dados) return el('section', { class: 'cartao' }, el('h2', null, 'Tópicos do Discord'), el('p', { class: 'sub' }, 'Não foi possível consultar os tópicos agora.'));
@@ -155,7 +167,8 @@ export function telaSaude() {
         indicador('Denúncias em aberto', saude.finalizador.abertas === null ? 'Sem dados' : String(saude.finalizador.abertas), 'pendentes, reivindicadas ou em análise, em todos os servidores'),
         indicador('Mensagens diretas', pausa ? 'Pausadas' : 'Liberadas',
           pausa ? `O Discord limitou as DMs do bot. Nova tentativa depois de ${formatarData(pausa)}.` : saude.dms.avisosExtras ? 'Avisos extras por DM ligados.' : 'Avisos extras por DM desligados (padrão).',
-          pausa ? 'critico' : 'ok')),
+          pausa ? 'critico' : 'ok'),
+        indicadorDeBackup(saude.backups)),
 
       blocoDeTopicos(),
       blocoDeErros()));

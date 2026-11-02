@@ -333,6 +333,7 @@ app.get('/api/saude', (req, res) => res.json({
   bancos: [{ nome: 'Principal', estado: 'conectado' }, { nome: 'Secundário', estado: 'conectado' }],
   finalizador: { naFila: 37, abertas: 214 },
   dms: { pausadaAte: new Date(Date.now() + 3 * 3600000), avisosExtras: false },
+  backups: { copias: 7, ultimaFalha: null, ultima: { nome: 'principal-exemplo.ndjson.gz', em: new Date(Date.now() - 5 * 3600000), tamanhoKb: 812 } },
   agora: new Date()
 }));
 app.get('/api/topicos', (req, res) => res.json({ servidores: topicos, conferidoEm: new Date(), limpeza: limpezaDeTopicos }));

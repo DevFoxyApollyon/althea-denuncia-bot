@@ -813,8 +813,11 @@ async function handleDenunciaSubmit(interaction, platform) {
                 `**Provas:** ${provas}`,
                 '',
                 `${denunciaLink}`,
+                // Acusado que não vê o canal fica fora do tópico privado: pelo site
+                // ele acompanha o caso e responde do mesmo jeito.
+                ...(linkNoSite ? [`🌐 **Pelo site:** ${linkNoSite}`] : []),
                 '',
-                'Se você acredita que esta denúncia é injusta, responda no tópico da denúncia com as contraprovas ou aguarde a análise da equipe.'
+                'Se você acredita que esta denúncia é injusta, responda no tópico da denúncia (ou pelo site) com as contraprovas ou aguarde a análise da equipe.'
             ].join('\n');
 
             for (const id of acusadoIds) {
