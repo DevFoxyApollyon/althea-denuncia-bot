@@ -60,7 +60,9 @@ const pontePunicaoSchema = new mongoose.Schema({
     topicoMsgId: { type: String, default: '' },
     canalMsgId: { type: String, default: '' },
     topicoId: { type: String, default: '' },
-    canalId: { type: String, default: '' }
+    canalId: { type: String, default: '' },
+    // Tópico privado: o Relatório de punições ganha o botão "Entrar no tópico".
+    topicoPrivado: { type: Boolean, default: false }
   },
   alvos: { type: [alvoSchema], default: [] },
   // Trava otimista: toda edição exige a versão que o painel leu.

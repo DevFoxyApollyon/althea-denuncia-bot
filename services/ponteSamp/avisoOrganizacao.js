@@ -4,6 +4,7 @@
 // de organização marca o responsável admin e quem aceitou na Cadeia Staff.
 const { EmbedBuilder } = require('discord.js');
 const { getConfig } = require('../../utils/configCache');
+const { botaoEntrarNoTopico } = require('../../utils/restricaoTopicos');
 const { Logger } = require('../../utils/logger');
 
 const log = new Logger({ tag: 'PonteOrganizacao' });
@@ -15,6 +16,8 @@ const normalizar = (texto) => String(texto || '').normalize('NFD').replace(/[̀-
 // "Tropa da Holanda ( Membro - 4)" → "Tropa da Holanda": o cargo entre parênteses não entra.
 const semParenteses = (texto) => String(texto || '').replace(/\s*\([^)]*\)/g, '').trim();
 const temOrganizacao = (organizacao) => !SEM_ORGANIZACAO.includes(normalizar(semParenteses(organizacao)));
+// Denúncia de tópico privado: o aviso leva o botão "Entrar no tópico".
+const botoesDoTopico = (punicao) => (punicao.mensagens?.topicoPrivado && punicao.mensagens.topicoId ? [botaoEntrarNoTopico(punicao.mensagens.topicoId)] : []);
 
 // Cargos que fazem o relatório marcar o responsável admin e quem aceitou na Cadeia Staff.
 const CARGO_ALTO = { min: 6, max: 12 };
@@ -76,6 +79,7 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
       await canal.send({
         content: mencoes || undefined,
         embeds: [embed],
+        components: botoesDoTopico(punicao),
         allowedMentions: { roles: papeis, users: usuarios }
       });
     }
@@ -150,7 +154,7 @@ async function avisarJaBanidos(client, punicao, resultado, nomePc) {
         )
         .setFooter({ text: `Painel do jogo (PC: ${nomePc})` })
         .setTimestamp();
-      await canal.send({ embeds: [embed] });
+      await canal.send({ embeds: [embed], components: botoesDoTopico(punicao) });
     }
     return resultado.length;
   } catch (error) {

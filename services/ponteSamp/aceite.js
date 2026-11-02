@@ -111,7 +111,11 @@ async function registrarAceite({ client, denuncia, origem, staff, canalMensagem 
       aceitoEm: new Date(),
       msgDiscord: {
         texto: corta(denuncia.motivo, 1500),
-        link: `https://discord.com/channels/${denuncia.guildId}/${denuncia.threadId}`,
+        // Link da mensagem da denúncia no canal: o do tópico privado aparece como
+        // "#desconhecido" para quem não está nele.
+        link: denuncia.channelId && denuncia.messageId
+          ? `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`
+          : `https://discord.com/channels/${denuncia.guildId}/${denuncia.threadId}`,
         acusado: corta(denuncia.acusado, 200),
         motivo: corta(denuncia.motivoAceite, 300),
         provas: corta(denuncia.provas, 1000)
@@ -119,7 +123,9 @@ async function registrarAceite({ client, denuncia, origem, staff, canalMensagem 
       mensagens: {
         topicoId: denuncia.threadId || '',
         canalId: canalMensagem?.channelId || '',
-        canalMsgId: canalMensagem?.id || ''
+        canalMsgId: canalMensagem?.id || '',
+        // Tópico público nasce da mensagem (mesmo id); o privado tem id próprio.
+        topicoPrivado: Boolean(denuncia.threadId && denuncia.messageId && denuncia.threadId !== denuncia.messageId)
       },
       alvos,
       versao: 0,

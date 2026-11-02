@@ -242,3 +242,11 @@ test('tópico privado: canais da staff recebem o link da mensagem principal e o 
   await manageStatusMessages(topico, 'recusada', '<@1>', { messageUrl: 'x', denuncia });
   assert.match(topico.enviados.at(-1).payload, /Link para compartilhar:\*\* https:\/\/discord\.com\/channels\/700000000000000009\/700000000000000004\/700000000000000005/);
 });
+
+test('relatório de punições: botão Entrar no tópico só com tópico privado', () => {
+  const { montarMensagemGm } = require('../services/ponteSamp/discordGm');
+  const base = { _id: 'p1', status: 'aplicada', alvos: [], msgDiscord: {}, mensagens: { topicoId: '700000000000000003' } };
+  const ids = (msg) => msg.components.flatMap(linha => linha.toJSON().components.map(botao => botao.custom_id));
+  assert.deepEqual(ids(montarMensagemGm({ ...base, mensagens: { ...base.mensagens, topicoPrivado: true } }, [], {})), ['entrar_topico:700000000000000003']);
+  assert.deepEqual(ids(montarMensagemGm(base, [], {})), []);
+});

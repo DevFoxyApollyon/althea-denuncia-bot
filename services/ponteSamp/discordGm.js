@@ -11,6 +11,7 @@ const { motivoParaGamemode, nomeParaGamemode } = require('./protocoloGm');
 const { fecharPunicaoSePronta } = require('./pedidosGm');
 const { LIMITES_GM_PADRAO } = require('./constantes');
 const { getConfig } = require('../../utils/configCache');
+const { botaoSoltoEntrarNoTopico } = require('../../utils/restricaoTopicos');
 const { Logger } = require('../../utils/logger');
 
 const log = new Logger({ tag: 'PonteGamemode' });
@@ -143,6 +144,7 @@ function montarMensagemGm(punicao, pedidos, servidor) {
   } else if (punicao.status === 'executando' && punicao.executor === 'gamemode') {
     botoes.push(new ButtonBuilder().setCustomId(BOTAO_CANCELAR + id).setLabel('Cancelar envio').setEmoji('✖️').setStyle(ButtonStyle.Danger));
   }
+  if (punicao.mensagens?.topicoPrivado && punicao.mensagens.topicoId) botoes.push(botaoSoltoEntrarNoTopico(punicao.mensagens.topicoId));
   return { embeds: [embed], components: botoes.length ? [new ActionRowBuilder().addComponents(botoes)] : [] };
 }
 
