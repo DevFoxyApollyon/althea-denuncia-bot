@@ -163,6 +163,62 @@ function linha(celulas, acao) {
   return tr;
 }
 
+// ---------------------------------------------------------------- controle da gamemode (só o dono)
+const PERGUNTAS_EXECUTOR = {
+  pc: 'Só o PC da staff aplica. A gamemode passa a receber 403. Continuar?',
+  gamemode: 'Só a gamemode aplica. O PC da staff para de receber punições deste servidor. Continuar?',
+  ambos: 'PC e gamemode aplicam: quem pegar primeiro leva. Continuar?'
+};
+
+async function mudarGamemode(s, mudanca, pergunta) {
+  if (pergunta && !confirm(pergunta)) return;
+  let texto;
+  try {
+    const r = await post(`/servidores/${s.guildId}/gamemode`, mudanca);
+    texto = r.conexoesRetomadas ? `Feito. ${r.conexoesRetomadas} credencial(is) pausada(s) voltaram a funcionar.` : 'Feito.';
+  } catch (e) { texto = e.message; }
+  // Recarregar limpa o aviso: ele vem depois.
+  await carregar('controle');
+  aviso(texto);
+}
+
+// Interruptor liga/desliga (role=switch).
+const interruptor = (ligado, rotulo, aoMudar) => el('button', {
+  type: 'button', role: 'switch', classe: 'interruptor', 'aria-checked': String(ligado), 'aria-label': rotulo, title: rotulo, onclick: aoMudar
+}, el('span', { classe: 'interruptor-bolinha' }));
+
+function cartaoDeControle(s) {
+  // Só aplica de verdade com executor da gamemode, sem pausa e sem teste nos dois lados.
+  const real = s.executor !== 'pc' && !s.pausado && !s.modoTesteBot && s.modoTesteJogo === false;
+  const situacao = real ? 'Aplica de verdade' : s.pausado ? 'Pausada' : s.executor === 'pc' ? 'Só o PC aplica' : 'Só simula';
+  const segmento = (valor, texto) => el('button', {
+    type: 'button', classe: s.executor === valor ? 'ativo' : '', 'aria-pressed': String(s.executor === valor),
+    onclick: () => { if (s.executor !== valor) mudarGamemode(s, { executor: valor }, PERGUNTAS_EXECUTOR[valor]); }
+  }, texto);
+  const jogo = s.modoTesteJogo === null ? 'sem contato ainda' : s.modoTesteJogo ? 'ligado' : 'desligado';
+
+  return el('article', { classe: `cartao-servidor controle${real ? ' real' : ''}` },
+    el('header', {},
+      el('h3', {}, s.nome || s.guildId),
+      el('span', { classe: `selo ${s.online ? 'ok' : 'off'}` }, s.online ? '● gamemode online' : '○ gamemode offline'),
+      el('span', { classe: `selo ${real ? 'perigo' : 'neutro'}` }, situacao)),
+    el('div', { classe: 'controle-linha' },
+      el('span', { classe: 'controle-rotulo' }, 'Quem aplica', el('small', {}, 'Com "PC da staff", a gamemode não recebe nada.')),
+      el('div', { classe: 'segmentos', role: 'group', 'aria-label': 'Quem aplica' },
+        segmento('pc', 'PC da staff'), segmento('gamemode', 'Gamemode'), segmento('ambos', 'Os dois'))),
+    el('div', { classe: 'controle-linha' },
+      el('span', { classe: 'controle-rotulo' }, 'Modo teste no bot', el('small', {}, `No jogo: ${jogo}`)),
+      interruptor(s.modoTesteBot, 'Modo teste no bot', () => mudarGamemode(s, { modoTeste: !s.modoTesteBot },
+        s.modoTesteBot ? 'Desligar o modo teste no bot? Com o jogo também fora do teste, as próximas punições são aplicadas de verdade.' : null))),
+    el('div', { classe: 'controle-linha' },
+      el('span', { classe: 'controle-rotulo' }, 'Entregar pedidos', el('small', {}, s.pausado ? 'Pausada: os pedidos ficam na fila' : 'A gamemode recebe os pedidos')),
+      interruptor(!s.pausado, 'Entregar pedidos', () => mudarGamemode(s, { pausado: !s.pausado },
+        s.pausado ? null : 'Pausar a gamemode? As buscas vêm vazias até retomar.'))),
+    el('footer', {},
+      el('span', { classe: 'dica-curta' }, `${s.aplicadas} aplicada(s) · ${s.simuladas} simulada(s)${s.incertos ? ` · ${s.incertos} incerto(s)` : ''}`),
+      el('code', {}, s.guildId)));
+}
+
 function preencher(secao, linhas) {
   const tbody = $(`#aba-${secao} tbody`);
   tbody.replaceChildren(...linhas);
@@ -295,6 +351,13 @@ const carregadores = {
     $('#gm-uso tbody').replaceChildren(...uso.map(u => linhaSimples([
       data(u.em), u.guild || u.guildId, u.acao, u.ip, { texto: u.detalhes ? JSON.stringify(u.detalhes) : '', classe: 'detalhes' }
     ])));
+  },
+  // Aba só do dono: executor, modo teste do bot e pausa de cada servidor.
+  async controle() {
+    const { servidores } = await api('/gamemode/guia');
+    $('#controle-gm-lista').replaceChildren(...(servidores.length
+      ? servidores.map(cartaoDeControle)
+      : [el('p', { classe: 'vazio' }, 'Nenhum servidor com a ponte ativa.')]));
   },
   async guia() {
     const [{ chaveMestra, versaoInclude, servidores }, chave] = await Promise.all([api('/gamemode/guia'), api('/chave')]);

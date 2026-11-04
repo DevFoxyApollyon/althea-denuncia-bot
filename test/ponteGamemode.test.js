@@ -1124,6 +1124,35 @@ test('/admin guia da gamemode: só o dono; situação de cada servidor sem segre
   });
 });
 
+test('/admin controle da gamemode: executor, modo teste e pausa pelo painel, auditados', async () => {
+  const { conexao } = await guildGm('100000000000000897');
+  await m.PonteConexaoGm.updateOne({ _id: conexao._id }, { $set: { pausada: true } });
+  const caminho = '/servidores/100000000000000897/gamemode';
+  await comAdmin(async (pedir) => {
+    assert.equal((await pedir(caminho, { usuario: '123', metodo: 'POST', corpo: { executor: 'pc' } })).status, 404, 'outra pessoa não descobre a rota');
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { executor: 'pc' } })).status, 403, 'sem CSRF');
+    const { csrf } = (await pedir('/csrf')).corpo;
+
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { executor: 'qualquer' }, csrf })).status, 400);
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: {}, csrf })).status, 400, 'nada para mudar');
+    assert.equal((await pedir('/servidores/100000000000000899/gamemode', { metodo: 'POST', corpo: { executor: 'pc' }, csrf })).status, 404, 'ponte inativa');
+
+    await pedir(caminho, { metodo: 'POST', corpo: { executor: 'ambos' }, csrf });
+    await pedir(caminho, { metodo: 'POST', corpo: { modoTeste: false }, csrf });
+    await pedir(caminho, { metodo: 'POST', corpo: { pausado: true }, csrf });
+    let s = await m.PonteServidor.findOne({ guildId: '100000000000000897' }).lean();
+    assert.deepEqual([s.executor, s.gm.modoTeste, s.gm.pausado], ['ambos', false, true]);
+
+    // Retomar também solta a credencial pausada por selo inválido.
+    const { corpo } = await pedir(caminho, { metodo: 'POST', corpo: { pausado: false }, csrf });
+    assert.equal(corpo.conexoesRetomadas, 1);
+    s = await m.PonteServidor.findOne({ guildId: '100000000000000897' }).lean();
+    assert.equal(s.gm.pausado, false);
+    assert.equal((await m.PonteConexaoGm.findById(conexao._id).lean()).pausada, false);
+    assert.ok(await m.PonteUso.exists({ guildId: '100000000000000897', acao: 'gm_config', 'detalhes.via': 'admin', 'detalhes.sub': 'executor', 'detalhes.para': 'ambos' }));
+  });
+});
+
 // ---------- Chave mestra pelo /admin ----------
 
 test('chave mestra: a linha do .env é trocada ou criada sem mexer no resto', () => {

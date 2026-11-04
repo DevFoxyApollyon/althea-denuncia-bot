@@ -14,7 +14,7 @@ const PontePedidoGm = require('../../models/PontePedidoGm');
 const gestao = require('../../services/ponteSamp/gestao');
 const motivos = require('../../services/ponteSamp/motivos');
 const { reclassificarFila } = require('../../services/ponteSamp/aceite');
-const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE } = require('../../services/ponteSamp/constantes');
+const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE, EXECUTORES } = require('../../services/ponteSamp/constantes');
 const { chaveMestraConfigurada, impressaoDaChave } = require('../../services/ponteSamp/cifra');
 const { trocarChaveMestra } = require('../../services/ponteSamp/chaveMestra');
 const acessos = require('../../services/ponteSamp/acessoAdmin');
@@ -140,6 +140,39 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     const s = await gestao.desativarGuild({ guildId: req.params.guildId, por: req.usuario.id });
     log?.info?.(`Ponte desativada pelo dono em ${req.params.guildId}`);
     res.json({ ok: !!s });
+  }));
+
+  // Controles da gamemode de um servidor (os mesmos de /ponte gamemode executor,
+  // pausar/retomar e o modo teste dos limites). Só o dono.
+  router.post('/api/servidores/:guildId/gamemode', soDono, rota(async (req, res) => {
+    const { guildId } = req.params;
+    if (!/^\d{5,25}$/.test(guildId)) return res.status(400).json({ erro: 'ID inválido.' });
+    const servidor = await PonteServidor.findOne({ guildId, ativo: true }).lean();
+    if (!servidor) return res.status(404).json({ erro: 'A ponte não está ativa neste servidor.' });
+
+    const { executor, pausado, modoTeste } = req.body || {};
+    const $set = {};
+    if (executor !== undefined) {
+      if (!EXECUTORES.includes(executor)) return res.status(400).json({ erro: 'Executor inválido.' });
+      $set.executor = executor;
+    }
+    if (pausado !== undefined) $set['gm.pausado'] = pausado === true;
+    if (modoTeste !== undefined) $set['gm.modoTeste'] = modoTeste === true;
+    if (!Object.keys($set).length) return res.status(400).json({ erro: 'Nada para mudar.' });
+
+    await PonteServidor.updateOne({ guildId }, { $set });
+    // Retomar também solta as credenciais pausadas por selo inválido, como no comando.
+    let conexoesRetomadas = 0;
+    if (pausado === false) {
+      ({ modifiedCount: conexoesRetomadas } = await PonteConexaoGm.updateMany({ guildId, status: 'ativa', pausada: true }, { $set: { pausada: false } }));
+    }
+    const sub = executor !== undefined ? 'executor' : pausado !== undefined ? (pausado ? 'pausar' : 'retomar') : 'limites';
+    await PonteUso.create({
+      guildId, acao: 'gm_config',
+      detalhes: { sub, via: 'admin', por: req.usuario.id, ...(executor !== undefined ? { de: servidor.executor || 'pc', para: executor } : {}),
+        ...(modoTeste !== undefined ? { modoTeste: modoTeste === true } : {}), ...(conexoesRetomadas ? { conexoesRetomadas } : {}) }
+    }).catch(() => {});
+    res.json({ ok: true, conexoesRetomadas });
   }));
 
   router.get('/api/instalacoes', rota(async (req, res) => {

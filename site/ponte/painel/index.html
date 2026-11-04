@@ -21,6 +21,7 @@
     </div>
     <nav aria-label="Seções do painel">
       <button type="button" data-aba="geral" class="ativa">Visão geral</button>
+      <button type="button" data-aba="controle" class="so-dono" hidden>Controle</button>
       <button type="button" data-aba="gamemode">Gamemode</button>
       <button type="button" data-aba="guia">Instalar</button>
       <button type="button" data-aba="instalacoes">PCs</button>
@@ -76,6 +77,12 @@
 
       <h2>Auditoria (gm_*)</h2>
       <table id="gm-uso"><thead><tr><th>Quando</th><th>Servidor</th><th>Ação</th><th>IP</th><th>Detalhes</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="aba-controle" hidden>
+      <h2>Controle da gamemode</h2>
+      <p class="dica">Só você vê e mexe aqui. Vale na hora: a gamemode lê na próxima busca, sem reiniciar. O modo teste do jogo (<code>rcon althea teste 0</code>) continua sendo do servidor do jogo.</p>
+      <div id="controle-gm-lista" class="cartoes"></div>
     </section>
 
     <section id="aba-guia" hidden>
