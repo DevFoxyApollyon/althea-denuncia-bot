@@ -368,6 +368,11 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
       PonteConexaoGm.find({ status: 'ativa' }, { guildId: 1, ultimoContatoEm: 1, versaoInclude: 1, modoTesteInformado: 1, ipsPermitidos: 1, pausada: 1 }).lean(),
       PontePedidoGm.aggregate([{ $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }])
     ]);
+    // Logs da gamemode: os últimos eventos gm_* de cada servidor (busca, resultado, recusa da conexão...).
+    const eventos = await PonteUso.find({ guildId: { $in: servidores.map(s => s.guildId) }, acao: /^gm_/ }, { em: 1, guildId: 1, acao: 1, contaId: 1, nick: 1, detalhes: 1 })
+      .sort({ em: -1 }).limit(300).lean();
+    const eventosDe = (guildId) => eventos.filter(e => e.guildId === guildId).slice(0, 10)
+      .map(e => ({ em: e.em, acao: e.acao, contaId: e.contaId || '', nick: e.nick || '', detalhes: e.detalhes || {} }));
     const agora = Date.now();
     const porStatus = (guildId, status) => pedidos.find(p => p._id.guildId === guildId && p._id.status === status)?.total || 0;
     res.json({
@@ -393,7 +398,8 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
           modoTesteJogo: daGuild.some(c => c.modoTesteInformado === true) ? true : daGuild.some(c => c.modoTesteInformado === false) ? false : null,
           aplicadas: porStatus(s.guildId, 'aplicada'),
           simuladas: porStatus(s.guildId, 'simulada'),
-          incertos: porStatus(s.guildId, 'incerto')
+          incertos: porStatus(s.guildId, 'incerto'),
+          eventos: eventosDe(s.guildId)
         };
       })
     });

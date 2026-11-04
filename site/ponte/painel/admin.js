@@ -187,6 +187,34 @@ const interruptor = (ligado, rotulo, aoMudar) => el('button', {
   type: 'button', role: 'switch', classe: 'interruptor', 'aria-checked': String(ligado), 'aria-label': rotulo, title: rotulo, onclick: aoMudar
 }, el('span', { classe: 'interruptor-bolinha' }));
 
+// Uma linha de log da gamemode, em português.
+function textoDoEvento(e) {
+  const d = e.detalhes || {};
+  const conta = [e.contaId && `conta ${e.contaId}`, e.nick].filter(Boolean).join(' ');
+  switch (e.acao) {
+    case 'gm_busca': return `Buscou ${(d.pedidos || []).length} pedido(s)`;
+    case 'gm_resultado': return `Respondeu: ${d.status || '?'}${d.codigo ? ` (${d.codigo})` : ''}${conta ? ` · ${conta}` : ''}`;
+    case 'gm_auth_falhou': return `Conexão recusada: ${d.codigo || '?'}`;
+    case 'gm_enviar': return `${d.nome || 'Staff'} enviou ${d.alvos || 0} alvo(s) ao jogo${d.teste ? ' (teste)' : ''}`;
+    case 'gm_cancelar': return `${d.nome || 'Staff'} cancelou um envio`;
+    case 'gm_config': return `Configuração: ${d.sub || '?'}${d.para ? ` → ${d.para}` : ''}${d.modoTeste !== undefined ? ` → teste ${d.modoTeste ? 'ligado' : 'desligado'}` : ''}${d.via === 'admin' ? ' (painel)' : ''}`;
+    case 'gm_selo_invalido': return 'Selo inválido: a credencial foi pausada';
+    default: return ROTULOS[e.acao] || e.acao;
+  }
+}
+const tomDoEvento = (e) => (e.acao === 'gm_auth_falhou' || e.acao === 'gm_selo_invalido' || ['recusada', 'erro', 'incerto'].includes(e.detalhes?.status) ? 'atencao'
+  : e.detalhes?.status === 'aplicada' ? 'online' : '');
+
+function logsDaGamemode(eventos = []) {
+  return el('details', { classe: 'controle-logs', open: '' },
+    el('summary', {}, `Logs da gamemode (${eventos.length ? `últimos ${eventos.length}` : 'nenhum ainda'})`),
+    eventos.length
+      ? el('ol', {}, eventos.map(e => el('li', { classe: tomDoEvento(e) },
+        el('time', { datetime: new Date(e.em).toISOString(), title: data(e.em) }, relativo(e.em)),
+        el('span', {}, textoDoEvento(e)))))
+      : el('p', { classe: 'dica-curta' }, 'A gamemode ainda não registrou nada neste servidor.'));
+}
+
 function cartaoDeControle(s) {
   // Só aplica de verdade com executor da gamemode, sem pausa e sem teste nos dois lados.
   const real = s.executor !== 'pc' && !s.pausado && !s.modoTesteBot && s.modoTesteJogo === false;
@@ -214,6 +242,7 @@ function cartaoDeControle(s) {
       el('span', { classe: 'controle-rotulo' }, 'Entregar pedidos', el('small', {}, s.pausado ? 'Pausada: os pedidos ficam na fila' : 'A gamemode recebe os pedidos')),
       interruptor(!s.pausado, 'Entregar pedidos', () => mudarGamemode(s, { pausado: !s.pausado },
         s.pausado ? null : 'Pausar a gamemode? As buscas vêm vazias até retomar.'))),
+    logsDaGamemode(s.eventos),
     el('footer', {},
       el('span', { classe: 'dica-curta' }, `${s.aplicadas} aplicada(s) · ${s.simuladas} simulada(s)${s.incertos ? ` · ${s.incertos} incerto(s)` : ''}`),
       el('code', {}, s.guildId)));

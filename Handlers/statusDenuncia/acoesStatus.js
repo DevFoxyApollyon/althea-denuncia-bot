@@ -614,9 +614,14 @@ async function handleLogAceitarButton(interaction, denuncia) {
       staff: { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username },
       canalMensagem: mensagemEditada
     }).catch(() => null);
-    const linhaPonte = ponte?.jaExistia
+    let linhaPonte = ponte?.jaExistia
       ? `\nℹ️ Já está no painel do jogo (aceita por ${ponte.aceitoPor || 'outra pessoa'}).`
       : ponte?.criado ? '\n🎮 Enviada para o painel do jogo.' : '';
+    // Modo gamemode: aceitar na Cadeia Staff já manda para o jogo, sem precisar do
+    // "Enviar ao jogo" do Relatório de punições (que continua lá se o envio falhar).
+    const envio = ponte ? await enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;
+    if (envio?.ok) linhaPonte = `\n📤 Enviada à gamemode (${envio.pedidos} pedido(s)).${envio.teste ? ' 🧪 Modo teste: só simula.' : ''}`;
+    else if (envio?.erro) linhaPonte += `\n⚠️ Não foi para a gamemode: ${envio.erro} Use "Enviar ao jogo" no Relatório de punições.`;
     await interaction.editReply({ content: `✅ Cadeia staff aceita${linhaPonte}` }).catch(() => {});
     setTimeout(() => {
       interaction.deleteReply().catch((error) => {
@@ -635,6 +640,24 @@ async function handleLogAceitarButton(interaction, denuncia) {
   } finally {
     _logButtonLocks.delete(lockKey);
   }
+}
+
+// Ponte em modo gamemode: o aceite na Cadeia Staff (feito pelo responsável, o mesmo
+// que pode usar o "Enviar ao jogo") manda a punição direto para o jogo. Com "Os dois",
+// não envia sozinho, para o PC da staff continuar podendo pegar. null: nada a enviar.
+async function enviarAoJogoNoAceite(interaction, denuncia) {
+  const PonteServidor = require('../../models/PonteServidor');
+  const PontePunicao = require('../../models/PontePunicao');
+  const servidor = await PonteServidor.findOne({ guildId: interaction.guild.id, ativo: true }).select('executor').lean();
+  if (servidor?.executor !== 'gamemode') return null;
+  const punicao = await PontePunicao.findOne({ denunciaId: denuncia._id }).select('status').lean();
+  if (punicao?.status !== 'aceita') return null;
+  return require('../../services/ponteSamp/discordGm').enviarAoJogo({
+    client: interaction.client,
+    punicaoId: punicao._id,
+    guildId: interaction.guild.id,
+    staff: { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username }
+  });
 }
 
 async function handleLogRecusarButton(interaction, denuncia) {
@@ -960,6 +983,7 @@ async function registrarAcaoModerador(moderadorId, acao, denunciaId, guildId) {
 
 module.exports = {
   abrirTopicoPublicoDoAceite,
+  enviarAoJogoNoAceite,
   handleStatusButton,
   processarAnaliseAutomatica,
   denunciasMap,

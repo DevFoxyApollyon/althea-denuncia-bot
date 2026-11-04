@@ -530,6 +530,29 @@ function clienteDiscord() {
   return { enviadas, editadas, client: { channels: { fetch: async () => canal } } };
 }
 
+test('aceite na Cadeia Staff: com executor Gamemode já envia ao jogo; com PC ou Os dois, não', async () => {
+  const { enviarAoJogoNoAceite } = require('../Handlers/statusDenuncia/acoesStatus');
+  const interacao = (guildId) => ({ client: null, guild: { id: guildId }, user: { id: staffA.id, username: 'joao' }, member: { displayName: staffA.nome } });
+
+  await guildGm('100000000000000870');
+  const punicao = await punicaoAceita('100000000000000870');
+  const r = await enviarAoJogoNoAceite(interacao('100000000000000870'), { _id: punicao.denunciaId });
+  assert.equal(r.ok, true);
+  assert.equal(r.pedidos, 1);
+  assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'executando');
+  assert.equal(await m.PontePedidoGm.countDocuments({ punicaoId: punicao._id, status: 'aprovado' }), 1);
+  // Segundo aceite (já enviada): não manda de novo.
+  assert.equal(await enviarAoJogoNoAceite(interacao('100000000000000870'), { _id: punicao.denunciaId }), null);
+
+  for (const executor of ['pc', 'ambos']) {
+    const guildId = executor === 'pc' ? '100000000000000871' : '100000000000000872';
+    await guildGm(guildId, { executor });
+    const outra = await punicaoAceita(guildId);
+    assert.equal(await enviarAoJogoNoAceite(interacao(guildId), { _id: outra.denunciaId }), null, executor);
+    assert.equal((await m.PontePunicao.findById(outra._id).lean()).status, 'aceita', executor);
+  }
+});
+
 test('9. motivoParaGamemode(motivoComSufixo(...)) sempre passa na regra do Alt_MotivoValido', () => {
   const { motivoComSufixo } = require('../services/ponteSamp/validacao');
   const { motivoGmValido, RE_MOTIVO_GM } = discordGm();

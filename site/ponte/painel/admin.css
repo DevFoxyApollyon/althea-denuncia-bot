@@ -131,7 +131,7 @@ button.pequeno { padding: 5px 12px; font-size: 13px; }
 .cartao-servidor footer code { color: var(--fraca); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
 
 /* Controle da gamemode (só o dono) */
-#controle-gm-lista { grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); }
+#controle-gm-lista { grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); align-items: start; }
 .selo.perigo { color: var(--perigo); background: var(--perigo-suave); border-color: color-mix(in srgb, var(--perigo) 35%, var(--borda)); }
 .cartao-servidor.controle { gap: 0; padding: 0; background: var(--painel); overflow: hidden; }
 .cartao-servidor.controle.real { border-color: color-mix(in srgb, var(--perigo) 45%, var(--borda)); box-shadow: 0 0 0 3px var(--perigo-suave); }
@@ -141,6 +141,16 @@ button.pequeno { padding: 5px 12px; font-size: 13px; }
 .controle-rotulo { display: grid; gap: 2px; font-size: 13.5px; font-weight: 600; }
 .controle-rotulo small { color: var(--fraca); font-size: 12px; font-weight: 500; }
 .dica-curta { color: var(--suave); font-size: 12.5px; }
+.controle-logs { border-bottom: 1px solid var(--borda); }
+.controle-logs summary { padding: 10px 16px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--suave); }
+.controle-logs summary:hover { color: var(--texto); }
+.controle-logs ol { list-style: none; margin: 0; padding: 0 16px 12px; display: grid; gap: 2px; max-height: 260px; overflow-y: auto; }
+.controle-logs li { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 10px; padding: 5px 8px; border-radius: 6px; font: 12px/1.45 ui-monospace, "Cascadia Mono", monospace; color: var(--texto); background: var(--elevada); }
+.controle-logs li time { color: var(--fraca); white-space: nowrap; }
+.controle-logs li span { overflow-wrap: anywhere; }
+.controle-logs li.atencao span { color: var(--perigo); font-weight: 400; }
+.controle-logs li.online span { color: var(--ok); font-weight: 400; }
+.controle-logs > p { margin: 0; padding: 0 16px 12px; }
 
 .segmentos { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--elevada); border: 1px solid var(--borda); }
 .segmentos button { border: 0; background: transparent; padding: 5px 11px; border-radius: 7px; font-size: 12.5px; color: var(--suave); }
