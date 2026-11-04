@@ -614,9 +614,14 @@ async function handleLogAceitarButton(interaction, denuncia) {
       staff: { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username },
       canalMensagem: mensagemEditada
     }).catch(() => null);
-    let linhaPonte = ponte?.jaExistia
-      ? `\nℹ️ Já está no painel do jogo (aceita por ${ponte.aceitoPor || 'outra pessoa'}).`
-      : ponte?.criado ? '\n🎮 Enviada para o painel do jogo.' : '';
+    const JA_EXISTIA = {
+      aplicada: '\nℹ️ Esta punição já foi aplicada no jogo.',
+      executando: '\nℹ️ Esta punição já foi enviada ao jogo e está esperando a resposta.',
+      cancelada: '\nℹ️ Esta punição foi cancelada.'
+    };
+    let linhaPonte = ponte?.reaberta ? '\n🔁 Punição reaberta: estava cancelada.'
+      : ponte?.jaExistia ? (JA_EXISTIA[ponte.status] || `\nℹ️ Já está no painel do jogo (aceita por ${ponte.aceitoPor || 'outra pessoa'}).`)
+        : ponte?.criado ? '\n🎮 Enviada para o painel do jogo.' : '';
     // Modo gamemode: aceitar na Cadeia Staff já manda para o jogo, sem precisar do
     // "Enviar ao jogo" do Relatório de punições (que continua lá se o envio falhar).
     const envio = ponte ? await enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;

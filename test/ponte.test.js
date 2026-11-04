@@ -165,6 +165,26 @@ test('registrarAceite: dois aceites em paralelo geram uma punição só', async 
   assert.deepEqual([punicao.alvos[0].cmd, punicao.alvos[0].tempo], ['ban', 5]);
 });
 
+test('registrarAceite: aceitar de novo na Cadeia Staff reabre a punição cancelada', async () => {
+  await guildAtiva('721');
+  const denuncia = denunciaFalsa('721');
+  const { punicao } = await m.aceite.registrarAceite({ client: clienteFalso, denuncia, origem: 'canal_staff', staff: { id: '5', nome: 'Staff' } });
+  await m.PontePunicao.updateOne({ _id: punicao._id }, { $set: { status: 'cancelada' } });
+
+  // Pelo tópico não reabre: só a Cadeia Staff decide de novo.
+  assert.equal((await m.aceite.registrarAceite({ client: clienteFalso, denuncia, origem: 'topico', staff: { id: '6', nome: 'Outro' } })).status, 'cancelada');
+
+  const r = await m.aceite.registrarAceite({ client: clienteFalso, denuncia, origem: 'canal_staff', staff: { id: '6', nome: 'Outro' } });
+  assert.equal(r.reaberta, true);
+  const salva = await m.PontePunicao.findById(punicao._id).lean();
+  assert.deepEqual([salva.status, salva.aceitoPor.nome, salva.versao > punicao.versao], ['aceita', 'Outro', true]);
+  assert.equal(await m.PontePunicao.countDocuments({ denunciaId: denuncia._id }), 1);
+
+  // Já aceita (ou enviada): não reabre nada, só informa.
+  const deNovo = await m.aceite.registrarAceite({ client: clienteFalso, denuncia, origem: 'canal_staff', staff: { id: '6', nome: 'Outro' } });
+  assert.deepEqual([deNovo.jaExistia, deNovo.status], [true, 'aceita']);
+});
+
 test('registrarAceite não faz nada em guild sem ponte ativa', async () => {
   const r = await m.aceite.registrarAceite({ client: clienteFalso, denuncia: denunciaFalsa('729'), origem: 'canal_staff', staff: { id: '1', nome: 'x' } });
   assert.equal(r, null);

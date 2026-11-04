@@ -152,7 +152,21 @@ async function registrarAceite({ client, denuncia, origem, staff, canalMensagem 
 
     const punicao = resultado.value;
     if (resultado.lastErrorObject?.updatedExisting) {
-      return { jaExistia: true, aceitoPor: punicao?.aceitoPor?.nome || '' };
+      // Cancelada antes e aceita de novo na Cadeia Staff: é uma decisão nova, então a
+      // punição volta a esperar envio (e, no modo gamemode, o aceite já envia).
+      if (origem === 'canal_staff' && punicao?.status === 'cancelada') {
+        const reaberta = await PontePunicao.findOneAndUpdate(
+          { _id: punicao._id, status: 'cancelada' },
+          { $set: { status: 'aceita', executor: '', aceitoPor: novo.aceitoPor, aceitoEm: new Date() }, $inc: { versao: 1 } },
+          { new: true }
+        ).lean();
+        if (reaberta) {
+          log.info(`Punição ${reaberta._id} reaberta pelo aceite na Cadeia Staff (denúncia ${denuncia._id}).`);
+          await require('./discordGm').atualizarMensagemGm(client, reaberta._id).catch(() => {});
+          return { reaberta: true, punicao: reaberta };
+        }
+      }
+      return { jaExistia: true, aceitoPor: punicao?.aceitoPor?.nome || '', status: punicao?.status || '' };
     }
 
     log.info(`Denúncia ${denuncia._id} na fila do jogo (${alvos.length} alvo(s), guild ${denuncia.guildId}).`);
