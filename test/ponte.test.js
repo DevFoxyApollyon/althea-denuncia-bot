@@ -411,7 +411,8 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   assert.equal(enviados.length, 2);
   assert.equal(enviados[0].content, '<@&777>');
   assert.equal(enviados[1].content, undefined); // sem organização: registra sem marcar
-  const campos = enviados[0].embeds[0].toJSON().fields.map(f => f.value).join(' ');
+  const embed0 = enviados[0].embeds[0].toJSON();
+  const campos = `${embed0.description} ${embed0.fields.map(f => f.value).join(' ')}`;
   assert.match(campos, /Policia Militar/);
   assert.match(campos, /Fulano_Tal/);
   assert.match(campos, /fulano\.dc/);
@@ -430,7 +431,23 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   assert.deepEqual(enviados[0].allowedMentions, { roles: ['777'], users: ['22'] });
   assert.match(enviados[0].embeds[0].toJSON().fields.map(f => f.value).join(' '), /equipe angola - 12/);
   assert.equal(enviados[1].content, undefined); // cargo 4: registra sem marcar
-  assert.match(enviados[1].embeds[0].toJSON().fields[0].value, /^Tropa da Holanda - 4$/);
+  assert.equal(enviados[1].embeds[0].toJSON().fields.find(f => f.name === '🏢 Organização').value, 'Tropa da Holanda - 4');
+
+  // Gamemode: cargo entre colchetes, punição legível, motivo e quem aplicou no rodapé.
+  enviados.length = 0;
+  const daGm = { ...punicao, alvos: [{ _id: alvoId, contaId: '1964972', cmd: 'ban', tempo: 3, avisos: 1, motivo: 'saav' }], aceitoPor: { id: '33', nome: 'Foxy' } };
+  await avisarAplicadas(client, daGm, [
+    { alvoId, ok: true, erro: '', comando: 'gamemode: ban 3d +1 aviso', nome: 'Couto', organizacao: 'U$ BEN$A [10]' }
+  ], 'gamemode:brp teste');
+  const gm = enviados[0].embeds[0].toJSON();
+  const campo = (nome) => gm.fields.find(f => f.name.includes(nome))?.value;
+  assert.equal(campo('Organização'), 'U$ BEN$A - 10');
+  assert.equal(campo('Punição'), 'Ban de 3 dias + 1 aviso');
+  assert.equal(campo('Motivo'), 'saav');
+  assert.equal(campo('Aceita'), '<@33>');
+  assert.match(gm.description, /Couto.*1964972/);
+  assert.match(gm.footer.text, /^Aplicada pela gamemode \(brp teste\)/);
+  assert.equal(enviados[0].content, '<@&777>'); // cargo 10: marca o responsável
 });
 
 test('API: nova denúncia da mesma conta traz o ban anterior para somar e marca o antigo como somado', async () => {

@@ -6,6 +6,7 @@ const { EmbedBuilder } = require('discord.js');
 const { getConfig } = require('../../utils/configCache');
 const { botaoEntrarNoTopico } = require('../../utils/restricaoTopicos');
 const { Logger } = require('../../utils/logger');
+const Usuario = require('../../models/Usuario');
 
 const log = new Logger({ tag: 'PonteOrganizacao' });
 
@@ -22,19 +23,45 @@ const botoesDoTopico = (punicao) => (punicao.mensagens?.topicoPrivado && punicao
 // Cargos que fazem o relatório marcar o responsável admin e quem aceitou na Cadeia Staff.
 const CARGO_ALTO = { min: 6, max: 12 };
 
-// Número do cargo: o último número entre parênteses ("( Membro - 4)" → 4, "(Cargo:[ lider - 12])" → 12).
+// Número do cargo: o último número entre parênteses ("( Membro - 4)" → 4, "(Cargo:[ lider - 12])" → 12)
+// ou entre colchetes no fim, como a gamemode manda ("U$ BEN$A [10]" → 10).
 function cargoDaOrganizacao(organizacao) {
-  const dentro = String(organizacao || '').match(/\(([^]*)\)/)?.[1] || '';
+  const texto = String(organizacao || '');
+  const dentro = texto.match(/\(([^]*)\)/)?.[1] || texto.match(/\[([^\]]*)\]\s*$/)?.[1] || '';
   const numeros = dentro.match(/\d+/g);
   return numeros ? Number(numeros[numeros.length - 1]) : null;
 }
 
-// "Tropa da Holanda ( Membro - 4)" → "Tropa da Holanda - 4".
+// "Tropa da Holanda ( Membro - 4)" → "Tropa da Holanda - 4"; "U$ BEN$A [10]" → "U$ BEN$A - 10".
 function organizacaoComCargo(organizacao) {
-  const nome = semParenteses(organizacao).replace(/\s+/g, ' ').trim();
+  const nome = semParenteses(organizacao).replace(/\s*\[[^\]]*\]\s*$/, '').replace(/\s+/g, ' ').trim();
   const cargo = cargoDaOrganizacao(organizacao);
   return (cargo === null ? nome : `${nome} - ${cargo}`).slice(0, 100);
 }
+
+// "Ban de 3 dias + 1 aviso", "Ban permanente", "Cadeia de 120 min".
+function punicaoLegivel(alvo) {
+  const tempo = Number(alvo?.tempo) || 0;
+  const avisos = Number(alvo?.avisos) || 0;
+  const base = alvo?.cmd === 'cadeia' ? `Cadeia de ${tempo} min`
+    : alvo?.cmd === 'ban' ? (tempo === 0 ? 'Ban permanente' : `Ban de ${tempo} dia${tempo === 1 ? '' : 's'}`)
+      : null;
+  if (!base) return null;
+  return avisos > 0 ? `${base} + ${avisos} aviso${avisos === 1 ? '' : 's'}` : base;
+}
+
+// Discord da conta punida: o que o jogo mandou ou, se não veio, quem tem essa conta no nick.
+async function discordDaConta(guildId, contaId, informado) {
+  if (informado) return String(informado).slice(0, 100);
+  if (!contaId) return 'Não informado';
+  const usuario = await Usuario.findOne({ guildId, conta: String(contaId) }).sort({ updatedAt: -1 }).select('userId').lean().catch(() => null);
+  return usuario?.userId ? `<@${usuario.userId}>` : 'Não informado';
+}
+
+// Quem aplicou: a gamemode ("gamemode:brp teste") ou um PC da staff.
+const quemAplicou = (nomePc) => (String(nomePc || '').startsWith('gamemode:')
+  ? `Aplicada pela gamemode (${String(nomePc).slice('gamemode:'.length) || 'servidor do jogo'})`
+  : `Aplicada pelo PC da staff (${nomePc || '?'})`);
 
 const cargoAlto = (cargo) => cargo !== null && cargo >= CARGO_ALTO.min && cargo <= CARGO_ALTO.max;
 
@@ -62,20 +89,24 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
       const papeis = cargo && (alto || (organizacao && numeroCargo === null)) ? [cargo] : [];
       const usuarios = quemAceitou ? [quemAceitou] : [];
       const mencoes = [...papeis.map(id => `<@&${id}>`), ...usuarios.map(id => `<@${id}>`)].join(' ');
+      const contaId = alvo.contaId || r.contaId || '';
+      const legivel = punicaoLegivel(alvo);
+      const aceitaPor = punicao.cadeiaStaffPor?.id ? `<@${punicao.cadeiaStaffPor.id}>`
+        : punicao.aceitoPor?.id ? `<@${punicao.aceitoPor.id}>` : punicao.aceitoPor?.nome || 'Não registrado';
       const embed = new EmbedBuilder()
-        .setColor(organizacao ? '#C0392B' : '#7F8C8D')
-        .setTitle(organizacao ? '🚨 Punição em membro de organização' : '⚖️ Punição aplicada pelo painel do jogo')
+        .setColor(organizacao ? '#C0392B' : '#2ECC71')
+        .setTitle(organizacao ? '🚨 Punição aplicada em membro de organização' : '✅ Punição aplicada no jogo')
+        .setDescription(`**${String(r.nome || alvo.nick || 'Jogador').slice(0, 60)}** · conta \`${contaId || '?'}\``)
         .addFields(
+          { name: '⚖️ Punição', value: legivel || `\`${String(r.comando || '?').slice(0, 120)}\``, inline: true },
           { name: '🏢 Organização', value: organizacao ? organizacaoComCargo(r.organizacao) : 'Nenhuma', inline: true },
-          { name: '👤 Nick no jogo', value: String(r.nome || alvo.nick || 'Não identificado').slice(0, 100), inline: true },
-          { name: '💬 Discord', value: String(r.discord || 'Não informado').slice(0, 100), inline: true },
-          { name: '🆔 ID da conta', value: `\`${alvo.contaId || '?'}\``, inline: true },
-          { name: '⚖️ Punição', value: `\`${String(r.comando || '').slice(0, 120)}\`` },
-          { name: '🔗 Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link' }
+          { name: '💬 Discord', value: await discordDaConta(punicao.guildId, contaId, r.discord), inline: true },
+          ...(alvo.motivo ? [{ name: '📝 Motivo', value: String(alvo.motivo).slice(0, 200), inline: true }] : []),
+          { name: alto ? '✅ Aceita na Cadeia Staff por' : '✅ Aceita por', value: aceitaPor, inline: true },
+          { name: '🔗 Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link', inline: true }
         )
-        .setFooter({ text: `Aplicada pelo painel do jogo (PC: ${nomePc})` })
+        .setFooter({ text: `${quemAplicou(nomePc)}${legivel && r.comando ? ` · ${String(r.comando).slice(0, 80)}` : ''}` })
         .setTimestamp();
-      if (alto) embed.addFields({ name: '✅ Aceita na Cadeia Staff por', value: quemAceitou ? `<@${quemAceitou}>` : 'Não registrado' });
       await canal.send({
         content: mencoes || undefined,
         embeds: [embed],
@@ -192,4 +223,4 @@ async function avisarSemResposta(client, punicao, resultado, nomePc, tentativas)
   }
 }
 
-module.exports = { avisarAplicadas, avisarNicksNaoEncontrados, avisarJaBanidos, avisarSemResposta, temOrganizacao, cargoDaOrganizacao, organizacaoComCargo, SEM_ORGANIZACAO };
+module.exports = { avisarAplicadas, punicaoLegivel, avisarNicksNaoEncontrados, avisarJaBanidos, avisarSemResposta, temOrganizacao, cargoDaOrganizacao, organizacaoComCargo, SEM_ORGANIZACAO };
