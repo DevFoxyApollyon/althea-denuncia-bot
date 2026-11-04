@@ -419,6 +419,9 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   assert.match(campos, /472860/);
   assert.match(campos, /discord\.com\/channels\/810\/1/);
   assert.equal(temOrganizacao('civil'), false);
+  const { cargoLegivel } = require('../services/ponteSamp/avisoOrganizacao');
+  assert.deepEqual(['U$ BEN$A (Gerente - 10)', 'Org (Cargo:[ lider - 12])', 'Org', 'U$ BEN$A [10]'].map(cargoLegivel),
+    ['Gerente (10)', 'lider (12)', 'Não informado', '10']);
 
   // Cargo 6 a 12: "Organização - cargo", marca o responsável e quem aceitou na Cadeia Staff.
   enviados.length = 0;
@@ -429,9 +432,13 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   ], 'PC1');
   assert.equal(enviados[0].content, '<@&777> <@22>');
   assert.deepEqual(enviados[0].allowedMentions, { roles: ['777'], users: ['22'] });
-  assert.match(enviados[0].embeds[0].toJSON().fields.map(f => f.value).join(' '), /equipe angola - 12/);
+  const lider = enviados[0].embeds[0].toJSON().fields;
+  assert.equal(lider.find(f => f.name === '🏢 Organização').value, 'equipe angola');
+  assert.equal(lider.find(f => f.name.includes('Cargo')).value, 'lider (12)');
   assert.equal(enviados[1].content, undefined); // cargo 4: registra sem marcar
-  assert.equal(enviados[1].embeds[0].toJSON().fields.find(f => f.name === '🏢 Organização').value, 'Tropa da Holanda - 4');
+  const membro = enviados[1].embeds[0].toJSON().fields;
+  assert.equal(membro.find(f => f.name === '🏢 Organização').value, 'Tropa da Holanda');
+  assert.equal(membro.find(f => f.name.includes('Cargo')).value, 'Membro (4)');
 
   // Gamemode: cargo entre colchetes, punição legível, motivo e quem aplicou no rodapé.
   enviados.length = 0;
@@ -441,7 +448,8 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   ], 'gamemode:brp teste');
   const gm = enviados[0].embeds[0].toJSON();
   const campo = (nome) => gm.fields.find(f => f.name.includes(nome))?.value;
-  assert.equal(campo('Organização'), 'U$ BEN$A - 10');
+  assert.equal(campo('Organização'), 'U$ BEN$A');
+  assert.equal(campo('Cargo'), '10'); // a gamemode ainda não manda o nome do cargo
   assert.equal(campo('Punição'), 'Ban de 3 dias + 1 aviso');
   assert.equal(campo('Motivo'), 'saav');
   assert.equal(campo('Aceita'), '<@33>');

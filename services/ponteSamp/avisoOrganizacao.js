@@ -25,18 +25,39 @@ const CARGO_ALTO = { min: 6, max: 12 };
 
 // Número do cargo: o último número entre parênteses ("( Membro - 4)" → 4, "(Cargo:[ lider - 12])" → 12)
 // ou entre colchetes no fim, como a gamemode manda ("U$ BEN$A [10]" → 10).
-function cargoDaOrganizacao(organizacao) {
+const textoDoCargo = (organizacao) => {
   const texto = String(organizacao || '');
-  const dentro = texto.match(/\(([^]*)\)/)?.[1] || texto.match(/\[([^\]]*)\]\s*$/)?.[1] || '';
-  const numeros = dentro.match(/\d+/g);
+  return texto.match(/\(([^]*)\)/)?.[1] || texto.match(/\[([^\]]*)\]\s*$/)?.[1] || '';
+};
+
+function cargoDaOrganizacao(organizacao) {
+  const numeros = textoDoCargo(organizacao).match(/\d+/g);
   return numeros ? Number(numeros[numeros.length - 1]) : null;
 }
 
+// Nome do cargo, quando o jogo manda: "( Membro - 4)" → "Membro", "(Cargo:[ lider - 12])" → "lider".
+function nomeDoCargo(organizacao) {
+  return textoDoCargo(organizacao)
+    .replace(/cargo\s*:?/i, '').replace(/[[\]]/g, '').replace(/\d+/g, '')
+    .replace(/[-:–|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+}
+
+// Só o nome da organização: "Tropa da Holanda ( Membro - 4)" → "Tropa da Holanda"; "U$ BEN$A [10]" → "U$ BEN$A".
+const nomeDaOrganizacao = (organizacao) => semParenteses(organizacao).replace(/\s*\[[^\]]*\]\s*$/, '').replace(/\s+/g, ' ').trim().slice(0, 100);
+
 // "Tropa da Holanda ( Membro - 4)" → "Tropa da Holanda - 4"; "U$ BEN$A [10]" → "U$ BEN$A - 10".
 function organizacaoComCargo(organizacao) {
-  const nome = semParenteses(organizacao).replace(/\s*\[[^\]]*\]\s*$/, '').replace(/\s+/g, ' ').trim();
+  const nome = nomeDaOrganizacao(organizacao);
   const cargo = cargoDaOrganizacao(organizacao);
   return (cargo === null ? nome : `${nome} - ${cargo}`).slice(0, 100);
+}
+
+// Campo "Cargo" do relatório: "Membro (4)", só "10" quando o jogo não manda o nome, ou "Não informado".
+function cargoLegivel(organizacao) {
+  const numero = cargoDaOrganizacao(organizacao);
+  const nome = nomeDoCargo(organizacao);
+  if (numero === null) return nome || 'Não informado';
+  return nome ? `${nome} (${numero})` : String(numero);
 }
 
 // "Ban de 3 dias + 1 aviso", "Ban permanente", "Cadeia de 120 min".
@@ -99,7 +120,8 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
         .setDescription(`**${String(r.nome || alvo.nick || 'Jogador').slice(0, 60)}** · conta \`${contaId || '?'}\``)
         .addFields(
           { name: '⚖️ Punição', value: legivel || `\`${String(r.comando || '?').slice(0, 120)}\``, inline: true },
-          { name: '🏢 Organização', value: organizacao ? organizacaoComCargo(r.organizacao) : 'Nenhuma', inline: true },
+          { name: '🏢 Organização', value: organizacao ? nomeDaOrganizacao(r.organizacao) || 'Não informada' : 'Nenhuma', inline: true },
+          ...(organizacao ? [{ name: '🎖️ Cargo na organização', value: cargoLegivel(r.organizacao), inline: true }] : []),
           { name: '💬 Discord', value: await discordDaConta(punicao.guildId, contaId, r.discord), inline: true },
           ...(alvo.motivo ? [{ name: '📝 Motivo', value: String(alvo.motivo).slice(0, 200), inline: true }] : []),
           { name: alto ? '✅ Aceita na Cadeia Staff por' : '✅ Aceita por', value: aceitaPor, inline: true },
@@ -223,4 +245,4 @@ async function avisarSemResposta(client, punicao, resultado, nomePc, tentativas)
   }
 }
 
-module.exports = { avisarAplicadas, punicaoLegivel, avisarNicksNaoEncontrados, avisarJaBanidos, avisarSemResposta, temOrganizacao, cargoDaOrganizacao, organizacaoComCargo, SEM_ORGANIZACAO };
+module.exports = { avisarAplicadas, punicaoLegivel, avisarNicksNaoEncontrados, avisarJaBanidos, avisarSemResposta, temOrganizacao, cargoDaOrganizacao, nomeDoCargo, cargoLegivel, organizacaoComCargo, SEM_ORGANIZACAO };
