@@ -175,7 +175,10 @@ async function mudarGamemode(s, mudanca, pergunta) {
   let texto;
   try {
     const r = await post(`/servidores/${s.guildId}/gamemode`, mudanca);
-    texto = r.conexoesRetomadas ? `Feito. ${r.conexoesRetomadas} credencial(is) pausada(s) voltaram a funcionar.` : 'Feito.';
+    texto = ['Feito.',
+      r.conexoesRetomadas && `${r.conexoesRetomadas} credencial(is) pausada(s) voltaram a funcionar.`,
+      r.devolvidas && `${r.devolvidas} punição(ões) ainda não buscada(s) pela gamemode voltaram para a fila do PC.`,
+      r.embedsNovos && `${r.embedsNovos} punição(ões) esperando envio ganharam o embed "Enviar ao jogo".`].filter(Boolean).join(' ');
   } catch (e) { texto = e.message; }
   // Recarregar limpa o aviso: ele vem depois.
   await carregar('controle');

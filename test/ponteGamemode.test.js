@@ -1405,3 +1405,36 @@ test('enviar ao jogo: pedido pela conta leva o nick conhecido (confirmado pela g
   const pedidos = await m.PontePedidoGm.find({ punicaoId: punicao._id }).sort({ criadoEm: 1 }).lean();
   assert.deepEqual(pedidos.map(p => [p.conta, p.nick]), [[472860, 'Couto'], [1039, 'foxy_apollyon'], [2471, '']]);
 });
+
+test('trocar o executor: punições que ainda não saíram seguem o executor novo e o embed se refaz', async () => {
+  const guildId = '100000000000000874';
+  await guildGm(guildId);
+  await comLogAdmin(guildId);
+  // A: enviada, mas a gamemode ainda não buscou. B: a gamemode já buscou.
+  const a = await punicaoAceita(guildId);
+  const b = await punicaoAceita(guildId);
+  await discordGm().enviarAoJogo({ punicaoId: a._id, guildId, staff: staffA });
+  await discordGm().enviarAoJogo({ punicaoId: b._id, guildId, staff: staffA });
+  await m.PontePedidoGm.updateMany({ punicaoId: b._id }, { $set: { status: 'entregue' } });
+
+  await m.PonteServidor.updateOne({ guildId }, { $set: { executor: 'pc' } });
+  const paraPc = await discordGm().aoTrocarExecutor({ guildId, para: 'pc' });
+  assert.equal(paraPc.devolvidas, 1);
+  assert.deepEqual([(await m.PontePunicao.findById(a._id).lean()).status, (await m.PontePunicao.findById(b._id).lean()).status], ['aceita', 'executando']);
+  assert.equal(await m.PontePedidoGm.countDocuments({ punicaoId: a._id, status: 'aprovado' }), 0);
+
+  // No PC: o embed da punição pendente perde os botões e diz que está na fila do PC.
+  const msgPc = discordGm().montarMensagemGm(await m.PontePunicao.findById(a._id).lean(), [], { executor: 'pc' });
+  assert.equal(msgPc.components.length, 0);
+  assert.match(msgPc.embeds[0].toJSON().description, /fila do PC/);
+  // O botão antigo responde que foi para o PC.
+  assert.match((await discordGm().enviarAoJogo({ punicaoId: a._id, guildId, staff: staffA })).erro, /fila do PC/);
+
+  // De volta para a gamemode: a pendente sem embed ganha o "Enviar ao jogo".
+  await m.PonteServidor.updateOne({ guildId }, { $set: { executor: 'gamemode' } });
+  const enviadas = [];
+  const client = { channels: { fetch: async () => ({ id: '400000000000000009', send: async (msg) => { enviadas.push(msg); return { id: '500000000000000009' }; } }) } };
+  const paraGm = await discordGm().aoTrocarExecutor({ client, guildId, para: 'gamemode' });
+  assert.equal(paraGm.embedsNovos, 1);
+  assert.ok(JSON.stringify(enviadas[0].components).includes('Enviar ao jogo'));
+});

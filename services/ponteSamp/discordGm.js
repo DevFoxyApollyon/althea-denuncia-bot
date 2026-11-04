@@ -109,7 +109,10 @@ function montarMensagemGm(punicao, pedidos, servidor) {
   const enviadoPor = pedidosDaVez.find(p => p.confirmadoPor?.length)?.confirmadoPor[0]?.nome || pedidosDaVez[0]?.aprovadoPor || '';
   const teste = pedidosDaVez.length ? pedidosDaVez.some(p => p.teste) : limitesDe(servidor).modoTeste;
 
-  const situacao = {
+  const peloPc = Boolean(servidor?.executor) && !EXECUTORES_GM.includes(servidor.executor);
+  const situacao = punicao.status === 'aceita' && peloPc
+    ? '🖥️ Este servidor aplica pelo PC da staff: esta punição está na fila do PC.'
+    : {
     aceita: pedidosDaVez.length
       ? '🔁 Nenhum alvo foi aplicado na última tentativa. Confira e envie de novo, se for o caso.'
       : '⏳ Aguardando um responsável enviar ao jogo.',
@@ -141,7 +144,7 @@ function montarMensagemGm(punicao, pedidos, servidor) {
 
   const id = String(punicao._id);
   const botoes = [];
-  if (punicao.status === 'aceita') {
+  if (punicao.status === 'aceita' && !peloPc) {
     botoes.push(
       new ButtonBuilder().setCustomId(BOTAO_ENVIAR + id).setLabel('Enviar ao jogo').setEmoji('🎮').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(BOTAO_EDITAR + id).setLabel('Editar').setEmoji('✏️').setStyle(ButtonStyle.Secondary),
@@ -196,8 +199,38 @@ const auditar = (acao, punicao, staff, detalhes = null) => PonteUso.create({
 async function servidorGm(guildId) {
   const servidor = await PonteServidor.findOne({ guildId: String(guildId), ativo: true }).lean();
   if (!servidor) return { erro: 'A ponte com o jogo não está ativa neste servidor.' };
-  if (!EXECUTORES_GM.includes(servidor.executor)) return { erro: 'Este servidor aplica as punições pelo PC, não pela gamemode.' };
+  if (!EXECUTORES_GM.includes(servidor.executor)) return { erro: 'Este servidor agora aplica pelo PC da staff: a punição já está na fila do PC.' };
   return { servidor };
+}
+
+// Trocou quem aplica: as punições que ainda não saíram seguem o executor novo.
+//  - Para o PC: as enviadas à gamemode que ela ainda não buscou voltam para a fila (o PC pega
+//    da fila); as que ela já buscou ficam com ela, porque podem estar sendo aplicadas.
+//  - Para a gamemode (ou os dois): cada punição esperando envio ganha o embed com "Enviar ao jogo".
+// Em todos os casos os embeds são refeitos (os botões somem ou voltam).
+async function aoTrocarExecutor({ client = null, guildId, para }) {
+  guildId = String(guildId);
+  let devolvidas = 0;
+  if (!EXECUTORES_GM.includes(para)) {
+    const enviadas = await PontePunicao.find({ guildId, status: 'executando', executor: 'gamemode' }, { _id: 1 }).lean();
+    for (const { _id } of enviadas) {
+      if (await PontePedidoGm.exists({ punicaoId: _id, status: { $in: ['entregue', 'incerto'] } })) continue;
+      await PontePedidoGm.updateMany({ punicaoId: _id, status: 'aprovado' }, { $set: { status: 'cancelado' } });
+      const r = await PontePunicao.updateOne({ _id, status: 'executando', executor: 'gamemode' }, { $set: { status: 'aceita', executor: '' }, $inc: { versao: 1 } });
+      devolvidas += r.modifiedCount;
+    }
+  }
+
+  let embedsNovos = 0;
+  const servidor = await PonteServidor.findOne({ guildId, ativo: true }).lean();
+  const pendentes = await PontePunicao.find({ guildId, status: { $in: ['aceita', 'executando'] } }).sort({ criadoEm: 1 }).limit(100).lean();
+  for (const punicao of pendentes) {
+    if (punicao.mensagemGm?.msgId) await atualizarMensagemGm(client, punicao._id).catch(() => {});
+    else if (punicao.status === 'aceita' && EXECUTORES_GM.includes(para) && client) {
+      if (await postarPunicaoGm(client, punicao, servidor).catch(() => null)) embedsNovos++;
+    }
+  }
+  return { devolvidas, embedsNovos };
 }
 
 // Nome no jogo de cada conta: o último que a gamemode confirmou ao aplicar ou, sem isso, o do
@@ -224,7 +257,10 @@ async function nicksConhecidos(guildId, contas) {
 // Botão "Enviar ao jogo": cria um pedido por alvo e tira a punição da fila do PC.
 async function enviarAoJogo({ client = null, punicaoId, guildId, staff }) {
   const { servidor, erro } = await servidorGm(guildId);
-  if (erro) return { erro };
+  if (erro) {
+    await atualizarMensagemGm(client, punicaoId).catch(() => {});
+    return { erro };
+  }
   const punicao = await PontePunicao.findOne({ _id: punicaoId, guildId: String(guildId) }).lean();
   if (!punicao) return { erro: 'Punição não encontrada.' };
   if (punicao.status !== 'aceita') return { erro: 'Esta punição não está mais esperando envio.' };
@@ -344,6 +380,7 @@ module.exports = {
   descreverPunicao,
   pedidoDoAlvo,
   nicksConhecidos,
+  aoTrocarExecutor,
   montarMensagemGm,
   postarPunicaoGm,
   atualizarMensagemGm,

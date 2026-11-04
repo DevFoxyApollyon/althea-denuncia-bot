@@ -167,13 +167,17 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     if (pausado === false) {
       ({ modifiedCount: conexoesRetomadas } = await PonteConexaoGm.updateMany({ guildId, status: 'ativa', pausada: true }, { $set: { pausada: false } }));
     }
+    // As punições que ainda não saíram seguem o executor novo (e os embeds se refazem).
+    const troca = executor !== undefined && executor !== (servidor.executor || 'pc')
+      ? await require('../../services/ponteSamp/discordGm').aoTrocarExecutor({ client, guildId, para: executor }).catch(() => null)
+      : null;
     const sub = executor !== undefined ? 'executor' : pausado !== undefined ? (pausado ? 'pausar' : 'retomar') : 'limites';
     await PonteUso.create({
       guildId, acao: 'gm_config',
       detalhes: { sub, via: 'admin', por: req.usuario.id, ...(executor !== undefined ? { de: servidor.executor || 'pc', para: executor } : {}),
         ...(modoTeste !== undefined ? { modoTeste: modoTeste === true } : {}), ...(conexoesRetomadas ? { conexoesRetomadas } : {}) }
     }).catch(() => {});
-    res.json({ ok: true, conexoesRetomadas });
+    res.json({ ok: true, conexoesRetomadas, devolvidas: troca?.devolvidas || 0, embedsNovos: troca?.embedsNovos || 0 });
   }));
 
   router.get('/api/instalacoes', rota(async (req, res) => {
