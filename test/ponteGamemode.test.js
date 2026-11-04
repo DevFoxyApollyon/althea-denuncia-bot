@@ -530,6 +530,20 @@ function clienteDiscord() {
   return { enviadas, editadas, client: { channels: { fetch: async () => canal } } };
 }
 
+test('Editar do Relatório de punições: o modal monta sem erro do Discord (rótulo até 45 letras)', () => {
+  const { modalDoAlvo } = require('../Handlers/ponteGamemode');
+  const punicao = { _id: new mongoose.Types.ObjectId(), versao: 3 };
+  for (const alvo of [
+    { _id: new mongoose.Types.ObjectId(), contaId: '1964972', cmd: 'ban', tempo: 3, avisos: 1, motivo: 'saav' },
+    { _id: new mongoose.Types.ObjectId(), nick: 'Fulano_de_Tal', cmd: 'cadeia', tempo: 120, avisos: 0, motivo: 'x'.repeat(80) }
+  ]) {
+    const json = modalDoAlvo(punicao, alvo).toJSON();
+    const campos = json.components.map(linha => linha.components[0]);
+    assert.ok(campos.every(c => c.label.length <= 45 && String(c.value).length <= c.max_length));
+    assert.deepEqual(campos.map(c => c.custom_id), ['tipo', 'tempo', 'avisos', 'motivo']);
+  }
+});
+
 test('aceite na Cadeia Staff: com executor Gamemode já envia ao jogo; com PC ou Os dois, não', async () => {
   const { enviarAoJogoNoAceite } = require('../Handlers/statusDenuncia/acoesStatus');
   const interacao = (guildId) => ({ client: null, guild: { id: guildId }, user: { id: staffA.id, username: 'joao' }, member: { displayName: staffA.nome } });

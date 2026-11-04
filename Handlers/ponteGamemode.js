@@ -60,15 +60,17 @@ async function handleCancelarGm(interaction) {
 }
 
 function modalDoAlvo(punicao, alvo) {
-  const campo = (id, rotulo, valor, estilo = TextInputStyle.Short, max = 10) => new ActionRowBuilder().addComponents(
-    new TextInputBuilder().setCustomId(id).setLabel(rotulo).setStyle(estilo).setRequired(id !== 'avisos').setMaxLength(max).setValue(String(valor ?? ''))
+  // O Discord recusa rótulo com mais de 45 letras (o modal nem abre): o detalhe vai no exemplo do campo.
+  const campo = (id, rotulo, valor, estilo = TextInputStyle.Short, max = 10, exemplo = '') => new ActionRowBuilder().addComponents(
+    new TextInputBuilder().setCustomId(id).setLabel(rotulo.slice(0, 45)).setStyle(estilo).setRequired(id !== 'avisos').setMaxLength(max)
+      .setValue(String(valor ?? '').slice(0, max)).setPlaceholder(exemplo || rotulo.slice(0, 100))
   );
   return new ModalBuilder()
     .setCustomId(`${gm.MODAL_ALVO}${punicao._id}:${alvo._id}:${punicao.versao}`)
     .setTitle(`Punição de ${String(alvo.contaId || alvo.nick || 'alvo').slice(0, 30)}`)
     .addComponents(
       campo('tipo', 'Tipo (ban ou cadeia)', alvo.cmd, TextInputStyle.Short, 6),
-      campo('tempo', 'Tempo (ban em dias, 0 = permanente; cadeia em min)', alvo.tempo, TextInputStyle.Short, 5),
+      campo('tempo', 'Tempo', alvo.tempo, TextInputStyle.Short, 5, 'Ban: dias (0 = permanente). Cadeia: minutos.'),
       campo('avisos', 'Avisos', alvo.avisos ?? 0, TextInputStyle.Short, 2),
       campo('motivo', 'Motivo ([DC] é colocado sozinho)', alvo.motivo, TextInputStyle.Short, 60)
     );
@@ -153,4 +155,4 @@ async function handleIncertoGm(interaction) {
   }).catch(() => {});
 }
 
-module.exports = { handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm };
+module.exports = { handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, modalDoAlvo };
