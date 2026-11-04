@@ -6,6 +6,7 @@ const PontePunicao = require('../../models/PontePunicao');
 const PontePedidoGm = require('../../models/PontePedidoGm');
 const PonteServidor = require('../../models/PonteServidor');
 const PonteUso = require('../../models/PonteUso');
+const Usuario = require('../../models/Usuario');
 const { motivoComSufixo, validarAlvos, RE_NICK } = require('./validacao');
 const { motivoParaGamemode, nomeParaGamemode } = require('./protocoloGm');
 const { fecharPunicaoSePronta, explicarCodigo } = require('./pedidosGm');
@@ -39,7 +40,9 @@ function descreverPunicao({ tipo, tempo, avisos }) {
 }
 
 // Alvo da punição → campos do pedido (seção 5 da especificação). Devolve { pedido } ou { erro }.
-function pedidoDoAlvo(alvo, servidor) {
+// nickDaConta: nome no jogo já conhecido da conta; vai junto só para a tabela da gamemode ter o
+// nick (quem decide quem é punido continua sendo a conta).
+function pedidoDoAlvo(alvo, servidor, nickDaConta = '') {
   const limites = limitesDe(servidor);
   const quem = alvo.contaId || alvo.nick || '?';
   if (!alvo.regra) return { erro: `${quem}: motivo fora da tabela. Edite o alvo antes de enviar.` };
@@ -47,7 +50,7 @@ function pedidoDoAlvo(alvo, servidor) {
   const tempo = Number(alvo.tempo) || 0;
   const avisos = Number(alvo.avisos) || 0;
   const conta = Number(alvo.contaId) || 0;
-  const nick = conta ? '' : String(alvo.nick || '');
+  const nick = conta ? [alvo.nick, nickDaConta].map(n => String(n || '')).find(n => RE_NICK.test(n)) || '' : String(alvo.nick || '');
   if (!conta && !RE_NICK.test(nick)) return { erro: `${quem}: sem ID de conta nem nick válido.` };
   if (tipo === 'ban') {
     if (tempo === 0 && !limites.permitirPermanente) return { erro: `${quem}: ban permanente não é liberado pelo bot neste servidor.` };
@@ -197,6 +200,27 @@ async function servidorGm(guildId) {
   return { servidor };
 }
 
+// Nome no jogo de cada conta: o último que a gamemode confirmou ao aplicar ou, sem isso, o do
+// nick do Discord de quem tem a conta ("nome_no_jogo 1234"). Só nomes que a gamemode aceita.
+async function nicksConhecidos(guildId, contas) {
+  const lista = [...new Set(contas.map(Number).filter(c => c > 0))];
+  const mapa = new Map();
+  if (!lista.length) return mapa;
+  const confirmados = await PontePedidoGm.find({ guildId: String(guildId), conta: { $in: lista }, 'resultado.nome': { $nin: ['', null] } }, { conta: 1, 'resultado.nome': 1 })
+    .sort({ criadoEm: -1 }).limit(200).lean().catch(() => []);
+  for (const p of confirmados) if (!mapa.has(p.conta) && RE_NICK.test(p.resultado.nome)) mapa.set(p.conta, p.resultado.nome);
+  const faltam = lista.filter(c => !mapa.has(c));
+  if (faltam.length) {
+    const usuarios = await Usuario.find({ guildId: String(guildId), conta: { $in: faltam.map(String) } }, { conta: 1, nickname: 1 })
+      .sort({ updatedAt: -1 }).lean().catch(() => []);
+    for (const u of usuarios) {
+      const nome = String(u.nickname || '').replace(/\s+\d+\s*$/, '').trim();
+      if (!mapa.has(Number(u.conta)) && RE_NICK.test(nome)) mapa.set(Number(u.conta), nome);
+    }
+  }
+  return mapa;
+}
+
 // Botão "Enviar ao jogo": cria um pedido por alvo e tira a punição da fila do PC.
 async function enviarAoJogo({ client = null, punicaoId, guildId, staff }) {
   const { servidor, erro } = await servidorGm(guildId);
@@ -207,7 +231,8 @@ async function enviarAoJogo({ client = null, punicaoId, guildId, staff }) {
   const alvos = alvosAtivos(punicao);
   if (alvos.length === 0) return { erro: 'A punição não tem alvos.' };
 
-  const montados = alvos.map(a => pedidoDoAlvo(a, servidor));
+  const nicks = await nicksConhecidos(punicao.guildId, alvos.map(a => a.contaId));
+  const montados = alvos.map(a => pedidoDoAlvo(a, servidor, nicks.get(Number(a.contaId))));
   const falha = montados.find(m => m.erro);
   if (falha) return { erro: falha.erro };
 
@@ -318,6 +343,7 @@ module.exports = {
   motivoGmValido,
   descreverPunicao,
   pedidoDoAlvo,
+  nicksConhecidos,
   montarMensagemGm,
   postarPunicaoGm,
   atualizarMensagemGm,

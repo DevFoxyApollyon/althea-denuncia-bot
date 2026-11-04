@@ -1356,3 +1356,21 @@ test('resultado da gamemode: console e Relatório de punições explicam o códi
   const texto = montarMensagemGm(punicao, pedidos, {}).embeds[0].toJSON().description;
   assert.match(texto, /ℹ️ \*\*RECUSADO\*\*: a gamemode recusou/);
 });
+
+test('enviar ao jogo: pedido pela conta leva o nick conhecido (confirmado pela gamemode ou do Discord)', async () => {
+  const Usuario = require('../models/Usuario');
+  await guildGm('100000000000000873');
+  // Nome já confirmado pela gamemode numa punição anterior.
+  const antiga = await punicaoAceita('100000000000000873');
+  await m.PontePedidoGm.create({ punicaoId: antiga._id, alvoId: antiga.alvos[0]._id, denunciaId: antiga.denunciaId, guildId: '100000000000000873', conexaoId: new mongoose.Types.ObjectId(),
+    tipo: 'ban', conta: 472860, tempo: 5, avisos: 1, motivo: 'DM [DC]', aprovadoPor: 'x', status: 'recusada', codigo: 'RECUSADO', resultado: { nome: 'Couto', organizacao: '', conta: 472860 } });
+  // Sem confirmação: vem do nick do Discord "nome_no_jogo 1234"; nick com enfeite não serve.
+  await Usuario.create([
+    { guildId: '100000000000000873', userId: '600000000000000001', conta: '1039', nickname: 'foxy_apollyon 1039' },
+    { guildId: '100000000000000873', userId: '600000000000000002', conta: '2471', nickname: '『Deus』Corvo 2471' }
+  ]);
+  const punicao = await punicaoAceita('100000000000000873', ['472860', '1039', '2471'].map(contaId => ({ contaId, cmd: 'ban', tempo: 5, avisos: 1, motivo: 'DM', regra: 'DM' })));
+  assert.equal((await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '100000000000000873', staff: staffA })).ok, true);
+  const pedidos = await m.PontePedidoGm.find({ punicaoId: punicao._id }).sort({ criadoEm: 1 }).lean();
+  assert.deepEqual(pedidos.map(p => [p.conta, p.nick]), [[472860, 'Couto'], [1039, 'foxy_apollyon'], [2471, '']]);
+});
