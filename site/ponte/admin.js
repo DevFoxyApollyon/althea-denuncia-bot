@@ -18,6 +18,7 @@ const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE, EXECUTOR
 const { chaveMestraConfigurada, impressaoDaChave } = require('../../services/ponteSamp/cifra');
 const { trocarChaveMestra } = require('../../services/ponteSamp/chaveMestra');
 const acessos = require('../../services/ponteSamp/acessoAdmin');
+const { lerIps } = require('../../services/ponteSamp/conexoesGm');
 const { criarToken, lerToken } = require('../sessao');
 const { criarLimitador } = require('../rotas/comum');
 
@@ -297,6 +298,24 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     res.json({ ok: !!c });
   }));
 
+  // Trava por IP da credencial: só esses IPs conseguem usar (vazio = qualquer IP). Só o dono.
+  router.post('/api/gamemode/conexoes/:id/ips', soDono, rota(async (req, res) => {
+    if (!idValido(req.params.id)) return res.status(400).json({ erro: 'ID inválido.' });
+    const lidos = lerIps(Array.isArray(req.body?.ips) ? req.body.ips.join(',') : req.body?.ips);
+    if (lidos.erro) return res.status(400).json({ erro: lidos.erro.replace(/`/g, '') });
+    const c = await PonteConexaoGm.findOneAndUpdate(
+      { _id: req.params.id, status: 'ativa' },
+      { $set: { ipsPermitidos: lidos.ips } },
+      { projection: { guildId: 1, ipsPermitidos: 1 } }
+    ).lean();
+    if (!c) return res.status(404).json({ erro: 'Credencial não encontrada ou revogada.' });
+    await PonteUso.create({
+      guildId: c.guildId, acao: 'gm_credencial',
+      detalhes: { sub: 'ips', via: 'admin', conexaoId: req.params.id, por: req.usuario.id, de: c.ipsPermitidos || [], para: lidos.ips }
+    }).catch(() => {});
+    res.json({ ok: true, ips: lidos.ips });
+  }));
+
   router.post('/api/gamemode/conexoes/:id/pausar', rota(async (req, res) => {
     if (!idValido(req.params.id)) return res.status(400).json({ erro: 'ID inválido.' });
     const pausada = req.body?.pausada !== false;
@@ -365,7 +384,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   router.get('/api/gamemode/guia', rota(async (req, res) => {
     const [servidores, conexoes, pedidos] = await Promise.all([
       PonteServidor.find({ ativo: true }, { guildId: 1, executor: 1, gm: 1 }).lean(),
-      PonteConexaoGm.find({ status: 'ativa' }, { guildId: 1, ultimoContatoEm: 1, versaoInclude: 1, modoTesteInformado: 1, ipsPermitidos: 1, pausada: 1 }).lean(),
+      PonteConexaoGm.find({ status: 'ativa' }, { guildId: 1, nome: 1, ultimoContatoEm: 1, ultimoIp: 1, versaoInclude: 1, modoTesteInformado: 1, ipsPermitidos: 1, pausada: 1 }).lean(),
       PontePedidoGm.aggregate([{ $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }])
     ]);
     // Logs da gamemode: os últimos eventos gm_* de cada servidor (busca, resultado, recusa da conexão...).
@@ -399,6 +418,8 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
           aplicadas: porStatus(s.guildId, 'aplicada'),
           simuladas: porStatus(s.guildId, 'simulada'),
           incertos: porStatus(s.guildId, 'incerto'),
+          // Credenciais ativas, para a trava por IP na aba Controle.
+          conexoes: daGuild.map(c => ({ id: String(c._id), nome: c.nome, ipsPermitidos: c.ipsPermitidos || [], ultimoIp: c.ultimoIp || '', pausada: c.pausada === true })),
           eventos: eventosDe(s.guildId)
         };
       })

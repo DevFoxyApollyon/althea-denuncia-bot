@@ -215,6 +215,54 @@ function logsDaGamemode(eventos = []) {
       : el('p', { classe: 'dica-curta' }, 'A gamemode ainda não registrou nada neste servidor.'));
 }
 
+async function editarIps(conexao) {
+  const texto = prompt(`IPs que podem usar a credencial "${conexao.nome}", separados por vírgula.
+Deixe vazio para aceitar qualquer IP.
+
+Se errar o IP, a gamemode para de conectar (403 IP) até você corrigir aqui.`, conexao.ipsPermitidos.join(', '));
+  if (texto === null) return;
+  let mensagem;
+  try {
+    const r = await post(`/gamemode/conexoes/${conexao.id}/ips`, { ips: texto });
+    mensagem = r.ips.length ? `Credencial travada em ${r.ips.join(', ')}.` : 'Trava por IP tirada: qualquer IP com a credencial é aceito.';
+  } catch (e) { mensagem = e.message; }
+  await carregar('controle');
+  aviso(mensagem);
+}
+
+async function travarNoIpAtual(conexao) {
+  if (!confirm(`Travar a credencial "${conexao.nome}" no IP ${conexao.ultimoIp}, de onde a gamemode conectou por último?
+
+Se o IP do servidor do jogo mudar (internet de casa costuma mudar), ela para de conectar até você atualizar aqui.`)) return;
+  let mensagem;
+  try {
+    const r = await post(`/gamemode/conexoes/${conexao.id}/ips`, { ips: [...conexao.ipsPermitidos, conexao.ultimoIp] });
+    mensagem = `Credencial travada em ${r.ips.join(', ')}.`;
+  } catch (e) { mensagem = e.message; }
+  await carregar('controle');
+  aviso(mensagem);
+}
+
+// Trava por IP de cada credencial do servidor.
+function travaPorIp(conexoes = []) {
+  return el('div', { classe: 'controle-ips' },
+    el('span', { classe: 'controle-rotulo' }, 'Trava por IP', el('small', {}, 'Só os IPs da lista conseguem usar a credencial.')),
+    conexoes.length
+      ? el('ul', {}, conexoes.map(c => {
+        const livre = !c.ipsPermitidos.length;
+        const foraDaLista = c.ultimoIp && !c.ipsPermitidos.includes(c.ultimoIp);
+        return el('li', { classe: livre ? 'livre' : '' },
+          el('div', {},
+            el('strong', {}, c.nome),
+            el('span', { classe: livre ? 'atencao' : 'online' }, livre ? '⚠️ qualquer IP' : `🔒 ${c.ipsPermitidos.join(', ')}`),
+            el('small', {}, c.ultimoIp ? `Último contato: ${c.ultimoIp}${foraDaLista && !livre ? ' (fora da lista)' : ''}` : 'Ainda não conectou')),
+          el('div', { classe: 'controle-ips-botoes' },
+            c.ultimoIp && foraDaLista && el('button', { type: 'button', classe: 'pequeno', onclick: () => travarNoIpAtual(c) }, livre ? 'Travar no IP atual' : 'Adicionar IP atual'),
+            el('button', { type: 'button', classe: 'pequeno', onclick: () => editarIps(c) }, 'Editar IPs')));
+      }))
+      : el('p', { classe: 'dica-curta' }, 'Nenhuma credencial ativa. Crie com /ponte gamemode criar.'));
+}
+
 function cartaoDeControle(s) {
   // Só aplica de verdade com executor da gamemode, sem pausa e sem teste nos dois lados.
   const real = s.executor !== 'pc' && !s.pausado && !s.modoTesteBot && s.modoTesteJogo === false;
@@ -242,6 +290,7 @@ function cartaoDeControle(s) {
       el('span', { classe: 'controle-rotulo' }, 'Entregar pedidos', el('small', {}, s.pausado ? 'Pausada: os pedidos ficam na fila' : 'A gamemode recebe os pedidos')),
       interruptor(!s.pausado, 'Entregar pedidos', () => mudarGamemode(s, { pausado: !s.pausado },
         s.pausado ? null : 'Pausar a gamemode? As buscas vêm vazias até retomar.'))),
+    travaPorIp(s.conexoes),
     logsDaGamemode(s.eventos),
     el('footer', {},
       el('span', { classe: 'dica-curta' }, `${s.aplicadas} aplicada(s) · ${s.simuladas} simulada(s)${s.incertos ? ` · ${s.incertos} incerto(s)` : ''}`),

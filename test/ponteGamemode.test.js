@@ -1190,6 +1190,37 @@ test('/admin controle da gamemode: executor, modo teste e pausa pelo painel, aud
   });
 });
 
+test('/admin trava por IP: o dono edita os IPs da credencial e a API passa a recusar outro IP', async () => {
+  const { conexao, segredo } = await guildGm('100000000000000898');
+  const caminho = `/gamemode/conexoes/${conexao._id}/ips`;
+  await comAdmin(async (pedir) => {
+    assert.equal((await pedir(caminho, { usuario: '123', metodo: 'POST', corpo: { ips: '1.2.3.4' } })).status, 404, 'outra pessoa não descobre a rota');
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { ips: '1.2.3.4' } })).status, 403, 'sem CSRF');
+    const { csrf } = (await pedir('/csrf')).corpo;
+
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { ips: '1.2.3.999' }, csrf })).status, 400, 'IP inválido');
+    assert.equal((await pedir('/gamemode/conexoes/xyz/ips', { metodo: 'POST', corpo: { ips: '' }, csrf })).status, 400);
+
+    const { corpo } = await pedir(caminho, { metodo: 'POST', corpo: { ips: ['203.0.113.7', '2804:d41:bf29:f600::1', '203.0.113.7'] }, csrf });
+    assert.deepEqual(corpo.ips, ['203.0.113.7', '2804:d41:bf29:f600::1']);
+    assert.deepEqual((await m.PonteConexaoGm.findById(conexao._id).lean()).ipsPermitidos, ['203.0.113.7', '2804:d41:bf29:f600::1']);
+    assert.ok(await m.PonteUso.exists({ guildId: '100000000000000898', acao: 'gm_credencial', 'detalhes.sub': 'ips', 'detalhes.via': 'admin' }));
+
+    const guia = (await pedir('/gamemode/guia')).corpo.servidores.find(s => s.guildId === '100000000000000898');
+    assert.deepEqual(guia.conexoes.map(c => c.ipsPermitidos), [['203.0.113.7', '2804:d41:bf29:f600::1']]);
+  });
+  // O teste chama a API de 127.0.0.1: fora da lista, recusa.
+  const r = await chamar(conexao, segredo, '/pedidos');
+  assert.equal(r.status, 403);
+  assert.equal(r.corpo.codigo, 'IP');
+
+  await comAdmin(async (pedir) => {
+    const { csrf } = (await pedir('/csrf')).corpo;
+    assert.deepEqual((await pedir(caminho, { metodo: 'POST', corpo: { ips: '' }, csrf })).corpo.ips, [], 'vazio tira a trava');
+  });
+  assert.equal((await chamar(conexao, segredo, '/pedidos')).status, 200);
+});
+
 // ---------- Chave mestra pelo /admin ----------
 
 test('chave mestra: a linha do .env é trocada ou criada sem mexer no resto', () => {
