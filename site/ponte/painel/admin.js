@@ -537,7 +537,15 @@ function trocarAba(aba) {
   carregar(aba);
 }
 
+// Tema claro ou escuro: o mesmo do site (fica salvo no navegador em "althea-tema").
+function alternarTema() {
+  const claro = document.documentElement.dataset.tema !== 'claro';
+  document.documentElement.dataset.tema = claro ? 'claro' : 'escuro';
+  try { localStorage.setItem('althea-tema', claro ? 'claro' : 'escuro'); } catch { /* sem armazenamento: vale só nesta aba */ }
+}
+
 async function iniciar() {
+  $('#tema').addEventListener('click', alternarTema);
   const selecao = $('#filtro-uso select');
   for (const acao of ACOES) selecao.append(new Option(acao === 'gm' ? 'gm_* (todas da gamemode)' : acao, acao));
   const statusPedido = $('#filtro-pedidos select');
