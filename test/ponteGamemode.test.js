@@ -1343,3 +1343,16 @@ test('/admin apaga PC e código de vez (só o dono) e registra na auditoria', as
     await pedir(`/acessos/${AMIGO}/remover`, { metodo: 'POST', csrf });
   });
 });
+
+test('resultado da gamemode: console e Relatório de punições explicam o código', async () => {
+  const { explicarCodigo, CODIGOS } = require('../services/ponteSamp/pedidosGm');
+  for (const codigo of Object.values(CODIGOS).flat()) assert.notEqual(explicarCodigo(codigo), 'código sem explicação cadastrada.', codigo);
+  assert.match(explicarCodigo('RECUSADO'), /log da gamemode/);
+
+  const { montarMensagemGm } = require('../services/ponteSamp/discordGm');
+  const alvoId = new mongoose.Types.ObjectId();
+  const punicao = { _id: 'p', status: 'aceita', alvos: [{ _id: alvoId, contaId: '1964972', cmd: 'ban', tempo: 3, avisos: 1, motivo: 'saav', regra: 'SAAV' }], msgDiscord: {}, mensagens: {} };
+  const pedidos = [{ alvoId, rodada: 1, status: 'recusada', codigo: 'RECUSADO' }];
+  const texto = montarMensagemGm(punicao, pedidos, {}).embeds[0].toJSON().description;
+  assert.match(texto, /ℹ️ \*\*RECUSADO\*\*: a gamemode recusou/);
+});

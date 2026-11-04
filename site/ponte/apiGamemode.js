@@ -10,7 +10,7 @@ const PonteUso = require('../../models/PonteUso');
 const { ponteLigada } = require('../../services/ponteSamp/gestao');
 const { chaveMestraConfigurada, decifrar } = require('../../services/ponteSamp/cifra');
 const { assinaturaConfere } = require('../../services/ponteSamp/protocoloGm');
-const { entregarPedidos, lerResultado, registrarResultado } = require('../../services/ponteSamp/pedidosGm');
+const { entregarPedidos, lerResultado, registrarResultado, descreverComando, explicarCodigo } = require('../../services/ponteSamp/pedidosGm');
 const { atualizarMensagemGm } = require('../../services/ponteSamp/discordGm');
 const { alertarSeloInvalido, alertarIpBloqueado, alertarDevolucoes } = require('../../services/ponteSamp/alertasGm');
 const PontePedidoGm = require('../../models/PontePedidoGm');
@@ -204,6 +204,10 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
         detalhes: { conexaoId: String(conexao._id), pedidoId: String(r.pedido._id), status: dados.status, codigo: dados.codigo }
       });
       atualizarMensagemGm(client, r.pedido.punicaoId).catch(() => {});
+      // No console do bot: o que a gamemode respondeu e o porquê.
+      const quem = [`conta ${dados.conta || r.pedido.conta || '?'}`, dados.nome || r.pedido.nick].filter(Boolean).join(' ');
+      const linha = `[PonteGm] Pedido ${r.pedido._id} (${descreverComando(r.pedido)}, ${quem}): ${dados.status} (${dados.codigo}) - ${explicarCodigo(dados.codigo)}`;
+      if (['aplicada', 'simulada'].includes(dados.status)) log?.info?.(linha); else log?.warn?.(linha);
     }
     if (r.alerta === 'selo') {
       // Selo recusado pela gamemode: ela já pausou do lado dela; aqui a conexão pausa também.

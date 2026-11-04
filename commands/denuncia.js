@@ -419,7 +419,15 @@ async function enviarAnexosNoTopico(thread, anexos, autor) {
                 allowedMentions: { parse: [] }
             });
         } catch (error) {
-            console.warn(`Não foi possível reenviar o anexo ${nome} no tópico:`, error.message);
+            // "Request entity too large": o arquivo passa do limite de envio do servidor,
+            // que depende do nível de impulso (10, 50 ou 100 MB).
+            const grande = error?.code === 40005 || /too large/i.test(String(error?.message || ''));
+            const nivel = Number(thread.guild?.premiumTier) || 0;
+            const limiteMb = nivel >= 3 ? 100 : nivel === 2 ? 50 : 10;
+            const tamanho = anexo.size ? ` (${(anexo.size / 1048576).toFixed(1)} MB)` : '';
+            console.warn(grande
+                ? `Não foi possível reenviar o anexo ${nome}${tamanho} no tópico: passa do limite de ${limiteMb} MB deste servidor (nível de impulso ${nivel}).`
+                : `Não foi possível reenviar o anexo ${nome}${tamanho} no tópico: ${error.message}`);
             await thread.send({
                 content: `⚠️ Não foi possível anexar **${nome}** (provavelmente grande demais para este servidor). ${autor}, envie o arquivo direto aqui no tópico.`,
                 allowedMentions: { users: [autor.id] }

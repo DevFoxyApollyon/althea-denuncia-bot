@@ -24,6 +24,27 @@ const CODIGOS = {
 };
 const DESTINO = { aplicada: 'aplicada', simulada: 'simulada', recusada: 'recusada', devolvida: 'aprovado', erro: 'incerto' };
 
+// O que cada código da gamemode quer dizer, para o log e o Relatório de punições.
+const EXPLICACOES = {
+  OK: 'aplicada no jogo.',
+  DUPLICADO: 'este pedido já tinha sido aplicado antes.',
+  SIMULADA: 'modo teste ligado na gamemode ou no bot: só simulou.',
+  CONTA_INEXISTENTE: 'a conta não existe no jogo. Confira o ID.',
+  CONTA_PROTEGIDA: 'conta de staff ou admin: a gamemode não pune.',
+  JA_BANIDO: 'a conta já está banida.',
+  NAO_BANIDO: 'pediu para desbanir, mas a conta não está banida.',
+  NAO_PRESO: 'pediu para soltar, mas a conta não está presa.',
+  RECUSADO: 'a gamemode recusou sem dar um motivo específico. O motivo aparece no log da gamemode (ex.: aplicação real desligada).',
+  DADOS_INVALIDOS: 'passou dos limites da gamemode (ALTHEA_MAX_*) ou o motivo não é aceito por ela.',
+  EXPIRADO: 'o pedido ficou velho demais antes de a gamemode pegar.',
+  SELO_INVALIDO: 'a assinatura do pedido não conferiu. A credencial foi pausada.',
+  PAUSADO: 'a gamemode está pausada (rcon althea pausar): o pedido volta para a fila.',
+  LIMITE_HORA: 'a gamemode bateu o limite de punições por hora (ALTHEA_MAX_POR_HORA): o pedido volta para a fila.',
+  ERRO_GAMEMODE: 'erro dentro da gamemode ao aplicar. Veja o log dela.',
+  TIMEOUT_GAMEMODE: 'a gamemode não respondeu a tempo. Pode ou não ter aplicado: confira no jogo.'
+};
+const explicarCodigo = (codigo) => EXPLICACOES[codigo] || 'código sem explicação cadastrada.';
+
 const segundos = (ms) => Math.floor(ms / 1000);
 // eslint-disable-next-line no-control-regex
 const texto = (valor, max) => String(valor ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
@@ -205,6 +226,7 @@ module.exports = {
   MAX_DEVOLUCOES,
   STATUS_FINAIS,
   CODIGOS,
+  explicarCodigo,
   lerResultado,
   descreverComando,
   paraProtocolo,

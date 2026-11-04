@@ -38,6 +38,7 @@ async function handleEnviarGm(interaction) {
   if (!punicaoId || !(await exigirResponsavel(interaction))) return;
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
   const r = await gm.enviarAoJogo({ client: interaction.client, punicaoId, guildId: interaction.guild.id, staff: staffDe(interaction) });
+  if (r.erro) log.warn(`"Enviar ao jogo" da punição ${punicaoId} não foi: ${r.erro}`);
   await interaction.editReply({
     content: r.erro
       ? `❌ ${r.erro}`

@@ -8,7 +8,7 @@ const PonteServidor = require('../../models/PonteServidor');
 const PonteUso = require('../../models/PonteUso');
 const { motivoComSufixo, validarAlvos, RE_NICK } = require('./validacao');
 const { motivoParaGamemode, nomeParaGamemode } = require('./protocoloGm');
-const { fecharPunicaoSePronta } = require('./pedidosGm');
+const { fecharPunicaoSePronta, explicarCodigo } = require('./pedidosGm');
 const { LIMITES_GM_PADRAO } = require('./constantes');
 const { getConfig } = require('../../utils/configCache');
 const { botaoSoltoEntrarNoTopico } = require('../../utils/restricaoTopicos');
@@ -117,6 +117,9 @@ function montarMensagemGm(punicao, pedidos, servidor) {
 
   const esperandoEnvio = punicao.status === 'aceita';
   const linhas = alvos.map((a, i) => linhaDoAlvo(a, i, ultimos.get(String(a._id)), servidor, esperandoEnvio));
+  // Por que não foi aplicada: um texto por código de recusa ou erro da última tentativa.
+  const codigosRuins = [...new Set(pedidosDaVez.filter(p => ['recusada', 'incerto', 'erro'].includes(p.status) && p.codigo).map(p => p.codigo))];
+  if (codigosRuins.length) linhas.push('', ...codigosRuins.map(c => `ℹ️ **${c}**: ${explicarCodigo(c)}`));
   const topo = [
     punicao.msgDiscord?.acusado && `**Acusado:** ${String(punicao.msgDiscord.acusado).slice(0, 200)}`,
     punicao.aceitoPor?.nome && `**Aceita por:** ${punicao.aceitoPor.nome}`

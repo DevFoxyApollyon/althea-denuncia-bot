@@ -625,8 +625,13 @@ async function handleLogAceitarButton(interaction, denuncia) {
     // Modo gamemode: aceitar na Cadeia Staff já manda para o jogo, sem precisar do
     // "Enviar ao jogo" do Relatório de punições (que continua lá se o envio falhar).
     const envio = ponte ? await enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;
-    if (envio?.ok) linhaPonte = `\n📤 Enviada à gamemode (${envio.pedidos} pedido(s)).${envio.teste ? ' 🧪 Modo teste: só simula.' : ''}`;
-    else if (envio?.erro) linhaPonte += `\n⚠️ Não foi para a gamemode: ${envio.erro} Use "Enviar ao jogo" no Relatório de punições.`;
+    if (envio?.ok) {
+      linhaPonte = `\n📤 Enviada à gamemode (${envio.pedidos} pedido(s)).${envio.teste ? ' 🧪 Modo teste: só simula.' : ''}`;
+      log.info(`[PonteGm] Denúncia ${denuncia._id} enviada à gamemode no aceite da Cadeia Staff (${envio.pedidos} pedido(s)${envio.teste ? ', modo teste' : ''}).`);
+    } else if (envio?.erro) {
+      linhaPonte += `\n⚠️ Não foi para a gamemode: ${envio.erro} Use "Enviar ao jogo" no Relatório de punições.`;
+      log.warn(`[PonteGm] Denúncia ${denuncia._id} não foi para a gamemode no aceite da Cadeia Staff: ${envio.erro}`);
+    }
     await interaction.editReply({ content: `✅ Cadeia staff aceita${linhaPonte}` }).catch(() => {});
     setTimeout(() => {
       interaction.deleteReply().catch((error) => {
