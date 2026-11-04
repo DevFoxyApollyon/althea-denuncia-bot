@@ -332,6 +332,11 @@ function bloqueioPendentesAtivo(config) {
   return config?.bloquearReivindicacaoComPendentes !== false;
 }
 
+const topicosPrivadosAtivos = (config) => config?.topicosPrivados !== false;
+const textoTopicosPrivados = (config) => (topicosPrivadosAtivos(config)
+  ? '🔒 **Privados** (todos os acusados no banco)'
+  : '🌐 **Sempre públicos**');
+
 const textoAlertaCritico = (config) => (alertaMotivoCriticoAtivo(config)
   ? '🟢 **Marcação do responsável ativada**'
   : '⚪ **Marcação do responsável desativada**');
@@ -398,6 +403,11 @@ function buildPanelEmbed(interaction, config, exemptUsers = []) {
       {
         name: '🚨 Alerta de motivo crítico',
         value: textoAlertaCritico(config),
+        inline: true
+      },
+      {
+        name: '🧵 Tópicos das denúncias',
+        value: textoTopicosPrivados(config),
         inline: true
       }
     )
@@ -470,6 +480,7 @@ async function createPanelSelectMenu(interaction, currentConfig = null) {
     { label: 'Manutenção de denúncias', value: 'toggle_maintenance', description: currentConfig?.manutencaoDenuncia ? 'Desativar manutenção' : 'Ativar manutenção', emoji: '🛠️' },
     { label: 'Bloqueio de pendências anteriores', value: 'toggle_pending_claim_block', description: bloqueioPendentesAtivo(currentConfig) ? 'Desativar neste servidor' : 'Ativar neste servidor', emoji: '⏳' },
     { label: 'Alerta de motivo crítico', value: 'toggle_critical_alert', description: alertaMotivoCriticoAtivo(currentConfig) ? 'Parar de marcar o responsável (zaralho, hack...)' : 'Voltar a marcar o responsável (zaralho, hack...)', emoji: '🚨' },
+    { label: 'Tópicos privados', value: 'toggle_private_threads', description: topicosPrivadosAtivos(currentConfig) ? 'Desligar: toda denúncia abre em tópico público' : 'Ligar: denúncia com acusado no banco abre privada', emoji: '🔒' },
     { label: 'Cargos principais', value: 'edit_roles_1', description: 'Cargos Mobile e PC', emoji: '👥' },
     { label: 'Cargos administrativos', value: 'edit_roles_2', description: 'Administrador e responsável', emoji: '🧑‍💼' }
   ];
@@ -557,6 +568,11 @@ async function abrirPainel(message, { negar, enviar }) {
         value: textoAlertaCritico(config),
         inline: false
       },
+      {
+        name: '🧵 Tópicos das denúncias',
+        value: textoTopicosPrivados(config),
+        inline: false
+      },
     )
     .setTimestamp()
     .setFooter({ text: 'Painel temporário • expira em 5 minutos' });
@@ -624,6 +640,7 @@ async function showConfig(interaction, currentConfig = null) {
       { name: '🛠️ Estado do sistema', value: config.manutencaoDenuncia ? '🔴 **Denúncias em manutenção**' : '🟢 **Denúncias disponíveis**' },
       { name: '⏳ Pendências anteriores', value: bloqueioPendentesAtivo(config) ? '🟢 **Bloqueio ativado neste servidor**' : '⚪ **Bloqueio desativado neste servidor**' },
       { name: '🚨 Alerta de motivo crítico', value: textoAlertaCritico(config) },
+      { name: '🧵 Tópicos das denúncias', value: textoTopicosPrivados(config) },
       { name: '🕒 Auditoria', value: `Última atualização: <t:${Math.floor(new Date(config.lastUpdated || Date.now()).getTime() / 1000)}:R>\nResponsável: **${config.updatedBy || 'Sistema'}**` }
     );
 
@@ -652,6 +669,7 @@ module.exports = {
   atualizarPainelCategoria,
   bloqueioPendentesAtivo,
   alertaMotivoCriticoAtivo,
+  topicosPrivadosAtivos,
   cachePanelExemptUsers,
   getPanelExemptUsers
 };

@@ -618,7 +618,8 @@ async function handleDenunciaSubmit(interaction, platform) {
         let mainMessage;
         let thread;
         try {
-            if (restritoParticipacao) {
+            // Os tópicos privados podem ser desligados no painel (site ou /painel).
+            if (restritoParticipacao && config.topicosPrivados !== false) {
                 // A staff só entra sozinha com a opção ligada no painel do bot.
                 const cargosDaStaff = config.staffNosTopicosPrivados === false ? [] : [config.roles?.administrador, config.roles?.responsavel_admin];
                 thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds], cargosDaStaff);

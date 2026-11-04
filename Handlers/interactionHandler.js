@@ -47,7 +47,8 @@ const {
   getPanelConfig,
   getPanelExemptUsers,
   bloqueioPendentesAtivo,
-  alertaMotivoCriticoAtivo
+  alertaMotivoCriticoAtivo,
+  topicosPrivadosAtivos
 } = require('../commands/painel');
 
 const { handleStatusButtons } = require('../commands/status');
@@ -211,6 +212,24 @@ async function handlePanelMenu(interaction) {
         content: bloquearReivindicacaoComPendentes
           ? '✅ O bloqueio de reivindicação por pendências anteriores foi ativado neste servidor.'
           : '⚪ O bloqueio de reivindicação por pendências anteriores foi desativado neste servidor.',
+        flags: [64]
+      }).catch(() => {});
+      break;
+    }
+    case 'toggle_private_threads': {
+      const topicosPrivados = !topicosPrivadosAtivos(config);
+      await interaction.deferUpdate();
+      const configAtualizada = await Config.findOneAndUpdate(
+        { guildId: interaction.guild.id },
+        { $set: { topicosPrivados, lastUpdated: new Date(), updatedBy: interaction.user.tag } },
+        { new: true, upsert: true }
+      );
+      cachePanelConfig(interaction.guild.id, configAtualizada);
+      await atualizarPainelMensagem(interaction, configAtualizada);
+      await interaction.followUp({
+        content: topicosPrivados
+          ? '🔒 Tópicos privados ligados: denúncia com todos os acusados no banco abre em tópico privado.'
+          : '🌐 Tópicos privados desligados: toda denúncia nova abre em tópico público. As que já estão abertas continuam como estão.',
         flags: [64]
       }).catch(() => {});
       break;

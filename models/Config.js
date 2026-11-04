@@ -36,6 +36,9 @@ const configSchema = new mongoose.Schema({
   esperaEntreReivindicacoes: { type: Boolean, default: undefined },
   // Põe os cargos de administrador e responsável em cada tópico privado novo.
   staffNosTopicosPrivados: { type: Boolean, default: true },
+  // Denúncia com todos os acusados identificados abre em tópico privado. Desligado,
+  // abre em tópico público (só as partes e a staff falam nele, como antes).
+  topicosPrivados: { type: Boolean, default: true },
   // Quantos minutos dura a espera para reivindicar (1 a 60).
   minutosEntreReivindicacoes: { type: Number, default: 1, min: 1, max: 60 },
   roles: {
