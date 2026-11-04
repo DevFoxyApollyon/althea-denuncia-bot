@@ -14,7 +14,7 @@ const PontePedidoGm = require('../../models/PontePedidoGm');
 const gestao = require('../../services/ponteSamp/gestao');
 const motivos = require('../../services/ponteSamp/motivos');
 const { reclassificarFila } = require('../../services/ponteSamp/aceite');
-const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE, EXECUTORES } = require('../../services/ponteSamp/constantes');
+const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE, EXECUTORES, LIMITES_GM_PADRAO } = require('../../services/ponteSamp/constantes');
 const { chaveMestraConfigurada, impressaoDaChave } = require('../../services/ponteSamp/cifra');
 const { trocarChaveMestra } = require('../../services/ponteSamp/chaveMestra');
 const acessos = require('../../services/ponteSamp/acessoAdmin');
@@ -151,8 +151,24 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     const servidor = await PonteServidor.findOne({ guildId, ativo: true }).lean();
     if (!servidor) return res.status(404).json({ erro: 'A ponte não está ativa neste servidor.' });
 
-    const { executor, pausado, modoTeste } = req.body || {};
+    const { executor, pausado, modoTeste, limites } = req.body || {};
     const $set = {};
+    // Limites dos envios à gamemode (os mesmos do /ponte gamemode limites).
+    if (limites !== undefined) {
+      const inteiro = (valor, rotulo, min, max) => {
+        const n = Number(valor);
+        if (!Number.isInteger(n) || n < min || n > max) throw Object.assign(new Error(`${rotulo}: use um número de ${min} a ${max}.`), { status: 400 });
+        return n;
+      };
+      try {
+        $set['gm.maxBanDias'] = inteiro(limites?.maxBanDias, 'Ban máximo', 1, 99999);
+        $set['gm.maxCadeiaMin'] = inteiro(limites?.maxCadeiaMin, 'Cadeia máxima', 1, 99999);
+        $set['gm.maxAvisos'] = inteiro(limites?.maxAvisos, 'Avisos', 0, 10);
+      } catch (erro) {
+        return res.status(400).json({ erro: erro.message });
+      }
+      $set['gm.permitirPermanente'] = limites?.permitirPermanente === true;
+    }
     if (executor !== undefined) {
       if (!EXECUTORES.includes(executor)) return res.status(400).json({ erro: 'Executor inválido.' });
       $set.executor = executor;
@@ -172,10 +188,13 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
       ? await require('../../services/ponteSamp/discordGm').aoTrocarExecutor({ client, guildId, para: executor }).catch(() => null)
       : null;
     const sub = executor !== undefined ? 'executor' : pausado !== undefined ? (pausado ? 'pausar' : 'retomar') : 'limites';
+    const novosLimites = limites !== undefined
+      ? { maxBanDias: $set['gm.maxBanDias'], maxCadeiaMin: $set['gm.maxCadeiaMin'], maxAvisos: $set['gm.maxAvisos'], permitirPermanente: $set['gm.permitirPermanente'] }
+      : null;
     await PonteUso.create({
       guildId, acao: 'gm_config',
       detalhes: { sub, via: 'admin', por: req.usuario.id, ...(executor !== undefined ? { de: servidor.executor || 'pc', para: executor } : {}),
-        ...(modoTeste !== undefined ? { modoTeste: modoTeste === true } : {}), ...(conexoesRetomadas ? { conexoesRetomadas } : {}) }
+        ...(modoTeste !== undefined ? { modoTeste: modoTeste === true } : {}), ...(novosLimites || {}), ...(conexoesRetomadas ? { conexoesRetomadas } : {}) }
     }).catch(() => {});
     res.json({ ok: true, conexoesRetomadas, devolvidas: troca?.devolvidas || 0, embedsNovos: troca?.embedsNovos || 0 });
   }));
@@ -429,6 +448,12 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
           pausado: s.gm?.pausado === true,
           modoTesteBot: s.gm?.modoTeste !== false,
           permitirPermanente: s.gm?.permitirPermanente !== false,
+          limites: {
+            maxBanDias: s.gm?.maxBanDias ?? LIMITES_GM_PADRAO.maxBanDias,
+            maxCadeiaMin: s.gm?.maxCadeiaMin ?? LIMITES_GM_PADRAO.maxCadeiaMin,
+            maxAvisos: s.gm?.maxAvisos ?? LIMITES_GM_PADRAO.maxAvisos,
+            permitirPermanente: s.gm?.permitirPermanente ?? LIMITES_GM_PADRAO.permitirPermanente
+          },
           credenciais: daGuild.length,
           semIp: daGuild.some(c => !(c.ipsPermitidos || []).length),
           pausadas: daGuild.filter(c => c.pausada).length,

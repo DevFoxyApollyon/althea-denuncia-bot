@@ -30,6 +30,7 @@ const {
   extrairMencoes,
   ATALHO_DO_SITE,
   historicoDoAcusado,
+  historicoNoJogo,
   registrarAcesso,
   STATUS_DECIDIDOS,
   presencaPorTopico,
@@ -283,12 +284,13 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
     };
 
     // Só o painel da staff recebe notas internas, auditoria e histórico do acusado.
-    const [notas, historicoAcusado] = fila
+    const [notas, historicoAcusado, historicoJogo] = fila
       ? await Promise.all([
         NotaInterna.find({ denunciaId: denuncia._id }).sort({ criadaEm: 1 }).lean(),
-        historicoDoAcusado(denuncia)
+        historicoDoAcusado(denuncia),
+        historicoNoJogo(denuncia).catch(() => null)
       ])
-      : [[], null];
+      : [[], null, null];
 
     // Só o responsável vê quem abriu o caso pelo site.
     const acessos = fila && acesso.papeis.responsavel
@@ -331,6 +333,7 @@ function registrarRotasDeDenuncias(router, { client, carregarDenuncia, buscarTop
         notas: notas.map(nota => ({ id: String(nota._id), autorId: nota.autorId, texto: nota.texto, criadaEm: nota.criadaEm })),
         auditoria: acoes.map(acao => ({ acao: acao.action, autorId: acao.moderatorId, data: acao.timestamp })),
         historicoAcusado,
+        historicoJogo,
         ...(acesso.papeis.responsavel ? { acessos: acessos.map(item => ({ usuarioId: item.usuarioId, relacao: item.relacao, em: item.em })) } : {})
       } : {}),
       // A nota só aparece para quem avaliou e para a staff.

@@ -107,6 +107,10 @@ app.get('/api/denuncias/:id', (req, res) => {
     pessoas,
     notas: [{ id: 'n1', autorId: '200', texto: 'Acusado já foi advertido por algo parecido no mês passado.', criadaEm: horas(2) }],
     auditoria: [{ acao: 'reivindicacao', autorId: '200', data: horas(25) }, { acao: 'analise', autorId: '200', data: horas(2.5) }],
+    historicoJogo: { total: 2, itens: [
+      { denunciaId: '2', em: new Date(Date.now() - 2 * 86400000), contaId: '1187', nick: 'Rafael_Monteiro', punicao: 'Ban de 3 dias + 1 aviso', motivo: 'RDM', organizacao: 'U$ BEN$A', cargo: 'Gerente (10)', aplicadaPor: 'gamemode (BRASIL ROLEPLAY 3)', retirada: false },
+      { denunciaId: '3', em: new Date(Date.now() - 9 * 86400000), contaId: '1187', nick: 'Rafael_Monteiro', punicao: 'Cadeia de 120 min', motivo: 'Anti-RP', organizacao: '', cargo: '', aplicadaPor: 'PC da staff (PC do Foxy)', retirada: true }
+    ] },
     historicoAcusado: { total: 3, aceitas: 2, recusadas: 1, casos: [
       { id: denuncias[1].id, acusado: '2471', motivo: 'RDM na praça central', status: 'aceita', dataCriacao: horas(300) },
       { id: denuncias[3].id, acusado: '2471', motivo: 'Uso de hack (aimbot) em tiroteio', status: 'pendente', dataCriacao: horas(5) },

@@ -1456,3 +1456,69 @@ test('/admin renomear credencial: só o dono, nome limpo e auditado', async () =
   assert.equal((await m.PonteConexaoGm.findById(conexao._id).lean()).nome, 'BRP Principal 1');
   assert.ok(await m.PonteUso.exists({ guildId: '100000000000000875', acao: 'gm_credencial', 'detalhes.sub': 'renomear' }));
 });
+
+test('/admin limites da gamemode: o dono edita pelo painel, com validação', async () => {
+  await guildGm('100000000000000876');
+  const caminho = '/servidores/100000000000000876/gamemode';
+  await comAdmin(async (pedir) => {
+    const { csrf } = (await pedir('/csrf')).corpo;
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { limites: { maxBanDias: 0, maxCadeiaMin: 300, maxAvisos: 3 } }, csrf })).status, 400);
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { limites: { maxBanDias: 30, maxCadeiaMin: 300, maxAvisos: 11 } }, csrf })).status, 400);
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { limites: { maxBanDias: 900, maxCadeiaMin: 120, maxAvisos: 2, permitirPermanente: false } }, csrf })).corpo.ok, true);
+    const guia = (await pedir('/gamemode/guia')).corpo.servidores.find(s => s.guildId === '100000000000000876');
+    assert.deepEqual(guia.limites, { maxBanDias: 900, maxCadeiaMin: 120, maxAvisos: 2, permitirPermanente: false });
+  });
+  assert.ok(await m.PonteUso.exists({ guildId: '100000000000000876', acao: 'gm_config', 'detalhes.sub': 'limites', 'detalhes.maxBanDias': 900 }));
+});
+
+test('aviso de gamemode offline: avisa uma vez com o motivo e avisa quando volta', async () => {
+  const { conferirGamemodes, OFFLINE_MS } = require('../jobs/alertaGamemode');
+  const guildId = '100000000000000877';
+  const { conexao } = await guildGm(guildId);
+  await comLogAdmin(guildId);
+  const agora = Date.now();
+  await m.PonteConexaoGm.updateOne({ _id: conexao._id }, { $set: { ultimoContatoEm: new Date(agora - OFFLINE_MS - 60e3), ultimoIp: '151.242.227.140' } });
+  await m.PonteUso.create({ guildId, acao: 'gm_auth_falhou', ip: '151.242.227.140', em: new Date(agora - 30e3), detalhes: { codigo: 'IP', conexaoId: String(conexao._id) } });
+
+  const enviadas = [];
+  const client = { guilds: { cache: new Map() }, channels: { fetch: async () => ({ send: async (msg) => { enviadas.push(msg); return {}; } }) } };
+  const desta = () => enviadas.filter(e => JSON.stringify(e).includes(conexao.nome));
+
+  assert.ok((await conferirGamemodes(client, agora)).offline >= 1);
+  assert.equal(desta().length, 1);
+  const texto = JSON.stringify(desta()[0].embeds[0].toJSON());
+  assert.match(texto, /Gamemode sem conectar/);
+  assert.match(texto, /151\.242\.227\.140 não está na trava por IP/);
+  await conferirGamemodes(client, agora + 60e3);
+  assert.equal(desta().length, 1, 'não repete o aviso');
+
+  await m.PonteConexaoGm.updateOne({ _id: conexao._id }, { $set: { ultimoContatoEm: new Date(agora + 120e3) } });
+  await conferirGamemodes(client, agora + 130e3);
+  assert.equal(desta().length, 2);
+  assert.match(JSON.stringify(desta()[1].embeds[0].toJSON()), /conectada de novo/);
+  assert.equal((await m.PonteConexaoGm.findById(conexao._id).lean()).alertaOfflineEm, null);
+});
+
+test('histórico no jogo: punições aplicadas nas mesmas contas, com nick, organização e cargo', async () => {
+  const { historicoNoJogo } = require('../site/rotas/comum');
+  const guildId = '100000000000000878';
+  const alvoId = new mongoose.Types.ObjectId();
+  const outraDenuncia = new mongoose.Types.ObjectId();
+  await m.PontePunicao.create({
+    denunciaId: outraDenuncia, guildId, origem: 'canal_staff', status: 'aplicada', aplicadaEm: new Date(),
+    aplicadaPor: { nomePc: 'gamemode:BRP 3' },
+    alvos: [{ _id: alvoId, contaId: '1964972', cmd: 'ban', tempo: 3, avisos: 1, motivo: 'saav', regra: 'SAAV' }],
+    resultado: [{ alvoId, ok: true, nome: 'Couto', organizacao: 'U$ BEN$A (Gerente - 10)', pc: 'gamemode:BRP 3' }]
+  });
+  // Aceita, mas ainda não aplicada: não entra.
+  await m.PontePunicao.create({ denunciaId: new mongoose.Types.ObjectId(), guildId, origem: 'canal_staff', status: 'aceita',
+    alvos: [{ contaId: '1964972', cmd: 'ban', tempo: 1, avisos: 0, motivo: 'x' }] });
+
+  const h = await historicoNoJogo({ _id: new mongoose.Types.ObjectId(), guildId, acusado: '1964972+999' });
+  assert.equal(h.total, 1);
+  assert.deepEqual(
+    [h.itens[0].nick, h.itens[0].punicao, h.itens[0].organizacao, h.itens[0].cargo, h.itens[0].aplicadaPor, h.itens[0].denunciaId],
+    ['Couto', 'Ban de 3 dias + 1 aviso', 'U$ BEN$A', 'Gerente (10)', 'gamemode (BRP 3)', String(outraDenuncia)]
+  );
+  assert.equal(await historicoNoJogo({ _id: new mongoose.Types.ObjectId(), guildId, acusado: 'Fulano_Tal' }), null, 'acusado só por nick');
+});

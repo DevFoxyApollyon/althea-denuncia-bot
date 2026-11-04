@@ -103,6 +103,43 @@ async function historicoDoAcusado(denuncia) {
   };
 }
 
+// Punições que o jogo já aplicou nas mesmas contas (pela ponte: PC da staff ou gamemode),
+// com o nome, a organização e o cargo que o jogo informou na hora.
+async function historicoNoJogo(denuncia) {
+  const ids = String(denuncia.acusado || '').split('+').map(id => id.trim()).filter(id => /^\d{1,9}$/.test(id)).slice(0, 6);
+  if (!ids.length) return null;
+  const PontePunicao = require('../../models/PontePunicao');
+  const { punicaoLegivel, temOrganizacao, nomeDaOrganizacao, cargoLegivel } = require('../../services/ponteSamp/avisoOrganizacao');
+
+  const punicoes = await PontePunicao.find({
+    guildId: denuncia.guildId,
+    denunciaId: { $ne: denuncia._id },
+    status: 'aplicada',
+    'alvos.contaId': { $in: ids }
+  }).sort({ aplicadaEm: -1 }).limit(30).select('denunciaId alvos resultado aplicadaEm aplicadaPor').lean().catch(() => []);
+
+  const itens = [];
+  for (const punicao of punicoes) {
+    for (const alvo of (punicao.alvos || []).filter(a => !a.removido && ids.includes(String(a.contaId)))) {
+      const r = (punicao.resultado || []).find(item => String(item.alvoId) === String(alvo._id) && item.ok) || {};
+      const pc = String(r.pc || punicao.aplicadaPor?.nomePc || '');
+      itens.push({
+        denunciaId: String(punicao.denunciaId),
+        em: r.em || punicao.aplicadaEm,
+        contaId: String(alvo.contaId),
+        nick: r.nome || alvo.nick || '',
+        punicao: punicaoLegivel(alvo) || r.comando || '',
+        motivo: alvo.motivo || '',
+        organizacao: temOrganizacao(r.organizacao) ? nomeDaOrganizacao(r.organizacao) : '',
+        cargo: temOrganizacao(r.organizacao) ? cargoLegivel(r.organizacao) : '',
+        aplicadaPor: pc.startsWith('gamemode:') ? `gamemode (${pc.slice(9)})` : pc ? `PC da staff (${pc})` : '',
+        retirada: Boolean(r.retiradaEm)
+      });
+    }
+  }
+  return { total: itens.length, itens: itens.slice(0, 10) };
+}
+
 // Registra a abertura de um caso pelo site, no máximo uma vez a cada 30 minutos
 // por pessoa e caso (a tela recarrega sozinha várias vezes).
 const JANELA_DE_ACESSO_MS = 30 * 60 * 1000;
@@ -263,6 +300,7 @@ module.exports = {
   ATALHO_DO_SITE,
   escaparRegex,
   historicoDoAcusado,
+  historicoNoJogo,
   JANELA_DE_ACESSO_MS,
   ultimosAcessos,
   registrarAcesso,

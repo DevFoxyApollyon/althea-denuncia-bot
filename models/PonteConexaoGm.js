@@ -25,6 +25,8 @@ const ponteConexaoGmSchema = new mongoose.Schema({
   ultimoIp: { type: String, default: '' },
   versaoInclude: { type: String, default: '' },
   modoTesteInformado: { type: Boolean, default: null },
+  // Quando o bot avisou que a gamemode parou de buscar (null: não está offline). Ver jobs/alertaGamemode.js.
+  alertaOfflineEm: { type: Date, default: null },
   revogadoEm: { type: Date, default: null },
   revogadoPor: { type: String, default: '' }
 });

@@ -435,7 +435,7 @@ function blocoEmLote(historico) {
 
 // Blocos que só a staff vê: histórico do acusado, registro de ações e notas internas.
 export function blocosDaStaff() {
-  const { historicoAcusado, auditoria = [], notas = [], pessoas = {}, acessos } = estado.detalhe;
+  const { historicoAcusado, historicoJogo, auditoria = [], notas = [], pessoas = {}, acessos } = estado.detalhe;
   const nomeDe = (id) => pessoas[id]?.nome || 'Staff';
 
   return [
@@ -454,6 +454,23 @@ export function blocosDaStaff() {
             el('button', { type: 'button', onclick: () => ir(`#/d/${caso.id}`) },
               el('span', null, el('strong', null, caso.motivo), el('small', null, formatarData(caso.dataCriacao))),
               selo(caso.status)))))
+        ]),
+
+    // Punições que o jogo já aplicou nessas contas, com o que o jogo informou na hora.
+    historicoJogo && el('section', { class: 'cartao' },
+      el('h2', null, 'Punições no jogo'),
+      historicoJogo.total === 0
+        ? el('p', { class: 'sub' }, 'Nenhuma punição aplicada no jogo a este ID pela ponte.')
+        : [
+          el('p', { class: 'historico-resumo' },
+            el('strong', null, String(historicoJogo.total)), historicoJogo.total === 1 ? ' punição aplicada antes.' : ' punições aplicadas antes.'),
+          el('ul', { class: 'historico-lista historico-jogo' }, historicoJogo.itens.map(item => el('li', null,
+            el('button', { type: 'button', onclick: () => ir(`#/d/${item.denunciaId}`) },
+              el('span', null,
+                el('strong', null, `${item.punicao}${item.retirada ? ' (retirada)' : ''}`),
+                el('small', null, [item.nick || `conta ${item.contaId}`, item.motivo, item.organizacao && `${item.organizacao} · cargo ${item.cargo}`].filter(Boolean).join(' · ')),
+                el('small', null, [formatarData(item.em), item.aplicadaPor].filter(Boolean).join(' · '))))))),
+          historicoJogo.total > historicoJogo.itens.length && el('p', { class: 'sub' }, `e mais ${historicoJogo.total - historicoJogo.itens.length}.`)
         ]),
 
     auditoria.length > 0 && el('section', { class: 'cartao' },

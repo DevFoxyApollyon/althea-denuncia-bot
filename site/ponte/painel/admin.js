@@ -259,6 +259,33 @@ Se o IP do servidor do jogo mudar (internet de casa costuma mudar), ela para de 
   aviso(mensagem);
 }
 
+// Limites dos envios à gamemode (os mesmos do /ponte gamemode limites).
+function limitesDoServidor(s) {
+  const l = s.limites || {};
+  const campo = (nome, rotulo, valor, min, max) => el('label', {}, rotulo,
+    el('input', { type: 'number', name: nome, min: String(min), max: String(max), step: '1', inputmode: 'numeric', value: String(valor ?? ''), required: '' }));
+  const salvar = async (evento) => {
+    evento.preventDefault();
+    const dados = new FormData(evento.currentTarget);
+    await mudarGamemode(s, {
+      limites: {
+        maxBanDias: Number(dados.get('maxBanDias')),
+        maxCadeiaMin: Number(dados.get('maxCadeiaMin')),
+        maxAvisos: Number(dados.get('maxAvisos')),
+        permitirPermanente: dados.get('permitirPermanente') === 'on'
+      }
+    }, null);
+  };
+  return el('div', { classe: 'controle-limites' },
+    el('span', { classe: 'controle-rotulo' }, 'Limites dos envios', el('small', {}, 'A gamemode também tem os limites dela (ALTHEA_MAX_*): vale o menor dos dois.')),
+    el('form', { onsubmit: salvar },
+      campo('maxBanDias', 'Ban máximo (dias)', l.maxBanDias, 1, 99999),
+      campo('maxCadeiaMin', 'Cadeia máxima (min)', l.maxCadeiaMin, 1, 99999),
+      campo('maxAvisos', 'Avisos máximos', l.maxAvisos, 0, 10),
+      el('label', { classe: 'caixa' }, el('input', { type: 'checkbox', name: 'permitirPermanente', ...(l.permitirPermanente ? { checked: '' } : {}) }), 'Ban permanente liberado'),
+      el('button', { type: 'submit', classe: 'pequeno' }, 'Salvar limites')));
+}
+
 // Trava por IP de cada credencial do servidor.
 function travaPorIp(conexoes = []) {
   return el('div', { classe: 'controle-ips' },
@@ -307,6 +334,7 @@ function cartaoDeControle(s) {
       el('span', { classe: 'controle-rotulo' }, 'Entregar pedidos', el('small', {}, s.pausado ? 'Pausada: os pedidos ficam na fila' : 'A gamemode recebe os pedidos')),
       interruptor(!s.pausado, 'Entregar pedidos', () => mudarGamemode(s, { pausado: !s.pausado },
         s.pausado ? null : 'Pausar a gamemode? As buscas vêm vazias até retomar.'))),
+    limitesDoServidor(s),
     travaPorIp(s.conexoes),
     logsDaGamemode(s.eventos),
     el('footer', {},

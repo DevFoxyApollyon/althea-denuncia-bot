@@ -35,6 +35,7 @@ const { iniciarPoller } = require('./jobs/nicknamePoller');
 const { iniciarLimpezaContasDuplicadas } = require('./jobs/Limparcontasduplicadas');
 const { iniciarAvisoReivindicacao } = require('./jobs/avisoReivindicacao');
 const { iniciarBackupDoBanco } = require('./jobs/backupBanco');
+const { iniciarAlertaGamemode } = require('./jobs/alertaGamemode');
 const { iniciarJobGamemode } = require('./services/ponteSamp/incertosGm');
 const { iniciarLimpezaDeEspelhos } = require('./utils/espelhos');
 const { registerMemberEvents } = require('./Handlers/memberEvents');
@@ -143,6 +144,7 @@ client.once('clientReady', async (readyClient) => {
     iniciarAutoFinalizador(client);
     iniciarAvisoReivindicacao(client);
     iniciarBackupDoBanco(); // cópia diária do banco principal no secundário
+    iniciarAlertaGamemode(client); // avisa quando a gamemode para de buscar pedidos
     iniciarJobGamemode(client); // ponte com a gamemode: pedido sem resposta vira incerto e vai para o Log Admin
     servidorDoSite = iniciarSite(client, log);
 
