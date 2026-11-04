@@ -218,6 +218,19 @@ function logsDaGamemode(eventos = []) {
       : el('p', { classe: 'dica-curta' }, 'A gamemode ainda não registrou nada neste servidor.'));
 }
 
+async function renomearConexao(conexao) {
+  const nome = prompt(`Nome novo para a credencial "${conexao.nome}" (até 40 letras).
+É o nome que aparece no relatório: "Aplicada pela gamemode (nome)".`, conexao.nome);
+  if (nome === null || nome.trim() === conexao.nome) return;
+  let mensagem;
+  try {
+    const r = await post(`/gamemode/conexoes/${conexao.id}/nome`, { nome });
+    mensagem = `Credencial renomeada para "${r.nome}".`;
+  } catch (e) { mensagem = e.message; }
+  await carregar('controle');
+  aviso(mensagem);
+}
+
 async function editarIps(conexao) {
   const texto = prompt(`IPs que podem usar a credencial "${conexao.nome}", separados por vírgula.
 Deixe vazio para aceitar qualquer IP.
@@ -261,7 +274,8 @@ function travaPorIp(conexoes = []) {
             el('small', {}, c.ultimoIp ? `Último contato: ${c.ultimoIp}${foraDaLista && !livre ? ' (fora da lista)' : ''}` : 'Ainda não conectou')),
           el('div', { classe: 'controle-ips-botoes' },
             c.ultimoIp && foraDaLista && el('button', { type: 'button', classe: 'pequeno', onclick: () => travarNoIpAtual(c) }, livre ? 'Travar no IP atual' : 'Adicionar IP atual'),
-            el('button', { type: 'button', classe: 'pequeno', onclick: () => editarIps(c) }, 'Editar IPs')));
+            el('button', { type: 'button', classe: 'pequeno', onclick: () => editarIps(c) }, 'Editar IPs'),
+            el('button', { type: 'button', classe: 'pequeno', onclick: () => renomearConexao(c) }, 'Renomear')));
       }))
       : el('p', { classe: 'dica-curta' }, 'Nenhuma credencial ativa. Crie com /ponte gamemode criar.'));
 }

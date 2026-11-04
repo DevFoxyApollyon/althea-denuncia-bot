@@ -303,6 +303,24 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   }));
 
   // Trava por IP da credencial: só esses IPs conseguem usar (vazio = qualquer IP). Só o dono.
+  // Nome da credencial (aparece no relatório: "Aplicada pela gamemode (nome)"). Só o dono.
+  router.post('/api/gamemode/conexoes/:id/nome', soDono, rota(async (req, res) => {
+    if (!idValido(req.params.id)) return res.status(400).json({ erro: 'ID inválido.' });
+    const nome = String(req.body?.nome || '').replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 40);
+    if (!nome) return res.status(400).json({ erro: 'Nome inválido: use letras, números, espaço, _ . ou -.' });
+    const c = await PonteConexaoGm.findOneAndUpdate(
+      { _id: req.params.id, status: 'ativa' },
+      { $set: { nome } },
+      { projection: { guildId: 1, nome: 1 } }
+    ).lean();
+    if (!c) return res.status(404).json({ erro: 'Credencial não encontrada ou revogada.' });
+    await PonteUso.create({
+      guildId: c.guildId, acao: 'gm_credencial',
+      detalhes: { sub: 'renomear', via: 'admin', conexaoId: req.params.id, por: req.usuario.id, de: c.nome, para: nome }
+    }).catch(() => {});
+    res.json({ ok: true, nome });
+  }));
+
   router.post('/api/gamemode/conexoes/:id/ips', soDono, rota(async (req, res) => {
     if (!idValido(req.params.id)) return res.status(400).json({ erro: 'ID inválido.' });
     const lidos = lerIps(Array.isArray(req.body?.ips) ? req.body.ips.join(',') : req.body?.ips);

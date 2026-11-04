@@ -13,6 +13,7 @@ const { fecharPunicaoSePronta, explicarCodigo } = require('./pedidosGm');
 const { LIMITES_GM_PADRAO } = require('./constantes');
 const { getConfig } = require('../../utils/configCache');
 const { botaoSoltoEntrarNoTopico } = require('../../utils/restricaoTopicos');
+const { temOrganizacao, nomeDaOrganizacao, cargoLegivel } = require('./avisoOrganizacao');
 const { Logger } = require('../../utils/logger');
 
 const log = new Logger({ tag: 'PonteGamemode' });
@@ -88,21 +89,36 @@ const ICONES = {
 
 const estadoDoPedido = (p) => `${ICONES[p.status] || p.status}${p.codigo && !['OK', 'SIMULADA'].includes(p.codigo) ? ` (${p.codigo})` : ''}`;
 
-// Esperando envio: mostra o alvo como vai sair (e o último resultado, se já foi tentado).
-// Depois do envio: mostra o pedido que foi para a gamemode e o estado dele.
-function linhaDoAlvo(alvo, indice, pedido, servidor, esperandoEnvio) {
-  const quem = alvo.contaId ? `\`${alvo.contaId}\`` : `\`${alvo.nick || '?'}\``;
+const maiuscula = (texto) => (texto ? texto[0].toUpperCase() + texto.slice(1) : texto);
+
+// Um bloco (campo do embed) por alvo: quem é, a punição, o motivo, o que o servidor do jogo
+// informou (nome, organização, cargo) e o estado. Esperando envio, mostra como vai sair.
+function blocoDoAlvo(alvo, indice, pedido, servidor, esperandoEnvio, nicks) {
   const previa = pedidoDoAlvo(alvo, servidor);
   const dados = esperandoEnvio ? previa.pedido : pedido || previa.pedido;
-  const punicao = dados ? `${descreverPunicao(dados)}: ${dados.motivo}` : `${alvo.cmd} ${alvo.tempo}: ${alvo.motivo || 'sem motivo'}`;
-  const estados = [];
-  if (esperandoEnvio && previa.erro) estados.push(`⚠️ ${previa.erro.replace(/^[^:]+: /, '')}`);
-  if (pedido) estados.push(esperandoEnvio ? `última tentativa: ${estadoDoPedido(pedido)}` : estadoDoPedido(pedido));
-  return `**${indice + 1}.** ${quem} — ${punicao}${estados.length ? ` — ${estados.join(' · ')}` : ''}`.slice(0, 300);
+  const resultado = pedido?.resultado || {};
+  const conta = alvo.contaId || (resultado.conta ? String(resultado.conta) : '');
+  const nick = resultado.nome || pedido?.nick || alvo.nick || nicks?.get(Number(alvo.contaId)) || '';
+  const titulo = `${indice + 1}. ${nick || 'Jogador'}${conta ? ` · conta ${conta}` : ''}`;
+
+  const linhas = [
+    `⚖️ ${dados ? maiuscula(descreverPunicao(dados)) : `${alvo.cmd} ${alvo.tempo}`}`,
+    `📝 ${dados?.motivo || alvo.motivo || 'sem motivo'}`
+  ];
+  if (temOrganizacao(resultado.organizacao)) {
+    linhas.push(`🏢 ${nomeDaOrganizacao(resultado.organizacao)} · 🎖️ ${cargoLegivel(resultado.organizacao)}`);
+  } else if (resultado.nome) {
+    linhas.push('🏢 Sem organização');
+  }
+  if (esperandoEnvio && previa.erro) linhas.push(`⚠️ ${previa.erro.replace(/^[^:]+: /, '')}`);
+  if (pedido) linhas.push(`${esperandoEnvio ? 'Última tentativa: ' : ''}${estadoDoPedido(pedido)}`);
+  else if (esperandoEnvio && !previa.erro) linhas.push('⏳ Ainda não enviado');
+  return { name: titulo.slice(0, 256), value: linhas.join('\n').slice(0, 1024) };
 }
 
 // Embed e botões conforme o estado da punição. Puro: só lê o que recebe.
-function montarMensagemGm(punicao, pedidos, servidor) {
+// nicks: nome no jogo já conhecido de cada conta (para mostrar antes do envio).
+function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
   const ultimos = ultimosPorAlvo(pedidos || []);
   const alvos = alvosAtivos(punicao);
   const pedidosDaVez = alvos.map(a => ultimos.get(String(a._id))).filter(Boolean);
@@ -122,25 +138,36 @@ function montarMensagemGm(punicao, pedidos, servidor) {
   }[punicao.status] || punicao.status;
 
   const esperandoEnvio = punicao.status === 'aceita';
-  const linhas = alvos.map((a, i) => linhaDoAlvo(a, i, ultimos.get(String(a._id)), servidor, esperandoEnvio));
+  const blocos = alvos.map((a, i) => blocoDoAlvo(a, i, ultimos.get(String(a._id)), servidor, esperandoEnvio, nicks));
   // Por que não foi aplicada: um texto por código de recusa ou erro da última tentativa.
   const codigosRuins = [...new Set(pedidosDaVez.filter(p => ['recusada', 'incerto', 'erro'].includes(p.status) && p.codigo).map(p => p.codigo))];
-  if (codigosRuins.length) linhas.push('', ...codigosRuins.map(c => `ℹ️ **${c}**: ${explicarCodigo(c)}`));
+  const falhou = esperandoEnvio && codigosRuins.length > 0;
+
   const topo = [
-    punicao.msgDiscord?.acusado && `**Acusado:** ${String(punicao.msgDiscord.acusado).slice(0, 200)}`,
-    punicao.aceitoPor?.nome && `**Aceita por:** ${punicao.aceitoPor.nome}`
-  ].filter(Boolean);
-  const rodape = [
+    [punicao.msgDiscord?.acusado && `👤 **Acusado:** ${String(punicao.msgDiscord.acusado).slice(0, 200)}`,
+      punicao.aceitoPor?.nome && `✅ **Aceita por:** ${punicao.aceitoPor.nome}`].filter(Boolean).join('  ·  '),
+    '',
     situacao,
     teste && punicao.status !== 'cancelada' && '🧪 Modo teste ligado: a gamemode só simula, nada é aplicado.',
     punicao.msgDiscord?.link && `🔗 [Abrir denúncia](${punicao.msgDiscord.link})`
-  ].filter(Boolean);
+  ].filter(linha => linha !== false && linha !== null && linha !== undefined);
+
+  const titulo = punicao.status === 'aceita' && peloPc ? '🖥️ Punição na fila do PC da staff'
+    : falhou ? '🔁 Punição não aplicada'
+      : { aceita: '🎮 Punição esperando envio ao jogo', executando: '📤 Punição enviada ao jogo', aplicada: '✅ Punição aplicada no jogo', cancelada: '🚫 Punição cancelada' }[punicao.status]
+        || '🎮 Punição para o jogo';
   const embed = new EmbedBuilder()
-    .setColor({ aceita: '#F1C40F', executando: '#3498DB', aplicada: '#2ECC71', cancelada: '#7F8C8D' }[punicao.status] || '#2B2D31')
-    .setTitle('🎮 Punição para o jogo')
-    .setDescription([...topo, ...(topo.length ? [''] : []), ...linhas, '', ...rodape].join('\n').slice(0, 4000))
-    .setFooter({ text: `Punição ${punicao._id}` })
+    .setColor(falhou ? '#E67E22' : { aceita: '#F1C40F', executando: '#3498DB', aplicada: '#2ECC71', cancelada: '#7F8C8D' }[punicao.status] || '#2B2D31')
+    .setTitle(titulo)
+    .setDescription(topo.join('\n').replace(/^\n+/, '').slice(0, 4000))
+    // Até 20 alvos em campos (o Discord aceita 25); o resto fica numa linha só.
+    .addFields(blocos.slice(0, 20).map(b => ({ ...b, inline: blocos.length > 1 })))
+    .setFooter({ text: `Punição ${punicao._id}${enviadoPor && punicao.status !== 'aceita' ? ` · enviada por ${enviadoPor}` : ''}` })
     .setTimestamp();
+  if (blocos.length > 20) embed.addFields({ name: `e mais ${blocos.length - 20} jogador(es)`, value: 'Veja todos pelo Editar.' });
+  if (codigosRuins.length) {
+    embed.addFields({ name: 'ℹ️ Por que não foi aplicada', value: codigosRuins.map(c => `**${c}**: ${explicarCodigo(c)}`).join('\n').slice(0, 1024) });
+  }
 
   const id = String(punicao._id);
   const botoes = [];
@@ -172,7 +199,8 @@ async function postarPunicaoGm(client, punicao, servidor) {
     log.warn(`Guild ${punicao.guildId}: sem canal de Relatório de punições (nem Log Admin) para o embed da gamemode.`);
     return null;
   }
-  const msg = await canal.send({ ...montarMensagemGm(punicao, [], servidor), allowedMentions: { parse: [] } });
+  const nicks = await nicksConhecidos(punicao.guildId, alvosAtivos(punicao).map(a => a.contaId)).catch(() => new Map());
+  const msg = await canal.send({ ...montarMensagemGm(punicao, [], servidor, nicks), allowedMentions: { parse: [] } });
   await PontePunicao.updateOne({ _id: punicao._id }, { $set: { mensagemGm: { canalId: canal.id, msgId: msg.id } } });
   return msg;
 }
@@ -187,9 +215,10 @@ async function atualizarMensagemGm(client, punicaoId) {
     PontePedidoGm.find({ punicaoId }).lean(),
     PonteServidor.findOne({ guildId: punicao.guildId }).lean()
   ]);
+  const nicks = await nicksConhecidos(punicao.guildId, alvosAtivos(punicao).map(a => a.contaId)).catch(() => new Map());
   const canal = await client.channels.fetch(canalId).catch(() => null);
   const msg = canal?.messages ? await canal.messages.fetch(msgId).catch(() => null) : null;
-  await msg?.edit(montarMensagemGm(punicao, pedidos, servidor)).catch(e => log.warn('Falha ao editar o embed da gamemode', e?.message));
+  await msg?.edit(montarMensagemGm(punicao, pedidos, servidor, nicks)).catch(e => log.warn('Falha ao editar o embed da gamemode', e?.message));
 }
 
 const auditar = (acao, punicao, staff, detalhes = null) => PonteUso.create({

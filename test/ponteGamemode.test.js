@@ -512,6 +512,11 @@ test('TIMEOUT_GAMEMODE e lease vencido viram incerto e não voltam sozinhos; res
 
 const discordGm = () => require('../services/ponteSamp/discordGm');
 const staffA = { id: '300000000000000001', nome: 'João Staff' };
+// Tudo o que o embed mostra: título, descrição e os campos de cada alvo.
+const textoDoEmbed = (msg) => {
+  const e = msg.embeds[0].toJSON();
+  return [e.title, e.description, ...(e.fields || []).flatMap(f => [f.name, f.value])].join('\n');
+};
 
 // Punição recém-aceita (como o registrarAceite deixa), sem pedidos.
 async function punicaoAceita(guildId, alvos = [{ contaId: '472860', cmd: 'ban', tempo: 5, avisos: 1, motivo: 'DM + RK', regra: 'DM' }]) {
@@ -610,8 +615,8 @@ test('aceite em guild gamemode posta o embed com os botões no Relatório de pun
   await discordGm().postarPunicaoGm(client, punicao.toObject(), await m.PonteServidor.findOne({ guildId: '860' }).lean());
   assert.equal(enviadas.length, 1);
   const embed = enviadas[0].embeds[0].toJSON();
-  assert.equal(embed.title, '🎮 Punição para o jogo');
-  assert.match(embed.description, /ban 5 dias \+ 1 aviso: DM \+ RK \[DC\]/);
+  assert.equal(embed.title, '🎮 Punição esperando envio ao jogo');
+  assert.match(textoDoEmbed(enviadas[0]), /⚖️ Ban 5 dias \+ 1 aviso\n📝 DM \+ RK \[DC\]/);
   const ids = enviadas[0].components[0].toJSON().components.map(b => b.custom_id);
   assert.deepEqual(ids, [`ponte_gm_enviar:${punicao._id}`, `ponte_gm_editar:${punicao._id}`, `ponte_gm_cancelar:${punicao._id}`]);
   assert.deepEqual((await m.PontePunicao.findById(punicao._id).lean()).mensagemGm, { canalId: '400000000000000001', msgId: '500000000000000001' });
@@ -709,7 +714,7 @@ test('reenvio depois de simulada cria a rodada 2; embed mostra o estado de cada 
 
   const servidor = await m.PonteServidor.findOne({ guildId: '866' }).lean();
   let msg = discordGm().montarMensagemGm(await m.PontePunicao.findById(punicao._id).lean(), await m.PontePedidoGm.find({ punicaoId: punicao._id }).lean(), servidor);
-  assert.match(msg.embeds[0].toJSON().description, /última tentativa: 🧪 simulada/);
+  assert.match(textoDoEmbed(msg), /Última tentativa: 🧪 simulada/);
   assert.equal(msg.components[0].toJSON().components.length, 3, 'pode enviar de novo');
 
   assert.equal((await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '866', staff: staffA })).ok, true);
@@ -719,7 +724,7 @@ test('reenvio depois de simulada cria a rodada 2; embed mostra o estado de cada 
   const [segundo] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
   await chamar(conexao, segredo, `/resultados/${segundo.id}`, { metodo: 'POST', corpo: resultado('aplicada', 'OK') });
   msg = discordGm().montarMensagemGm(await m.PontePunicao.findById(punicao._id).lean(), await m.PontePedidoGm.find({ punicaoId: punicao._id }).lean(), servidor);
-  const texto = msg.embeds[0].toJSON().description;
+  const texto = textoDoEmbed(msg);
   assert.match(texto, /✅ aplicada/);
   assert.match(texto, /Aplicada pela gamemode/);
   assert.deepEqual(msg.components, [], 'aplicada: sem botões');
@@ -769,8 +774,8 @@ test('resultado da gamemode edita o embed da punição', async () => {
     const [p] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
     await chamar(conexao, segredo, `/resultados/${p.id}`, { metodo: 'POST', corpo: resultado('recusada', 'CONTA_PROTEGIDA') });
     // As edições são em segundo plano.
-    for (let i = 0; i < 50 && !editadas.some(e => /CONTA_PROTEGIDA/.test(e.embeds[0].toJSON().description)); i++) await new Promise(r => setTimeout(r, 20));
-    assert.ok(editadas.some(e => /❌ recusada \(CONTA_PROTEGIDA\)/.test(e.embeds[0].toJSON().description)));
+    for (let i = 0; i < 50 && !editadas.some(e => /CONTA_PROTEGIDA/.test(textoDoEmbed(e))); i++) await new Promise(r => setTimeout(r, 20));
+    assert.ok(editadas.some(e => /❌ recusada \(CONTA_PROTEGIDA\)/.test(textoDoEmbed(e))));
   } finally {
     base = baseOriginal;
     servidor.close();
@@ -1384,8 +1389,8 @@ test('resultado da gamemode: console e Relatório de punições explicam o códi
   const alvoId = new mongoose.Types.ObjectId();
   const punicao = { _id: 'p', status: 'aceita', alvos: [{ _id: alvoId, contaId: '1964972', cmd: 'ban', tempo: 3, avisos: 1, motivo: 'saav', regra: 'SAAV' }], msgDiscord: {}, mensagens: {} };
   const pedidos = [{ alvoId, rodada: 1, status: 'recusada', codigo: 'RECUSADO' }];
-  const texto = montarMensagemGm(punicao, pedidos, {}).embeds[0].toJSON().description;
-  assert.match(texto, /ℹ️ \*\*RECUSADO\*\*: a gamemode recusou/);
+  const texto = textoDoEmbed(montarMensagemGm(punicao, pedidos, {}));
+  assert.match(texto, /Por que não foi aplicada\n\*\*RECUSADO\*\*: a gamemode recusou/);
 });
 
 test('enviar ao jogo: pedido pela conta leva o nick conhecido (confirmado pela gamemode ou do Discord)', async () => {
@@ -1437,4 +1442,17 @@ test('trocar o executor: punições que ainda não saíram seguem o executor nov
   const paraGm = await discordGm().aoTrocarExecutor({ client, guildId, para: 'gamemode' });
   assert.equal(paraGm.embedsNovos, 1);
   assert.ok(JSON.stringify(enviadas[0].components).includes('Enviar ao jogo'));
+});
+
+test('/admin renomear credencial: só o dono, nome limpo e auditado', async () => {
+  const { conexao } = await guildGm('100000000000000875');
+  const caminho = `/gamemode/conexoes/${conexao._id}/nome`;
+  await comAdmin(async (pedir) => {
+    assert.equal((await pedir(caminho, { usuario: '123', metodo: 'POST', corpo: { nome: 'x' } })).status, 404);
+    const { csrf } = (await pedir('/csrf')).corpo;
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { nome: '<<>>' }, csrf })).status, 400);
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { nome: 'BRP <Principal> 1' }, csrf })).corpo.nome, 'BRP Principal 1');
+  });
+  assert.equal((await m.PonteConexaoGm.findById(conexao._id).lean()).nome, 'BRP Principal 1');
+  assert.ok(await m.PonteUso.exists({ guildId: '100000000000000875', acao: 'gm_credencial', 'detalhes.sub': 'renomear' }));
 });
