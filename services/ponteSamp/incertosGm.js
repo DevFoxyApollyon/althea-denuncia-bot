@@ -8,7 +8,7 @@ const PonteConexaoGm = require('../../models/PonteConexaoGm');
 const PonteServidor = require('../../models/PonteServidor');
 const PonteUso = require('../../models/PonteUso');
 const { marcarIncertos, registrarAplicada, fecharPunicaoSePronta } = require('./pedidosGm');
-const { atualizarMensagemGm, descreverPunicao, EXECUTORES_GM } = require('./discordGm');
+const { atualizarMensagemGm, canalDoRelatorio, descreverPunicao, EXECUTORES_GM } = require('./discordGm');
 const { nomeParaGamemode } = require('./protocoloGm');
 const { LIMITES_GM_PADRAO } = require('./constantes');
 const { ponteLigada } = require('./gestao');
@@ -30,6 +30,7 @@ function mensagemDoIncerto(pedido, punicao, resolvido = null) {
     .setDescription([
       `Não dá para saber se a gamemode aplicou **${descreverPunicao(pedido)}** em \`${pedido.conta || pedido.nick}\` (${pedido.motivo}).`,
       pedido.codigo ? `Último código: \`${pedido.codigo}\`.` : 'A gamemode buscou o pedido e não respondeu a tempo.',
+      pedido.codigo === 'TIMEOUT_GAMEMODE' ? '-# A gamemode recebeu o pedido, mas não chamou `Althea_Concluir` em 180 s. Se todos dão este erro, o problema está no código da gamemode.' : '',
       'Confira no jogo e escolha abaixo. Nada é reenviado sozinho.',
       punicao?.msgDiscord?.link ? `🔗 [Abrir denúncia](${punicao.msgDiscord.link})` : '',
       resolvido ? `\n${resolvido}` : ''
@@ -43,7 +44,8 @@ function mensagemDoIncerto(pedido, punicao, resolvido = null) {
   return { embeds: [embed], components };
 }
 
-// Avisa no Log Admin cada incerto ainda não avisado (um aviso por pedido).
+// Avisa cada incerto ainda não avisado (um aviso por pedido) no Relatório de
+// punições e no Log Admin. Se os dois forem o mesmo canal, vai uma vez só.
 async function avisarIncertos(client, agora = Date.now()) {
   let avisados = 0;
   for (let i = 0; i < 20; i++) {
@@ -53,16 +55,29 @@ async function avisarIncertos(client, agora = Date.now()) {
     if (!pedido) break;
     try {
       const [config, punicao] = await Promise.all([getConfig(pedido.guildId).catch(() => null), PontePunicao.findById(pedido.punicaoId).lean()]);
-      const canal = config?.channels?.log && client ? await client.channels.fetch(config.channels.log).catch(() => null) : null;
+      const logAdmin = config?.channels?.log && client ? await client.channels.fetch(config.channels.log).catch(() => null) : null;
+      const relatorio = await canalDoRelatorio(client, pedido.guildId);
       atualizarMensagemGm(client, pedido.punicaoId).catch(() => {});
-      if (!canal?.send) continue;
       const cargo = config?.roles?.responsavel_admin;
-      const msg = await canal.send({
+      const enviar = (canal) => canal.send({
         content: cargo ? `<@&${cargo}>` : undefined,
         ...mensagemDoIncerto(pedido, punicao),
         allowedMentions: { roles: cargo ? [cargo] : [] }
       });
-      await PontePedidoGm.updateOne({ _id: pedido._id }, { $set: { mensagemIncerto: { canalId: canal.id, msgId: msg.id } } });
+      const $set = {};
+      if (relatorio?.send) {
+        const msg = await enviar(relatorio).catch(erro => { log.warn(`Aviso do incerto ${pedido._id} não foi para o Relatório de punições: ${erro.message}`); return null; });
+        if (msg) $set.mensagemIncertoRelatorio = { canalId: relatorio.id, msgId: msg.id };
+      }
+      if (logAdmin?.send && logAdmin.id !== relatorio?.id) {
+        const msg = await enviar(logAdmin).catch(erro => { log.warn(`Aviso do incerto ${pedido._id} não foi para o Log Admin: ${erro.message}`); return null; });
+        if (msg) $set.mensagemIncerto = { canalId: logAdmin.id, msgId: msg.id };
+      }
+      if (!Object.keys($set).length) {
+        log.warn(`Incerto ${pedido._id} (guild ${pedido.guildId}) sem canal para avisar: configure o Relatório de punições ou o Log Admin.`);
+        continue;
+      }
+      await PontePedidoGm.updateOne({ _id: pedido._id }, { $set });
       avisados += 1;
     } catch (erro) {
       log.warn(`Falha ao avisar pedido incerto ${pedido._id}: ${erro.message}`);
@@ -80,11 +95,34 @@ async function verificarIncertos(client, agora = Date.now()) {
 }
 
 async function fecharAviso(client, pedido, punicao, texto) {
-  const { canalId, msgId } = pedido.mensagemIncerto || {};
-  if (!client || !canalId || !msgId) return;
-  const canal = await client.channels.fetch(canalId).catch(() => null);
-  const msg = canal?.messages ? await canal.messages.fetch(msgId).catch(() => null) : null;
-  await msg?.edit(mensagemDoIncerto(pedido, punicao, texto)).catch(() => {});
+  if (!client) return;
+  for (const { canalId, msgId } of [pedido.mensagemIncerto, pedido.mensagemIncertoRelatorio]) {
+    if (!canalId || !msgId) continue;
+    const canal = await client.channels.fetch(canalId).catch(() => null);
+    const msg = canal?.messages ? await canal.messages.fetch(msgId).catch(() => null) : null;
+    await msg?.edit(mensagemDoIncerto(pedido, punicao, texto)).catch(() => {});
+  }
+}
+
+// A punição foi aplicada (pela gamemode, pelo botão ou pelo PC): os avisos de
+// incerto dela saem do Relatório de punições e do Log Admin, porque o aviso da
+// aplicação já está no canal.
+async function apagarAvisosDeIncerto(client, punicaoId) {
+  const pedidos = await PontePedidoGm.find(
+    { punicaoId, $or: [{ 'mensagemIncerto.msgId': { $nin: ['', null] } }, { 'mensagemIncertoRelatorio.msgId': { $nin: ['', null] } }] },
+    { mensagemIncerto: 1, mensagemIncertoRelatorio: 1 }
+  ).lean();
+  for (const pedido of pedidos) {
+    await PontePedidoGm.updateOne({ _id: pedido._id }, { $unset: { mensagemIncerto: 1, mensagemIncertoRelatorio: 1 } });
+    if (!client) continue;
+    for (const { canalId, msgId } of [pedido.mensagemIncerto, pedido.mensagemIncertoRelatorio]) {
+      if (!canalId || !msgId) continue;
+      const canal = await client.channels.fetch(canalId).catch(() => null);
+      const msg = canal?.messages ? await canal.messages.fetch(msgId).catch(() => null) : null;
+      await msg?.delete().catch(() => {});
+    }
+  }
+  return pedidos.length;
 }
 
 // Botões do Log Admin. aplicada=true: "Foi aplicada"; false: "Não foi aplicada, reenviar".
@@ -207,6 +245,7 @@ module.exports = {
   BOTAO_INCERTO_OK,
   BOTAO_INCERTO_REENVIAR,
   resolverIncertosDaPunicao,
+  apagarAvisosDeIncerto,
   mensagemDoIncerto,
   avisarIncertos,
   verificarIncertos,

@@ -205,6 +205,16 @@ async function atualizarMensagensDiscord(client, punicao, texto) {
   ]);
 }
 
+// Aplicada: o tópico ganha a linha "Aplicado"; na Cadeia Staff só some o "aguardando no
+// painel" (o Relatório de punições já registra a aplicação).
+async function marcarAplicadaNoDiscord(client, punicao, texto) {
+  const { topicoId, topicoMsgId } = punicao.mensagens || {};
+  await Promise.all([
+    editarMensagem(client, topicoId, topicoMsgId, () => texto),
+    limparAguardando(client, punicao)
+  ]);
+}
+
 // Tirada da fila sem aplicar: só some a linha "aguardando no painel" da Cadeia Staff,
 // sem escrever nada no lugar.
 async function limparAguardando(client, punicao) {
@@ -247,4 +257,4 @@ async function reclassificarFila({ client = null, lista = null, tabela = null } 
   return fila;
 }
 
-module.exports = { registrarAceite, atualizarMensagensDiscord, limparAguardando, montarAlvos, reclassificarFila };
+module.exports = { registrarAceite, atualizarMensagensDiscord, marcarAplicadaNoDiscord, limparAguardando, montarAlvos, reclassificarFila };

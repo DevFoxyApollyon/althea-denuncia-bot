@@ -133,7 +133,8 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   router.get('/api/status', rota(async (req, res) => {
     const servidores = await PonteServidor.find({ ativo: true }, { guildId: 1, executor: 1, gm: 1 }).lean();
     const guilds = servidores.map(s => s.guildId);
-    const [conexoes, instalacoes, punicoes, pedidos, aplicadas] = await Promise.all([
+    const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [conexoes, instalacoes, punicoes, pedidos, aplicadas, respostas] = await Promise.all([
       PonteConexaoGm.find({ guildId: { $in: guilds }, status: 'ativa' }, { guildId: 1, ultimoContatoEm: 1, pausada: 1 }).lean(),
       PonteInstalacao.find({ guildId: { $in: guilds }, status: 'ativa' }, { guildId: 1, ultimoPingEm: 1 }).lean(),
       PontePunicao.aggregate([
@@ -148,6 +149,17 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
         { $match: { guildId: { $in: guilds }, acao: { $in: ['aplicar', 'gm_resultado'] } } },
         { $sort: { em: -1 } },
         { $group: { _id: '$guildId', em: { $first: '$em' }, acao: { $first: '$acao' }, nick: { $first: '$nick' }, contaId: { $first: '$contaId' } } }
+      ]),
+      // Tempo de resposta da gamemode nas últimas 24 h (o timeout conta à parte).
+      PontePedidoGm.aggregate([
+        { $match: { guildId: { $in: guilds }, respondidoEm: { $gte: desde24h } } },
+        { $group: {
+          _id: '$guildId',
+          media: { $avg: { $cond: [{ $and: [{ $ne: ['$codigo', 'TIMEOUT_GAMEMODE'] }, { $ne: ['$segundosResposta', null] }] }, '$segundosResposta', null] } },
+          maximo: { $max: { $cond: [{ $ne: ['$codigo', 'TIMEOUT_GAMEMODE'] }, '$segundosResposta', null] } },
+          respondidos: { $sum: { $cond: [{ $ne: ['$codigo', 'TIMEOUT_GAMEMODE'] }, 1, 0] } },
+          timeouts: { $sum: { $cond: [{ $eq: ['$codigo', 'TIMEOUT_GAMEMODE'] }, 1, 0] } }
+        } }
       ])
     ]);
     const agora = Date.now();
@@ -159,6 +171,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
         const contato = gms.map(c => c.ultimoContatoEm).filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
         const pcs = instalacoes.filter(i => i.guildId === s.guildId);
         const ultima = aplicadas.find(a => a._id === s.guildId);
+        const resposta = respostas.find(r => r._id === s.guildId);
         return {
           guildId: s.guildId,
           nome: nomeGuild(s.guildId),
@@ -179,10 +192,52 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
             comGamemode: conta(pedidos, s.guildId, 'entregue'),
             incertos: conta(pedidos, s.guildId, 'incerto')
           },
-          ultimaAplicada: ultima ? { em: ultima.em, por: ultima.acao === 'gm_resultado' ? 'gamemode' : 'pc', alvo: ultima.nick || ultima.contaId || '' } : null
+          ultimaAplicada: ultima ? { em: ultima.em, por: ultima.acao === 'gm_resultado' ? 'gamemode' : 'pc', alvo: ultima.nick || ultima.contaId || '' } : null,
+          resposta: resposta ? {
+            media: resposta.media === null ? null : Math.round(resposta.media),
+            maximo: resposta.maximo ?? null,
+            respondidos: resposta.respondidos,
+            timeouts: resposta.timeouts
+          } : null
         };
       })
     });
+  }));
+
+  // Pedidos incertos (a gamemode não respondeu), agrupados por punição, para resolver
+  // pelo painel com os mesmos efeitos dos botões do Discord.
+  router.get('/api/gamemode/incertos', rota(async (req, res) => {
+    const incertos = await PontePedidoGm.find({ status: 'incerto' }).sort({ entregueEm: 1 }).limit(200).lean();
+    const punicoes = await PontePunicao.find({ _id: { $in: [...new Set(incertos.map(p => String(p.punicaoId)))] } }, { msgDiscord: 1, aceitoPor: 1, guildId: 1 }).lean();
+    const porId = new Map(punicoes.map(p => [String(p._id), p]));
+    const grupos = new Map();
+    for (const p of incertos) {
+      const chave = String(p.punicaoId);
+      if (!grupos.has(chave)) {
+        const punicao = porId.get(chave);
+        grupos.set(chave, {
+          punicaoId: chave, guildId: p.guildId, guild: nomeGuild(p.guildId),
+          link: punicao?.msgDiscord?.link || '', acusado: punicao?.msgDiscord?.acusado || '', aceitoPor: punicao?.aceitoPor?.nome || '',
+          alvos: []
+        });
+      }
+      grupos.get(chave).alvos.push({
+        pedidoId: String(p._id), conta: p.conta || 0, nick: p.nick || '', tipo: p.tipo, tempo: p.tempo, avisos: p.avisos,
+        motivo: p.motivo, codigo: p.codigo || '', entregueEm: p.entregueEm, rodada: p.rodada
+      });
+    }
+    res.json([...grupos.values()]);
+  }));
+
+  router.post('/api/gamemode/incertos/:punicaoId', rota(async (req, res) => {
+    if (!idValido(req.params.punicaoId)) return res.status(400).json({ erro: 'ID inválido.' });
+    const punicao = await PontePunicao.findById(req.params.punicaoId, { guildId: 1 }).lean();
+    if (!punicao) return res.status(404).json({ erro: 'Punição não encontrada.' });
+    const aplicada = req.body?.aplicada === true;
+    const staff = { id: req.usuario.id, nome: `${req.usuario.nome || req.usuario.id} (painel)` };
+    const r = await require('../../services/ponteSamp/incertosGm').resolverIncertosDaPunicao({ client, punicaoId: punicao._id, guildId: punicao.guildId, staff, aplicada });
+    if (r.erro) return res.status(409).json({ erro: r.erro });
+    res.json({ ok: true, ...r, mensagem: aplicada ? 'Registrado como aplicado.' : r.destino === 'pc' ? 'A punição voltou para a fila do PC.' : 'Enviada de novo para a gamemode.' });
   }));
 
   // O que aconteceu por último na ponte, em todos os servidores (sem as ações de rotina).

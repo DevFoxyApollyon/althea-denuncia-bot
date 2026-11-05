@@ -229,6 +229,13 @@ async function atualizarMensagemGm(client, punicaoId) {
   const nicks = await nicksConhecidos(punicao.guildId, alvosAtivos(punicao).map(a => a.contaId)).catch(() => new Map());
   const canal = await client.channels.fetch(canalId).catch(() => null);
   const msg = canal?.messages ? await canal.messages.fetch(msgId).catch(() => null) : null;
+  // Aplicada: o aviso "Punição aplicada" (avisoOrganizacao) já está no canal com
+  // todos os dados; este embed sai para não repetir.
+  if (punicao.status === 'aplicada') {
+    if (msg) await msg.delete().catch(e => log.warn('Falha ao apagar o embed da gamemode', e?.message));
+    await PontePunicao.updateOne({ _id: punicao._id }, { $unset: { mensagemGm: 1 } }).catch(() => {});
+    return;
+  }
   await msg?.edit(montarMensagemGm(punicao, pedidos, servidor, nicks)).catch(e => log.warn('Falha ao editar o embed da gamemode', e?.message));
 }
 
@@ -426,6 +433,7 @@ module.exports = {
   montarMensagemGm,
   postarPunicaoGm,
   atualizarMensagemGm,
+  canalDoRelatorio,
   enviarAoJogo,
   cancelarGm,
   editarAlvoGm,

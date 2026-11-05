@@ -463,6 +463,10 @@ function cartaoDeStatus(s) {
         : 'vazia'),
       s.fila.incertos > 0 && linhaStatus('Incertos', `${s.fila.incertos} sem resposta: resolver no Relatório de punições`, 'atencao'),
       s.modoTeste && usaGm && linhaStatus('Modo teste', 'ligado: a gamemode só simula', 'atencao'),
+      usaGm && linhaStatus('Resposta (24 h)', !s.resposta ? 'sem pedidos respondidos'
+        : [s.resposta.media === null ? 'sem resposta a tempo' : `média ${s.resposta.media} s · máx ${s.resposta.maximo} s`,
+          `${s.resposta.respondidos} respondido(s)`, s.resposta.timeouts && `${s.resposta.timeouts} timeout(s)`].filter(Boolean).join(' · '),
+      !s.resposta ? '' : s.resposta.timeouts || (s.resposta.media ?? 0) > 60 ? 'atencao' : 'ok'),
       linhaStatus('Última aplicada', s.ultimaAplicada
         ? `${s.ultimaAplicada.alvo ? `${s.ultimaAplicada.alvo} · ` : ''}${s.ultimaAplicada.por === 'gamemode' ? 'pela gamemode' : 'pelo PC'} · ${relativo(s.ultimaAplicada.em)}`
         : 'nenhuma ainda')),
@@ -491,6 +495,38 @@ function ligarStatusAoVivo() {
   }, 15000);
 }
 
+// ---------- Pedidos incertos (aba Pedidos e credenciais) ----------
+function cartaoDeIncerto(g) {
+  const decidir = async (evento, aplicada) => {
+    const pergunta = aplicada
+      ? 'Registrar como APLICADA? Confirme no jogo antes: a punição fecha e não vai de novo.'
+      : 'Mandar de novo? Confirme no jogo que NÃO foi aplicada, senão o jogador leva duas vezes.';
+    if (!confirm(pergunta)) return;
+    for (const b of evento.currentTarget.parentElement.querySelectorAll('button')) b.disabled = true;
+    try {
+      const r = await post(`/gamemode/incertos/${g.punicaoId}`, { aplicada });
+      aviso(r.mensagem);
+      carregar('gamemode');
+    } catch (e) {
+      aviso(e.message);
+      for (const b of evento.currentTarget.parentElement.querySelectorAll('button')) b.disabled = false;
+    }
+  };
+  return el('article', { classe: 'incerto' },
+    el('header', {},
+      el('strong', {}, g.guild || g.guildId),
+      el('small', {}, [g.acusado && `acusado ${g.acusado}`, g.aceitoPor && `aceita por ${g.aceitoPor}`].filter(Boolean).join(' · '))),
+    el('ul', {}, g.alvos.map(a => el('li', {},
+      el('span', {}, `${a.nick || 'conta'} ${a.conta ? `· conta ${a.conta}` : ''}`),
+      el('span', {}, `${punicaoGm(a)} · ${a.motivo}`),
+      el('small', {}, `${a.codigo || 'sem resposta'} · entregue ${relativo(a.entregueEm)}${a.rodada > 1 ? ` · rodada ${a.rodada}` : ''}`)))),
+    el('footer', {},
+      g.link && el('a', { href: g.link, target: '_blank', rel: 'noopener' }, 'Abrir denúncia'),
+      el('div', { classe: 'botoes' },
+        el('button', { type: 'button', classe: 'primario', onclick: (e) => decidir(e, true) }, '✅ Foi aplicada'),
+        el('button', { type: 'button', onclick: (e) => decidir(e, false) }, '🔁 Tentar novamente'))));
+}
+
 const carregadores = {
   async geral() {
     ligarStatusAoVivo();
@@ -505,7 +541,7 @@ const carregadores = {
       numero('Servidores ativos', String(ativos.length), `de ${servidores.length} cadastrado(s)`),
       numero('PCs online', String(pcsAtivos.filter(i => i.online).length), `de ${pcsAtivos.length} ativo(s)`),
       numero('Gamemodes online', String(gm.filter(s => s.online).length), `de ${gm.filter(s => s.credenciais).length} com credencial`),
-      numero('Pedidos incertos', String(incertos), incertos ? 'resolver no Log Admin' : 'tudo certo', incertos ? 'tom-alerta' : '')
+      numero('Pedidos incertos', String(incertos), incertos ? 'resolver em Pedidos e credenciais' : 'tudo certo', incertos ? 'tom-alerta' : '')
     );
     $('#servidores-total').textContent = servidores.length ? `${servidores.length} servidor(es)` : '';
     $('#lista-servidores').replaceChildren(...(servidores.length
@@ -529,7 +565,12 @@ const carregadores = {
   async gamemode() {
     const filtro = new URLSearchParams();
     for (const [k, v] of new FormData($('#filtro-pedidos'))) if (v) filtro.set(k, v);
-    const [conexoes, pedidos, uso] = await Promise.all([api('/gamemode/conexoes'), api(`/gamemode/pedidos?${filtro}`), api('/uso?acao=gm')]);
+    const [conexoes, pedidos, uso, incertos] = await Promise.all([api('/gamemode/conexoes'), api(`/gamemode/pedidos?${filtro}`), api('/uso?acao=gm'), api('/gamemode/incertos')]);
+
+    $('#gm-incertos-total').textContent = incertos.length ? `${incertos.length} punição(ões)` : '';
+    $('#gm-incertos').replaceChildren(...(incertos.length
+      ? incertos.map(cartaoDeIncerto)
+      : [el('p', { classe: 'vazio' }, 'Nenhum pedido incerto. 👍')]));
 
     const semIp = conexoes.filter(c => c.status === 'ativa' && !c.ipsPermitidos.length);
     $('#gm-sem-ip').hidden = !semIp.length;

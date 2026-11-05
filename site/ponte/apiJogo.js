@@ -16,7 +16,7 @@ const { validarAlvos, previaComandos, templatesEfetivos, classificarMotivo } = r
 const { obterTabela, salvarTabela } = require('../../services/ponteSamp/motivos');
 const { SUFIXO_MOTIVO, CMDS_PUNICAO, VERSAO_MOD_ATUAL } = require('../../services/ponteSamp/constantes');
 const { montarRelatorio } = require('../../services/ponteSamp/relatorio');
-const { atualizarMensagensDiscord, limparAguardando, reclassificarFila } = require('../../services/ponteSamp/aceite');
+const { marcarAplicadaNoDiscord, limparAguardando, reclassificarFila } = require('../../services/ponteSamp/aceite');
 const { avisarAplicadas, avisarNicksNaoEncontrados, avisarJaBanidos, avisarSemResposta } = require('../../services/ponteSamp/avisoOrganizacao');
 
 // Tentativas em que o servidor do jogo não respondeu antes de o automático parar e avisar a staff.
@@ -444,7 +444,7 @@ function criarApiJogo({ client = null, log = null, limites = {} } = {}) {
 
     // Cadeia Staff: marca a mensagem da denúncia como aplicada, com o PC.
     if (punicao.status === 'aplicada') {
-      atualizarMensagensDiscord(client, punicao, `➱ Aplicado (painel: ${instalacao.nome})`).catch(() => {});
+      marcarAplicadaNoDiscord(client, punicao, `➱ Aplicado (painel: ${instalacao.nome})`).catch(() => {});
     }
 
     // Nick que o /vercontanick não achou: a punição fica pausada e o Log Admin é avisado.
@@ -457,6 +457,8 @@ function criarApiJogo({ client = null, log = null, limites = {} } = {}) {
 
     // Registro no Log Admin; membro de organização marca o responsável admin.
     avisarAplicadas(client, punicao, resultado, instalacao.nome).catch(() => {});
+    // Avisos de incerto da gamemode (punição devolvida ao PC) saem do canal.
+    if (resultado.some(r => r.ok)) require('../../services/ponteSamp/incertosGm').apagarAvisosDeIncerto(client, punicao._id).catch(() => {});
 
     // Servidor do jogo sem responder: na 3ª vez para o mesmo jogador, o automático para e o Log Admin é avisado.
     const falhas = new Map();

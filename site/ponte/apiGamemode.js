@@ -168,6 +168,11 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
     });
     // A busca vazia (a cada 10 s) não entra na auditoria, senão a coleção enche.
     if (pedidos.length) {
+      // No console do bot: quem buscou, de onde, com qual include e o quê.
+      const versao = String(req.query.versao || '?').replace(RE_VERSAO, '').slice(0, 20) || '?';
+      log?.info?.(`[PonteGm] Gamemode "${conexao.nome}" (IP ${ip}, include ${versao}, teste ${String(req.query.teste || '') === '1' ? 'ligado' : 'desligado'}) buscou ${pedidos.length} pedido(s): `
+        + pedidos.map(p => `${p.id} (${p.tipo} ${p.tempo}${p.avisos ? ` +${p.avisos}` : ''}, conta ${p.conta || '?'}${p.nick ? ` ${p.nick}` : ''})`).join('; ')
+        + `. Ela tem até 180 s para responder cada um.`);
       auditar(req, 'gm_busca', { detalhes: { conexaoId: String(conexao._id), pedidos: pedidos.map(p => p.id) } });
       // Embed da punição: "📤 entregue" em cada alvo buscado.
       PontePedidoGm.distinct('punicaoId', { _id: { $in: pedidos.map(p => p.id) } })
@@ -193,8 +198,14 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
     if (dados.erro) throw new ErroGm(400, '', dados.erro);
 
     const r = await registrarResultado({ client, conexao, pedidoId: req.params.pedidoId, dados, agora: agora() });
-    if (r.http === 404) throw new ErroGm(404, '', 'Pedido não encontrado nesta conexão.');
-    if (r.http === 409) throw new ErroGm(409, '', 'O pedido já tem outro resultado.');
+    if (r.http === 404) {
+      log?.warn?.(`[PonteGm] Gamemode "${conexao.nome}" mandou resultado de um pedido que não é dela ou não existe: ${req.params.pedidoId} (${dados.status}/${dados.codigo}). Confira se a gamemode repassa o ID do pedido sem cortar.`);
+      throw new ErroGm(404, '', 'Pedido não encontrado nesta conexão.');
+    }
+    if (r.http === 409) {
+      log?.warn?.(`[PonteGm] Gamemode "${conexao.nome}" mandou outro resultado (${dados.status}/${dados.codigo}) para o pedido ${req.params.pedidoId}, que já estava fechado. Ignorado.`);
+      throw new ErroGm(409, '', 'O pedido já tem outro resultado.');
+    }
 
     if (r.novo) {
       await auditar(req, 'gm_resultado', {
@@ -206,8 +217,19 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
       atualizarMensagemGm(client, r.pedido.punicaoId).catch(() => {});
       // No console do bot: o que a gamemode respondeu e o porquê.
       const quem = [`conta ${dados.conta || r.pedido.conta || '?'}`, dados.nome || r.pedido.nick].filter(Boolean).join(' ');
-      const linha = `[PonteGm] Pedido ${r.pedido._id} (${descreverComando(r.pedido)}, ${quem}): ${dados.status} (${dados.codigo}) - ${explicarCodigo(dados.codigo)}`;
+      // Quanto tempo a gamemode levou entre buscar e responder.
+      const segundos = r.pedido.entregueEm ? Math.round((agora() - new Date(r.pedido.entregueEm).getTime()) / 1000) : null;
+      const tempo = segundos === null ? '' : ` em ${segundos} s`;
+      const org = dados.organizacao ? `, organização "${dados.organizacao}"` : '';
+      const linha = `[PonteGm] Pedido ${r.pedido._id} (${descreverComando(r.pedido)}, ${quem}${org}): ${dados.status} (${dados.codigo})${tempo} - ${explicarCodigo(dados.codigo)}`;
       if (['aplicada', 'simulada'].includes(dados.status)) log?.info?.(linha); else log?.warn?.(linha);
+      if (dados.codigo === 'TIMEOUT_GAMEMODE') {
+        log?.warn?.(`[PonteGm] Diagnóstico do pedido ${r.pedido._id}: a gamemode "${conexao.nome}" buscou o pedido`
+          + `${r.pedido.entregueEm ? ` às ${new Date(r.pedido.entregueEm).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : ''}`
+          + `, a função Althea_Aplicar devolveu ALTHEA_AGUARDAR e Althea_Concluir não foi chamado com este ID em 180 s.`
+          + ' Causas comuns: o callback da consulta ao banco não roda (forward/public com nome errado), algum caminho (conta não achada, erro) não chama Althea_Concluir,'
+          + ' ou o ID do pedido é guardado cortado. Veja o log do servidor do jogo: as linhas "[Althea]" mostram cada etapa.');
+      }
     }
     if (r.alerta === 'selo') {
       // Selo recusado pela gamemode: ela já pausou do lado dela; aqui a conexão pausa também.

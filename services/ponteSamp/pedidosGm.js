@@ -6,10 +6,11 @@ const PontePedidoGm = require('../../models/PontePedidoGm');
 const PontePunicao = require('../../models/PontePunicao');
 const PonteConexaoGm = require('../../models/PonteConexaoGm');
 const { selarPedido } = require('./protocoloGm');
-const { atualizarMensagensDiscord } = require('./aceite');
+const { marcarAplicadaNoDiscord } = require('./aceite');
 const { avisarAplicadas } = require('./avisoOrganizacao');
 
-const LEASE_S = 120;
+// Tem que passar do ALTHEA_TIMEOUT_GAMEMODE_S da include (180 s) com folga para o envio do resultado.
+const LEASE_S = 240;
 const MAX_DEVOLUCOES = 5;
 // Sem volta: o pedido já tem resposta (ou foi encerrado pela staff).
 const STATUS_FINAIS = ['aplicada', 'simulada', 'recusada', 'erro', 'cancelado'];
@@ -49,6 +50,19 @@ const segundos = (ms) => Math.floor(ms / 1000);
 // eslint-disable-next-line no-control-regex
 const texto = (valor, max) => String(valor ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 
+// A gamemode manda a organização como "4 GTO [35]": o número entre colchetes é o
+// ID da organização, não o cargo (o cargo vai entre parênteses: "4 GTO [35] (Membro - 3)").
+// Vira "4 GTO · ID 35", para o relatório não ler o ID como cargo. ID 0 (sem
+// organização) some. Colchetes dentro dos parênteses não mudam.
+function organizacaoDaGamemode(valor) {
+  const textoOrg = texto(valor, 60);
+  const parenteses = textoOrg.indexOf('(');
+  const antes = parenteses === -1 ? textoOrg : textoOrg.slice(0, parenteses);
+  const depois = parenteses === -1 ? '' : textoOrg.slice(parenteses);
+  const comId = antes.replace(/\s*\[(\d+)\]\s*/, (_, id) => (id === '0' || /^0+$/.test(id) ? ' ' : ` · ID ${Number(id)} `));
+  return `${comId.trim()}${depois ? ` ${depois}` : ''}`.replace(/\s+/g, ' ').trim().slice(0, 70);
+}
+
 // Corpo do POST /resultados já parseado → { status, codigo, nome, organizacao, conta } ou { erro }.
 function lerResultado(corpo) {
   if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) return { erro: 'Corpo inválido.' };
@@ -60,7 +74,7 @@ function lerResultado(corpo) {
     status,
     codigo,
     nome: texto(corpo.nome, 40),
-    organizacao: texto(corpo.organizacao, 60),
+    organizacao: organizacaoDaGamemode(corpo.organizacao),
     conta: Number.isInteger(conta) && conta > 0 && conta <= 999999999 ? conta : 0
   };
 }
@@ -172,7 +186,8 @@ async function fecharPunicaoSePronta({ client, punicaoId, conexao, agora = Date.
   if (!punicao) return null;
 
   if (punicao.status === 'aplicada') {
-    atualizarMensagensDiscord(client, punicao, `➱ Aplicado (gamemode: ${conexao.nome})`).catch(() => {});
+    require('./incertosGm').apagarAvisosDeIncerto(client, punicaoId).catch(() => {});
+    marcarAplicadaNoDiscord(client, punicao, `➱ Aplicado (gamemode: ${conexao.nome})`).catch(() => {});
     const aplicados = new Set(lista.filter(p => p.status === 'aplicada').map(p => String(p.alvoId)));
     const itens = (punicao.resultado || []).filter(r => r.ok && aplicados.has(String(r.alvoId)) && String(r.pc || '').startsWith('gamemode:'));
     avisarAplicadas(client, punicao, itens, nomePc).catch(() => {});
@@ -201,7 +216,9 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
     status: destino,
     codigo: dados.codigo,
     resultado: { nome: dados.nome, organizacao: dados.organizacao, conta: dados.conta },
-    leaseAte: null
+    leaseAte: null,
+    respondidoEm: new Date(agora),
+    segundosResposta: atual.entregueEm ? Math.max(0, Math.round((agora - new Date(atual.entregueEm).getTime()) / 1000)) : null
   };
   const pedido = await PontePedidoGm.findOneAndUpdate(
     { ...filtro, status: { $in: ['entregue', 'incerto'] } },

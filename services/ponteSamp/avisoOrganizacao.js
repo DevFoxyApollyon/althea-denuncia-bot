@@ -81,8 +81,8 @@ async function discordDaConta(guildId, contaId, informado) {
 
 // Quem aplicou: a gamemode ("gamemode:brp teste") ou um PC da staff.
 const quemAplicou = (nomePc) => (String(nomePc || '').startsWith('gamemode:')
-  ? `Aplicada pela gamemode (${String(nomePc).slice('gamemode:'.length) || 'servidor do jogo'})`
-  : `Aplicada pelo PC da staff (${nomePc || '?'})`);
+  ? `Gamemode · ${String(nomePc).slice('gamemode:'.length) || 'servidor do jogo'}`
+  : `PC da staff · ${nomePc || '?'}`);
 
 const cargoAlto = (cargo) => cargo !== null && cargo >= CARGO_ALTO.min && cargo <= CARGO_ALTO.max;
 
@@ -99,6 +99,10 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
     const cargo = config?.roles?.responsavel_admin;
     const link = punicao.msgDiscord?.link || '';
 
+    // Nick no jogo de quem veio só com a conta: o que a gamemode já confirmou ou o do Discord.
+    const contas = alvos.map(r => ((punicao.alvos || []).find(a => String(a._id) === String(r.alvoId)) || {}).contaId || r.contaId);
+    const nicks = await require('./discordGm').nicksConhecidos(punicao.guildId, contas).catch(() => new Map());
+
     for (const r of alvos) {
       const alvo = (punicao.alvos || []).find(a => String(a._id) === String(r.alvoId)) || {};
       const organizacao = temOrganizacao(r.organizacao);
@@ -114,20 +118,27 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
       const legivel = punicaoLegivel(alvo);
       const aceitaPor = punicao.cadeiaStaffPor?.id ? `<@${punicao.cadeiaStaffPor.id}>`
         : punicao.aceitoPor?.id ? `<@${punicao.aceitoPor.id}>` : punicao.aceitoPor?.nome || 'Não registrado';
+      // Nick: o que o jogo mandou ao aplicar, o do pedido ou o conhecido da conta.
+      const nick = r.nome || alvo.nick || nicks.get(Number(contaId)) || 'Jogador';
+      // O mesmo embed com ou sem organização: quem foi punido em cima e duas
+      // linhas de três campos (o quê, por quê, de onde / quem aceitou, quem aplicou, link).
       const embed = new EmbedBuilder()
-        .setColor(organizacao ? '#C0392B' : '#2ECC71')
-        .setTitle(organizacao ? '🚨 Punição aplicada em membro de organização' : '✅ Punição aplicada no jogo')
-        .setDescription(`**${String(r.nome || alvo.nick || 'Jogador').slice(0, 60)}** · conta \`${contaId || '?'}\``)
+        .setColor('#2B8A3E')
+        .setAuthor({ name: 'Relatório de punições' })
+        .setTitle('Punição aplicada')
+        .setDescription([
+          `**Player:** ${String(nick).slice(0, 60)} (${contaId || '?'})`,
+          `**Discord:** ${await discordDaConta(punicao.guildId, contaId, r.discord)}`
+        ].join('\n'))
         .addFields(
-          { name: '⚖️ Punição', value: legivel || `\`${String(r.comando || '?').slice(0, 120)}\``, inline: true },
-          { name: '🏢 Organização', value: organizacao ? nomeDaOrganizacao(r.organizacao) || 'Não informada' : 'Nenhuma', inline: true },
-          ...(organizacao ? [{ name: '🎖️ Cargo na organização', value: cargoLegivel(r.organizacao), inline: true }] : []),
-          { name: '💬 Discord', value: await discordDaConta(punicao.guildId, contaId, r.discord), inline: true },
-          ...(alvo.motivo ? [{ name: '📝 Motivo', value: String(alvo.motivo).slice(0, 200), inline: true }] : []),
-          { name: alto ? '✅ Aceita na Cadeia Staff por' : '✅ Aceita por', value: aceitaPor, inline: true },
-          { name: '🔗 Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link', inline: true }
+          { name: 'Punição', value: legivel || `\`${String(r.comando || '?').slice(0, 120)}\``, inline: true },
+          { name: 'Motivo', value: String(alvo.motivo || '—').slice(0, 200), inline: true },
+          { name: 'Organização', value: organizacao ? nomeDaOrganizacao(r.organizacao) || 'Não informada' : 'Nenhuma', inline: true },
+          { name: alto ? 'Aceita na Cadeia Staff por' : 'Aceita por', value: aceitaPor, inline: true },
+          { name: 'Aplicada por', value: quemAplicou(nomePc), inline: true },
+          { name: 'Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link', inline: true }
         )
-        .setFooter({ text: `${quemAplicou(nomePc)}${legivel && r.comando ? ` · ${String(r.comando).slice(0, 80)}` : ''}` })
+        .setFooter({ text: `Punição ${String(punicao._id || '').slice(-8) || '—'}${r.comando ? ` · ${String(r.comando).slice(0, 80)}` : ''}` })
         .setTimestamp();
       await canal.send({
         content: mencoes || undefined,

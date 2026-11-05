@@ -80,7 +80,14 @@ function modalDoAlvo(punicao, alvo) {
 async function punicaoParaEditar(interaction, punicaoId) {
   const punicao = await PontePunicao.findOne({ _id: punicaoId, guildId: interaction.guild.id }).lean();
   if (!punicao || punicao.status !== 'aceita') {
-    await interaction.reply(efemero('❌ Esta punição não está mais esperando envio.')).catch(() => {});
+    // Embed velho com botões de antes: diz o que aconteceu e refaz o embed (os botões somem).
+    const situacao = {
+      executando: 'já foi enviada ao jogo e está esperando a resposta',
+      aplicada: 'já foi aplicada',
+      cancelada: 'foi cancelada'
+    }[punicao?.status] || 'não existe mais (passou do prazo de guarda ou foi apagada)';
+    await interaction.reply(efemero(`❌ Esta punição ${situacao}. O embed foi atualizado.`)).catch(() => {});
+    if (punicao) gm.atualizarMensagemGm(interaction.client, punicao._id).catch(() => {});
     return null;
   }
   return punicao;

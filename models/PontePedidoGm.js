@@ -34,6 +34,9 @@ const pontePedidoGmSchema = new mongoose.Schema({
   // Unix (s) do momento da entrega; entra no selo.
   emitidoEm: { type: Number, default: 0 },
   entregueEm: { type: Date, default: null },
+  // Quando a gamemode respondeu e quantos segundos levou desde a entrega.
+  respondidoEm: { type: Date, default: null },
+  segundosResposta: { type: Number, default: null },
   // Entregue sem resposta depois disso vira "incerto".
   leaseAte: { type: Date, default: null },
   entregas: { type: Number, default: 0 },
@@ -46,6 +49,11 @@ const pontePedidoGmSchema = new mongoose.Schema({
   // Aviso do incerto no Log Admin (um por pedido), com os botões de resolver.
   alertaIncertoEm: { type: Date, default: null },
   mensagemIncerto: {
+    canalId: { type: String, default: '' },
+    msgId: { type: String, default: '' }
+  },
+  // O mesmo aviso no Relatório de punições (quando é outro canal que o Log Admin).
+  mensagemIncertoRelatorio: {
     canalId: { type: String, default: '' },
     msgId: { type: String, default: '' }
   },

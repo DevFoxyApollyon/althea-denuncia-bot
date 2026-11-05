@@ -263,7 +263,7 @@ test('rota real aceita as requisições dos vetores, com o relógio no horário 
   }
   const pedido = await m.PontePedidoGm.findById(pedidoId).lean();
   assert.equal(pedido.status, 'aplicada');
-  assert.equal(pedido.resultado.organizacao, 'Policia Militar [6]');
+  assert.equal(pedido.resultado.organizacao, 'Policia Militar · ID 6', 'o número entre colchetes é o ID da organização');
   const fechada = await m.PontePunicao.findById(punicao._id).lean();
   assert.equal(fechada.status, 'aplicada');
   assert.equal(fechada.resultado[0].pc, 'gamemode:GM 800');
@@ -819,7 +819,7 @@ test('job de incerto: lease vencido e TIMEOUT vão uma vez só para o Log Admin,
   const [primeiro] = (await chamar(conexao, segredo, '/pedidos', { query: 'limite=2' })).corpo.pedidos;
   await chamar(conexao, segredo, `/resultados/${primeiro.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
 
-  const depoisDoLease = Date.now() + 121 * 1000;
+  const depoisDoLease = Date.now() + (require('../services/ponteSamp/pedidosGm').LEASE_S + 1) * 1000;
   // O job avisa até 20 por ciclo, e os outros testes deixaram entregues em outras guilds.
   for (let i = 0; i < 10; i++) {
     await incertosGm().verificarIncertos(client, depoisDoLease);
@@ -828,7 +828,7 @@ test('job de incerto: lease vencido e TIMEOUT vão uma vez só para o Log Admin,
   const daGuild = enviadas.filter(e => /Pedido/.test(e.embeds[0].toJSON().footer.text));
   assert.equal(daGuild.length >= 2, true);
   const ids = await m.PontePedidoGm.find({ punicaoId: punicao._id }).lean();
-  assert.ok(ids.every(p => p.status === 'incerto' && p.alertaIncertoEm && p.mensagemIncerto.msgId));
+  assert.ok(ids.every(p => p.status === 'incerto' && p.alertaIncertoEm && (p.mensagemIncerto.msgId || p.mensagemIncertoRelatorio.msgId)), 'sem Relatório de punições, vai uma vez só para o Log Admin');
   const botoes = daGuild[0].components[0].toJSON().components.map(b => b.custom_id.split(':')[0] + ':');
   assert.deepEqual(botoes, ['ponte_gm_incerto_ok:', 'ponte_gm_incerto_reenviar:']);
   assert.equal(daGuild[0].content, '<@&200000000000000003>');
@@ -1581,5 +1581,96 @@ test('/admin status ao vivo: gamemode online, fila, incertos e última aplicada 
     assert.equal(s.fila.incertos, 1);
     assert.equal(s.fila.paraGamemode, 1, 'o segundo alvo espera a gamemode buscar');
     assert.equal((await pedir('/status', { usuario: '123' })).status, 404, 'outra pessoa não vê');
+  });
+});
+
+test('aviso de incerto vai para o Relatório de punições e para o Log Admin, e os dois fecham juntos', async () => {
+  const { conexao, segredo } = await guildGm('894');
+  const Config = require('../models/Config');
+  await Config.create({ guildId: '894', channels: { log: '400000000000000011', relatorioPunicoes: '400000000000000012' }, roles: { responsavel_admin: '200000000000000003' } });
+  const enviadas = [];
+  const editadas = [];
+  const canais = new Map();
+  const canal = (id) => {
+    if (!canais.has(id)) {
+      canais.set(id, {
+        id,
+        send: async (msg) => { enviadas.push({ id, msg }); return { id: `70000000000000${enviadas.length}${id.slice(-2)}` }; },
+        messages: { fetch: async () => ({ edit: async (msg) => editadas.push({ id, msg }) }) }
+      });
+    }
+    return canais.get(id);
+  };
+  const client = { channels: { fetch: async (id) => canal(String(id)) } };
+  const punicao = await punicaoAceita('894', [{ contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }]);
+  await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '894', staff: staffA });
+  const [p] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  await chamar(conexao, segredo, `/resultados/${p.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
+  for (let i = 0; i < 10; i++) {
+    await incertosGm().verificarIncertos(client);
+    if (!(await m.PontePedidoGm.exists({ status: 'incerto', alertaIncertoEm: null }))) break;
+  }
+  const daGuild = enviadas.filter(e => e.msg.embeds?.[0]?.toJSON().footer?.text === `Pedido ${p.id}`);
+  assert.deepEqual(daGuild.map(e => e.id).sort(), ['400000000000000011', '400000000000000012']);
+  assert.match(daGuild[0].msg.embeds[0].toJSON().description, /Althea_Concluir/);
+
+  await incertosGm().resolverIncerto({ client, pedidoId: p.id, guildId: '894', staff: staffA, aplicada: true });
+  const fechadas = editadas.filter(e => /Marcada como aplicada/.test(e.msg.embeds[0].toJSON().description)).map(e => e.id).sort();
+  assert.deepEqual(fechadas, ['400000000000000011', '400000000000000012']);
+});
+
+test('organização da gamemode: o número entre colchetes é o ID da organização, não o cargo', () => {
+  const { lerResultado } = require('../services/ponteSamp/pedidosGm');
+  const { cargoLegivel, nomeDaOrganizacao, temOrganizacao } = require('../services/ponteSamp/avisoOrganizacao');
+  const org = (texto) => lerResultado({ status: 'aplicada', codigo: 'OK', organizacao: texto }).organizacao;
+  assert.equal(org('4 GTO [35]'), '4 GTO · ID 35');
+  assert.equal(cargoLegivel(org('4 GTO [35]')), 'Não informado', 'o 35 não vira cargo');
+  assert.equal(nomeDaOrganizacao(org('4 GTO [35]')), '4 GTO · ID 35');
+  assert.equal(org('Policia Militar [12] (Cabo - 6)'), 'Policia Militar · ID 12 (Cabo - 6)');
+  assert.equal(cargoLegivel(org('Policia Militar [12] (Cabo - 6)')), 'Cabo (6)');
+  assert.equal(org('Org (Cargo:[ lider - 12])'), 'Org (Cargo:[ lider - 12])', 'colchete dentro do parêntese não muda');
+  assert.equal(org('Nenhuma [0]'), 'Nenhuma');
+  assert.equal(temOrganizacao(org('Nenhuma [0]')), false);
+  assert.equal(org(''), '');
+});
+
+test('punição aplicada: o embed do Relatório de punições é apagado (o aviso da aplicação já mostra tudo)', async () => {
+  await guildGm('895');
+  const punicao = await punicaoAceita('895', [{ contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }]);
+  await m.PontePunicao.updateOne({ _id: punicao._id }, { $set: { status: 'aplicada', mensagemGm: { canalId: 'c', msgId: 'm' } } });
+  let apagada = false;
+  let editada = false;
+  const client = { channels: { fetch: async () => ({ messages: { fetch: async () => ({ delete: async () => { apagada = true; }, edit: async () => { editada = true; } }) } }) } };
+  await discordGm().atualizarMensagemGm(client, punicao._id);
+  assert.equal(apagada, true);
+  assert.equal(editada, false);
+  assert.equal((await m.PontePunicao.findById(punicao._id).lean()).mensagemGm?.msgId, undefined);
+});
+
+test('/admin incertos: lista por punição e resolve pelo painel; tempo de resposta no status', async () => {
+  process.env.OWNER_DISCORD_ID = DONO;
+  const { conexao, segredo } = await guildGm('896');
+  const punicao = await punicaoAceita('896', [{ contaId: '7', cmd: 'ban', tempo: 2, avisos: 1, motivo: 'MG', regra: 'MG' }]);
+  await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '896', staff: staffA });
+  const [p] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  await chamar(conexao, segredo, `/resultados/${p.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
+  const gravado = await m.PontePedidoGm.findById(p.id).lean();
+  assert.ok(gravado.respondidoEm, 'grava quando respondeu');
+  assert.equal(typeof gravado.segundosResposta, 'number');
+
+  await comAdmin(async (pedir) => {
+    const lista = (await pedir('/gamemode/incertos')).corpo;
+    const g = lista.find(x => x.punicaoId === String(punicao._id));
+    assert.equal(g.alvos.length, 1);
+    assert.equal(g.alvos[0].codigo, 'TIMEOUT_GAMEMODE');
+
+    const s = (await pedir('/status')).corpo.servidores.find(x => x.guildId === '896');
+    assert.equal(s.resposta.timeouts, 1);
+
+    const { corpo: csrf } = await pedir('/csrf');
+    const r = await pedir(`/gamemode/incertos/${punicao._id}`, { metodo: 'POST', corpo: { aplicada: true }, csrf: csrf.csrf });
+    assert.equal(r.status, 200);
+    assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'aplicada');
+    assert.equal((await pedir(`/gamemode/incertos/${punicao._id}`, { metodo: 'POST', corpo: { aplicada: true }, csrf: csrf.csrf })).status, 409, 'só uma vez');
   });
 });

@@ -89,7 +89,7 @@ const VERSAO_MOD_ATUAL = '1.8.4';
 
 // Versão do include da gamemode (ALTHEA_VERSAO em althea_ponte/althea_ponte.inc).
 // O include fica fora do bot (pasta althea-gamemode); ao lançar versão nova dele, atualize aqui.
-const VERSAO_INCLUDE_GM = '1.0.0';
+const VERSAO_INCLUDE_GM = '1.0.1';
 
 module.exports = {
   TEMPLATES_PADRAO,

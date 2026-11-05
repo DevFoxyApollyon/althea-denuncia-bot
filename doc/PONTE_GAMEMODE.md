@@ -118,8 +118,10 @@ Resposta 200:
 Corpo (JSON, até 2 KB):
 
 ```json
-{"status":"aplicada","codigo":"OK","nome":"Fulano_Tal","organizacao":"Policia Militar [6]","conta":472860}
+{"status":"aplicada","codigo":"OK","nome":"Fulano_Tal","organizacao":"Policia Militar [12] (Cabo - 6)","conta":472860}
 ```
+
+`organizacao` (até 60 letras): nome da organização; o número entre colchetes é o **ID da organização** (opcional) e o cargo vai entre parênteses, com o nome e o número (`(Cabo - 6)`). Sem organização: vazio. O Discord mostra "Policia Militar · ID 12" e o cargo "Cabo (6)"; cargo de 6 a 12 marca o responsável no Relatório de punições.
 
 - O pedido precisa ser **desta conexão** e estar em `entregue` ou `incerto`. Uma resposta atrasada resolve o incerto.
 - Respostas:
@@ -166,7 +168,7 @@ Nenhum campo pode conter `|`, porque a validação do bot e a da gamemode impede
 | `recusada` | `SELO_INVALIDO` | **alerta de segurança**: DM ao dono e canal de alertas; pausa a conexão no Althea também |
 | `devolvida` | `PAUSADO`, `LIMITE_HORA` | **com certeza não aplicado**: volta para `aprovado` sozinho; com mais de 5 devoluções, vira `erro` e alerta |
 | `erro` | `ERRO_GAMEMODE` | não se sabe se aplicou: vira `incerto` (conferência humana) |
-| `erro` | `TIMEOUT_GAMEMODE` | a gamemode não respondeu em 60 s: `incerto` |
+| `erro` | `TIMEOUT_GAMEMODE` | a gamemode não respondeu em 180 s (`ALTHEA_TIMEOUT_GAMEMODE_S`): `incerto` |
 
 **Incerto nunca é reenviado sozinho.** Um job a cada 30 s marca como `incerto` todo `entregue` com `leaseAte` vencido. Em seguida, posta no Log Admin dois botões, que só um responsável pode usar e que ficam auditados:
 - "✅ Foi aplicada";
