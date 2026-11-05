@@ -14,6 +14,9 @@ const { getConfig: getCachedConfig } = require('../utils/configCache');
 const { dmPausada, registrarErroDeDM } = require('../utils/dmSegura');
 const { getBrasiliaDateTime } = require('../utils/dateUtils');
 const { Logger } = require('../utils/logger');
+const { classificarMotivo } = require('../services/ponteSamp/validacao');
+const { obterTabela } = require('../services/ponteSamp/motivos');
+const { punicaoLegivel } = require('../services/ponteSamp/avisoOrganizacao');
 
 const log = new Logger({ tag: 'ProvaStaff' });
 
@@ -40,7 +43,7 @@ function embedDoPainel() {
     .setDescription('> Registre aqui a punição com as provas.\n\n**Só a staff (administrador ou responsável) usa este botão.**')
     .addFields({
       name: '📌 Como funciona',
-      value: '1. Clique em **Upar provas**\n2. Preencha o ID, o motivo e a punição (e anexe vídeos ou imagens)\n3. Um tópico guarda as provas e o responsável aceita ou recusa',
+      value: '1. Clique em **Upar provas**\n2. Preencha o ID e o motivo (e anexe vídeos ou imagens); a punição sai da tabela de motivos\n3. Um tópico guarda as provas e o responsável aceita ou recusa',
       inline: false
     })
     .setFooter({ text: 'Provas da staff · Apenas staff' })
@@ -88,7 +91,6 @@ function modalDoRegistro() {
   const modal = new ModalBuilder().setCustomId(MODAL_REGISTRO).setTitle('📋 Registrar punição').addComponents(
     campo('id', 'ID(s) do(s) acusado(s), separe com +', TextInputStyle.Short, { max: 200, exemplo: 'Ex.: 123456 ou 123+456+789' }),
     campo('motivo', 'Motivo da punição', TextInputStyle.Paragraph, { min: 2, max: 500, exemplo: 'Descreva o motivo de forma clara' }),
-    campo('punicao', 'Punição aplicada', TextInputStyle.Short, { min: 2, max: 100, exemplo: 'Ex.: Ban 3 dias + 1 aviso' }),
     campo('provas', 'Provas (opcional: links ou texto)', TextInputStyle.Paragraph, { max: 1000, obrigatorio: false, exemplo: 'Links das provas, ou deixe em branco e use o tópico' })
   );
   // Upload no modal exige discord.js >= 14.23; em versão antiga o formulário abre sem esse campo.
@@ -121,7 +123,6 @@ async function handleModalRegistro(interaction) {
   const ler = (id) => { try { return String(interaction.fields.getTextInputValue(id) || '').trim(); } catch { return ''; } };
   const contas = [...new Set(ler('id').split('+').map(s => s.trim()).filter(Boolean))];
   const motivo = ler('motivo');
-  const punicao = ler('punicao');
   const provas = ler('provas');
   let arquivos = [];
   try { arquivos = [...(interaction.fields.getUploadedFiles('arquivos')?.values() ?? [])]; } catch { arquivos = []; }
@@ -130,7 +131,13 @@ async function handleModalRegistro(interaction) {
   const invalido = contas.find(c => !/^\d{1,9}$/.test(c));
   if (invalido) return interaction.editReply(`❌ ID inválido: \`${invalido.slice(0, 30)}\`. Use só os números da conta; vários com \`+\` (ex.: \`123+456\`).`);
   if (contas.length > MAX_IDS) return interaction.editReply(`❌ No máximo ${MAX_IDS} IDs por registro.`);
-  if (motivo.length < 2 || punicao.length < 2) return interaction.editReply('❌ Preencha o motivo e a punição.');
+  if (motivo.length < 2) return interaction.editReply('❌ Preencha o motivo.');
+
+  // A punição sai da tabela de motivos (a mesma do aceite da denúncia).
+  const regra = classificarMotivo(motivo, (await obterTabela()).tabela);
+  const punicao = regra.regra
+    ? punicaoLegivel({ cmd: regra.cmd, tempo: regra.tempo, avisos: regra.avisos })
+    : 'Motivo fora da tabela: o responsável confere no aceite';
 
   // Discord de cada conta (quem tem a conta no nick).
   const vinculos = await Usuario.find({ guildId: interaction.guild.id, conta: { $in: contas } }, { conta: 1, userId: 1 }).sort({ updatedAt: -1 }).lean().catch(() => []);

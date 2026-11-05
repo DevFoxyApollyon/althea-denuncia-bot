@@ -2520,6 +2520,9 @@ button.bot-resumo-item:hover { background: var(--elevada); }
 .bot-barra p::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--marca); }
 .bot-barra.ativa { border-color: var(--analise); }
 .bot-barra.ativa p { color: var(--texto); font-weight: 600; }
+.bot-barra.erro { border-color: var(--recusada); }
+.bot-barra.erro p { color: var(--recusada); }
+.bot-barra.erro p::before { background: var(--recusada); }
 .bot-barra.ativa p::before { background: var(--analise); animation: bot-pulsar 1.6s ease-in-out infinite; }
 @keyframes bot-pulsar { 50% { opacity: .35; } }
 

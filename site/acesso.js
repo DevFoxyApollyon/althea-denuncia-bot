@@ -34,7 +34,8 @@ function papeisDoMembro(member, config) {
     administrador,
     fundador,
     // Painel do bot e Configurações do site: o fundador, quando há esse cargo; senão o responsável.
-    podeConfigurar: config.roles?.fundador ? fundador : responsavel,
+    // O dono do bot também, para não ficar trancado fora.
+    podeConfigurar: (config.roles?.fundador ? fundador : responsavel) || require('../services/ponteSamp/gestao').ehDono(member.id || member.user?.id),
     staff: responsavel || administrador,
     podeDenunciarPC: tem(config.roles?.pc),
     podeDenunciarMobile: tem(config.roles?.permitido)

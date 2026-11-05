@@ -489,10 +489,13 @@ export function telaPainelDoBot() {
       cartaoDeBackup(carregarPainelDoBot),
 
       // Barra que acompanha a tela: sempre à mão, sem precisar voltar ao topo.
-      el('div', { class: `bot-barra${mudancas ? ' ativa' : ''}`, role: 'status' },
-        el('p', null, mudancas
-          ? (mudancas === 1 ? '1 mudança não salva' : `${mudancas} mudanças não salvas`)
-          : 'Tudo salvo'),
+      // O erro do salvar aparece aqui também: o aviso do topo fica fora da tela.
+      el('div', { class: `bot-barra${mudancas ? ' ativa' : ''}${estado.aviso?.tipo === 'erro' ? ' erro' : ''}`, role: 'status' },
+        el('p', null, estado.aviso?.tipo === 'erro' && mudancas
+          ? estado.aviso.texto
+          : mudancas
+            ? (mudancas === 1 ? '1 mudança não salva' : `${mudancas} mudanças não salvas`)
+            : 'Tudo salvo'),
         el('div', { class: 'acoes' },
           mudancas > 0 && el('button', {
             type: 'button',

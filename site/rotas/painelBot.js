@@ -32,7 +32,7 @@ const ehId = (valor) => /^\d{15,21}$/.test(valor);
 // Confere o que veio do formulário. "atual" é o que está salvo: um valor que não
 // mudou é sempre aceito, para não travar quem só quer trocar outra coisa.
 // canais/cargos são os IDs do servidor; canaisVisiveis, todos os que o bot enxerga.
-function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, cargosDeQuemSalva }) {
+function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, cargosDeQuemSalva, donoDoBot = false }) {
   const channels = {};
   const roles = {};
   const texto = (valor) => String(valor ?? '').trim();
@@ -59,10 +59,11 @@ function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, ca
 
   // Quem salva precisa continuar entrando nesta tela: com fundador escolhido, precisa
   // ter o cargo de fundador; sem ele, o de responsável.
-  if (roles.fundador && !cargosDeQuemSalva.has(roles.fundador)) {
+  // O dono do bot não perde o acesso (entra por ser o dono).
+  if (roles.fundador && !donoDoBot && !cargosDeQuemSalva.has(roles.fundador)) {
     throw new Error('Você não tem o cargo escolhido como fundador e ficaria sem acesso a esta tela. Pegue o cargo no Discord antes de trocar.');
   }
-  if (!roles.fundador && !cargosDeQuemSalva.has(roles.responsavel_admin)) {
+  if (!roles.fundador && !donoDoBot && !cargosDeQuemSalva.has(roles.responsavel_admin)) {
     throw new Error('Você não tem o cargo escolhido como responsável e ficaria sem acesso a esta tela. Pegue o cargo no Discord antes de trocar.');
   }
 
@@ -241,7 +242,8 @@ async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos 
       canais: new Set(guild.channels.cache.keys()),
       cargos: new Set(guild.roles.cache.keys()),
       canaisVisiveis: new Set(client.channels.cache.keys()),
-      cargosDeQuemSalva: new Set(member.roles.cache.keys())
+      cargosDeQuemSalva: new Set(member.roles.cache.keys()),
+      donoDoBot: require('../../services/ponteSamp/gestao').ehDono(usuarioId)
     });
   } catch (erro) {
     throw new ErroHttp(400, erro.message);
