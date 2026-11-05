@@ -7,7 +7,7 @@ const PontePunicao = require('../../models/PontePunicao');
 const PonteConexaoGm = require('../../models/PonteConexaoGm');
 const PonteServidor = require('../../models/PonteServidor');
 const PonteUso = require('../../models/PonteUso');
-const { marcarIncertos, registrarAplicada, fecharPunicaoSePronta } = require('./pedidosGm');
+const { marcarIncertos, reenviarSozinho, registrarAplicada, fecharPunicaoSePronta } = require('./pedidosGm');
 const { atualizarMensagemGm, canalDoRelatorio, descreverPunicao, EXECUTORES_GM } = require('./discordGm');
 const { nomeParaGamemode } = require('./protocoloGm');
 const { LIMITES_GM_PADRAO } = require('./constantes');
@@ -44,8 +44,8 @@ function mensagemDoIncerto(pedido, punicao, resolvido = null) {
   return { embeds: [embed], components };
 }
 
-// Avisa cada incerto ainda não avisado (um aviso por pedido) no Relatório de
-// punições e no Log Admin. Se os dois forem o mesmo canal, vai uma vez só.
+// Avisa cada incerto ainda não avisado (um aviso por pedido) só no Relatório de
+// punições (sem ele configurado, no Log Admin).
 async function avisarIncertos(client, agora = Date.now()) {
   let avisados = 0;
   for (let i = 0; i < 20; i++) {
@@ -55,7 +55,6 @@ async function avisarIncertos(client, agora = Date.now()) {
     if (!pedido) break;
     try {
       const [config, punicao] = await Promise.all([getConfig(pedido.guildId).catch(() => null), PontePunicao.findById(pedido.punicaoId).lean()]);
-      const logAdmin = config?.channels?.log && client ? await client.channels.fetch(config.channels.log).catch(() => null) : null;
       const relatorio = await canalDoRelatorio(client, pedido.guildId);
       atualizarMensagemGm(client, pedido.punicaoId).catch(() => {});
       const cargo = config?.roles?.responsavel_admin;
@@ -68,10 +67,6 @@ async function avisarIncertos(client, agora = Date.now()) {
       if (relatorio?.send) {
         const msg = await enviar(relatorio).catch(erro => { log.warn(`Aviso do incerto ${pedido._id} não foi para o Relatório de punições: ${erro.message}`); return null; });
         if (msg) $set.mensagemIncertoRelatorio = { canalId: relatorio.id, msgId: msg.id };
-      }
-      if (logAdmin?.send && logAdmin.id !== relatorio?.id) {
-        const msg = await enviar(logAdmin).catch(erro => { log.warn(`Aviso do incerto ${pedido._id} não foi para o Log Admin: ${erro.message}`); return null; });
-        if (msg) $set.mensagemIncerto = { canalId: logAdmin.id, msgId: msg.id };
       }
       if (!Object.keys($set).length) {
         log.warn(`Incerto ${pedido._id} (guild ${pedido.guildId}) sem canal para avisar: configure o Relatório de punições ou o Log Admin.`);
@@ -90,6 +85,14 @@ async function avisarIncertos(client, agora = Date.now()) {
 async function verificarIncertos(client, agora = Date.now()) {
   if (!ponteLigada()) return { marcados: 0, avisados: 0 };
   const marcados = await marcarIncertos(agora);
+  // Prazo vencido sem resposta: a primeira tentativa vai de novo sozinha.
+  for (const pedido of marcados) {
+    const novo = await reenviarSozinho(pedido, agora).catch(() => null);
+    if (novo) {
+      log.warn(`Pedido ${pedido._id} sem resposta da gamemode no prazo: reenviado sozinho (pedido novo ${novo._id}).`);
+      atualizarMensagemGm(client, pedido.punicaoId).catch(() => {});
+    }
+  }
   const avisados = await avisarIncertos(client, agora);
   return { marcados: marcados.length, avisados };
 }

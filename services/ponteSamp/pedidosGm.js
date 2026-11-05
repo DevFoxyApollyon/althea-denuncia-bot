@@ -124,6 +124,49 @@ async function entregarPedidos({ conexao, segredo, limite, agora = Date.now() })
 }
 
 // Entregue sem resposta depois do lease: vira incerto (conferência humana, nunca volta sozinho).
+// A gamemode não respondeu (TIMEOUT ou prazo vencido): manda de novo na hora, uma
+// vez só, para ban e cadeia. O pedido antigo vira "cancelado" e o novo é a rodada
+// seguinte. O ban vai sem "somar": se o primeiro já tinha aplicado, a gamemode
+// responde JA_BANIDO e o bot conta como aplicada. Na cadeia não há essa proteção
+// (escolha do JV: pode prender duas vezes). Se a segunda também não responder, vira
+// incerto e espera alguém conferir no jogo, como antes.
+const TIPOS_COM_REENVIO = ['ban', 'cadeia'];
+
+async function reenviarSozinho(pedido, agora = Date.now()) {
+  if (!pedido || pedido.reenvioAutomatico || !TIPOS_COM_REENVIO.includes(pedido.tipo)) return null;
+  const resolvidoPor = { id: 'althea', nome: 'Althea (reenvio automático)', em: new Date(agora) };
+  const fechado = await PontePedidoGm.findOneAndUpdate(
+    { _id: pedido._id, status: 'incerto' }, { $set: { status: 'cancelado', resolvidoPor } }, { new: true }
+  ).lean();
+  if (!fechado) return null;
+  const ultimo = await PontePedidoGm.findOne({ punicaoId: pedido.punicaoId, alvoId: pedido.alvoId }).sort({ rodada: -1 }).lean();
+  const novo = await PontePedidoGm.create({
+    punicaoId: pedido.punicaoId,
+    alvoId: pedido.alvoId,
+    rodada: (ultimo?.rodada || pedido.rodada) + 1,
+    denunciaId: pedido.denunciaId,
+    guildId: pedido.guildId,
+    tipo: pedido.tipo,
+    conta: pedido.conta,
+    nick: pedido.nick,
+    tempo: pedido.tempo,
+    avisos: pedido.avisos,
+    somar: false,
+    motivo: pedido.motivo,
+    aprovadoPor: pedido.aprovadoPor,
+    teste: pedido.teste,
+    confirmadoPor: pedido.confirmadoPor || [],
+    reenvioAutomatico: true,
+    status: 'aprovado',
+    criadoEm: new Date(agora)
+  });
+  await require('../../models/PonteUso').create({
+    guildId: pedido.guildId, acao: 'gm_incerto_reenviar', punicaoId: pedido.punicaoId,
+    detalhes: { automatico: true, pedidoId: String(pedido._id), novoPedidoId: String(novo._id), codigo: pedido.codigo || 'PRAZO' }
+  }).catch(() => {});
+  return novo;
+}
+
 async function marcarIncertos(agora = Date.now()) {
   const marcados = [];
   for (;;) {
@@ -205,8 +248,11 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   if (!atual) return { http: 404 };
 
   const devolvida = dados.status === 'devolvida';
-  const destino = devolvida && atual.devolucoes + 1 > MAX_DEVOLUCOES ? 'erro' : DESTINO[dados.status];
-  const mesmo = (p) => p.codigo === dados.codigo && (devolvida ? p.status === 'aprovado' || p.status === 'erro' : p.status === DESTINO[dados.status]);
+  // Reenvio automático de ban que volta "já banido": o primeiro envio tinha aplicado.
+  const jaAplicadaAntes = atual.reenvioAutomatico && dados.codigo === 'JA_BANIDO';
+  const destinoNormal = jaAplicadaAntes ? 'aplicada' : DESTINO[dados.status];
+  const destino = devolvida && atual.devolucoes + 1 > MAX_DEVOLUCOES ? 'erro' : destinoNormal;
+  const mesmo = (p) => p.codigo === dados.codigo && (devolvida ? p.status === 'aprovado' || p.status === 'erro' : p.status === destinoNormal);
 
   if (!['entregue', 'incerto'].includes(atual.status)) {
     return mesmo(atual) ? { http: 200, pedido: atual, novo: false } : { http: 409, pedido: atual };
@@ -233,9 +279,11 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
 
   if (pedido.status === 'aplicada') await registrarAplicada(pedido, conexao, dados, agora);
   if (STATUS_FINAIS.includes(pedido.status)) await fecharPunicaoSePronta({ client, punicaoId: pedido.punicaoId, conexao, agora });
+  // TIMEOUT: tenta de novo na hora (uma vez).
+  const reenvio = pedido.status === 'incerto' && dados.codigo === 'TIMEOUT_GAMEMODE' ? await reenviarSozinho(pedido, agora) : null;
 
   const alerta = dados.codigo === 'SELO_INVALIDO' ? 'selo' : (devolvida && pedido.status === 'erro' ? 'devolucoes' : null);
-  return { http: 200, pedido, novo: true, alerta };
+  return { http: 200, pedido, novo: true, alerta, reenvio };
 }
 
 module.exports = {
@@ -249,6 +297,7 @@ module.exports = {
   paraProtocolo,
   entregarPedidos,
   marcarIncertos,
+  reenviarSozinho,
   registrarAplicada,
   fecharPunicaoSePronta,
   registrarResultado

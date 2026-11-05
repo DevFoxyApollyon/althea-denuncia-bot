@@ -433,11 +433,11 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   assert.equal(enviados[0].content, '<@&777> <@22>');
   assert.deepEqual(enviados[0].allowedMentions, { roles: ['777'], users: ['22'] });
   const lider = enviados[0].embeds[0].toJSON().fields;
-  assert.equal(lider.find(f => f.name === 'Organização').value, 'equipe angola');
+  assert.equal(lider.find(f => f.name === '🏢 Organização').value, 'equipe angola');
   assert.equal(lider.some(f => f.name.includes('Cargo')), false, 'o embed não tem campo de cargo');
   assert.equal(enviados[1].content, undefined); // cargo 4: registra sem marcar
   const membro = enviados[1].embeds[0].toJSON().fields;
-  assert.equal(membro.find(f => f.name === 'Organização').value, 'Tropa da Holanda');
+  assert.equal(membro.find(f => f.name === '🏢 Organização').value, 'Tropa da Holanda');
   assert.equal(enviados[0].embeds[0].toJSON().title, enviados[1].embeds[0].toJSON().title, 'com ou sem organização, o mesmo embed');
 
   // Gamemode: cargo entre colchetes, punição legível, motivo e quem aplicou no rodapé.
@@ -450,12 +450,13 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   const campo = (nome) => gm.fields.find(f => f.name.includes(nome))?.value;
   assert.equal(campo('Organização'), 'U$ BEN$A');
   assert.equal(campo('Cargo'), undefined);
-  assert.equal(campo('Punição'), 'Ban de 3 dias + 1 aviso');
+  assert.match(gm.description, /Punição:\*\* Ban de 3 dias \+ 1 aviso/);
+  assert.match(gm.title, /Banimento aplicado/);
   assert.equal(campo('Motivo'), 'saav');
   assert.equal(campo('Aceita'), '<@33>');
   assert.match(gm.description, /Couto.*1964972/);
   assert.equal(campo('Aplicada por'), 'Gamemode · brp teste');
-  assert.equal(gm.title, 'Punição aplicada');
+
   assert.equal(enviados[0].content, '<@&777>'); // cargo 10: marca o responsável
 });
 
@@ -788,5 +789,5 @@ test('punição aplicada sem nick do jogo: usa o nick conhecido da conta', async
   const alvoId = new mongoose.Types.ObjectId();
   await avisarAplicadas(client, { guildId: '811', alvos: [{ _id: alvoId, contaId: '1168678', cmd: 'ban', tempo: 6, avisos: 2, motivo: 'RUSH' }] },
     [{ alvoId, ok: true, erro: '', nome: '', organizacao: '' }], 'gamemode:brp');
-  assert.match(enviados[0].embeds[0].toJSON().description, /^\*\*Player:\*\* Jesus_Sensaa \(1168678\)\n\*\*Discord:\*\* <@900000000000000099>$/);
+  assert.match(enviados[0].embeds[0].toJSON().description, /Player:\*\* Jesus_Sensaa \(`1168678`\)\n💬 \*\*Discord:\*\* <@900000000000000099>/);
 });

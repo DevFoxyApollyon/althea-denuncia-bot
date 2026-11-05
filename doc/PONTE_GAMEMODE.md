@@ -170,7 +170,7 @@ Nenhum campo pode conter `|`, porque a validação do bot e a da gamemode impede
 | `erro` | `ERRO_GAMEMODE` | não se sabe se aplicou: vira `incerto` (conferência humana) |
 | `erro` | `TIMEOUT_GAMEMODE` | a gamemode não respondeu em 180 s (`ALTHEA_TIMEOUT_GAMEMODE_S`): `incerto` |
 
-**Incerto nunca é reenviado sozinho.** Um job a cada 30 s marca como `incerto` todo `entregue` com `leaseAte` vencido. Em seguida, posta no Log Admin dois botões, que só um responsável pode usar e que ficam auditados:
+**Reenvio automático (uma vez):** quando a **primeira** tentativa de um `ban` ou `cadeia` dá `TIMEOUT_GAMEMODE` ou passa do prazo sem resposta, o Althea cria na hora a rodada seguinte (`reenvioAutomatico: true`) e cancela a primeira. O ban reenviado vai com `somar: false`: se a primeira já tinha aplicado, a gamemode responde `JA_BANIDO` e o Althea conta como aplicada. Na cadeia não há essa proteção (o jogador pode ser preso duas vezes). **A partir da segunda tentativa, incerto nunca é reenviado sozinho.** Um job a cada 30 s marca como `incerto` todo `entregue` com `leaseAte` vencido. Em seguida, posta no Log Admin dois botões, que só um responsável pode usar e que ficam auditados:
 - "✅ Foi aplicada";
 - "🔁 Não foi aplicada, reenviar".
 

@@ -484,10 +484,12 @@ test('devolvida volta para aprovado até 5 vezes; na 6ª vira erro', async () =>
   assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'aceita');
 });
 
-test('TIMEOUT_GAMEMODE e lease vencido viram incerto e não voltam sozinhos; resposta atrasada resolve', async () => {
+test('segunda tentativa: TIMEOUT_GAMEMODE e lease vencido viram incerto e não voltam sozinhos; resposta atrasada resolve', async () => {
   const { conexao, segredo } = await guildGm('851');
   const { pedidos } = await punicaoComPedidos('851', 2);
   await chamar(conexao, segredo, '/pedidos');
+  // Já é a segunda tentativa: não volta sozinho (a primeira é testada à parte).
+  await m.PontePedidoGm.updateMany({ guildId: '851' }, { $set: { reenvioAutomatico: true } });
 
   await chamar(conexao, segredo, `/resultados/${pedidos[0]._id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
   assert.equal((await m.PontePedidoGm.findById(pedidos[0]._id).lean()).status, 'incerto');
@@ -816,6 +818,8 @@ test('job de incerto: lease vencido e TIMEOUT vão uma vez só para o Log Admin,
     { contaId: '2', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }
   ]);
   await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '870', staff: staffA });
+  // Já é a segunda tentativa: o TIMEOUT não é reenviado sozinho.
+  await m.PontePedidoGm.updateMany({ guildId: '870' }, { $set: { reenvioAutomatico: true } });
   const [primeiro] = (await chamar(conexao, segredo, '/pedidos', { query: 'limite=2' })).corpo.pedidos;
   await chamar(conexao, segredo, `/resultados/${primeiro.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
 
@@ -1532,6 +1536,8 @@ test('embed travado com incerto: "Foi aplicada" e "Tentar novamente" (gamemode o
     { contaId: '2', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }
   ]);
   await discordGm().enviarAoJogo({ punicaoId: p1._id, guildId: '872', staff: staffA });
+  // Já é a segunda tentativa: o TIMEOUT não é reenviado sozinho.
+  await m.PontePedidoGm.updateMany({ guildId: '872' }, { $set: { reenvioAutomatico: true } });
   for (const p of (await chamar(g1.conexao, g1.segredo, '/pedidos', { query: 'limite=2' })).corpo.pedidos) {
     await chamar(g1.conexao, g1.segredo, `/resultados/${p.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
   }
@@ -1549,6 +1555,8 @@ test('embed travado com incerto: "Foi aplicada" e "Tentar novamente" (gamemode o
   const g2 = await guildGm('873');
   const p2 = await punicaoAceita('873', [{ contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }]);
   await discordGm().enviarAoJogo({ punicaoId: p2._id, guildId: '873', staff: staffA });
+  // Já é a segunda tentativa: o TIMEOUT não é reenviado sozinho.
+  await m.PontePedidoGm.updateMany({ guildId: '873' }, { $set: { reenvioAutomatico: true } });
   const [pedido] = (await chamar(g2.conexao, g2.segredo, '/pedidos')).corpo.pedidos;
   await chamar(g2.conexao, g2.segredo, `/resultados/${pedido.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
   await m.PonteServidor.updateOne({ guildId: '873' }, { $set: { executor: 'pc' } });
@@ -1569,6 +1577,8 @@ test('/admin status ao vivo: gamemode online, fila, incertos e última aplicada 
     { contaId: '2', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }
   ]);
   await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '893', staff: staffA });
+  // Já é a segunda tentativa: o TIMEOUT não é reenviado sozinho.
+  await m.PontePedidoGm.updateMany({ guildId: '893' }, { $set: { reenvioAutomatico: true } });
   const [a] = (await chamar(conexao, segredo, '/pedidos', { query: 'limite=1' })).corpo.pedidos;
   await chamar(conexao, segredo, `/resultados/${a.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
   await comAdmin(async (pedir) => {
@@ -1584,7 +1594,7 @@ test('/admin status ao vivo: gamemode online, fila, incertos e última aplicada 
   });
 });
 
-test('aviso de incerto vai para o Relatório de punições e para o Log Admin, e os dois fecham juntos', async () => {
+test('aviso de incerto vai só para o Relatório de punições e fecha quando resolvido', async () => {
   const { conexao, segredo } = await guildGm('894');
   const Config = require('../models/Config');
   await Config.create({ guildId: '894', channels: { log: '400000000000000011', relatorioPunicoes: '400000000000000012' }, roles: { responsavel_admin: '200000000000000003' } });
@@ -1604,6 +1614,8 @@ test('aviso de incerto vai para o Relatório de punições e para o Log Admin, e
   const client = { channels: { fetch: async (id) => canal(String(id)) } };
   const punicao = await punicaoAceita('894', [{ contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }]);
   await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '894', staff: staffA });
+  // Já é a segunda tentativa: o TIMEOUT não é reenviado sozinho.
+  await m.PontePedidoGm.updateMany({ guildId: '894' }, { $set: { reenvioAutomatico: true } });
   const [p] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
   await chamar(conexao, segredo, `/resultados/${p.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
   for (let i = 0; i < 10; i++) {
@@ -1611,12 +1623,12 @@ test('aviso de incerto vai para o Relatório de punições e para o Log Admin, e
     if (!(await m.PontePedidoGm.exists({ status: 'incerto', alertaIncertoEm: null }))) break;
   }
   const daGuild = enviadas.filter(e => e.msg.embeds?.[0]?.toJSON().footer?.text === `Pedido ${p.id}`);
-  assert.deepEqual(daGuild.map(e => e.id).sort(), ['400000000000000011', '400000000000000012']);
+  assert.deepEqual(daGuild.map(e => e.id), ['400000000000000012'], 'não vai para o Log Admin');
   assert.match(daGuild[0].msg.embeds[0].toJSON().description, /Althea_Concluir/);
 
   await incertosGm().resolverIncerto({ client, pedidoId: p.id, guildId: '894', staff: staffA, aplicada: true });
   const fechadas = editadas.filter(e => /Marcada como aplicada/.test(e.msg.embeds[0].toJSON().description)).map(e => e.id).sort();
-  assert.deepEqual(fechadas, ['400000000000000011', '400000000000000012']);
+  assert.deepEqual(fechadas, ['400000000000000012']);
 });
 
 test('organização da gamemode: o número entre colchetes é o ID da organização, não o cargo', () => {
@@ -1652,6 +1664,8 @@ test('/admin incertos: lista por punição e resolve pelo painel; tempo de respo
   const { conexao, segredo } = await guildGm('896');
   const punicao = await punicaoAceita('896', [{ contaId: '7', cmd: 'ban', tempo: 2, avisos: 1, motivo: 'MG', regra: 'MG' }]);
   await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '896', staff: staffA });
+  // Já é a segunda tentativa: o TIMEOUT não é reenviado sozinho.
+  await m.PontePedidoGm.updateMany({ guildId: '896' }, { $set: { reenvioAutomatico: true } });
   const [p] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
   await chamar(conexao, segredo, `/resultados/${p.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
   const gravado = await m.PontePedidoGm.findById(p.id).lean();
@@ -1679,6 +1693,8 @@ test('incerto avisado antes da versão com o Relatório de punições: resolver 
   const { conexao, segredo } = await guildGm('897');
   const punicao = await punicaoAceita('897', [{ contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }]);
   await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '897', staff: staffA });
+  // Já é a segunda tentativa: o TIMEOUT não é reenviado sozinho.
+  await m.PontePedidoGm.updateMany({ guildId: '897' }, { $set: { reenvioAutomatico: true } });
   const [p] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
   await chamar(conexao, segredo, `/resultados/${p.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
   // Pedido antigo: só o aviso do Log Admin, sem o campo do Relatório de punições.
@@ -1687,4 +1703,36 @@ test('incerto avisado antes da versão com o Relatório de punições: resolver 
   const r = await incertosGm().resolverIncerto({ client, pedidoId: p.id, guildId: '897', staff: staffA, aplicada: true });
   assert.equal(r.ok, true);
   assert.equal(await incertosGm().apagarAvisosDeIncerto(client, punicao._id), 0, 'já apagado ao aplicar');
+});
+
+
+test('TIMEOUT na primeira tentativa: reenvia na hora uma vez; ban que volta "já banido" conta como aplicada', async () => {
+  const { conexao, segredo } = await guildGm('898');
+  const punicao = await punicaoAceita('898', [{ contaId: '5', cmd: 'ban', tempo: 2, avisos: 1, motivo: 'MG', regra: 'MG' }]);
+  await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '898', staff: staffA });
+  const [primeiro] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  await chamar(conexao, segredo, `/resultados/${primeiro.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
+  assert.equal((await m.PontePedidoGm.findById(primeiro.id).lean()).status, 'cancelado', 'a primeira sai do caminho');
+
+  const [segundo] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  assert.ok(segundo, 'a segunda tentativa vai na próxima busca');
+  assert.notEqual(segundo.id, primeiro.id);
+  assert.equal(segundo.somar, false, 'ban reenviado não soma');
+  const salvo = await m.PontePedidoGm.findById(segundo.id).lean();
+  assert.deepEqual([salvo.rodada, salvo.reenvioAutomatico], [2, true]);
+
+  await chamar(conexao, segredo, `/resultados/${segundo.id}`, { metodo: 'POST', corpo: resultado('recusada', 'JA_BANIDO') });
+  assert.equal((await m.PontePedidoGm.findById(segundo.id).lean()).status, 'aplicada');
+  assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'aplicada');
+  assert.ok(await m.PonteUso.exists({ acao: 'gm_incerto_reenviar', punicaoId: punicao._id, 'detalhes.automatico': true }));
+
+  // Segunda tentativa que também dá TIMEOUT fica incerta (não há terceira).
+  const outra = await punicaoAceita('898', [{ contaId: '6', cmd: 'cadeia', tempo: 30, avisos: 0, motivo: 'MG', regra: 'MG' }]);
+  await discordGm().enviarAoJogo({ punicaoId: outra._id, guildId: '898', staff: staffA });
+  const [c1] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  await chamar(conexao, segredo, `/resultados/${c1.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
+  const [c2] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  await chamar(conexao, segredo, `/resultados/${c2.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
+  assert.equal((await m.PontePedidoGm.findById(c2.id).lean()).status, 'incerto');
+  assert.equal(await m.PontePedidoGm.countDocuments({ punicaoId: outra._id }), 2);
 });

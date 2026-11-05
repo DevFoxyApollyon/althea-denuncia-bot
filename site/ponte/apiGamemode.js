@@ -223,6 +223,10 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
       const org = dados.organizacao ? `, organização "${dados.organizacao}"` : '';
       const linha = `[PonteGm] Pedido ${r.pedido._id} (${descreverComando(r.pedido)}, ${quem}${org}): ${dados.status} (${dados.codigo})${tempo} - ${explicarCodigo(dados.codigo)}`;
       if (['aplicada', 'simulada'].includes(dados.status)) log?.info?.(linha); else log?.warn?.(linha);
+      if (r.reenvio) {
+        log?.warn?.(`[PonteGm] Pedido ${r.pedido._id}: TIMEOUT na primeira tentativa, reenviado sozinho (pedido novo ${r.reenvio._id}). Se a segunda também não responder, vira incerto.`);
+        atualizarMensagemGm(client, r.pedido.punicaoId).catch(() => {});
+      }
       if (dados.codigo === 'TIMEOUT_GAMEMODE') {
         log?.warn?.(`[PonteGm] Diagnóstico do pedido ${r.pedido._id}: a gamemode "${conexao.nome}" buscou o pedido`
           + `${r.pedido.entregueEm ? ` às ${new Date(r.pedido.entregueEm).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : ''}`

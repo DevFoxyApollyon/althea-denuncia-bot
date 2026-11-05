@@ -86,6 +86,15 @@ const quemAplicou = (nomePc) => (String(nomePc || '').startsWith('gamemode:')
 
 const cargoAlto = (cargo) => cargo !== null && cargo >= CARGO_ALTO.min && cargo <= CARGO_ALTO.max;
 
+// Cor, ícone e título pelo tipo da punição.
+const VISUAL_DO_TIPO = {
+  ban: { cor: '#E03131', icone: '🔨', titulo: 'Banimento aplicado' },
+  cadeia: { cor: '#F08C00', icone: '⛓️', titulo: 'Cadeia aplicada' },
+  desbanir: { cor: '#2F9E44', icone: '🔓', titulo: 'Desbanimento aplicado' },
+  soltar: { cor: '#2F9E44', icone: '🔓', titulo: 'Jogador solto' }
+};
+const visualDoTipo = (cmd) => VISUAL_DO_TIPO[cmd] || { cor: '#1C7ED6', icone: '✅', titulo: 'Punição aplicada' };
+
 // resultado: itens que o PC mandou em /aplicada (só os aplicados agora contam).
 async function avisarAplicadas(client, punicao, resultado, nomePc) {
   // Pulados por já terem levado ban há menos de 1h vêm com ok e erro preenchido.
@@ -120,26 +129,35 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
         : punicao.aceitoPor?.id ? `<@${punicao.aceitoPor.id}>` : punicao.aceitoPor?.nome || 'Não registrado';
       // Nick: o que o jogo mandou ao aplicar, o do pedido ou o conhecido da conta.
       const nick = r.nome || alvo.nick || nicks.get(Number(contaId)) || 'Jogador';
-      // O mesmo embed com ou sem organização: quem foi punido em cima e duas
-      // linhas de três campos (o quê, por quê, de onde / quem aceitou, quem aplicou, link).
+      // O mesmo embed com ou sem organização. Cor e título pelo tipo (ban, cadeia...),
+      // foto do Discord do jogador quando ele está vinculado, quem foi punido no
+      // topo e duas linhas de três campos.
+      const discord = await discordDaConta(punicao.guildId, contaId, r.discord);
+      const discordId = String(discord).match(/^<@!?(\d{15,21})>$/)?.[1];
+      const pessoa = discordId ? await client.users?.fetch?.(discordId).catch(() => null) : null;
+      const visual = visualDoTipo(alvo.cmd);
+      const servidor = client.guilds?.cache?.get?.(punicao.guildId);
       const embed = new EmbedBuilder()
-        .setColor('#2B8A3E')
-        .setAuthor({ name: 'Relatório de punições' })
-        .setTitle('Punição aplicada')
+        .setColor(visual.cor)
+        .setAuthor({ name: `Relatório de punições${servidor?.name ? ` · ${servidor.name}` : ''}`.slice(0, 256), iconURL: servidor?.iconURL?.() || undefined })
+        .setTitle(`${visual.icone}  ${visual.titulo}`)
         .setDescription([
-          `**Player:** ${String(nick).slice(0, 60)} (${contaId || '?'})`,
-          `**Discord:** ${await discordDaConta(punicao.guildId, contaId, r.discord)}`
+          `👤 **Player:** ${String(nick).slice(0, 60)} (\`${contaId || '?'}\`)`,
+          `💬 **Discord:** ${discord === 'Não informado' ? 'não vinculado' : discord}`,
+          `⚖️ **Punição:** ${legivel || `\`${String(r.comando || '?').slice(0, 120)}\``}`
         ].join('\n'))
         .addFields(
-          { name: 'Punição', value: legivel || `\`${String(r.comando || '?').slice(0, 120)}\``, inline: true },
-          { name: 'Motivo', value: String(alvo.motivo || '—').slice(0, 200), inline: true },
-          { name: 'Organização', value: organizacao ? nomeDaOrganizacao(r.organizacao) || 'Não informada' : 'Nenhuma', inline: true },
-          { name: alto ? 'Aceita na Cadeia Staff por' : 'Aceita por', value: aceitaPor, inline: true },
-          { name: 'Aplicada por', value: quemAplicou(nomePc), inline: true },
-          { name: 'Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link', inline: true }
+          { name: '📝 Motivo', value: String(alvo.motivo || '—').slice(0, 200), inline: true },
+          { name: '🏢 Organização', value: organizacao ? nomeDaOrganizacao(r.organizacao) || 'Não informada' : 'Nenhuma', inline: true },
+          { name: '🔗 Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link', inline: true },
+          { name: alto ? '✅ Aceita na Cadeia Staff por' : '✅ Aceita por', value: aceitaPor, inline: true },
+          { name: '🎮 Aplicada por', value: quemAplicou(nomePc), inline: true },
+          { name: '🧾 Comando', value: `\`${String(r.comando || '—').slice(0, 80)}\``, inline: true }
         )
-        .setFooter({ text: `Punição ${String(punicao._id || '').slice(-8) || '—'}${r.comando ? ` · ${String(r.comando).slice(0, 80)}` : ''}` })
+        .setFooter({ text: `Punição #${String(punicao._id || '').slice(-8) || '—'}` })
         .setTimestamp();
+      const avatar = pessoa?.displayAvatarURL?.({ size: 128 });
+      if (avatar) embed.setThumbnail(avatar);
       await canal.send({
         content: mencoes || undefined,
         embeds: [embed],
