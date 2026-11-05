@@ -96,7 +96,7 @@ async function verificarIncertos(client, agora = Date.now()) {
 
 async function fecharAviso(client, pedido, punicao, texto) {
   if (!client) return;
-  for (const { canalId, msgId } of [pedido.mensagemIncerto, pedido.mensagemIncertoRelatorio]) {
+  for (const { canalId, msgId } of [pedido.mensagemIncerto, pedido.mensagemIncertoRelatorio].map(m => m || {})) {
     if (!canalId || !msgId) continue;
     const canal = await client.channels.fetch(canalId).catch(() => null);
     const msg = canal?.messages ? await canal.messages.fetch(msgId).catch(() => null) : null;
@@ -115,7 +115,7 @@ async function apagarAvisosDeIncerto(client, punicaoId) {
   for (const pedido of pedidos) {
     await PontePedidoGm.updateOne({ _id: pedido._id }, { $unset: { mensagemIncerto: 1, mensagemIncertoRelatorio: 1 } });
     if (!client) continue;
-    for (const { canalId, msgId } of [pedido.mensagemIncerto, pedido.mensagemIncertoRelatorio]) {
+    for (const { canalId, msgId } of [pedido.mensagemIncerto, pedido.mensagemIncertoRelatorio].map(m => m || {})) {
       if (!canalId || !msgId) continue;
       const canal = await client.channels.fetch(canalId).catch(() => null);
       const msg = canal?.messages ? await canal.messages.fetch(msgId).catch(() => null) : null;

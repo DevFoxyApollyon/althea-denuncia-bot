@@ -1674,3 +1674,17 @@ test('/admin incertos: lista por punição e resolve pelo painel; tempo de respo
     assert.equal((await pedir(`/gamemode/incertos/${punicao._id}`, { metodo: 'POST', corpo: { aplicada: true }, csrf: csrf.csrf })).status, 409, 'só uma vez');
   });
 });
+
+test('incerto avisado antes da versão com o Relatório de punições: resolver não quebra', async () => {
+  const { conexao, segredo } = await guildGm('897');
+  const punicao = await punicaoAceita('897', [{ contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }]);
+  await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '897', staff: staffA });
+  const [p] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  await chamar(conexao, segredo, `/resultados/${p.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
+  // Pedido antigo: só o aviso do Log Admin, sem o campo do Relatório de punições.
+  await m.PontePedidoGm.collection.updateOne({ _id: new mongoose.Types.ObjectId(p.id) }, { $set: { mensagemIncerto: { canalId: 'c', msgId: 'm' } }, $unset: { mensagemIncertoRelatorio: '' } });
+  const { client } = discordComDm();
+  const r = await incertosGm().resolverIncerto({ client, pedidoId: p.id, guildId: '897', staff: staffA, aplicada: true });
+  assert.equal(r.ok, true);
+  assert.equal(await incertosGm().apagarAvisosDeIncerto(client, punicao._id), 0, 'já apagado ao aplicar');
+});
