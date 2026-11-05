@@ -238,7 +238,8 @@ function criarApiJogo({ client = null, log = null, limites = {} } = {}) {
     res.json({
       ok: true,
       templates: templatesEfetivos(servidor.templates),
-      tabela,
+      // O PC só aplica ban e cadeia: os motivos "só registro" ficam de fora.
+      tabela: tabela.filter(t => t.cmd !== 'registro'),
       tabelaPropria: propria,
       sufixo: SUFIXO_MOTIVO,
       punicoes: lista.map(p => formatarPunicao(p, servidor.templates, tabela, anteriores))
@@ -257,10 +258,11 @@ function criarApiJogo({ client = null, log = null, limites = {} } = {}) {
       avisos: Number(req.body?.avisos ?? 0)
     };
     const { tabela } = await obterTabela();
-    const atual = tabela.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.filter(s => s !== t.nome), cmd: t.cmd, tempo: t.tempo, avisos: t.avisos }));
+    const atual = tabela.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.filter(s => s !== t.nome), cmd: t.cmd, tempo: t.tempo, avisos: t.avisos, texto: t.texto }));
     const salvo = await salvarTabela([...atual, novo], `painel do jogo (${instalacao?.nome || 'PC'})`);
     if (salvo.erro) throw new ErroPonte(400, salvo.erro);
     reclassificarFila({ client, tabela: salvo.tabela }).catch(() => {});
+    require('../../commands/provaStaff').atualizarProvasForaDaTabela({ client, tabela: salvo.tabela }).catch(() => {});
     await auditar(req, 'regras', { detalhes: { motivo: novo.nome, via: 'jogo', motivos: salvo.tabela.length } });
     res.json({ ok: true, total: salvo.tabela.length });
   }));

@@ -211,6 +211,8 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
         detalhes: { conexaoId: String(conexao._id), pedidoId: String(r.pedido._id), status: dados.status, codigo: dados.codigo }
       });
       atualizarMensagemGm(client, r.pedido.punicaoId).catch(() => {});
+      // Conta de staff ou admin: a gamemode não pune; o Relatório de punições avisa.
+      if (dados.codigo === 'CONTA_PROTEGIDA') require('../../services/ponteSamp/avisoOrganizacao').avisarContaProtegida(client, r.pedido, dados, conexao.nome).catch(() => {});
       // Desbanimento (/desbanir): o resultado vai para o Relatório de punições.
       if (['desbanir', 'soltar'].includes(r.pedido.tipo) && r.pedido.status !== 'aprovado') require('../../services/ponteSamp/desbanirGm').avisarDesbanimento(client, r.pedido, dados, conexao.nome).catch(() => {});
       // No console do bot: o que a gamemode respondeu e o porquê.

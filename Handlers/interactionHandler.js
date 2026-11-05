@@ -59,7 +59,7 @@ const { handleFeedbackMenu, handleFeedbackModal } = require('../utils/feedback')
 const { getConfig: getCachedConfig } = require('../utils/configCache');
 const Denuncia = require('../models/Denuncia');
 const { MODAL_LINK, handleLinkModal } = require('../commands/link');
-const { MODAL_DESBANIR, BOTAO_DESBANIR, handleDesbanirModal, handleDesbanirBotao } = require('../commands/desbanir');
+const { MODAL_DESBANIR, BOTAO_DESBANIR, BOTAO_DESBANIR_ID, BOTAO_SOLTAR_ID, MODAL_AVISOS_ID, handleDesbanirModal, handleDesbanirBotao, handleDesbanirIdBotao, handleAvisosIdModal, handleSoltarIdBotao } = require('../commands/desbanir');
 const provaStaff = require('../commands/provaStaff');
 const DenunciaStaff = require('../models/DenunciaStaff');
 const { MINUTOS_ANALISE_AUTOMATICA } = require('../utils/esperas');
@@ -453,6 +453,8 @@ const ROTAS = {
       [BOTAO_GM_APLICADA, handleIncertoDaPunicaoGm],
       [BOTAO_GM_REAPLICAR, handleIncertoDaPunicaoGm],
       [BOTAO_DESBANIR, handleDesbanirBotao],
+      [BOTAO_DESBANIR_ID, handleDesbanirIdBotao],
+      [BOTAO_SOLTAR_ID, handleSoltarIdBotao],
       [provaStaff.BOTAO_ACEITAR, provaStaff.handleBotaoAceitar],
       [provaStaff.BOTAO_RECUSAR, provaStaff.handleBotaoRecusar]
     ]
@@ -482,6 +484,7 @@ const ROTAS = {
       ['feedback:modal:', handleFeedbackModalSubmit],
       ['corrigir_modal_aceite_', handleSalvarCorrigirDenuncia],
       [MODAL_SENHA, handleSenhaCadeiaModal],
+      [MODAL_AVISOS_ID, handleAvisosIdModal],
       [provaStaff.MODAL_ACEITE, provaStaff.handleModalAceite],
       [MODAL_ALVO, handleModalAlvoGm]
     ]

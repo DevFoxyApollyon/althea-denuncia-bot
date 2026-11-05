@@ -23,7 +23,8 @@ const OPCOES = {
   minutosAnaliseAutomatica: 'Minutos da análise automática',
   minutosArquivarTopico: 'Arquivar tópicos após (minutos)',
   topicosPrivados: 'Tópicos privados',
-  senhaCadeiaStaff: 'Senha na Cadeia Staff'
+  senhaCadeiaStaff: 'Senha na Cadeia Staff',
+  provasExigirMotivo: 'Provas só com motivo da tabela'
 };
 
 const texto = (valor) => {

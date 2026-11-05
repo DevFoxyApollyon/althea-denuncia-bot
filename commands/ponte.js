@@ -132,6 +132,7 @@ async function handlePonteMotivosModal(interaction) {
   const salvo = await motivos.salvarTabela(lista, `${interaction.user.tag} (Discord, ${interaction.guild.name})`, { podeApagar });
   if (salvo.erro) return interaction.reply(efemero(`❌ ${salvo.erro}`));
   reclassificarFila({ client: interaction.client, tabela: salvo.tabela }).catch(() => {});
+  require('./provaStaff').atualizarProvasForaDaTabela({ client: interaction.client, tabela: salvo.tabela }).catch(() => {});
   log.info(`Tabela de motivos da ponte salva por ${interaction.user.tag} (${salvo.tabela.length} motivos).`);
   return interaction.reply(efemero(`✅ Tabela salva com ${salvo.tabela.length} motivos. Vale para todos os servidores e para os PCs na próxima atualização da fila.`));
 }

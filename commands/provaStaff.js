@@ -135,9 +135,11 @@ async function handleModalRegistro(interaction) {
 
   // A punição sai da tabela de motivos (a mesma do aceite da denúncia).
   const regra = classificarMotivo(motivo, (await obterTabela()).tabela);
-  const punicao = regra.regra
-    ? punicaoLegivel({ cmd: regra.cmd, tempo: regra.tempo, avisos: regra.avisos })
-    : 'Motivo fora da tabela: o responsável confere no aceite';
+  // Trava (liga e desliga no Painel do bot): motivo fora da tabela não registra.
+  if (!regra.regra && config?.provasExigirMotivo !== false) {
+    return interaction.editReply(`❌ O motivo **${motivo.slice(0, 100)}** não está na tabela de motivos. Cadastre o motivo e o tempo em **Motivos de punição** no site (ou como "Só registro", se não for ban nem cadeia) e envie de novo.`);
+  }
+  const punicao = punicaoDoMotivo(regra);
 
   // Discord de cada conta (quem tem a conta no nick).
   const vinculos = await Usuario.find({ guildId: interaction.guild.id, conta: { $in: contas } }, { conta: 1, userId: 1 }).sort({ updatedAt: -1 }).lean().catch(() => []);
@@ -195,6 +197,38 @@ async function handleModalRegistro(interaction) {
   return interaction.editReply(`✅ Registro criado${topico ? ` com o tópico ${topico}` : ''}. ${dms ? `📨 ${dms} DM(s) enviada(s).` : ''} O responsável vai aceitar ou recusar.`);
 }
 
+const FORA_DA_TABELA = 'Motivo fora da tabela: o responsável confere no aceite';
+const punicaoDoMotivo = (regra) => (!regra.regra ? FORA_DA_TABELA
+  : regra.cmd === 'registro' ? `${regra.texto || 'Só registro'} (só registro, não vai para o jogo)`
+    : punicaoLegivel({ cmd: regra.cmd, tempo: regra.tempo, avisos: regra.avisos }));
+
+// Motivo novo cadastrado (site, /ponte motivos ou painel do jogo): os registros
+// pendentes que estavam fora da tabela ganham a punição na mensagem e no tópico.
+async function atualizarProvasForaDaTabela({ client, tabela }) {
+  const pendentes = await DenunciaStaff.find({ status: 'pendente', punicao: FORA_DA_TABELA }).limit(200).lean();
+  let atualizadas = 0;
+  for (const doc of pendentes) {
+    const regra = classificarMotivo(doc.motivo, tabela);
+    if (!regra.regra) continue;
+    const punicao = punicaoDoMotivo(regra);
+    const r = await DenunciaStaff.updateOne({ _id: doc._id, status: 'pendente', punicao: FORA_DA_TABELA }, { $set: { punicao } });
+    if (!r.modifiedCount) continue;
+    atualizadas += 1;
+    if (!client) continue;
+    const trocar = async (canalId, msgId) => {
+      const canal = canalId ? await client.channels.fetch(canalId).catch(() => null) : null;
+      const msg = canal?.messages && msgId ? await canal.messages.fetch(msgId).catch(() => null) : null;
+      if (msg?.content?.includes(FORA_DA_TABELA)) await msg.edit({ content: msg.content.replace(FORA_DA_TABELA, punicao), allowedMentions: { parse: [] } }).catch(() => {});
+    };
+    await trocar(doc.channelId, doc.messageId);
+    // Primeira mensagem do tópico (o resumo com a punição).
+    const topico = doc.threadId ? await client.channels.fetch(doc.threadId).catch(() => null) : null;
+    const resumo = topico?.messages ? (await topico.messages.fetch({ limit: 5, after: '0' }).catch(() => null))?.find(m => m.author?.id === client.user?.id && m.content.includes(FORA_DA_TABELA)) : null;
+    if (resumo) await resumo.edit({ content: resumo.content.replace(FORA_DA_TABELA, punicao), allowedMentions: { parse: [] } }).catch(() => {});
+  }
+  return atualizadas;
+}
+
 async function registroDoBotao(interaction, prefixo) {
   const id = interaction.customId.slice(prefixo.length);
   if (!/^[0-9a-f]{24}$/.test(id)) return null;
@@ -230,6 +264,13 @@ async function editarRegistro(client, doc, status, quem) {
   await msg.edit({ content: texto, components: [], allowedMentions: { parse: [] } }).catch(() => {});
 }
 
+// No tópico das provas: aceita (com o link da Cadeia Staff) ou recusada, como nas denúncias.
+async function avisarNoTopico(client, doc, texto) {
+  const topico = doc.threadId ? await client.channels.fetch(doc.threadId).catch(() => null) : null;
+  if (topico?.archived) await topico.setArchived(false).catch(() => {});
+  if (topico?.send) await topico.send({ content: texto, allowedMentions: { parse: [] } }).catch(() => {});
+}
+
 async function handleModalAceite(interaction) {
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
   const { config, responsavel } = await papeis(interaction);
@@ -260,6 +301,9 @@ async function handleModalAceite(interaction) {
   }
   if (cadeiaMsg) await DenunciaStaff.updateOne({ _id: doc._id }, { $set: { 'cadeia.canalId': cadeiaMsg.channelId, 'cadeia.msgId': cadeiaMsg.id } });
   await editarRegistro(interaction.client, doc, 'Aceita', interaction.user);
+  await avisarNoTopico(interaction.client, doc, cadeiaMsg
+    ? `✅ Provas aceitas por ${interaction.user}\n🔗 **Link para compartilhar:** ${cadeiaMsg.url}`
+    : `✅ Provas aceitas por ${interaction.user}`);
   return interaction.editReply(cadeiaMsg
     ? `✅ Aceita e enviada para a Cadeia Staff: ${cadeiaMsg.url}`
     : '⚠️ Aceita, mas a Cadeia Staff não está configurada ou o bot não consegue enviar lá.');
@@ -275,6 +319,7 @@ async function handleBotaoRecusar(interaction) {
   if (!doc) return interaction.reply(efemero('ℹ️ Este registro já foi decidido.'));
   await interaction.deferUpdate();
   await editarRegistro(interaction.client, doc, 'Recusada', interaction.user);
+  await avisarNoTopico(interaction.client, doc, `❌ Provas recusadas por ${interaction.user}`);
 }
 
 // Cadeia Staff: a DenunciaStaff vira o formato que o aceite da denúncia usa (ponte com o jogo).
@@ -306,5 +351,5 @@ async function recusarNaCadeia(interaction, doc) {
 module.exports = {
   BOTAO_UPAR, MODAL_REGISTRO, BOTAO_ACEITAR, BOTAO_RECUSAR, MODAL_ACEITE,
   handleProvaStaffSlash, handleBotaoUpar, handleModalRegistro, handleBotaoAceitar, handleModalAceite, handleBotaoRecusar,
-  comoDenuncia, recusarNaCadeia, publicarPainel
+  comoDenuncia, recusarNaCadeia, publicarPainel, atualizarProvasForaDaTabela, avisarNoTopico
 };

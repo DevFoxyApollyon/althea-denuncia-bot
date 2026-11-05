@@ -844,12 +844,13 @@ test('/provastaff: aceitar pede ID e motivo, manda para a Cadeia Staff com Aceit
   const cadeia = { send: async (msg) => { enviadas.push(msg); return { id: '700', channelId: '600000000000000813', url: 'https://x' }; } };
   const registro = { content: '➥ Status: `Pendente`', edit: async (msg) => editadas.push(msg) };
   let resposta = '';
+  const noTopico = [];
   const interacao = {
     customId: `${provaStaff.MODAL_ACEITE}${doc._id}`,
     guild: { id: '813', channels: { fetch: async () => cadeia } },
     member: { displayName: 'Resp', roles: { cache: new Map([['777000000000000813', {}]]) } },
     user: { id: '1', username: 'resp', toString: () => '<@1>' },
-    client: { channels: { fetch: async () => ({ messages: { fetch: async () => registro } }) } },
+    client: { channels: { fetch: async (id) => (id === '600000000000000998' ? { send: async (msg) => noTopico.push(msg.content) } : { messages: { fetch: async () => registro } }) } },
     fields: { getTextInputValue: (id) => ({ acusado: ' 111 + 222 ', motivo: 'SAAV' })[id] },
     deferReply: async () => {},
     editReply: async (r) => { resposta = typeof r === 'string' ? r : r.content; }
@@ -860,6 +861,7 @@ test('/provastaff: aceitar pede ID e motivo, manda para a Cadeia Staff com Aceit
   const botoes = enviadas[0].components[0].toJSON().components.map(b => b.custom_id);
   assert.deepEqual(botoes, ['log_aceitar_600000000000000999', 'log_recusar_600000000000000999']);
   assert.match(editadas[0].content, /Status: `Aceita`/);
+  assert.match(noTopico[0], /Provas aceitas por <@1>\n🔗 \*\*Link para compartilhar:\*\* https:\/\/x/);
   const salvo = await DenunciaStaff.findById(doc._id).lean();
   assert.deepEqual([salvo.status, salvo.acusadoAceite, salvo.cadeia.msgId], ['aceita', '111+222', '700']);
 
@@ -870,4 +872,35 @@ test('/provastaff: aceitar pede ID e motivo, manda para a Cadeia Staff com Aceit
   // Segunda vez: já decidido.
   await provaStaff.handleModalAceite(interacao);
   assert.match(resposta, /já foi decidido/);
+});
+
+test('/provastaff: motivo cadastrado depois atualiza a punição dos registros pendentes fora da tabela', async () => {
+  const DenunciaStaff = require('../models/DenunciaStaff');
+  const { atualizarProvasForaDaTabela } = require('../commands/provaStaff');
+  const { tabela: padrao } = await require('../services/ponteSamp/motivos').obterTabela();
+  const fora = 'Motivo fora da tabela: o responsável confere no aceite';
+  const doc = await DenunciaStaff.create({ guildId: '814', contas: ['1'], motivo: 'Mau uso /n', punicao: fora, channelId: 'c', messageId: 'm' });
+  const editadas = [];
+  const client = { user: { id: 'bot' }, channels: { fetch: async () => ({ messages: { fetch: async () => ({ content: `➥ Punição: ${fora}`, edit: async (msg) => editadas.push(msg.content) }) } }) } };
+  assert.equal(await atualizarProvasForaDaTabela({ client, tabela: padrao }), 0, 'ainda fora da tabela');
+  const tabela = [...padrao, { nome: 'MAU USO /N', sinonimos: ['MAU USO /N'], cmd: 'cadeia', tempo: 120, avisos: 0 }];
+  assert.equal(await atualizarProvasForaDaTabela({ client, tabela }), 1);
+  assert.equal((await DenunciaStaff.findById(doc._id).lean()).punicao, 'Cadeia de 120 min');
+  assert.equal(editadas[0], '➥ Punição: Cadeia de 120 min');
+});
+
+test('aceite com motivo "só registro": segue normal, mas não cria punição para o jogo', async () => {
+  const motivos = require('../services/ponteSamp/motivos');
+  const { tabela: padrao } = await motivos.obterTabela();
+  await guildAtiva('815');
+  await motivos.salvarTabela([...padrao.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.filter(s => s !== t.nome), cmd: t.cmd, tempo: t.tempo, avisos: t.avisos, texto: t.texto })),
+    { nome: 'MAU USO /N', cmd: 'registro', tempo: 0, avisos: 0, texto: 'Mute 120 min' }], 'teste');
+  try {
+    const denuncia = { ...denunciaFalsa('815', '1039'), motivoAceite: 'Mau uso /n' };
+    const r = await m.aceite.registrarAceite({ client: clienteFalso, denuncia, origem: 'canal_staff', staff: { id: '1', nome: 'x' } });
+    assert.deepEqual(r, { soRegistro: true });
+    assert.equal(await m.PontePunicao.countDocuments({ denunciaId: denuncia._id }), 0);
+  } finally {
+    await motivos.salvarTabela([], 'teste');
+  }
 });

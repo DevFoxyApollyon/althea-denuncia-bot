@@ -23,11 +23,12 @@ export async function carregarMotivosPonte() {
 
 // "edicao" é o que está na tela; "salvo" é o que veio do servidor, para saber o que mudou.
 function aplicar(dados) {
-  const edicao = dados.tabela.map(m => ({ nome: m.nome, sinonimos: m.sinonimos.join(', '), cmd: m.cmd, tempo: m.tempo, avisos: m.avisos, salvo: true }));
+  const edicao = dados.tabela.map(m => ({ nome: m.nome, sinonimos: m.sinonimos.join(', '), cmd: m.cmd, tempo: m.tempo, avisos: m.avisos, texto: m.texto || '', salvo: true }));
   estado.motivosPonte = { propria: dados.propria, podeApagar: dados.podeApagar === true, edicao, salvo: JSON.stringify(edicao) };
 }
 
 function descrever(m) {
+  if (m.cmd === 'registro') return `${m.texto || 'Só registro'} · não vai para o jogo`;
   const tempo = Number(m.tempo) || 0;
   const avisos = Number(m.avisos) || 0;
   const base = m.cmd === 'cadeia' ? `Cadeia de ${tempo} min` : tempo === 0 ? 'Banimento permanente (/blackban)' : `Banimento de ${tempo} dia(s)`;
@@ -40,8 +41,9 @@ const paraEnvio = (edicao) => edicao
     nome: m.nome.trim(),
     sinonimos: m.sinonimos.split(',').map(s => s.trim()).filter(Boolean),
     cmd: m.cmd,
-    tempo: Number(m.tempo) || 0,
-    avisos: Number(m.avisos) || 0
+    tempo: m.cmd === 'registro' ? 0 : Number(m.tempo) || 0,
+    avisos: m.cmd === 'registro' ? 0 : Number(m.avisos) || 0,
+    ...(m.cmd === 'registro' ? { texto: String(m.texto || '').trim() } : {})
   }));
 
 async function salvar(botao, tabela, mensagemConfirmacao) {
@@ -62,7 +64,7 @@ function linhaDoMotivo(m, indice, edicao, podeApagar) {
   const campo = (props) => el('input', { ...props, oninput: (e) => { m[props['data-campo']] = e.target.value; }, onchange: () => desenhar() });
   const rotulado = (rotulo, controle, classe = '') => el('label', { class: `motivo-campo ${classe}`.trim() }, el('span', null, rotulo), controle);
   const permanente = m.cmd !== 'cadeia' && (Number(m.tempo) || 0) === 0;
-  return el('article', { class: `motivo-item${m.cmd === 'cadeia' ? ' cadeia' : permanente ? ' permanente' : ''}` },
+  return el('article', { class: `motivo-item${m.cmd === 'cadeia' ? ' cadeia' : m.cmd === 'registro' ? ' registro' : permanente ? ' permanente' : ''}` },
     el('header', { class: 'motivo-topo' },
       campo({ 'data-campo': 'nome', class: 'motivo-nome', value: m.nome, maxlength: '30', 'aria-label': 'Motivo', placeholder: 'Nome do motivo (ex.: DM)', readonly: travado, title: travado ? 'Só o dono do bot renomeia motivos.' : null }),
       el('span', { class: 'motivo-resumo' }, descrever(m)),
@@ -70,9 +72,14 @@ function linhaDoMotivo(m, indice, edicao, podeApagar) {
     el('div', { class: 'motivo-campos' },
       rotulado('Tipo', el('select', { onchange: (e) => { m.cmd = e.target.value; desenhar(); } },
         el('option', { value: 'ban', selected: m.cmd === 'ban' }, 'Tempban'),
-        el('option', { value: 'cadeia', selected: m.cmd === 'cadeia' }, 'Cadeia'))),
-      rotulado(m.cmd === 'cadeia' ? 'Minutos' : 'Dias (0 = perm.)', campo({ 'data-campo': 'tempo', type: 'number', inputmode: 'numeric', min: '0', max: '99999', value: String(m.tempo) })),
-      rotulado('Avisos', campo({ 'data-campo': 'avisos', type: 'number', inputmode: 'numeric', min: '0', max: '10', value: String(m.avisos) })),
+        el('option', { value: 'cadeia', selected: m.cmd === 'cadeia' }, 'Cadeia'),
+        el('option', { value: 'registro', selected: m.cmd === 'registro' }, 'Só registro (não vai para o jogo)'))),
+      m.cmd === 'registro'
+        ? rotulado('Texto da punição', campo({ 'data-campo': 'texto', value: m.texto || '', maxlength: '60', placeholder: 'Ex.: Mute 120 min' }), 'largo')
+        : [
+          rotulado(m.cmd === 'cadeia' ? 'Minutos' : 'Dias (0 = perm.)', campo({ 'data-campo': 'tempo', type: 'number', inputmode: 'numeric', min: '0', max: '99999', value: String(m.tempo) })),
+          rotulado('Avisos', campo({ 'data-campo': 'avisos', type: 'number', inputmode: 'numeric', min: '0', max: '10', value: String(m.avisos) }))
+        ],
       rotulado('Sinônimos', campo({ 'data-campo': 'sinonimos', value: m.sinonimos, placeholder: 'Separados por vírgula' }), 'largo')));
 }
 
@@ -94,6 +101,7 @@ export function telaMotivosPonte() {
           el('p', { class: 'sub' }, dados.propria ? 'Tabela personalizada.' : 'Usando a tabela padrão do bot.'),
           !dados.podeApagar && el('p', { class: 'sub' }, 'Você pode mudar e adicionar motivos. Apagar ou renomear um motivo é só com o dono do bot.'))),
       el('section', { class: 'cartao' },
+        el('p', { class: 'bot-ajuda' }, 'Só registro: para punições que não são ban nem cadeia (ex.: mute já dado no jogo). A denúncia é aceita normalmente, mas nada vai para o jogo; o texto aparece como a punição.'),
         el('p', { class: 'bot-ajuda' }, 'Vários motivos na mesma denúncia: banimentos somam dias e avisos; permanente (tempo 0) vence tudo e vira /blackban; banimento vence cadeia. Todo motivo vai com [DC] no fim. Os sinônimos também são reconhecidos (ex.: MONEY FARM e MF).'),
         el('div', { class: 'motivo-lista' }, edicao.map((m, i) => linhaDoMotivo(m, i, edicao, dados.podeApagar))),
         el('button', { type: 'button', class: 'motivo-adicionar', onclick: () => { edicao.push({ nome: '', sinonimos: '', cmd: 'ban', tempo: 1, avisos: 1 }); desenhar(); } }, '+ Adicionar motivo')),

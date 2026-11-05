@@ -50,7 +50,7 @@ async function avisarIncertos(client, agora = Date.now()) {
   let avisados = 0;
   for (let i = 0; i < 20; i++) {
     const pedido = await PontePedidoGm.findOneAndUpdate(
-      { status: 'incerto', alertaIncertoEm: null }, { $set: { alertaIncertoEm: new Date(agora) } }, { new: true }
+      { status: 'incerto', alertaIncertoEm: null, tipo: { $ne: 'consultar' } }, { $set: { alertaIncertoEm: new Date(agora) } }, { new: true }
     ).lean();
     if (!pedido) break;
     try {

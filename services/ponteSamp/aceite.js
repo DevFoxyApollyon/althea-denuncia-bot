@@ -101,7 +101,10 @@ async function registrarAceite({ client, denuncia, origem, staff, canalMensagem 
     const servidor = await servidorAtivo(denuncia?.guildId);
     if (!servidor) return null;
 
-    const alvos = montarAlvos(denuncia, (await obterTabela()).tabela);
+    const todos = montarAlvos(denuncia, (await obterTabela()).tabela);
+    // Só registro (ex.: mute já dado no jogo): o aceite segue, mas nada vai para o jogo.
+    const alvos = todos.filter(a => a.cmd !== 'registro');
+    if (!alvos.length && todos.length) return { soRegistro: true };
     const novo = {
       denunciaId: denuncia._id,
       guildId: denuncia.guildId,

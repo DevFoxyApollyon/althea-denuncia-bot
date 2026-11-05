@@ -75,7 +75,13 @@ function lerResultado(corpo) {
     codigo,
     nome: texto(corpo.nome, 40),
     organizacao: organizacaoDaGamemode(corpo.organizacao),
-    conta: Number.isInteger(conta) && conta > 0 && conta <= 999999999 ? conta : 0
+    conta: Number.isInteger(conta) && conta > 0 && conta <= 999999999 ? conta : 0,
+    // Consulta: situação da conta (só vem nela).
+    ...(corpo.banido !== undefined || corpo.preso !== undefined ? {
+      banido: Number(corpo.banido) === 1 || corpo.banido === true,
+      preso: Number(corpo.preso) === 1 || corpo.preso === true,
+      avisos: Math.max(0, Math.min(99, Math.round(Number(corpo.avisos) || 0)))
+    } : {})
   };
 }
 
@@ -261,7 +267,10 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   const $set = {
     status: destino,
     codigo: dados.codigo,
-    resultado: { nome: dados.nome, organizacao: dados.organizacao, conta: dados.conta },
+    resultado: {
+      nome: dados.nome, organizacao: dados.organizacao, conta: dados.conta,
+      ...(dados.banido !== undefined ? { banido: dados.banido, preso: dados.preso, avisos: dados.avisos } : {})
+    },
     leaseAte: null,
     respondidoEm: new Date(agora),
     segundosResposta: atual.entregueEm ? Math.max(0, Math.round((agora - new Date(atual.entregueEm).getTime()) / 1000)) : null
@@ -278,7 +287,7 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   }
 
   // Desbanimento não entra no histórico de punições aplicadas.
-  if (pedido.status === 'aplicada' && !['desbanir', 'soltar'].includes(pedido.tipo)) await registrarAplicada(pedido, conexao, dados, agora);
+  if (pedido.status === 'aplicada' && ['ban', 'cadeia'].includes(pedido.tipo)) await registrarAplicada(pedido, conexao, dados, agora);
   if (STATUS_FINAIS.includes(pedido.status)) await fecharPunicaoSePronta({ client, punicaoId: pedido.punicaoId, conexao, agora });
   // TIMEOUT: tenta de novo na hora (uma vez).
   const reenvio = pedido.status === 'incerto' && dados.codigo === 'TIMEOUT_GAMEMODE' ? await reenviarSozinho(pedido, agora) : null;

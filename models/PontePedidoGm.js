@@ -46,7 +46,11 @@ const pontePedidoGmSchema = new mongoose.Schema({
   resultado: {
     nome: { type: String, default: '' },
     organizacao: { type: String, default: '' },
-    conta: { type: Number, default: 0 }
+    conta: { type: Number, default: 0 },
+    // Só na consulta (/desbanir pelo ID): situação da conta no jogo.
+    banido: { type: Boolean, default: null },
+    preso: { type: Boolean, default: null },
+    avisos: { type: Number, default: null }
   },
   // Aviso do incerto no Log Admin (um por pedido), com os botões de resolver.
   alertaIncertoEm: { type: Date, default: null },

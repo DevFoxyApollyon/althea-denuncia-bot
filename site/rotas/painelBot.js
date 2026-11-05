@@ -90,6 +90,7 @@ function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, ca
     minutosAnaliseAutomatica: minutosDaAnalise(entrada?.minutosAnalise),
     topicosPrivados: entrada?.topicosPrivados !== false,
     senhaCadeiaStaff: entrada?.senhaCadeia === true,
+    provasExigirMotivo: entrada?.provasExigirMotivo !== false,
     isentos
   };
 }
@@ -168,6 +169,7 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         minutosAnalise: minutosAnaliseAutomatica(config),
         topicosPrivados: config?.topicosPrivados !== false,
         senhaCadeia: config?.senhaCadeiaStaff === true,
+        provasExigirMotivo: config?.provasExigirMotivo !== false,
         isentos: isentos.map(id => ({ id, nome: pessoas[id]?.nome || null }))
       },
       canais: [...guild.channels.cache.values()]
@@ -250,7 +252,7 @@ async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos 
   }
 
   const quem = member.user?.tag || usuarioId;
-  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, minutosEntreDenuncias: novo.minutosEntreDenuncias, avisoReivindicacao: novo.avisoReivindicacao, minutosAvisoReivindicacao: novo.minutosAvisoReivindicacao, minutosArquivarTopico: novo.minutosArquivarTopico, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, analiseAutomatica: novo.analiseAutomatica, minutosAnaliseAutomatica: novo.minutosAnaliseAutomatica, topicosPrivados: novo.topicosPrivados, senhaCadeiaStaff: novo.senhaCadeiaStaff, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
+  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, minutosEntreDenuncias: novo.minutosEntreDenuncias, avisoReivindicacao: novo.avisoReivindicacao, minutosAvisoReivindicacao: novo.minutosAvisoReivindicacao, minutosArquivarTopico: novo.minutosArquivarTopico, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, analiseAutomatica: novo.analiseAutomatica, minutosAnaliseAutomatica: novo.minutosAnaliseAutomatica, topicosPrivados: novo.topicosPrivados, senhaCadeiaStaff: novo.senhaCadeiaStaff, provasExigirMotivo: novo.provasExigirMotivo, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
   for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
   for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
 

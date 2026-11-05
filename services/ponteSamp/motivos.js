@@ -55,15 +55,23 @@ async function salvarTabela(lista, autor, { podeApagar = true } = {}) {
 
 // Texto editável (Discord): uma linha por motivo, "NOME|SINONIMO = ban 5 1" (tipo, tempo, avisos).
 function tabelaParaTexto(tabela) {
-  return tabela.map(t => `${t.sinonimos.join('|')} = ${t.cmd} ${t.tempo} ${t.avisos}`).join('\n');
+  return tabela.map(t => (t.cmd === 'registro'
+    ? `${t.sinonimos.join('|')} = registro ${t.texto}`
+    : `${t.sinonimos.join('|')} = ${t.cmd} ${t.tempo} ${t.avisos}`)).join('\n');
 }
 
 function textoParaTabela(texto) {
   const lista = [];
   for (const [i, linha] of String(texto || '').split('\n').entries()) {
     if (!linha.trim()) continue;
+    const reg = linha.match(/^(.+?)\s*=\s*registro\s+(.+)$/i);
+    if (reg) {
+      const [nome, ...sinonimos] = reg[1].split('|').map(s => s.trim()).filter(Boolean);
+      lista.push({ nome, sinonimos, cmd: 'registro', tempo: 0, avisos: 0, texto: reg[2].trim() });
+      continue;
+    }
     const m = linha.match(/^(.+?)\s*=\s*(ban|cadeia)\s+(\d+)\s+(\d+)\s*$/i);
-    if (!m) return { erro: `Linha ${i + 1} fora do formato "NOME = ban 5 1": ${linha.slice(0, 60)}` };
+    if (!m) return { erro: `Linha ${i + 1} fora do formato "NOME = ban 5 1" (ou "NOME = registro Mute 120 min"): ${linha.slice(0, 60)}` };
     const [nome, ...sinonimos] = m[1].split('|').map(s => s.trim()).filter(Boolean);
     lista.push({ nome, sinonimos, cmd: m[2].toLowerCase(), tempo: Number(m[3]), avisos: Number(m[4]) });
   }

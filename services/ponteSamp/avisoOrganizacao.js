@@ -208,6 +208,49 @@ async function avisarNicksNaoEncontrados(client, punicao, resultado, nomePc) {
 
 // O servidor respondeu que a conta já estava banida (ex.: chegou a 3/3 avisos e tomou ban
 // automático). Nada foi aplicado; fica o registro no Relatório de punições.
+// A gamemode recusou porque a conta é de staff ou admin (CONTA_PROTEGIDA): aviso no
+// Relatório de punições, marcando o responsável, no mesmo formato da punição aplicada.
+async function avisarContaProtegida(client, pedido, dados, nomeConexao = '') {
+  if (!client) return false;
+  try {
+    const config = await getConfig(pedido.guildId);
+    const canalId = config?.channels?.relatorioPunicoes || config?.channels?.log;
+    const canal = canalId ? await client.channels.fetch(canalId).catch(() => null) : null;
+    if (!canal?.send) return false;
+    const PontePunicao = require('../../models/PontePunicao');
+    const punicao = await PontePunicao.findById(pedido.punicaoId, { msgDiscord: 1, alvos: 1, aceitoPor: 1, cadeiaStaffPor: 1 }).lean();
+    const alvo = (punicao?.alvos || []).find(a => String(a._id) === String(pedido.alvoId)) || {};
+    const conta = dados.conta || pedido.conta || alvo.contaId || '?';
+    const discord = await discordDaConta(pedido.guildId, conta, '');
+    const servidor = client.guilds?.cache?.get?.(pedido.guildId);
+    const cargo = config?.roles?.responsavel_admin;
+    const aceitaPor = punicao?.cadeiaStaffPor?.id ? `<@${punicao.cadeiaStaffPor.id}>` : punicao?.aceitoPor?.id ? `<@${punicao.aceitoPor.id}>` : punicao?.aceitoPor?.nome || '—';
+    const embed = new EmbedBuilder()
+      .setColor('#7048E8')
+      .setAuthor({ name: `Relatório de punições${servidor?.name ? ` · ${servidor.name}` : ''}`.slice(0, 256), iconURL: servidor?.iconURL?.() || undefined })
+      .setTitle('🛡️  Conta protegida: punição não aplicada')
+      .setDescription([
+        `👤 **Player:** ${String(dados.nome || pedido.nick || alvo.nick || 'Jogador').slice(0, 60)} (\`${conta}\`)`,
+        `💬 **Discord:** ${discord === 'Não informado' ? 'não vinculado' : discord}`,
+        `⚖️ **Punição pedida:** ${punicaoLegivel(alvo) || pedido.tipo}`,
+        'A gamemode não pune contas de staff ou admin. Se for para punir, aplique à mão no jogo.'
+      ].join('\n'))
+      .addFields(
+        { name: '📝 Motivo', value: String(alvo.motivo || '—').slice(0, 200), inline: true },
+        { name: '🏢 Organização', value: temOrganizacao(dados.organizacao) ? nomeDaOrganizacao(dados.organizacao) || 'Não informada' : 'Nenhuma', inline: true },
+        { name: '🔗 Denúncia', value: punicao?.msgDiscord?.link ? `[Abrir denúncia](${punicao.msgDiscord.link})` : 'Sem link', inline: true },
+        { name: '✅ Aceita por', value: aceitaPor, inline: true }
+      )
+      .setFooter({ text: `🎮 Recusada por ${quemAplicou(`gamemode:${nomeConexao}`)} · Punição #${String(pedido.punicaoId).slice(-8)}`.slice(0, 2048) })
+      .setTimestamp();
+    await canal.send({ content: cargo ? `<@&${cargo}>` : undefined, embeds: [embed], allowedMentions: { roles: cargo ? [cargo] : [] } });
+    return true;
+  } catch (error) {
+    log.warn(`Falha ao avisar conta protegida no relatório: ${error.message}`);
+    return false;
+  }
+}
+
 async function avisarJaBanidos(client, punicao, resultado, nomePc) {
   if (!client || resultado.length === 0) return 0;
   try {
@@ -279,4 +322,4 @@ async function avisarSemResposta(client, punicao, resultado, nomePc, tentativas)
   }
 }
 
-module.exports = { avisarAplicadas, punicaoLegivel, discordDaConta, quemAplicou, avisarNicksNaoEncontrados, avisarJaBanidos, avisarSemResposta, temOrganizacao, cargoDaOrganizacao, nomeDoCargo, nomeDaOrganizacao, cargoLegivel, organizacaoComCargo, SEM_ORGANIZACAO };
+module.exports = { avisarAplicadas, avisarContaProtegida, punicaoLegivel, discordDaConta, quemAplicou, avisarNicksNaoEncontrados, avisarJaBanidos, avisarSemResposta, temOrganizacao, cargoDaOrganizacao, nomeDoCargo, nomeDaOrganizacao, cargoLegivel, organizacaoComCargo, SEM_ORGANIZACAO };

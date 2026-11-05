@@ -1842,3 +1842,61 @@ test('senha da Cadeia Staff: cria com confirmação, libera 30 min, erra 5 vezes
   assert.match((await validarSenha(id, { senha: 'segredo1' })).erro, /Tente de novo/, 'bloqueado mesmo com a certa');
   assert.equal((await validarSenha(id, { senha: 'segredo1' }, Date.now() + 16 * 60 * 1000)).ok, true);
 });
+
+test('conta protegida: a gamemode recusa e o Relatório de punições avisa marcando o responsável', async () => {
+  const { avisarContaProtegida } = require('../services/ponteSamp/avisoOrganizacao');
+  const Config = require('../models/Config');
+  await Config.create({ guildId: '902', channels: { relatorioPunicoes: '400000000000000092' }, roles: { responsavel_admin: '200000000000000902' } });
+  const alvoId = new mongoose.Types.ObjectId();
+  const punicao = await m.PontePunicao.create({ denunciaId: new mongoose.Types.ObjectId(), guildId: '902', origem: 'canal_staff', status: 'aceita', alvos: [{ _id: alvoId, contaId: '1031954', cmd: 'ban', tempo: 5, avisos: 1, motivo: 'DM', regra: 'DM' }] });
+  const enviados = [];
+  const client = { channels: { fetch: async () => ({ send: async (msg) => enviados.push(msg) }) } };
+  assert.equal(await avisarContaProtegida(client, { guildId: '902', punicaoId: punicao._id, alvoId, conta: 1031954 }, { nome: 'Deusa_Lince', conta: 1031954 }, 'BRP 3'), true);
+  assert.equal(enviados[0].content, '<@&200000000000000902>');
+  const e = enviados[0].embeds[0].toJSON();
+  assert.match(e.title, /Conta protegida/);
+  assert.match(e.description, /Deusa_Lince \(`1031954`\)/);
+  assert.match(e.description, /Ban de 5 dias \+ 1 aviso/);
+});
+
+test('motivo "só registro": aparece com o texto, não vai para o jogo e não soma com ban', () => {
+  const { validarTabela, classificarMotivo, tabelaDa } = require('../services/ponteSamp/validacao');
+  const { regras, erro } = validarTabela([
+    { nome: 'Mau uso /n', cmd: 'registro', tempo: 0, avisos: 0, texto: 'Mute 120 min' },
+    { nome: 'DM', cmd: 'ban', tempo: 5, avisos: 1 }
+  ]);
+  assert.equal(erro, undefined);
+  assert.match(validarTabela([{ nome: 'XX', cmd: 'registro', tempo: 0 }]).erro, /texto da punição/);
+  const tabela = tabelaDa({ regras });
+  const so = classificarMotivo('mau uso /n', tabela);
+  assert.deepEqual([so.cmd, so.texto], ['registro', 'Mute 120 min']);
+  const junto = classificarMotivo('mau uso /n + dm', tabela);
+  assert.deepEqual([junto.cmd, junto.tempo, junto.avisos], ['ban', 5, 1], 'registro não soma com ban');
+  const { textoParaTabela, tabelaParaTexto } = require('../services/ponteSamp/motivos');
+  assert.match(tabelaParaTexto(tabela), /MAU USO \/N = registro Mute 120 min/);
+  assert.deepEqual(textoParaTabela('MAU USO /N = registro Mute 120 min').lista[0], { nome: 'MAU USO /N', sinonimos: [], cmd: 'registro', tempo: 0, avisos: 0, texto: 'Mute 120 min' });
+});
+
+test('/desbanir pelo ID: consulta a conta no jogo e manda desbanir com os avisos escolhidos', async () => {
+  const { conexao, segredo } = await guildGm('903');
+  const { consultarConta, desfazerPorConta } = require('../services/ponteSamp/desbanirGm');
+  const consulta = consultarConta({ guildId: '903', conta: 1067694, staff: staffA, esperarMs: 5000, intervaloMs: 50 });
+  await new Promise(r => setTimeout(r, 100));
+  const [p] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  assert.deepEqual([p.tipo, p.conta, p.teste], ['consultar', 1067694, false], 'consulta vale mesmo no modo teste');
+  await chamar(conexao, segredo, `/resultados/${p.id}`, { metodo: 'POST', corpo: resultado('aplicada', 'OK', { nome: 'ivila_laivi', conta: 1067694, banido: 1, preso: 0, avisos: 2 }) });
+  const r = await consulta;
+  assert.deepEqual([r.ok, r.banido, r.preso, r.avisos, r.nome], [true, true, false, 2, 'ivila_laivi']);
+
+  const d = await desfazerPorConta({ guildId: '903', conta: 1067694, acao: 'desbanir', avisos: 1, staff: staffA });
+  assert.equal(d.ok, true);
+  const [desban] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  assert.deepEqual([desban.tipo, desban.conta, desban.avisos], ['desbanir', 1067694, 1]);
+
+  // Gamemode sem Althea_Consultar: responde RECUSADO.
+  const semFuncao = consultarConta({ guildId: '903', conta: 5, staff: staffA, esperarMs: 5000, intervaloMs: 50 });
+  await new Promise(r2 => setTimeout(r2, 100));
+  const [c2] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  await chamar(conexao, segredo, `/resultados/${c2.id}`, { metodo: 'POST', corpo: resultado('recusada', 'RECUSADO') });
+  assert.match((await semFuncao).erro, /Althea_Consultar/);
+});

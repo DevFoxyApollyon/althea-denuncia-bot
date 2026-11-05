@@ -3,7 +3,7 @@ const { model } = require('../utils/persistencia');
 
 // Denúncia da staff (/provastaff): a staff registra a punição com as provas no canal
 // fixo; o responsável aceita (vai para a Cadeia Staff e, de lá, para o jogo) ou recusa.
-// Fica no banco principal; dura o prazo padrão (utils/retencaoDados.js).
+// Fica no banco principal por 4 dias (utils/retencaoDados.js).
 const denunciaStaffSchema = new mongoose.Schema({
   guildId: { type: String, required: true },
   autor: { id: { type: String, default: '' }, nome: { type: String, default: '' } },

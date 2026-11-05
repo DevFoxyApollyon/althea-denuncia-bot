@@ -12,7 +12,7 @@ const paraTela = ({ tabela, propria }, podeApagar) => ({
   propria,
   // Só o dono do bot apaga motivos; os outros mudam e adicionam.
   podeApagar,
-  tabela: tabela.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.filter(s => s !== t.nome), cmd: t.cmd, tempo: t.tempo, avisos: t.avisos, grupo: t.grupo }))
+  tabela: tabela.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.filter(s => s !== t.nome), cmd: t.cmd, tempo: t.tempo, avisos: t.avisos, texto: t.texto || '', grupo: t.grupo }))
 });
 
 function registrarRotasDeMotivosDaPonte(router, { client }) {
@@ -34,6 +34,7 @@ function registrarRotasDeMotivosDaPonte(router, { client }) {
     if (salvo.erro) throw new ErroHttp(400, salvo.erro);
     // Denúncias que esperavam por um motivo novo saem do "aguardando" (não segura a resposta).
     reclassificarFila({ client, tabela: salvo.tabela }).catch(() => {});
+    require('../../commands/provaStaff').atualizarProvasForaDaTabela({ client, tabela: salvo.tabela }).catch(() => {});
     await PonteUso.create({
       guildId: acesso.guild.id, acao: 'regras',
       detalhes: { por: req.usuario.id, nome: req.usuario.nome, motivos: salvo.tabela.length, propria: salvo.propria }

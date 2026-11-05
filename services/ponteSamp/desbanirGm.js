@@ -150,4 +150,71 @@ async function avisarDesbanimento(client, pedido, dados, nomeConexao = '') {
   await canal.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => {});
 }
 
-module.exports = { TIPOS_DESFAZER, prepararDesbanimento, desbanir, avisarDesbanimento, situacaoDoDesbanimento };
+// ---------- /desbanir pelo ID da conta ----------
+// Sem denúncia: o pedido não tem punição de verdade (ids próprios, só para o registro).
+async function servidorComGamemode(guildId) {
+  const servidor = await PonteServidor.findOne({ guildId: String(guildId), ativo: true }).lean();
+  if (!servidor) return { erro: 'A ponte com o jogo não está ativa neste servidor.' };
+  if (!EXECUTORES_GM.includes(servidor.executor)) return { erro: 'Este servidor aplica pelo PC da staff: o /desbanir pelo ID só funciona com a gamemode.' };
+  return { servidor };
+}
+
+async function pedidoAvulso({ servidor, guildId, conta, tipo, avisos = 0, staff, agora = Date.now() }) {
+  const mongoose = require('mongoose');
+  return PontePedidoGm.create({
+    punicaoId: new mongoose.Types.ObjectId(),
+    alvoId: new mongoose.Types.ObjectId(),
+    rodada: 1,
+    guildId: String(guildId),
+    tipo,
+    conta: Number(conta),
+    tempo: 0,
+    avisos,
+    somar: false,
+    motivo: tipo === 'consultar' ? motivoParaGamemode(motivoComSufixo('CONSULTA')) : MOTIVO_DESBAN,
+    aprovadoPor: nomeParaGamemode(staff.nome),
+    // A consulta só lê: vai valendo mesmo com o modo teste ligado.
+    teste: tipo === 'consultar' ? false : (servidor.gm?.modoTeste ?? LIMITES_GM_PADRAO.modoTeste) === true,
+    confirmadoPor: [{ id: String(staff.id), nome: String(staff.nome || '').slice(0, 64), em: new Date(agora) }],
+    status: 'aprovado',
+    criadoEm: new Date(agora)
+  });
+}
+
+// Pergunta à gamemode se a conta está banida, presa e quantos avisos tem. Espera a
+// resposta (a gamemode busca a cada ~10 s). Devolve { ok, banido, preso, avisos, nome } ou { erro }.
+async function consultarConta({ guildId, conta, staff, esperarMs = 45000, intervaloMs = 2000 }) {
+  const { servidor, erro } = await servidorComGamemode(guildId);
+  if (erro) return { erro };
+  const pedido = await pedidoAvulso({ servidor, guildId, conta, tipo: 'consultar', staff });
+  const limite = Date.now() + esperarMs;
+  while (Date.now() < limite) {
+    await new Promise(r => setTimeout(r, intervaloMs));
+    const atual = await PontePedidoGm.findById(pedido._id).lean();
+    if (['aplicada', 'simulada'].includes(atual?.status) && atual.resultado?.banido !== null && atual.resultado?.banido !== undefined) {
+      return { ok: true, banido: atual.resultado.banido, preso: atual.resultado.preso, avisos: atual.resultado.avisos || 0, nome: atual.resultado.nome || '' };
+    }
+    if (['recusada', 'erro', 'incerto', 'cancelado'].includes(atual?.status)) {
+      return { erro: atual.codigo === 'CONTA_INEXISTENTE' ? 'Essa conta não existe no jogo.' : atual.codigo === 'RECUSADO'
+        ? 'A gamemode ainda não sabe responder a consulta (falta a Althea_Consultar na gamemode).' : `A gamemode não respondeu a consulta (${atual.codigo || atual.status}).` };
+    }
+  }
+  await PontePedidoGm.updateOne({ _id: pedido._id, status: 'aprovado' }, { $set: { status: 'cancelado' } }).catch(() => {});
+  return { erro: 'A gamemode não respondeu a consulta a tempo. Ela está online? Veja o Status ao vivo no Painel da ponte.' };
+}
+
+// Desbanir (tirando "avisos") ou soltar da cadeia, direto pela conta.
+async function desfazerPorConta({ guildId, conta, acao, avisos = 0, staff }) {
+  const { servidor, erro } = await servidorComGamemode(guildId);
+  if (erro) return { erro };
+  const maxAvisos = servidor.gm?.maxAvisos ?? LIMITES_GM_PADRAO.maxAvisos;
+  const tipo = acao === 'soltar' ? 'soltar' : 'desbanir';
+  const pedido = await pedidoAvulso({ servidor, guildId, conta, tipo, avisos: tipo === 'desbanir' ? Math.max(0, Math.min(maxAvisos, Number(avisos) || 0)) : 0, staff });
+  await PonteUso.create({
+    guildId: String(guildId), acao: 'gm_enviar',
+    detalhes: { sub: tipo, via: 'desbanir_id', por: String(staff.id), nome: staff.nome, conta: Number(conta), avisos: pedido.avisos }
+  }).catch(() => {});
+  return { ok: true, pedido, teste: pedido.teste };
+}
+
+module.exports = { consultarConta, desfazerPorConta, TIPOS_DESFAZER, prepararDesbanimento, desbanir, avisarDesbanimento, situacaoDoDesbanimento };

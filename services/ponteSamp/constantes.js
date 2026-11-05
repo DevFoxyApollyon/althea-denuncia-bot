@@ -71,7 +71,7 @@ const ACOES_USO = ['fila', 'editar', 'executar', 'aplicar', 'cancelar', 'auth_fa
 
 // Ponte com a gamemode (protocolo gm/v1, doc/PONTE_GAMEMODE.md).
 const EXECUTORES = ['pc', 'gamemode', 'ambos'];
-const TIPOS_GM = ['ban', 'cadeia', 'desbanir', 'soltar'];
+const TIPOS_GM = ['ban', 'cadeia', 'desbanir', 'soltar', 'consultar'];
 const STATUS_CONEXAO_GM = ['ativa', 'revogada'];
 const STATUS_PEDIDO_GM = ['aprovado', 'entregue', 'aplicada', 'simulada', 'recusada', 'erro', 'incerto', 'cancelado'];
 const LIMITES_GM_PADRAO = Object.freeze({

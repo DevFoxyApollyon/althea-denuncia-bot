@@ -51,6 +51,8 @@ const configSchema = new mongoose.Schema({
   senhaCadeiaStaff: { type: Boolean, default: false },
   // Mensagem do painel do /provastaff (sai e volta no fim do canal a cada registro).
   provasStaffPainelMsgId: { type: String, default: '' },
+  // /provastaff só registra motivo que está na tabela de motivos.
+  provasExigirMotivo: { type: Boolean, default: true },
   // Quantos minutos dura a espera para reivindicar (1 a 60).
   minutosEntreReivindicacoes: { type: Number, default: 1, min: 1, max: 60 },
   // Denúncia reivindicada e parada vai sozinha para análise depois deste tempo.

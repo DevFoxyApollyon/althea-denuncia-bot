@@ -81,6 +81,7 @@ function aplicar(dados) {
     minutosAnalise: Number(dados.valores.minutosAnalise) || 30,
     topicosPrivados: dados.valores.topicosPrivados !== false,
     senhaCadeia: dados.valores.senhaCadeia === true,
+    provasExigirMotivo: dados.valores.provasExigirMotivo !== false,
     isentos: dados.valores.isentos.map(item => item.id).join('\n')
   };
   estado.painelBot = { ...dados, edicao: valores, salvo: JSON.stringify(valores) };
@@ -348,6 +349,7 @@ export function telaPainelDoBot() {
     edicao.minutosAnalise !== antes.minutosAnalise,
     edicao.topicosPrivados !== antes.topicosPrivados,
     edicao.senhaCadeia !== antes.senhaCadeia,
+    edicao.provasExigirMotivo !== antes.provasExigirMotivo,
     edicao.isentos.trim() !== antes.isentos.trim(),
     ...todosOsCanais.map(item => edicao.channels[item.chave] !== antes.channels[item.chave]),
     ...CARGOS.map(item => edicao.roles[item.chave] !== antes.roles[item.chave])
@@ -417,6 +419,9 @@ export function telaPainelDoBot() {
         linha({ nome: 'Senha para aceitar e recusar na Cadeia Staff', explica: 'Ligada, quem clica em Aceitar ou Recusar na Cadeia Staff precisa da senha pessoal. Na primeira vez a pessoa cria a senha (digita e confirma); depois fica liberada por 30 minutos e, passado esse tempo, digita a senha de novo. Só um código protegido da senha fica guardado.' },
           'bot-senha-cadeia', interruptor(edicao, 'senhaCadeia', 'bot-senha-cadeia', { ligado: 'Pede senha', desligado: 'Sem senha' }), null,
           { valor: edicao.senhaCadeia, mudou: edicao.senhaCadeia !== antes.senhaCadeia }),
+        linha({ nome: 'Provas da staff só com motivo da tabela', explica: 'Ligada, o /provastaff não registra se o motivo não estiver em Motivos de punição: avisa para cadastrar o motivo e o tempo (ou como "Só registro") e enviar de novo. Desligada, registra e o responsável confere a punição no aceite.' },
+          'bot-provas-motivo', interruptor(edicao, 'provasExigirMotivo', 'bot-provas-motivo', { ligado: 'Exige motivo', desligado: 'Aceita qualquer' }), null,
+          { valor: edicao.provasExigirMotivo, mudou: edicao.provasExigirMotivo !== antes.provasExigirMotivo }),
         linha({ nome: 'Arquivar tópicos sem mensagem', explica: 'Tempo sem mensagem até o tópico de uma denúncia nova ser arquivado. Arquivado, ele some da lista do lado no Discord, mas continua aberto pelo link e volta sozinho quando alguém escreve. Vale para as denúncias abertas depois de salvar.' },
           'bot-arquivar', el('select', {
             id: 'bot-arquivar',

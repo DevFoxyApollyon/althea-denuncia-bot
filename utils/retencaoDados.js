@@ -46,7 +46,8 @@ const PRAZOS_EM_DIAS = {
   rascunhodenuncias: 15,   // denúncia começada e não enviada
   pontepunicoes: 45,       // fila de punições do jogo (mesmo tempo da denúncia)
   ponteusos: 90,           // auditoria da ponte do jogo
-  pontepedidosgm: 90       // pedidos enviados à gamemode (um por alvo)
+  pontepedidosgm: 90,      // pedidos enviados à gamemode (um por alvo)
+  denunciastaffs: 4        // provas da staff (/provastaff)
 };
 
 // O prazo fica no próprio modelo:

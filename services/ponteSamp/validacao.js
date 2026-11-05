@@ -54,7 +54,14 @@ function contemMotivo(textoNormal, motivo) {
 
 // Junta motivos da tabela numa punição só: permanente vence tudo; banimentos somam
 // dias e avisos (SAAV + RUSH = 6 dias, 2 avisos); banimento vence cadeia; cadeias somam minutos.
-function combinarMotivos(itens) {
+function combinarMotivos(todos) {
+  // Só registro não pune no jogo: com ban ou cadeia junto, fica de fora; sozinho, o
+  // resultado é "registro" com o texto dos motivos.
+  const itens = todos.filter(m => m.cmd !== 'registro');
+  if (!itens.length) {
+    const nomes = todos.map(m => m.nome);
+    return { cmd: 'registro', tempo: 0, avisos: 0, regra: nomes.join(' + ').slice(0, 60), motivos: nomes, texto: todos.map(m => m.texto).filter(Boolean).join(' + ').slice(0, 120) };
+  }
   const bans = itens.filter(m => m.cmd === 'ban');
   const usados = bans.length ? bans : itens;
   const cmd = bans.length ? 'ban' : (itens[0]?.cmd || CMD_PADRAO);
@@ -67,7 +74,8 @@ function combinarMotivos(itens) {
 }
 
 // "Banimento de 5 dias + 1 aviso", "Banimento permanente", "Cadeia de 120 minutos".
-function grupoDe(cmd, tempo, avisos) {
+function grupoDe(cmd, tempo, avisos, texto = '') {
+  if (cmd === 'registro') return `${texto || 'Só registro'} (só registro)`;
   const base = cmd === 'cadeia'
     ? `Cadeia de ${tempo} minutos`
     : tempo === 0 ? 'Banimento permanente' : `Banimento de ${tempo} dia${tempo === 1 ? '' : 's'}`;
@@ -87,7 +95,7 @@ function tabelaDa(servidor) {
   if (propria.length === 0) return ITENS_TABELA;
   return propria.map(r => {
     const sinonimos = [r.nome, ...(r.sinonimos || [])].filter(Boolean);
-    return { nome: r.nome, sinonimos, cmd: r.cmd, tempo: r.tempo, avisos: r.avisos || 0, grupo: grupoDe(r.cmd, r.tempo, r.avisos || 0) };
+    return { nome: r.nome, sinonimos, cmd: r.cmd, tempo: r.tempo, avisos: r.avisos || 0, texto: r.texto || '', grupo: grupoDe(r.cmd, r.tempo, r.avisos || 0, r.texto) };
   });
 }
 
@@ -106,7 +114,15 @@ function validarTabela(lista) {
     const avisos = Number(bruto?.avisos ?? 0);
     if (nome.length < 2) return { erro: `Motivo ${n}: nome muito curto.` };
     if (vistos.has(nome)) return { erro: `Motivo "${nome}" repetido.` };
-    if (!CMDS_PUNICAO.includes(cmd)) return { erro: `Motivo ${nome}: tipo inválido (ban ou cadeia).` };
+    if (cmd === 'registro') {
+      // Só registro: sem tempo nem avisos, com o texto que aparece como punição.
+      const texto = String(bruto?.texto || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (texto.length < 2) return { erro: `Motivo ${nome}: escreva o texto da punição (ex.: Mute 120 min).` };
+      vistos.add(nome);
+      regras.push({ nome, sinonimos: sinonimos.filter(s => s !== nome), cmd, tempo: 0, avisos: 0, texto });
+      continue;
+    }
+    if (!CMDS_PUNICAO.includes(cmd)) return { erro: `Motivo ${nome}: tipo inválido (ban, cadeia ou só registro).` };
     if (!Number.isInteger(tempo) || tempo < 0 || tempo > 99999 || (cmd === 'cadeia' && tempo === 0)) return { erro: `Motivo ${nome}: tempo inválido.` };
     if (!Number.isInteger(avisos) || avisos < 0 || avisos > 10) return { erro: `Motivo ${nome}: avisos inválidos (0 a 10).` };
     vistos.add(nome);
