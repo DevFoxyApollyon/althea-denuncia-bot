@@ -793,3 +793,25 @@ test('punição aplicada sem nick do jogo: usa o nick conhecido da conta', async
     [{ alvoId, ok: true, erro: '', nome: '', organizacao: '' }], 'gamemode:brp');
   assert.match(enviados[0].embeds[0].toJSON().description, /Player:\*\* Jesus_Sensaa \(`1168678`\)\n💬 \*\*Discord:\*\* <@900000000000000099>/);
 });
+
+test('punição aplicada: botão "Ver no site" com a página da denúncia', async () => {
+  const Config = require('../models/Config');
+  const { avisarAplicadas } = require('../services/ponteSamp/avisoOrganizacao');
+  await Config.create({ guildId: '812', channels: { relatorioPunicoes: '557' }, roles: {} });
+  const enviados = [];
+  const client = { channels: { fetch: async () => ({ send: async (msg) => enviados.push(msg) }) } };
+  const alvoId = new mongoose.Types.ObjectId();
+  const denunciaId = new mongoose.Types.ObjectId();
+  const antes = process.env.SITE_URL;
+  process.env.SITE_URL = 'https://site.exemplo/';
+  try {
+    await avisarAplicadas(client, { guildId: '812', denunciaId, mensagens: { topicoPrivado: true, topicoId: '900000000000000001' }, alvos: [{ _id: alvoId, contaId: '1', cmd: 'ban', tempo: 1 }] },
+      [{ alvoId, ok: true, erro: '', nome: 'X' }], 'gamemode:brp');
+  } finally {
+    process.env.SITE_URL = antes;
+  }
+  const botoes = enviados[0].components[0].toJSON().components;
+  assert.equal(botoes.length, 2);
+  assert.equal(botoes[1].url, `https://site.exemplo/#/d/${denunciaId}`);
+  assert.equal(botoes[1].label, 'Ver no site');
+});

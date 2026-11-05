@@ -2,9 +2,9 @@
 // (ou no Log Admin, se ele não estiver configurado), com
 // organização (com o cargo), nick, ID da conta, comando e link da denúncia. Cargo 6 a 12
 // de organização marca o responsável admin e quem aceitou na Cadeia Staff.
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { getConfig } = require('../../utils/configCache');
-const { botaoEntrarNoTopico } = require('../../utils/restricaoTopicos');
+const { botaoEntrarNoTopico, botaoSoltoEntrarNoTopico } = require('../../utils/restricaoTopicos');
 const { Logger } = require('../../utils/logger');
 const Usuario = require('../../models/Usuario');
 
@@ -19,6 +19,18 @@ const semParenteses = (texto) => String(texto || '').replace(/\s*\([^)]*\)/g, ''
 const temOrganizacao = (organizacao) => !SEM_ORGANIZACAO.includes(normalizar(semParenteses(organizacao)));
 // Denúncia de tópico privado: o aviso leva o botão "Entrar no tópico".
 const botoesDoTopico = (punicao) => (punicao.mensagens?.topicoPrivado && punicao.mensagens.topicoId ? [botaoEntrarNoTopico(punicao.mensagens.topicoId)] : []);
+
+// Embed de punição aplicada: "Entrar no tópico" (tópico privado) e "Ver no site"
+// (página da denúncia; só com o endereço público do site, em https).
+function botoesDaAplicada(punicao) {
+  const site = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
+  const botoes = [];
+  if (punicao.mensagens?.topicoPrivado && punicao.mensagens.topicoId) botoes.push(botaoSoltoEntrarNoTopico(punicao.mensagens.topicoId));
+  if (site.startsWith('https://') && punicao.denunciaId) {
+    botoes.push(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Ver no site').setEmoji('🌐').setURL(`${site}/#/d/${punicao.denunciaId}`));
+  }
+  return botoes.length ? [new ActionRowBuilder().addComponents(botoes)] : [];
+}
 
 // Cargos que fazem o relatório marcar o responsável admin e quem aceitou na Cadeia Staff.
 const CARGO_ALTO = { min: 6, max: 12 };
@@ -154,7 +166,7 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
       await canal.send({
         content: mencoes || undefined,
         embeds: [embed],
-        components: botoesDoTopico(punicao),
+        components: botoesDaAplicada(punicao),
         allowedMentions: { roles: papeis, users: usuarios }
       });
     }

@@ -168,11 +168,6 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
     });
     // A busca vazia (a cada 10 s) não entra na auditoria, senão a coleção enche.
     if (pedidos.length) {
-      // No console do bot: quem buscou, de onde, com qual include e o quê.
-      const versao = String(req.query.versao || '?').replace(RE_VERSAO, '').slice(0, 20) || '?';
-      log?.info?.(`[PonteGm] Gamemode "${conexao.nome}" (IP ${ip}, include ${versao}, teste ${String(req.query.teste || '') === '1' ? 'ligado' : 'desligado'}) buscou ${pedidos.length} pedido(s): `
-        + pedidos.map(p => `${p.id} (${p.tipo} ${p.tempo}${p.avisos ? ` +${p.avisos}` : ''}, conta ${p.conta || '?'}${p.nick ? ` ${p.nick}` : ''})`).join('; ')
-        + `. Ela tem até 180 s para responder cada um.`);
       auditar(req, 'gm_busca', { detalhes: { conexaoId: String(conexao._id), pedidos: pedidos.map(p => p.id) } });
       // Embed da punição: "📤 entregue" em cada alvo buscado.
       PontePedidoGm.distinct('punicaoId', { _id: { $in: pedidos.map(p => p.id) } })
