@@ -130,11 +130,8 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
       // Nick: o que o jogo mandou ao aplicar, o do pedido ou o conhecido da conta.
       const nick = r.nome || alvo.nick || nicks.get(Number(contaId)) || 'Jogador';
       // O mesmo embed com ou sem organização. Cor e título pelo tipo (ban, cadeia...),
-      // foto do Discord do jogador quando ele está vinculado, quem foi punido no
-      // topo e duas linhas de três campos.
+      // quem foi punido no topo, os campos e, no rodapé, quem aplicou.
       const discord = await discordDaConta(punicao.guildId, contaId, r.discord);
-      const discordId = String(discord).match(/^<@!?(\d{15,21})>$/)?.[1];
-      const pessoa = discordId ? await client.users?.fetch?.(discordId).catch(() => null) : null;
       const visual = visualDoTipo(alvo.cmd);
       const servidor = client.guilds?.cache?.get?.(punicao.guildId);
       const embed = new EmbedBuilder()
@@ -150,14 +147,10 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
           { name: '📝 Motivo', value: String(alvo.motivo || '—').slice(0, 200), inline: true },
           { name: '🏢 Organização', value: organizacao ? nomeDaOrganizacao(r.organizacao) || 'Não informada' : 'Nenhuma', inline: true },
           { name: '🔗 Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link', inline: true },
-          { name: alto ? '✅ Aceita na Cadeia Staff por' : '✅ Aceita por', value: aceitaPor, inline: true },
-          { name: '🎮 Aplicada por', value: quemAplicou(nomePc), inline: true },
-          { name: '🧾 Comando', value: `\`${String(r.comando || '—').slice(0, 80)}\``, inline: true }
+          { name: alto ? '✅ Aceita na Cadeia Staff por' : '✅ Aceita por', value: aceitaPor, inline: true }
         )
-        .setFooter({ text: `Punição #${String(punicao._id || '').slice(-8) || '—'}` })
+        .setFooter({ text: `🎮 Aplicada por ${quemAplicou(nomePc)} · Punição #${String(punicao._id || '').slice(-8) || '—'}`.slice(0, 2048) })
         .setTimestamp();
-      const avatar = pessoa?.displayAvatarURL?.({ size: 128 });
-      if (avatar) embed.setThumbnail(avatar);
       await canal.send({
         content: mencoes || undefined,
         embeds: [embed],

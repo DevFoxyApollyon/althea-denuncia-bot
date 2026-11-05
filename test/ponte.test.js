@@ -455,7 +455,9 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   assert.equal(campo('Motivo'), 'saav');
   assert.equal(campo('Aceita'), '<@33>');
   assert.match(gm.description, /Couto.*1964972/);
-  assert.equal(campo('Aplicada por'), 'Gamemode · brp teste');
+  assert.match(gm.footer.text, /^🎮 Aplicada por Gamemode · brp teste · Punição #/);
+  assert.equal(gm.thumbnail, undefined, 'sem foto');
+  assert.equal(campo('Comando'), undefined);
 
   assert.equal(enviados[0].content, '<@&777>'); // cargo 10: marca o responsável
 });
