@@ -137,7 +137,7 @@ async function handleModalRegistro(interaction) {
   const regra = classificarMotivo(motivo, (await obterTabela()).tabela);
   // Trava (liga e desliga no Painel do bot): motivo fora da tabela não registra.
   if (!regra.regra && config?.provasExigirMotivo !== false) {
-    return interaction.editReply(`❌ O motivo **${motivo.slice(0, 100)}** não está na tabela de motivos. Cadastre o motivo e o tempo em **Motivos de punição** no site (ou como "Só registro", se não for ban nem cadeia) e envie de novo.`);
+    return interaction.editReply(`❌ O motivo **${motivo.slice(0, 100)}** não está na tabela de motivos. Cadastre o motivo e o tempo em **Motivos de punição** no site (ou como "Neutro", se não for ban nem cadeia) e envie de novo.`);
   }
   const punicao = punicaoDoMotivo(regra);
 
@@ -199,7 +199,7 @@ async function handleModalRegistro(interaction) {
 
 const FORA_DA_TABELA = 'Motivo fora da tabela: o responsável confere no aceite';
 const punicaoDoMotivo = (regra) => (!regra.regra ? FORA_DA_TABELA
-  : regra.cmd === 'registro' ? `${regra.texto || 'Só registro'} (só registro, não vai para o jogo)`
+  : regra.cmd === 'registro' ? `${regra.texto || 'Neutro'} (neutro, não vai para o jogo)`
     : punicaoLegivel({ cmd: regra.cmd, tempo: regra.tempo, avisos: regra.avisos }));
 
 // Motivo novo cadastrado (site, /ponte motivos ou painel do jogo): os registros

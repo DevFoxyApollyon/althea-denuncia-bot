@@ -75,7 +75,7 @@ function combinarMotivos(todos) {
 
 // "Banimento de 5 dias + 1 aviso", "Banimento permanente", "Cadeia de 120 minutos".
 function grupoDe(cmd, tempo, avisos, texto = '') {
-  if (cmd === 'registro') return `${texto || 'Só registro'} (só registro)`;
+  if (cmd === 'registro') return `${texto || 'Neutro'} (neutro)`;
   const base = cmd === 'cadeia'
     ? `Cadeia de ${tempo} minutos`
     : tempo === 0 ? 'Banimento permanente' : `Banimento de ${tempo} dia${tempo === 1 ? '' : 's'}`;
@@ -116,13 +116,13 @@ function validarTabela(lista) {
     if (vistos.has(nome)) return { erro: `Motivo "${nome}" repetido.` };
     if (cmd === 'registro') {
       // Só registro: sem tempo nem avisos, com o texto que aparece como punição.
-      const texto = String(bruto?.texto || '').replace(/\s+/g, ' ').trim().slice(0, 60);
-      if (texto.length < 2) return { erro: `Motivo ${nome}: escreva o texto da punição (ex.: Mute 120 min).` };
+      // Neutro: só visual. O texto é opcional (sem ele, aparece "Neutro").
+      const texto = String(bruto?.texto || '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Neutro';
       vistos.add(nome);
       regras.push({ nome, sinonimos: sinonimos.filter(s => s !== nome), cmd, tempo: 0, avisos: 0, texto });
       continue;
     }
-    if (!CMDS_PUNICAO.includes(cmd)) return { erro: `Motivo ${nome}: tipo inválido (ban, cadeia ou só registro).` };
+    if (!CMDS_PUNICAO.includes(cmd)) return { erro: `Motivo ${nome}: tipo inválido (ban, cadeia ou neutro).` };
     if (!Number.isInteger(tempo) || tempo < 0 || tempo > 99999 || (cmd === 'cadeia' && tempo === 0)) return { erro: `Motivo ${nome}: tempo inválido.` };
     if (!Number.isInteger(avisos) || avisos < 0 || avisos > 10) return { erro: `Motivo ${nome}: avisos inválidos (0 a 10).` };
     vistos.add(nome);

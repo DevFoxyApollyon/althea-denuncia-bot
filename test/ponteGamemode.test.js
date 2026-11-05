@@ -1866,15 +1866,15 @@ test('motivo "só registro": aparece com o texto, não vai para o jogo e não so
     { nome: 'DM', cmd: 'ban', tempo: 5, avisos: 1 }
   ]);
   assert.equal(erro, undefined);
-  assert.match(validarTabela([{ nome: 'XX', cmd: 'registro', tempo: 0 }]).erro, /texto da punição/);
+  assert.equal(validarTabela([{ nome: 'XX', cmd: 'registro', tempo: 0 }]).regras[0].texto, 'Neutro', 'texto opcional');
   const tabela = tabelaDa({ regras });
   const so = classificarMotivo('mau uso /n', tabela);
   assert.deepEqual([so.cmd, so.texto], ['registro', 'Mute 120 min']);
   const junto = classificarMotivo('mau uso /n + dm', tabela);
   assert.deepEqual([junto.cmd, junto.tempo, junto.avisos], ['ban', 5, 1], 'registro não soma com ban');
   const { textoParaTabela, tabelaParaTexto } = require('../services/ponteSamp/motivos');
-  assert.match(tabelaParaTexto(tabela), /MAU USO \/N = registro Mute 120 min/);
-  assert.deepEqual(textoParaTabela('MAU USO /N = registro Mute 120 min').lista[0], { nome: 'MAU USO /N', sinonimos: [], cmd: 'registro', tempo: 0, avisos: 0, texto: 'Mute 120 min' });
+  assert.match(tabelaParaTexto(tabela), /MAU USO \/N = neutro Mute 120 min/);
+  assert.deepEqual(textoParaTabela('MAU USO /N = neutro Mute 120 min').lista[0], { nome: 'MAU USO /N', sinonimos: [], cmd: 'registro', tempo: 0, avisos: 0, texto: 'Mute 120 min' });
 });
 
 test('/desbanir pelo ID: consulta a conta no jogo e manda desbanir com os avisos escolhidos', async () => {

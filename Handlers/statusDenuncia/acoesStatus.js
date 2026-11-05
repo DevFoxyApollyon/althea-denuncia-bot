@@ -640,7 +640,7 @@ async function handleLogAceitarButton(interaction, denuncia) {
       executando: '\nℹ️ Esta punição já foi enviada ao jogo e está esperando a resposta.',
       cancelada: '\nℹ️ Esta punição foi cancelada.'
     };
-    let linhaPonte = ponte?.soRegistro ? '\n📝 Só registro: este motivo não vai para o jogo.'
+    let linhaPonte = ponte?.soRegistro ? '\n📝 Motivo neutro: só visual, não vai para o jogo.'
       : ponte?.reaberta ? '\n🔁 Punição reaberta: estava cancelada.'
       : ponte?.jaExistia ? (JA_EXISTIA[ponte.status] || `\nℹ️ Já está no painel do jogo (aceita por ${ponte.aceitoPor || 'outra pessoa'}).`)
         : ponte?.criado ? '\n🎮 Enviada para o painel do jogo.' : '';

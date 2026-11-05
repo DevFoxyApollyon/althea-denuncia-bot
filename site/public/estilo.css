@@ -2770,6 +2770,9 @@ button.teste-cartao.rascunho { border-style: dashed; }
 .motivo-resumo { padding-inline: 6px; }
 .motivo-campo.largo { grid-column: 1 / -1; }
 .config .cartao > button { margin-top: 12px; }
+.motivos-barra-acoes { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.motivos-barra-acoes .acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.motivo-item.neutro { border-left-color: var(--texto-3); }
 @media (max-width: 760px) {
   .motivo-adicionar { width: 100%; }
 }

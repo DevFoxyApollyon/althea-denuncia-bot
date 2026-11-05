@@ -28,7 +28,7 @@ function aplicar(dados) {
 }
 
 function descrever(m) {
-  if (m.cmd === 'registro') return `${m.texto || 'Só registro'} · não vai para o jogo`;
+  if (m.cmd === 'registro') return `${m.texto || 'Neutro'} · só visual, não vai para o jogo`;
   const tempo = Number(m.tempo) || 0;
   const avisos = Number(m.avisos) || 0;
   const base = m.cmd === 'cadeia' ? `Cadeia de ${tempo} min` : tempo === 0 ? 'Banimento permanente (/blackban)' : `Banimento de ${tempo} dia(s)`;
@@ -64,7 +64,7 @@ function linhaDoMotivo(m, indice, edicao, podeApagar) {
   const campo = (props) => el('input', { ...props, oninput: (e) => { m[props['data-campo']] = e.target.value; }, onchange: () => desenhar() });
   const rotulado = (rotulo, controle, classe = '') => el('label', { class: `motivo-campo ${classe}`.trim() }, el('span', null, rotulo), controle);
   const permanente = m.cmd !== 'cadeia' && (Number(m.tempo) || 0) === 0;
-  return el('article', { class: `motivo-item${m.cmd === 'cadeia' ? ' cadeia' : m.cmd === 'registro' ? ' registro' : permanente ? ' permanente' : ''}` },
+  return el('article', { class: `motivo-item${m.cmd === 'cadeia' ? ' cadeia' : m.cmd === 'registro' ? ' neutro' : permanente ? ' permanente' : ''}` },
     el('header', { class: 'motivo-topo' },
       campo({ 'data-campo': 'nome', class: 'motivo-nome', value: m.nome, maxlength: '30', 'aria-label': 'Motivo', placeholder: 'Nome do motivo (ex.: DM)', readonly: travado, title: travado ? 'Só o dono do bot renomeia motivos.' : null }),
       el('span', { class: 'motivo-resumo' }, descrever(m)),
@@ -73,9 +73,9 @@ function linhaDoMotivo(m, indice, edicao, podeApagar) {
       rotulado('Tipo', el('select', { onchange: (e) => { m.cmd = e.target.value; desenhar(); } },
         el('option', { value: 'ban', selected: m.cmd === 'ban' }, 'Tempban'),
         el('option', { value: 'cadeia', selected: m.cmd === 'cadeia' }, 'Cadeia'),
-        el('option', { value: 'registro', selected: m.cmd === 'registro' }, 'Só registro (não vai para o jogo)'))),
+        el('option', { value: 'registro', selected: m.cmd === 'registro' }, 'Neutro'))),
       m.cmd === 'registro'
-        ? rotulado('Texto da punição', campo({ 'data-campo': 'texto', value: m.texto || '', maxlength: '60', placeholder: 'Ex.: Mute 120 min' }), 'largo')
+        ? rotulado('Texto que aparece (opcional)', campo({ 'data-campo': 'texto', value: m.texto || '', maxlength: '60', placeholder: 'Ex.: Mute 120 min' }), 'largo')
         : [
           rotulado(m.cmd === 'cadeia' ? 'Minutos' : 'Dias (0 = perm.)', campo({ 'data-campo': 'tempo', type: 'number', inputmode: 'numeric', min: '0', max: '99999', value: String(m.tempo) })),
           rotulado('Avisos', campo({ 'data-campo': 'avisos', type: 'number', inputmode: 'numeric', min: '0', max: '10', value: String(m.avisos) }))
@@ -101,17 +101,21 @@ export function telaMotivosPonte() {
           el('p', { class: 'sub' }, dados.propria ? 'Tabela personalizada.' : 'Usando a tabela padrão do bot.'),
           !dados.podeApagar && el('p', { class: 'sub' }, 'Você pode mudar e adicionar motivos. Apagar ou renomear um motivo é só com o dono do bot.'))),
       el('section', { class: 'cartao' },
-        el('p', { class: 'bot-ajuda' }, 'Só registro: para punições que não são ban nem cadeia (ex.: mute já dado no jogo). A denúncia é aceita normalmente, mas nada vai para o jogo; o texto aparece como a punição.'),
+        el('p', { class: 'bot-ajuda' }, 'Neutro: só visual, para punições que não são ban nem cadeia (ex.: mute já dado no jogo). A denúncia é aceita normalmente, mas nada vai para o jogo; o texto aparece como a punição.'),
         el('p', { class: 'bot-ajuda' }, 'Vários motivos na mesma denúncia: banimentos somam dias e avisos; permanente (tempo 0) vence tudo e vira /blackban; banimento vence cadeia. Todo motivo vai com [DC] no fim. Os sinônimos também são reconhecidos (ex.: MONEY FARM e MF).'),
-        el('div', { class: 'motivo-lista' }, edicao.map((m, i) => linhaDoMotivo(m, i, edicao, dados.podeApagar))),
-        el('button', { type: 'button', class: 'motivo-adicionar', onclick: () => { edicao.push({ nome: '', sinonimos: '', cmd: 'ban', tempo: 1, avisos: 1 }); desenhar(); } }, '+ Adicionar motivo')),
-      el('div', { class: `bot-barra${mudou ? ' ativa' : ''}`, role: 'status' },
+        el('div', { class: 'motivo-lista' }, edicao.map((m, i) => linhaDoMotivo(m, i, edicao, dados.podeApagar)))),
+      // Barra fixa: à esquerda o que mexe na lista; à direita descartar e salvar.
+      el('div', { class: `bot-barra motivos-barra${mudou ? ' ativa' : ''}`, role: 'status' },
         el('p', null, mudou ? 'Mudanças não salvas' : 'Tudo salvo'),
-        el('div', { class: 'acoes' },
-          dados.propria && dados.podeApagar && el('button', {
-            type: 'button',
-            onclick: (e) => salvar(e.currentTarget, [], 'Voltar para a tabela padrão do bot em todos os servidores? As mudanças feitas serão perdidas.')
-          }, 'Restaurar padrão'),
+        el('div', { class: 'motivos-barra-acoes' },
+          el('div', { class: 'acoes' },
+            el('button', { type: 'button', onclick: () => adicionarMotivo(edicao) }, '+ Adicionar motivo'),
+            dados.propria && dados.podeApagar && el('button', {
+              type: 'button',
+              class: 'perigo',
+              onclick: (e) => salvar(e.currentTarget, [], 'Voltar para a tabela padrão do bot em todos os servidores? As mudanças feitas serão perdidas.')
+            }, 'Restaurar padrão')),
+          el('div', { class: 'acoes' },
           mudou && el('button', { type: 'button', onclick: () => { dados.edicao = JSON.parse(dados.salvo); desenhar(); } }, 'Descartar'),
           el('button', {
             class: 'primario',
@@ -122,5 +126,15 @@ export function telaMotivosPonte() {
               if (!tabela.length) return avisar('erro', 'A tabela não pode ficar vazia. Use "Restaurar padrão".');
               salvar(e.currentTarget, tabela, `A tabela fica com ${tabela.length} motivos e vale para todos os servidores.`);
             }
-          }, 'Salvar motivos')))));
+          }, 'Salvar motivos'))))));
+}
+
+// Motivo novo no fim da lista: rola até ele e já deixa o nome para digitar.
+function adicionarMotivo(edicao) {
+  edicao.push({ nome: '', sinonimos: '', cmd: 'ban', tempo: 1, avisos: 1 });
+  desenhar();
+  const nomes = document.querySelectorAll('.motivo-lista .motivo-nome');
+  const ultimo = nomes[nomes.length - 1];
+  ultimo?.closest('.motivo-item')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  ultimo?.focus({ preventScroll: true });
 }
