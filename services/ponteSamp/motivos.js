@@ -32,9 +32,18 @@ async function obterTabela() {
 }
 
 // Salva a tabela de todos os servidores. Lista vazia volta para a padrão.
-async function salvarTabela(lista, autor) {
+// podeApagar: só o dono do bot apaga motivo (ou volta à tabela padrão). Os outros
+// só mudam o que já existe e adicionam; renomear conta como apagar.
+async function salvarTabela(lista, autor, { podeApagar = true } = {}) {
   const { erro, regras } = validarTabela(lista);
   if (erro) return { erro };
+  if (!podeApagar) {
+    const atual = await obterTabela();
+    if (atual.propria && (!Array.isArray(lista) || lista.length === 0)) return { erro: 'Só o dono do bot pode voltar para a tabela padrão.' };
+    const novos = new Set(regras.map(r => r.nome));
+    const sumiram = atual.tabela.map(t => t.nome).filter(nome => !novos.has(nome));
+    if (sumiram.length) return { erro: `Só o dono do bot pode apagar ou renomear motivos: ${sumiram.slice(0, 10).join(', ')}.` };
+  }
   await PonteMotivos.updateOne(
     { chave: 'global' },
     { $set: { regras, definidas: true, atualizadoPor: String(autor || 'Sistema').slice(0, 80) } },

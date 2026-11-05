@@ -85,55 +85,6 @@ async function api(caminho, opcoes = {}) {
   return corpo;
 }
 const post = (caminho, corpo = {}) => api(caminho, { method: 'POST', body: JSON.stringify(corpo) });
-const put = (caminho, corpo = {}) => api(caminho, { method: 'PUT', body: JSON.stringify(corpo) });
-
-// Linha editável da tabela de motivos.
-function linhaMotivo(m = { nome: '', sinonimos: [], cmd: 'ban', tempo: 1, avisos: 1 }) {
-  const tr = document.createElement('tr');
-  const campo = (tipo, valor, attrs = {}) => {
-    const td = document.createElement('td');
-    const el = document.createElement('input');
-    el.type = tipo;
-    el.value = valor;
-    Object.assign(el, attrs);
-    td.append(el);
-    tr.append(td);
-    return el;
-  };
-  campo('text', m.nome, { maxLength: 30 }).dataset.campo = 'nome';
-  campo('text', m.sinonimos.join(', ')).dataset.campo = 'sinonimos';
-  const tdTipo = document.createElement('td');
-  const tipo = document.createElement('select');
-  tipo.dataset.campo = 'cmd';
-  tipo.append(new Option('Tempban (dias)', 'ban'), new Option('Cadeia (minutos)', 'cadeia'));
-  tipo.value = m.cmd;
-  tdTipo.append(tipo);
-  tr.append(tdTipo);
-  campo('number', m.tempo, { min: 0, max: 99999 }).dataset.campo = 'tempo';
-  campo('number', m.avisos, { min: 0, max: 10 }).dataset.campo = 'avisos';
-  const tdApagar = document.createElement('td');
-  const apagar = document.createElement('button');
-  apagar.type = 'button';
-  apagar.className = 'perigo';
-  apagar.textContent = 'Apagar';
-  apagar.addEventListener('click', () => tr.remove());
-  tdApagar.append(apagar);
-  tr.append(tdApagar);
-  return tr;
-}
-
-function lerMotivos() {
-  return [...document.querySelectorAll('#aba-motivos tbody tr')].map(tr => {
-    const v = (campo) => tr.querySelector(`[data-campo="${campo}"]`).value;
-    return {
-      nome: v('nome').trim(),
-      sinonimos: v('sinonimos').split(',').map(s => s.trim()).filter(Boolean),
-      cmd: v('cmd'),
-      tempo: Number(v('tempo')),
-      avisos: Number(v('avisos'))
-    };
-  }).filter(m => m.nome);
-}
 
 function linha(celulas, acao) {
   const tr = document.createElement('tr');
@@ -651,11 +602,6 @@ const carregadores = {
     if (continuar) tbody.append(...linhas); else tbody.replaceChildren(...linhas);
     $('#mais-uso').hidden = lista.length < 50;
   },
-  async motivos() {
-    const { tabela, propria } = await api('/motivos');
-    $('#motivos-situacao').textContent = propria ? 'Tabela personalizada.' : 'Usando a tabela padrão.';
-    $('#aba-motivos tbody').replaceChildren(...tabela.map(linhaMotivo));
-  },
   async codigos() {
     const lista = await api('/codigos');
     preencher('codigos', lista.map(c => {
@@ -738,16 +684,6 @@ async function iniciar() {
     } catch (erro) { aviso(erro.message); }
   });
 
-  $('#motivo-novo').addEventListener('click', () => $('#aba-motivos tbody').append(linhaMotivo()));
-  $('#motivos-salvar').addEventListener('click', async () => {
-    const tabela = lerMotivos();
-    if (!tabela.length) return aviso('A tabela não pode ficar vazia (use Restaurar padrão).');
-    try { const r = await put('/motivos', { tabela }); aviso(`Motivos salvos (${r.total}).`); carregar('motivos'); } catch (e) { aviso(e.message); }
-  });
-  $('#motivos-padrao').addEventListener('click', async () => {
-    if (!confirm('Voltar para a tabela padrão? As mudanças feitas serão perdidas.')) return;
-    try { await put('/motivos', { tabela: [] }); aviso('Tabela padrão restaurada.'); carregar('motivos'); } catch (e) { aviso(e.message); }
-  });
 
   try { ({ csrf, dono } = await api('/csrf')); } catch (e) { aviso(e.message); }
   for (const elemento of document.querySelectorAll('.so-dono')) elemento.hidden = !dono;

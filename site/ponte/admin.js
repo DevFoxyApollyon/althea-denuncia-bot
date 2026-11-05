@@ -13,8 +13,6 @@ const PonteConexaoGm = require('../../models/PonteConexaoGm');
 const PontePedidoGm = require('../../models/PontePedidoGm');
 const PontePunicao = require('../../models/PontePunicao');
 const gestao = require('../../services/ponteSamp/gestao');
-const motivos = require('../../services/ponteSamp/motivos');
-const { reclassificarFila } = require('../../services/ponteSamp/aceite');
 const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE, EXECUTORES, LIMITES_GM_PADRAO } = require('../../services/ponteSamp/constantes');
 const { chaveMestraConfigurada, impressaoDaChave } = require('../../services/ponteSamp/cifra');
 const { trocarChaveMestra } = require('../../services/ponteSamp/chaveMestra');
@@ -366,20 +364,6 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     }
     const { codigo } = await gestao.criarCodigo({ criadoPor: req.usuario.id, validadeDias, limitePcs });
     res.json({ ok: true, codigo });
-  }));
-
-  // Tabela de motivos (a mesma para todos os servidores).
-  router.get('/api/motivos', rota(async (req, res) => {
-    const { tabela, propria } = await motivos.obterTabela();
-    res.json({ propria, tabela: tabela.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.filter(s => s !== t.nome), cmd: t.cmd, tempo: t.tempo, avisos: t.avisos, grupo: t.grupo })) });
-  }));
-
-  router.put('/api/motivos', rota(async (req, res) => {
-    const salvo = await motivos.salvarTabela(req.body?.tabela, `site: ${req.usuario.nome}`);
-    if (salvo.erro) return res.status(400).json({ erro: salvo.erro });
-    reclassificarFila({ client, tabela: salvo.tabela }).catch(() => {});
-    log?.info?.(`Tabela de motivos da ponte salva pelo site (${salvo.tabela.length} motivos).`);
-    res.json({ ok: true, propria: salvo.propria, total: salvo.tabela.length });
   }));
 
   // Apagar de vez um PC ou um código (some da lista). O PC apagado perde o token na hora,

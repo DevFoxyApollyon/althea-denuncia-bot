@@ -815,3 +815,18 @@ test('punição aplicada: botão "Ver no site" com a página da denúncia', asyn
   assert.equal(botoes[1].url, `https://site.exemplo/#/d/${denunciaId}`);
   assert.equal(botoes[1].label, 'Ver no site');
 });
+
+test('motivos: quem não é o dono muda e adiciona, mas não apaga, renomeia nem volta ao padrão', async () => {
+  const motivos = require('../services/ponteSamp/motivos');
+  const { tabela: padrao } = await motivos.obterTabela();
+  const comNovo = [...padrao, { nome: 'TESTE NOVO', cmd: 'ban', tempo: 2, avisos: 0 }];
+  const ok = await motivos.salvarTabela(comNovo, 'staff', { podeApagar: false });
+  assert.equal(ok.erro, undefined, 'adicionar pode');
+  const mudado = comNovo.map(t => (t.nome === 'TESTE NOVO' ? { ...t, tempo: 4 } : t));
+  assert.equal((await motivos.salvarTabela(mudado, 'staff', { podeApagar: false })).erro, undefined, 'mudar pode');
+  assert.match((await motivos.salvarTabela(padrao, 'staff', { podeApagar: false })).erro, /Só o dono.*TESTE NOVO/);
+  const renomeado = mudado.map(t => (t.nome === 'TESTE NOVO' ? { ...t, nome: 'OUTRO NOME' } : t));
+  assert.match((await motivos.salvarTabela(renomeado, 'staff', { podeApagar: false })).erro, /Só o dono/);
+  assert.match((await motivos.salvarTabela([], 'staff', { podeApagar: false })).erro, /tabela padrão/);
+  assert.equal((await motivos.salvarTabela([], 'dono')).propria, false, 'o dono volta ao padrão');
+});

@@ -128,7 +128,8 @@ async function handlePonteMotivosModal(interaction) {
   if (!(await podeEditarMotivos(interaction))) return interaction.reply(efemero('❌ Sem permissão.'));
   const { erro, lista } = motivos.textoParaTabela(interaction.fields.getTextInputValue('motivos'));
   if (erro) return interaction.reply(efemero(`❌ ${erro}`));
-  const salvo = await motivos.salvarTabela(lista, `${interaction.user.tag} (Discord, ${interaction.guild.name})`);
+  const podeApagar = require('../services/ponteSamp/gestao').ehDono(interaction.user.id);
+  const salvo = await motivos.salvarTabela(lista, `${interaction.user.tag} (Discord, ${interaction.guild.name})`, { podeApagar });
   if (salvo.erro) return interaction.reply(efemero(`❌ ${salvo.erro}`));
   reclassificarFila({ client: interaction.client, tabela: salvo.tabela }).catch(() => {});
   log.info(`Tabela de motivos da ponte salva por ${interaction.user.tag} (${salvo.tabela.length} motivos).`);

@@ -23,8 +23,8 @@ export async function carregarMotivosPonte() {
 
 // "edicao" é o que está na tela; "salvo" é o que veio do servidor, para saber o que mudou.
 function aplicar(dados) {
-  const edicao = dados.tabela.map(m => ({ nome: m.nome, sinonimos: m.sinonimos.join(', '), cmd: m.cmd, tempo: m.tempo, avisos: m.avisos }));
-  estado.motivosPonte = { propria: dados.propria, edicao, salvo: JSON.stringify(edicao) };
+  const edicao = dados.tabela.map(m => ({ nome: m.nome, sinonimos: m.sinonimos.join(', '), cmd: m.cmd, tempo: m.tempo, avisos: m.avisos, salvo: true }));
+  estado.motivosPonte = { propria: dados.propria, podeApagar: dados.podeApagar === true, edicao, salvo: JSON.stringify(edicao) };
 }
 
 function descrever(m) {
@@ -56,15 +56,17 @@ async function salvar(botao, tabela, mensagemConfirmacao) {
 }
 
 // Um cartão por motivo: nome e resumo no topo; tipo, tempo, avisos e sinônimos com rótulo embaixo.
-function linhaDoMotivo(m, indice, edicao) {
+// Motivo já salvo só é apagado ou renomeado pelo dono do bot; o novo (ainda não salvo) pode sair.
+function linhaDoMotivo(m, indice, edicao, podeApagar) {
+  const travado = m.salvo && !podeApagar;
   const campo = (props) => el('input', { ...props, oninput: (e) => { m[props['data-campo']] = e.target.value; }, onchange: () => desenhar() });
   const rotulado = (rotulo, controle, classe = '') => el('label', { class: `motivo-campo ${classe}`.trim() }, el('span', null, rotulo), controle);
   const permanente = m.cmd !== 'cadeia' && (Number(m.tempo) || 0) === 0;
   return el('article', { class: `motivo-item${m.cmd === 'cadeia' ? ' cadeia' : permanente ? ' permanente' : ''}` },
     el('header', { class: 'motivo-topo' },
-      campo({ 'data-campo': 'nome', class: 'motivo-nome', value: m.nome, maxlength: '30', 'aria-label': 'Motivo', placeholder: 'Nome do motivo (ex.: DM)' }),
+      campo({ 'data-campo': 'nome', class: 'motivo-nome', value: m.nome, maxlength: '30', 'aria-label': 'Motivo', placeholder: 'Nome do motivo (ex.: DM)', readonly: travado, title: travado ? 'Só o dono do bot renomeia motivos.' : null }),
       el('span', { class: 'motivo-resumo' }, descrever(m)),
-      el('button', { type: 'button', class: 'so-icone perigo', title: 'Apagar motivo', 'aria-label': `Apagar ${m.nome || 'motivo'}`, onclick: () => { edicao.splice(indice, 1); desenhar(); } }, icone('lixeira'))),
+      !travado && el('button', { type: 'button', class: 'so-icone perigo', title: 'Apagar motivo', 'aria-label': `Apagar ${m.nome || 'motivo'}`, onclick: () => { edicao.splice(indice, 1); desenhar(); } }, icone('lixeira'))),
     el('div', { class: 'motivo-campos' },
       rotulado('Tipo', el('select', { onchange: (e) => { m.cmd = e.target.value; desenhar(); } },
         el('option', { value: 'ban', selected: m.cmd === 'ban' }, 'Tempban'),
@@ -89,15 +91,16 @@ export function telaMotivosPonte() {
         el('div', null,
           el('h1', null, 'Motivos de punição'),
           el('p', { class: 'sub' }, 'O motivo escrito no aceite da denúncia escolhe a punição aplicada pelo painel do jogo. A tabela é a mesma em todos os servidores: o que você salvar aqui vale para todos.'),
-          el('p', { class: 'sub' }, dados.propria ? 'Tabela personalizada.' : 'Usando a tabela padrão do bot.'))),
+          el('p', { class: 'sub' }, dados.propria ? 'Tabela personalizada.' : 'Usando a tabela padrão do bot.'),
+          !dados.podeApagar && el('p', { class: 'sub' }, 'Você pode mudar e adicionar motivos. Apagar ou renomear um motivo é só com o dono do bot.'))),
       el('section', { class: 'cartao' },
         el('p', { class: 'bot-ajuda' }, 'Vários motivos na mesma denúncia: banimentos somam dias e avisos; permanente (tempo 0) vence tudo e vira /blackban; banimento vence cadeia. Todo motivo vai com [DC] no fim. Os sinônimos também são reconhecidos (ex.: MONEY FARM e MF).'),
-        el('div', { class: 'motivo-lista' }, edicao.map((m, i) => linhaDoMotivo(m, i, edicao))),
+        el('div', { class: 'motivo-lista' }, edicao.map((m, i) => linhaDoMotivo(m, i, edicao, dados.podeApagar))),
         el('button', { type: 'button', class: 'motivo-adicionar', onclick: () => { edicao.push({ nome: '', sinonimos: '', cmd: 'ban', tempo: 1, avisos: 1 }); desenhar(); } }, '+ Adicionar motivo')),
       el('div', { class: `bot-barra${mudou ? ' ativa' : ''}`, role: 'status' },
         el('p', null, mudou ? 'Mudanças não salvas' : 'Tudo salvo'),
         el('div', { class: 'acoes' },
-          dados.propria && el('button', {
+          dados.propria && dados.podeApagar && el('button', {
             type: 'button',
             onclick: (e) => salvar(e.currentTarget, [], 'Voltar para a tabela padrão do bot em todos os servidores? As mudanças feitas serão perdidas.')
           }, 'Restaurar padrão'),

@@ -6,9 +6,12 @@ const { ErroHttp, assincrono } = require('./comum');
 const motivos = require('../../services/ponteSamp/motivos');
 const { reclassificarFila } = require('../../services/ponteSamp/aceite');
 const PonteUso = require('../../models/PonteUso');
+const { ehDono } = require('../../services/ponteSamp/gestao');
 
-const paraTela = ({ tabela, propria }) => ({
+const paraTela = ({ tabela, propria }, podeApagar) => ({
   propria,
+  // Só o dono do bot apaga motivos; os outros mudam e adicionam.
+  podeApagar,
   tabela: tabela.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.filter(s => s !== t.nome), cmd: t.cmd, tempo: t.tempo, avisos: t.avisos, grupo: t.grupo }))
 });
 
@@ -21,12 +24,13 @@ function registrarRotasDeMotivosDaPonte(router, { client }) {
 
   router.get('/motivos-ponte', assincrono(async (req, res) => {
     await acessoDaStaff(req, req.query.guildId);
-    res.json(paraTela(await motivos.obterTabela()));
+    res.json(paraTela(await motivos.obterTabela(), ehDono(req.usuario.id)));
   }));
 
   router.post('/motivos-ponte', express.json({ limit: '64kb' }), assincrono(async (req, res) => {
     const acesso = await acessoDaStaff(req, req.body?.guildId);
-    const salvo = await motivos.salvarTabela(req.body?.tabela, `${req.usuario.nome} (site, ${acesso.guild.name})`);
+    const podeApagar = ehDono(req.usuario.id);
+    const salvo = await motivos.salvarTabela(req.body?.tabela, `${req.usuario.nome} (site, ${acesso.guild.name})`, { podeApagar });
     if (salvo.erro) throw new ErroHttp(400, salvo.erro);
     // Denúncias que esperavam por um motivo novo saem do "aguardando" (não segura a resposta).
     reclassificarFila({ client, tabela: salvo.tabela }).catch(() => {});
@@ -34,7 +38,7 @@ function registrarRotasDeMotivosDaPonte(router, { client }) {
       guildId: acesso.guild.id, acao: 'regras',
       detalhes: { por: req.usuario.id, nome: req.usuario.nome, motivos: salvo.tabela.length, propria: salvo.propria }
     }).catch(() => {});
-    res.json({ ok: true, mensagem: salvo.propria ? 'Motivos salvos para todos os servidores.' : 'Tabela padrão restaurada.', ...paraTela(salvo) });
+    res.json({ ok: true, mensagem: salvo.propria ? 'Motivos salvos para todos os servidores.' : 'Tabela padrão restaurada.', ...paraTela(salvo, podeApagar) });
   }));
 }
 
