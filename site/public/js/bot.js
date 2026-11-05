@@ -26,6 +26,7 @@ const GRUPOS_DE_CANAIS = [
       { chave: 'log', nome: 'Log administrativo', explica: 'Registro das ações da staff (análise, aceite, recusa), dos alertas de muitas denúncias contra o mesmo jogador e das mensagens apagadas nos tópicos.' },
       { chave: 'analysis', nome: 'Em análise', explica: 'Lista das denúncias que estão em análise. A mensagem sai daqui quando a denúncia é decidida.' },
       { chave: 'topDaily', nome: 'Top diário', explica: 'O ranking diário da staff é enviado neste canal.' },
+      { chave: 'provasStaff', nome: 'Provas da staff', explica: 'Canal fixo do /provastaff: a staff registra a punição com as provas, e o responsável aceita (vai para a Cadeia Staff) ou recusa.' },
       { chave: 'relatorioPunicoes', nome: 'Relatório de punições', explica: 'Histórico das punições aplicadas pelo painel do jogo (organização, nick, ID e link da denúncia). Sem este canal, vai para o Log administrativo.' },
       { chave: 'backup', nome: 'Backup', explica: 'Recebe o arquivo com a conversa e as provas quando a denúncia é finalizada. Usado quando não há canal Cloud.' },
       { chave: 'armazem', nome: 'Armazém', explica: 'Cada denúncia nova ganha uma cópia (tópico espelho) neste canal.' }
@@ -43,6 +44,7 @@ const CARGOS = [
   { chave: 'pc', nome: 'Pode denunciar no PC', obrigatorio: true, explica: 'Quem tem este cargo pode abrir denúncia de PC, no Discord e no site.' },
   { chave: 'permitido', nome: 'Pode denunciar no Mobile', obrigatorio: true, explica: 'Quem tem este cargo pode abrir denúncia de Mobile, no Discord e no site.' },
   { chave: 'administrador', nome: 'Staff (administrador)', explica: 'Atende as denúncias: reivindica, analisa, aceita e recusa. No site, vê a fila e os atendimentos.' },
+  { chave: 'fundador', nome: 'Fundador', explica: 'Opcional. Escolhido, só quem tem este cargo entra no Painel do bot (aqui e no /painel do Discord) e nas Configurações do site. Sem ele, vale o cargo de responsável.' },
   { chave: 'responsavel_admin', nome: 'Responsável', obrigatorio: true, explica: 'Tudo o que a staff faz, mais: finalizar denúncias, usar o /painel, ver a auditoria e mexer nas configurações do site, inclusive nesta tela.' }
 ];
 
@@ -78,6 +80,7 @@ function aplicar(dados) {
     analiseAutomatica: dados.valores.analiseAutomatica !== false,
     minutosAnalise: Number(dados.valores.minutosAnalise) || 30,
     topicosPrivados: dados.valores.topicosPrivados !== false,
+    senhaCadeia: dados.valores.senhaCadeia === true,
     isentos: dados.valores.isentos.map(item => item.id).join('\n')
   };
   estado.painelBot = { ...dados, edicao: valores, salvo: JSON.stringify(valores) };
@@ -344,6 +347,7 @@ export function telaPainelDoBot() {
     edicao.analiseAutomatica !== antes.analiseAutomatica,
     edicao.minutosAnalise !== antes.minutosAnalise,
     edicao.topicosPrivados !== antes.topicosPrivados,
+    edicao.senhaCadeia !== antes.senhaCadeia,
     edicao.isentos.trim() !== antes.isentos.trim(),
     ...todosOsCanais.map(item => edicao.channels[item.chave] !== antes.channels[item.chave]),
     ...CARGOS.map(item => edicao.roles[item.chave] !== antes.roles[item.chave])
@@ -410,6 +414,9 @@ export function telaPainelDoBot() {
         linha({ nome: 'Tópicos privados', explica: 'Ligada, a denúncia em que todos os acusados estão no banco abre em tópico privado: só o denunciante, os acusados e a staff veem. Desligada, toda denúncia abre em tópico público (só as partes e a staff conseguem falar nele, como antes).' },
           'bot-topicos-privados', interruptor(edicao, 'topicosPrivados', 'bot-topicos-privados', { ligado: 'Privado', desligado: 'Sempre público' }), null,
           { valor: edicao.topicosPrivados, mudou: edicao.topicosPrivados !== antes.topicosPrivados }),
+        linha({ nome: 'Senha para aceitar e recusar na Cadeia Staff', explica: 'Ligada, quem clica em Aceitar ou Recusar na Cadeia Staff precisa da senha pessoal. Na primeira vez a pessoa cria a senha (digita e confirma); depois fica liberada por 30 minutos e, passado esse tempo, digita a senha de novo. Só um código protegido da senha fica guardado.' },
+          'bot-senha-cadeia', interruptor(edicao, 'senhaCadeia', 'bot-senha-cadeia', { ligado: 'Pede senha', desligado: 'Sem senha' }), null,
+          { valor: edicao.senhaCadeia, mudou: edicao.senhaCadeia !== antes.senhaCadeia }),
         linha({ nome: 'Arquivar tópicos sem mensagem', explica: 'Tempo sem mensagem até o tópico de uma denúncia nova ser arquivado. Arquivado, ele some da lista do lado no Discord, mas continua aberto pelo link e volta sozinho quando alguém escreve. Vale para as denúncias abertas depois de salvar.' },
           'bot-arquivar', el('select', {
             id: 'bot-arquivar',

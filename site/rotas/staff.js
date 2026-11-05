@@ -214,13 +214,13 @@ function registrarRotasDaStaff(router, { client, carregarDenuncia, buscarTopico,
   // Configurações do site (categorias), por servidor.
   router.get('/config-site', assincrono(async (req, res) => {
     const acesso = await acessoAoServidor(client, req.usuario.id, String(req.query.guildId || ''));
-    if (!acesso?.papeis.responsavel) throw new ErroHttp(403, 'As configurações são restritas ao responsável.');
+    if (!acesso?.papeis.podeConfigurar) throw new ErroHttp(403, acesso?.config?.roles?.fundador ? 'As configurações do site são restritas ao fundador.' : 'As configurações são restritas ao responsável.');
     res.json({ config: configVisivel(acesso.guild.id), padrao: PADRAO });
   }));
 
   router.post('/config-site', express.json({ limit: '128kb' }), assincrono(async (req, res) => {
     const acesso = await acessoAoServidor(client, req.usuario.id, String(req.body?.guildId || ''));
-    if (!acesso?.papeis.responsavel) throw new ErroHttp(403, 'As configurações são restritas ao responsável.');
+    if (!acesso?.papeis.podeConfigurar) throw new ErroHttp(403, acesso?.config?.roles?.fundador ? 'As configurações do site são restritas ao fundador.' : 'As configurações são restritas ao responsável.');
 
     if (req.body?.restaurar === true) {
       await restaurarConfigDoSite(acesso.guild.id);

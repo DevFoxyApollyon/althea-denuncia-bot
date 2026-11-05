@@ -560,6 +560,27 @@ async function handleRecusarPorMensagem(message, denuncia, config) {
   await handleRecusar(interaction, denuncia, config, message.url, logsChannel, 'palavra-chave');
 }
 
+// /desbanir: a punição foi desfeita, então a denúncia passa a recusada pelo mesmo
+// caminho do botão Recusar (mensagens do tópico, Cadeia Staff, histórico e rank).
+async function recusarDenunciaDesfeita({ client, guild, member, user, denunciaId }) {
+  const denuncia = await Denuncia.findById(denunciaId);
+  if (!denuncia || denuncia.status === 'recusada') return false;
+  const config = await getCachedConfig(guild.id);
+  const topico = denuncia.threadId ? await guild.channels.fetch(denuncia.threadId).catch(() => null) : null;
+  if (!topico) return false;
+  const interaction = {
+    guild, channel: topico, client, user, member,
+    deferred: false, replied: false,
+    isRepliable: () => true,
+    deferReply: async () => { interaction.deferred = true; },
+    editReply: async () => null,
+    reply: async () => null
+  };
+  const logsChannel = config?.channels?.logs ? guild.channels.cache.get(config.channels.logs) : null;
+  await handleRecusar(interaction, denuncia, config, `https://discord.com/channels/${guild.id}/${denuncia.channelId}/${denuncia.messageId}`, logsChannel, 'desbanir');
+  return true;
+}
+
 async function validarResponsavelAdminLog(interaction) {
   const config = await getCachedConfig(interaction.guild.id);
   const roleId = config?.roles?.responsavel_admin;
@@ -997,6 +1018,7 @@ module.exports = {
   processarAnaliseAutomatica,
   denunciasMap,
   handleRecusarPorMensagem,
+  recusarDenunciaDesfeita,
   handleLogAceitarButton,
   handleLogRecusarButton,
   handlePunishmentModal,

@@ -14,6 +14,7 @@ const { entregarPedidos, lerResultado, registrarResultado, descreverComando, exp
 const { atualizarMensagemGm } = require('../../services/ponteSamp/discordGm');
 const { alertarSeloInvalido, alertarIpBloqueado, alertarDevolucoes } = require('../../services/ponteSamp/alertasGm');
 const PontePedidoGm = require('../../models/PontePedidoGm');
+const { VERSAO_INCLUDE_GM } = require('../../services/ponteSamp/constantes');
 const { criarLimitador } = require('../rotas/comum');
 const { ipDoCliente } = require('../protecao');
 
@@ -210,6 +211,8 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
         detalhes: { conexaoId: String(conexao._id), pedidoId: String(r.pedido._id), status: dados.status, codigo: dados.codigo }
       });
       atualizarMensagemGm(client, r.pedido.punicaoId).catch(() => {});
+      // Desbanimento (/desbanir): o resultado vai para o Relatório de punições.
+      if (['desbanir', 'soltar'].includes(r.pedido.tipo) && r.pedido.status !== 'aprovado') require('../../services/ponteSamp/desbanirGm').avisarDesbanimento(client, r.pedido, dados, conexao.nome).catch(() => {});
       // No console do bot: o que a gamemode respondeu e o porquê.
       const quem = [`conta ${dados.conta || r.pedido.conta || '?'}`, dados.nome || r.pedido.nick].filter(Boolean).join(' ');
       // Quanto tempo a gamemode levou entre buscar e responder.
@@ -226,7 +229,9 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
       if (dados.codigo === 'TIMEOUT_GAMEMODE') {
         log?.warn?.(`[PonteGm] Diagnóstico do pedido ${r.pedido._id}: a gamemode "${conexao.nome}" buscou o pedido`
           + `${r.pedido.entregueEm ? ` às ${new Date(r.pedido.entregueEm).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : ''}`
-          + `, a função Althea_Aplicar devolveu ALTHEA_AGUARDAR e Althea_Concluir não foi chamado com este ID em 180 s.`
+          + `, a função Althea_Aplicar devolveu ALTHEA_AGUARDAR e Althea_Concluir não foi chamado com este ID${segundos === null ? '' : ` em ${segundos} s`}.`
+          // Include antiga: o limite dela é 60 s (a 1.0.1 espera 180 s).
+          + (conexao.versaoInclude && conexao.versaoInclude !== VERSAO_INCLUDE_GM ? ` A gamemode está com a include ${conexao.versaoInclude} (limite de 60 s); a atual é a ${VERSAO_INCLUDE_GM}.` : '')
           + ' Causas comuns: o callback da consulta ao banco não roda (forward/public com nome errado), algum caminho (conta não achada, erro) não chama Althea_Concluir,'
           + ' ou o ID do pedido é guardado cortado. Veja o log do servidor do jogo: as linhas "[Althea]" mostram cada etapa.');
       }

@@ -141,7 +141,7 @@ async function resolverIncerto({ client = null, pedidoId, guildId, staff, aplica
   let novo = null;
   if (aplicada) {
     const conexao = (pedido.conexaoId && await PonteConexaoGm.findById(pedido.conexaoId, { nome: 1 }).lean()) || { nome: 'gamemode' };
-    await registrarAplicada(pedido, { nome: `${conexao.nome} (confirmado por ${resolvidoPor.nome})` }, pedido.resultado || {}, agora);
+    if (!['desbanir', 'soltar'].includes(pedido.tipo)) await registrarAplicada(pedido, { nome: `${conexao.nome} (confirmado por ${resolvidoPor.nome})` }, pedido.resultado || {}, agora);
     await fecharPunicaoSePronta({ client, punicaoId: pedido.punicaoId, conexao, agora });
   } else {
     // Pedido novo (rodada + 1) para o mesmo alvo, aprovado por quem confirmou.

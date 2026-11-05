@@ -4,10 +4,10 @@ const PainelHistorico = require('../models/PainelHistorico');
 
 const CANAIS = {
   pc: 'Canal Denúncias PC', mobile: 'Canal Denúncias Mobile', logs: 'Canal Cadeia Staff', log: 'Canal Log administrativo',
-  analysis: 'Canal Em análise', topDaily: 'Canal Top diário', relatorioPunicoes: 'Canal Relatório de punições',
+  analysis: 'Canal Em análise', topDaily: 'Canal Top diário', relatorioPunicoes: 'Canal Relatório de punições', provasStaff: 'Canal Provas da staff',
   backup: 'Canal Backup', armazem: 'Canal Armazém', registro: 'Canal Registro', cloud: 'Canal Cloud', canalDenuncia: 'Canal fixo de denúncias'
 };
-const CARGOS = { pc: 'Cargo PC', permitido: 'Cargo Mobile', administrador: 'Cargo Staff', responsavel_admin: 'Cargo Responsável' };
+const CARGOS = { pc: 'Cargo PC', permitido: 'Cargo Mobile', administrador: 'Cargo Staff', responsavel_admin: 'Cargo Responsável', fundador: 'Cargo Fundador' };
 const OPCOES = {
   manutencaoDenuncia: 'Manutenção das denúncias',
   bloquearReivindicacaoComPendentes: 'Bloqueio de pendências anteriores',
@@ -22,7 +22,8 @@ const OPCOES = {
   analiseAutomatica: 'Análise automática',
   minutosAnaliseAutomatica: 'Minutos da análise automática',
   minutosArquivarTopico: 'Arquivar tópicos após (minutos)',
-  topicosPrivados: 'Tópicos privados'
+  topicosPrivados: 'Tópicos privados',
+  senhaCadeiaStaff: 'Senha na Cadeia Staff'
 };
 
 const texto = (valor) => {

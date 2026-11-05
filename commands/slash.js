@@ -5,6 +5,8 @@ const { handleStatusSlash } = require('./status');
 const { handleDenunciaSlash } = require('./denuncia');
 const ponte = require('./ponte');
 const { handleLinkSlash } = require('./link');
+const { handleDesbanirSlash } = require('./desbanir');
+const { handleProvaStaffSlash } = require('./provaStaff');
 
 const comandos = [
     {
@@ -45,6 +47,18 @@ const comandos = [
             .setName('link')
             .setDescription('Pega o link de um tópico de denúncia e devolve o link da mensagem principal.'),
         executar: handleLinkSlash
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('desbanir')
+            .setDescription('Desbane pelo jogo quem o bot baniu numa denúncia (pede o link da denúncia).'),
+        executar: handleDesbanirSlash
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('provastaff')
+            .setDescription('Publica o painel de provas da staff no canal fixo (configurado no /painel ou no site).'),
+        executar: handleProvaStaffSlash
     },
     {
         data: new SlashCommandBuilder()

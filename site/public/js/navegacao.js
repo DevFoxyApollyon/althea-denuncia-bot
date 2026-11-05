@@ -71,6 +71,9 @@ export function painelDeNotificacoes(novidades) {
     blocoDoPush());
 }
 
+// Painel do bot e Configurações do site: o fundador, quando o servidor tem esse cargo; senão o responsável.
+const podeConfigurar = () => { const p = papeisAtuais(); return p.podeConfigurar ?? p.responsavel; };
+
 const papelDoUsuario = (papeis) => (papeis.responsavel ? 'Responsável' : papeis.staff ? 'Staff' : 'Jogador');
 
 // Menu que abre ao clicar na própria conta: quem é você neste servidor,
@@ -99,7 +102,7 @@ export function menuDoPerfil(papeis, claro) {
     item('Minhas denúncias', 'casa', () => abrirArea('jogador')),
     papeis.staff && item('Painel da staff', 'escudo', () => abrirArea('staff')),
     item('Chat do servidor', 'balao', () => ir('#/chat')),
-    papeis.responsavel && item('Configurações do site', 'ajustes', () => {
+    (papeis.podeConfigurar ?? papeis.responsavel) && item('Configurações do site', 'ajustes', () => {
       estado.area = 'admin';
       estado.vista = 'admin';
       ir('#/config');
@@ -236,8 +239,8 @@ export function menuLateral() {
       itemDoChat(),
       itemDeRota('Sugestões', 'lampada', 'sugestoes'),
       grupo('Ajustes'),
-      itemDeRota('Configurações do site', 'ajustes', 'config'),
-      itemDeRota('Painel do bot', 'escudo', 'bot'),
+      podeConfigurar() && itemDeRota('Configurações do site', 'ajustes', 'config'),
+      podeConfigurar() && itemDeRota('Painel do bot', 'escudo', 'bot'),
       itemDeRota('Motivos de punição', 'nota', 'motivos'),
       itemDeRota('Saúde do bot', 'grafico', 'saude')
     ]

@@ -279,4 +279,4 @@ async function avisarSemResposta(client, punicao, resultado, nomePc, tentativas)
   }
 }
 
-module.exports = { avisarAplicadas, punicaoLegivel, avisarNicksNaoEncontrados, avisarJaBanidos, avisarSemResposta, temOrganizacao, cargoDaOrganizacao, nomeDoCargo, nomeDaOrganizacao, cargoLegivel, organizacaoComCargo, SEM_ORGANIZACAO };
+module.exports = { avisarAplicadas, punicaoLegivel, discordDaConta, quemAplicou, avisarNicksNaoEncontrados, avisarJaBanidos, avisarSemResposta, temOrganizacao, cargoDaOrganizacao, nomeDoCargo, nomeDaOrganizacao, cargoLegivel, organizacaoComCargo, SEM_ORGANIZACAO };

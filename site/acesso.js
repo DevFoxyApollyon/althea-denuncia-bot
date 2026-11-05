@@ -27,10 +27,14 @@ function papeisDoMembro(member, config) {
   const tem = (roleId) => Boolean(roleId && member.roles.cache.has(roleId));
   const responsavel = tem(config.roles?.responsavel_admin);
   const administrador = tem(config.roles?.administrador);
+  const fundador = tem(config.roles?.fundador);
 
   return {
     responsavel,
     administrador,
+    fundador,
+    // Painel do bot e Configurações do site: o fundador, quando há esse cargo; senão o responsável.
+    podeConfigurar: config.roles?.fundador ? fundador : responsavel,
     staff: responsavel || administrador,
     podeDenunciarPC: tem(config.roles?.pc),
     podeDenunciarMobile: tem(config.roles?.permitido)

@@ -21,7 +21,9 @@ const configSchema = new mongoose.Schema({
     analysis: { type: String, required: false, default: '' },
     topDaily: { type: String, required: false, default: '' },
     // Histórico das punições aplicadas pelo painel do jogo (vazio: usa o Log Admin).
-    relatorioPunicoes: { type: String, required: false, default: '' }
+    relatorioPunicoes: { type: String, required: false, default: '' },
+    // Canal fixo do /provastaff (provas da staff).
+    provasStaff: { type: String, required: false, default: '' }
   },
   manutencaoDenuncia: { type: Boolean, default: false },
   bloquearReivindicacaoComPendentes: { type: Boolean, default: true },
@@ -45,6 +47,10 @@ const configSchema = new mongoose.Schema({
   // Denúncia com todos os acusados identificados abre em tópico privado. Desligado,
   // abre em tópico público (só as partes e a staff falam nele, como antes).
   topicosPrivados: { type: Boolean, default: true },
+  // Aceitar e Recusar da Cadeia Staff pedem a senha pessoal da staff (30 min liberado).
+  senhaCadeiaStaff: { type: Boolean, default: false },
+  // Mensagem do painel do /provastaff (sai e volta no fim do canal a cada registro).
+  provasStaffPainelMsgId: { type: String, default: '' },
   // Quantos minutos dura a espera para reivindicar (1 a 60).
   minutosEntreReivindicacoes: { type: Number, default: 1, min: 1, max: 60 },
   // Denúncia reivindicada e parada vai sozinha para análise depois deste tempo.
@@ -55,7 +61,10 @@ const configSchema = new mongoose.Schema({
     permitido: { type: String, required: false, default: '' },
     pc: { type: String, required: false, default: '' },
     administrador: { type: String, required: false, default: '' },
-    responsavel_admin: { type: String, required: false, default: '' }
+    responsavel_admin: { type: String, required: false, default: '' },
+    // Fundador: com o cargo escolhido, só ele entra no Painel do bot (site e /painel)
+    // e nas Configurações do site. Sem cargo escolhido, vale o responsável, como antes.
+    fundador: { type: String, required: false, default: '' }
   },
   
   lastUpdated: { 

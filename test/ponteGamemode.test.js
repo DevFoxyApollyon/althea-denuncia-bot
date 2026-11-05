@@ -1736,3 +1736,109 @@ test('TIMEOUT na primeira tentativa: reenvia na hora uma vez; ban que volta "já
   assert.equal((await m.PontePedidoGm.findById(c2.id).lean()).status, 'incerto');
   assert.equal(await m.PontePedidoGm.countDocuments({ punicaoId: outra._id }), 2);
 });
+
+test('/desbanir: só denúncia aplicada pelo bot; pedido "desbanir" para cada banido; resultado não entra no histórico', async () => {
+  const { conexao, segredo } = await guildGm('899');
+  const Denuncia = require('../models/Denuncia');
+  const { prepararDesbanimento, desbanir } = require('../services/ponteSamp/desbanirGm');
+  const denunciaId = new mongoose.Types.ObjectId();
+  await Denuncia.collection.insertOne({ _id: denunciaId, guildId: '899', threadId: '700000000000000899', acusado: '4242', motivo: 'DM', status: 'aceita', dataCriacao: new Date() });
+  const link = { guildId: '899', canalId: '700000000000000899', mensagemId: null };
+
+  const punicao = await m.PontePunicao.create({ denunciaId, guildId: '899', origem: 'canal_staff', status: 'aceita', alvos: [{ contaId: '4242', cmd: 'ban', tempo: 3, avisos: 1, motivo: 'DM', regra: 'DM' }] });
+  assert.match((await prepararDesbanimento('899', link)).erro, /ainda não aplicou/);
+
+  await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '899', staff: staffA });
+  const [ban] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  await chamar(conexao, segredo, `/resultados/${ban.id}`, { metodo: 'POST', corpo: resultado('aplicada', 'OK', { conta: 4242 }) });
+  const antes = (await m.PontePunicao.findById(punicao._id).lean()).resultado.length;
+
+  const tela = await prepararDesbanimento('899', link);
+  assert.deepEqual(tela.alvos.map(a => [a.conta, a.estado]), [[4242, 'pode']]);
+
+  const r = await desbanir({ punicaoId: punicao._id, guildId: '899', staff: staffA });
+  assert.deepEqual(r.contas, [4242]);
+  assert.match((await desbanir({ punicaoId: punicao._id, guildId: '899', staff: staffA })).erro, /já foram desbanidos ou soltos/);
+
+  const [pedido] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  assert.deepEqual([pedido.tipo, pedido.conta, pedido.tempo, pedido.avisos, pedido.somar], ['desbanir', 4242, 0, 0, false]);
+  await chamar(conexao, segredo, `/resultados/${pedido.id}`, { metodo: 'POST', corpo: resultado('aplicada', 'OK') });
+  const depois = await m.PontePunicao.findById(punicao._id).lean();
+  assert.equal(depois.resultado.length, antes, 'desbanimento não vira punição aplicada');
+  assert.equal(depois.status, 'aplicada');
+  assert.deepEqual((await prepararDesbanimento('899', link)).alvos.map(a => a.estado), ['desbanido']);
+});
+
+test('desbanimento no Relatório de punições: mesmo formato do embed de punição aplicada', async () => {
+  const { avisarDesbanimento } = require('../services/ponteSamp/desbanirGm');
+  const Config = require('../models/Config');
+  await Config.create({ guildId: '900', channels: { relatorioPunicoes: '400000000000000090' }, roles: {} });
+  const alvoId = new mongoose.Types.ObjectId();
+  const punicao = await m.PontePunicao.create({
+    denunciaId: new mongoose.Types.ObjectId(), guildId: '900', origem: 'canal_staff', status: 'aplicada', aplicadaEm: new Date(),
+    msgDiscord: { link: 'https://discord.com/channels/900/1' },
+    alvos: [{ _id: alvoId, contaId: '1067694', cmd: 'ban', tempo: 3, avisos: 1, motivo: 'SAAV', regra: 'SAAV' }],
+    resultado: [{ alvoId, ok: true, nome: 'ivila_laivi', organizacao: '4 GTO · ID 35', contaId: '1067694' }]
+  });
+  const enviados = [];
+  const client = { channels: { fetch: async () => ({ send: async (msg) => enviados.push(msg) }) } };
+  const pedido = { tipo: 'desbanir', status: 'aplicada', codigo: 'OK', guildId: '900', punicaoId: punicao._id, alvoId, conta: 1067694, confirmadoPor: [{ id: '300000000000000001', nome: 'Foxy' }] };
+  await avisarDesbanimento(client, pedido, { conta: 1067694, nome: '' }, 'BRASIL ROLEPLAY 3');
+  const e = enviados[0].embeds[0].toJSON();
+  assert.match(e.title, /Desbanimento aplicado/);
+  assert.match(e.description, /Player:\*\* ivila_laivi \(`1067694`\)/);
+  assert.match(e.description, /Ban retirado:\*\* Ban de 3 dias \+ 1 aviso/);
+  const campo = (nome) => e.fields.find(f => f.name.includes(nome))?.value;
+  assert.equal(campo('Motivo'), 'SAAV');
+  assert.equal(campo('Organização'), '4 GTO · ID 35');
+  assert.equal(campo('a pedido de'), '<@300000000000000001>');
+  assert.match(e.footer.text, /Aplicado por Gamemode · BRASIL ROLEPLAY 3/);
+});
+
+test('/desbanir: cadeia vira "soltar" e os avisos vão junto (include 1.0.1); com a 1.0.0 os avisos ficam', async () => {
+  const { conexao, segredo } = await guildGm('901');
+  const Denuncia = require('../models/Denuncia');
+  const { desbanir, situacaoDoDesbanimento } = require('../services/ponteSamp/desbanirGm');
+  const denunciaId = new mongoose.Types.ObjectId();
+  await Denuncia.collection.insertOne({ _id: denunciaId, guildId: '901', threadId: '700000000000000901', acusado: '5151', status: 'aceita', dataCriacao: new Date() });
+  const punicao = await m.PontePunicao.create({ denunciaId, guildId: '901', origem: 'canal_staff', status: 'aceita', alvos: [{ contaId: '5151', cmd: 'cadeia', tempo: 60, avisos: 2, motivo: 'MG', regra: 'MG' }] });
+  await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '901', staff: staffA });
+  const [cadeia] = (await chamar(conexao, segredo, '/pedidos', { query: 'versao=1.0.1' })).corpo.pedidos;
+  await chamar(conexao, segredo, `/resultados/${cadeia.id}`, { metodo: 'POST', corpo: resultado('aplicada', 'OK', { conta: 5151 }) });
+
+  const [alvo] = await situacaoDoDesbanimento(await m.PontePunicao.findById(punicao._id).lean());
+  assert.deepEqual([alvo.tipo, alvo.estado], ['soltar', 'pode']);
+  const r = await desbanir({ punicaoId: punicao._id, guildId: '901', staff: staffA });
+  assert.equal(r.avisosFicam, false);
+  const [soltar] = (await chamar(conexao, segredo, '/pedidos', { query: 'versao=1.0.1' })).corpo.pedidos;
+  assert.deepEqual([soltar.tipo, soltar.tempo, soltar.avisos], ['soltar', 0, 2]);
+
+  // Include 1.0.0: a 1.0.0 recusa avisos em soltar/desbanir, então vão 0.
+  await m.PonteConexaoGm.updateOne({ _id: conexao._id }, { $set: { versaoInclude: '1.0.0' } });
+  await chamar(conexao, segredo, `/resultados/${soltar.id}`, { metodo: 'POST', corpo: resultado('recusada', 'NAO_PRESO') });
+  const de10 = await desbanir({ punicaoId: punicao._id, guildId: '901', staff: staffA });
+  assert.equal(de10.avisosFicam, true);
+  const ultimo = await m.PontePedidoGm.findOne({ punicaoId: punicao._id, tipo: 'soltar' }).sort({ rodada: -1 }).lean();
+  assert.equal(ultimo.avisos, 0);
+});
+
+test('senha da Cadeia Staff: cria com confirmação, libera 30 min, erra 5 vezes e bloqueia', async () => {
+  const { validarSenha, situacaoDaSenha, senhaCadeiaAtiva, modalDaSenha } = require('../utils/senhaStaff');
+  await require('../models/SenhaStaff').init();
+  const id = '300000000000000777';
+  assert.equal(senhaCadeiaAtiva({}), false, 'desligada por padrão');
+  assert.deepEqual(await situacaoDaSenha(id), { liberado: false, temSenha: false });
+  assert.equal(modalDaSenha({ temSenha: false, acao: 'aceitar', messageId: '1' }).toJSON().components.length, 2, 'criar pede confirmação');
+  assert.match((await validarSenha(id, { senha: 'abcd', confirmar: 'abce' })).erro, /não são iguais/);
+  assert.match((await validarSenha(id, { senha: 'ab', confirmar: 'ab' })).erro, /de 4 a 32/);
+  const criada = await validarSenha(id, { senha: 'segredo1', confirmar: 'segredo1' });
+  assert.equal(criada.criada, true);
+  assert.equal((await situacaoDaSenha(id)).liberado, true);
+  assert.equal((await situacaoDaSenha(id, Date.now() + 31 * 60 * 1000)).liberado, false, 'passou de 30 min');
+  const SenhaStaff = require('../models/SenhaStaff');
+  assert.equal(JSON.stringify(await SenhaStaff.findOne({ userId: id }).lean()).includes('segredo1'), false, 'só o hash fica');
+  for (let i = 1; i < 5; i++) assert.match((await validarSenha(id, { senha: 'errada' })).erro, new RegExp(`${i} de 5`));
+  assert.match((await validarSenha(id, { senha: 'errada' })).erro, /15 minutos/);
+  assert.match((await validarSenha(id, { senha: 'segredo1' })).erro, /Tente de novo/, 'bloqueado mesmo com a certa');
+  assert.equal((await validarSenha(id, { senha: 'segredo1' }, Date.now() + 16 * 60 * 1000)).ok, true);
+});

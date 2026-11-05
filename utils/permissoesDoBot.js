@@ -30,6 +30,7 @@ const NECESSARIAS = {
   analysis: { perms: BASE, para: 'Listar as denúncias em análise.' },
   topDaily: { perms: BASE, para: 'Enviar o ranking diário.' },
   relatorioPunicoes: { perms: BASE, para: 'Publicar as punições para o jogo.' },
+  provasStaff: { perms: [...BASE, P.AttachFiles, P.ManageMessages, P.CreatePublicThreads, P.SendMessagesInThreads], para: 'Painel do /provastaff, registros e tópicos com as provas.' },
   backup: { perms: [...BASE, P.AttachFiles], para: 'Enviar o arquivo da denúncia finalizada.' },
   armazem: { perms: [...BASE, P.AttachFiles, ...TOPICOS], para: 'Criar a cópia (tópico espelho) de cada denúncia.' },
   registro: { perms: [...BASE, P.AttachFiles, ...TOPICOS], para: 'Criar a cópia (tópico espelho) de cada denúncia.' },

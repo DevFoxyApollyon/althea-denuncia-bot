@@ -54,8 +54,9 @@ async function hasPermission(interaction, currentConfig) {
   const config = currentConfig === undefined
     ? getPanelConfig(guildId) || await getConfig(guildId)
     : currentConfig;
-  const responsavelAdminId = config?.roles?.responsavel_admin;
-  return Boolean(responsavelAdminId && membro.roles.cache.has(responsavelAdminId));
+  // Com fundador escolhido, só ele abre o /painel; sem ele, o responsável.
+  const cargoId = config?.roles?.fundador || config?.roles?.responsavel_admin;
+  return Boolean(cargoId && membro.roles.cache.has(cargoId));
 }
 
 function getCurrentUser(interaction) {
@@ -101,11 +102,18 @@ function createChannelsModal1(currentConfig = null) {
     .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
     .setValue(currentConfig?.channels?.relatorioPunicoes || '');
 
+  const provas = new TextInputBuilder()
+    .setCustomId('provas_staff_channel').setLabel('ID do canal de provas da staff (opcional)')
+    .setPlaceholder('Canal fixo do /provastaff')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.channels?.provasStaff || '');
+
   return modal.addComponents(
     new ActionRowBuilder().addComponents(pc),
     new ActionRowBuilder().addComponents(mobile),
     new ActionRowBuilder().addComponents(logs),
-    new ActionRowBuilder().addComponents(relatorio)
+    new ActionRowBuilder().addComponents(relatorio),
+    new ActionRowBuilder().addComponents(provas)
   );
 }
 
@@ -202,10 +210,16 @@ function createRolesModal2(currentConfig = null) {
     .setPlaceholder('Cargo com permissão para finalizar denúncias')
     .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
     .setValue(currentConfig?.roles?.responsavel_admin || '');
+  const fundador = new TextInputBuilder()
+    .setCustomId('fundador_role').setLabel('ID do cargo Fundador (opcional)')
+    .setPlaceholder('Só ele entra no painel do bot e nas configurações do site')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.roles?.fundador || '');
 
   return modal.addComponents(
     new ActionRowBuilder().addComponents(admin),
-    new ActionRowBuilder().addComponents(resp)
+    new ActionRowBuilder().addComponents(resp),
+    new ActionRowBuilder().addComponents(fundador)
   );
 }
 

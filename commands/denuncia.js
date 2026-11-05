@@ -1197,5 +1197,6 @@ module.exports = {
     atualizarStatusNaMensagem,
     criarTopicoPrivado,
     liberarTopicosPrivadosParaCargos,
-    liberarTopicosPrivadosNoServidor
+    liberarTopicosPrivadosNoServidor,
+    enviarAnexosNoTopico
 };

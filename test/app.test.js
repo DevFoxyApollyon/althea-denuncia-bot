@@ -94,7 +94,7 @@ test('todo botão, menu e modal criado no código tem rota', () => {
 test('comandos de barra têm definição válida e nomes únicos', () => {
   const { comandos } = require('../commands/slash');
   const nomes = comandos.map(comando => comando.data.toJSON().name);
-  assert.deepEqual([...nomes].sort(), ['ativar', 'denuncia', 'instalacao', 'link', 'painel', 'ponte', 'ponte-codigo', 'rank', 'status']);
+  assert.deepEqual([...nomes].sort(), ['ativar', 'denuncia', 'desbanir', 'instalacao', 'link', 'painel', 'ponte', 'ponte-codigo', 'provastaff', 'rank', 'status']);
   for (const comando of comandos) {
     assert.equal(typeof comando.executar, 'function', comando.data.name);
     assert.ok(comando.data.toJSON().description.length <= 100);
@@ -205,4 +205,15 @@ test('/link: lê o link do tópico, de uma mensagem dele ou de outro domínio do
     { guildId: '817924556358156360', canalId: '1547188378037002280', mensagemId: '1567751210776404015' });
   assert.equal(lerLinkDoDiscord('https://exemplo.com/channels/1/2'), null);
   assert.equal(lerLinkDoDiscord(''), null);
+});
+
+test('fundador: com o cargo escolhido, só ele configura; sem ele, vale o responsável', () => {
+  const { papeisDoMembro } = require('../site/acesso');
+  const membro = (cargos) => ({ roles: { cache: new Set(cargos) } });
+  const semFundador = { roles: { responsavel_admin: 'R' } };
+  const comFundador = { roles: { responsavel_admin: 'R', fundador: 'F' } };
+  assert.equal(papeisDoMembro(membro(['R']), semFundador).podeConfigurar, true);
+  assert.equal(papeisDoMembro(membro(['R']), comFundador).podeConfigurar, false, 'responsável sem o cargo de fundador não entra');
+  assert.equal(papeisDoMembro(membro(['F']), comFundador).podeConfigurar, true);
+  assert.equal(papeisDoMembro(membro(['R']), comFundador).responsavel, true, 'continua responsável no resto');
 });

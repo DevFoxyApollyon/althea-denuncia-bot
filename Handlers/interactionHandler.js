@@ -59,8 +59,12 @@ const { handleFeedbackMenu, handleFeedbackModal } = require('../utils/feedback')
 const { getConfig: getCachedConfig } = require('../utils/configCache');
 const Denuncia = require('../models/Denuncia');
 const { MODAL_LINK, handleLinkModal } = require('../commands/link');
+const { MODAL_DESBANIR, BOTAO_DESBANIR, handleDesbanirModal, handleDesbanirBotao } = require('../commands/desbanir');
+const provaStaff = require('../commands/provaStaff');
+const DenunciaStaff = require('../models/DenunciaStaff');
 const { MINUTOS_ANALISE_AUTOMATICA } = require('../utils/esperas');
 const { registrarAlteracao } = require('../utils/historicoPainel');
+const { MODAL_SENHA, senhaCadeiaAtiva, situacaoDaSenha, modalDaSenha, validarSenha } = require('../utils/senhaStaff');
 
 async function handlePanelModalSubmit(interaction) {
   try {
@@ -84,6 +88,7 @@ async function handlePanelModalSubmit(interaction) {
         config.channels.mobile = fields.getTextInputValue('mobile_channel').trim();
         config.channels.logs = fields.getTextInputValue('logs_channel').trim();
         config.channels.relatorioPunicoes = fields.getTextInputValue('relatorio_punicoes_channel').trim();
+        config.channels.provasStaff = fields.getTextInputValue('provas_staff_channel').trim();
         break;
       case 'channels_modal_2':
         config.channels.log = fields.getTextInputValue('log_admin_channel').trim();
@@ -104,6 +109,15 @@ async function handlePanelModalSubmit(interaction) {
       case 'roles_modal_2':
         config.roles.administrador = fields.getTextInputValue('admin_role').trim();
         config.roles.responsavel_admin = fields.getTextInputValue('resp_admin_role').trim();
+        {
+          // Quem salva precisa continuar podendo abrir o /painel.
+          const fundador = fields.getTextInputValue('fundador_role').trim();
+          if (fundador && !interaction.member?.roles?.cache?.has(fundador) && !interaction.member?.permissions?.has?.(8n)) {
+            await interaction.editReply({ content: '❌ Você não tem o cargo de fundador escolhido e ficaria sem acesso ao /painel. Pegue o cargo antes.' });
+            return;
+          }
+          config.roles.fundador = fundador;
+        }
         break;
       case 'auto_analysis_modal': {
         const { minimo, maximo } = MINUTOS_ANALISE_AUTOMATICA;
@@ -347,22 +361,55 @@ async function handleFeedbackModalSubmit(interaction) {
 
 // Botões "Aceitar"/"Recusar" da mensagem de log (customId: log_<ação>_<messageId>).
 async function handleLogButton(interaction) {
+  const acao = interaction.customId.startsWith('log_aceitar_') ? 'aceitar' : 'recusar';
+  const messageId = interaction.customId.replace(/^log_(?:aceitar|recusar)_/, '');
+
+  // Senha da Cadeia Staff (ligada no Painel do bot): sem estar liberado, abre o
+  // formulário de criar ou digitar a senha; a ação continua depois dele.
+  const config = await getCachedConfig(interaction.guild.id);
+  if (senhaCadeiaAtiva(config)) {
+    const senha = await situacaoDaSenha(interaction.user.id);
+    if (!senha.liberado) return interaction.showModal(modalDaSenha({ temSenha: senha.temSenha, acao, messageId }));
+  }
+
   try {
     await interaction.deferReply({ flags: [64] });
   } catch (error) {
     if (error?.code === 10062) return;
     throw error;
   }
+  await executarAcaoDaCadeia(interaction, acao, messageId);
+}
 
-  const messageId = interaction.customId.replace(/^log_(?:aceitar|recusar)_/, '');
+async function executarAcaoDaCadeia(interaction, acao, messageId) {
   const denuncia = await Denuncia.findOne({ messageId, guildId: interaction.guild.id });
-  if (!denuncia) return interaction.editReply({ content: '❌ Denúncia não encontrada.' });
-
-  if (interaction.customId.startsWith('log_aceitar_')) {
-    await handleLogAceitarButton(interaction, denuncia);
-  } else {
-    await handleLogRecusarButton(interaction, denuncia);
+  if (!denuncia) {
+    // Provas da staff (/provastaff) aceitas: o mesmo Aceitar e Recusar da Cadeia Staff.
+    const doc = await DenunciaStaff.findOne({ messageId, guildId: interaction.guild.id }).lean();
+    if (!doc) return interaction.editReply({ content: '❌ Denúncia não encontrada.' });
+    if (acao === 'recusar') return provaStaff.recusarNaCadeia(interaction, doc);
+    await handleLogAceitarButton(interaction, provaStaff.comoDenuncia(doc));
+    await DenunciaStaff.updateOne({ _id: doc._id, 'cadeia.status': '' }, { $set: { 'cadeia.status': 'aceita' } }).catch(() => {});
+    return;
   }
+  if (acao === 'aceitar') await handleLogAceitarButton(interaction, denuncia);
+  else await handleLogRecusarButton(interaction, denuncia);
+}
+
+// Formulário da senha: criou ou acertou, libera por 30 minutos e faz o que a pessoa clicou.
+async function handleSenhaCadeiaModal(interaction) {
+  const [acao, messageId] = interaction.customId.slice(MODAL_SENHA.length).split(':');
+  if (!['aceitar', 'recusar'].includes(acao) || !/^\d{15,21}$/.test(messageId || '')) return;
+  let confirmar;
+  try { confirmar = interaction.fields.getTextInputValue('confirmar'); } catch { confirmar = undefined; }
+  const r = await validarSenha(interaction.user.id, { senha: interaction.fields.getTextInputValue('senha'), confirmar });
+  if (r.erro) return interaction.reply({ content: `🔒 ${r.erro}`, flags: [64] });
+  await interaction.deferReply({ flags: [64] });
+  await executarAcaoDaCadeia(interaction, acao, messageId);
+  await interaction.followUp({
+    content: `🔓 ${r.criada ? 'Senha criada.' : 'Senha certa.'} Aceitar e Recusar da Cadeia Staff liberados até <t:${Math.floor(r.liberadoAte.getTime() / 1000)}:t>.`,
+    flags: [64]
+  }).catch(() => {});
 }
 
 const handleStatusChange = (interaction) => handleStatusButton(interaction, interaction.customId);
@@ -379,6 +426,7 @@ const ROTAS = {
       denuncia_mobile: handleDenunciaMobile,
       minhas_denuncias: handleMyDenunciasButton,
       entrar_topico: handleEntrarNoTopico,
+      [provaStaff.BOTAO_UPAR]: provaStaff.handleBotaoUpar,
       consulta_denuncias_id: handleMyDenunciasButton,
       reivindicar: handleClaimButton,
       finalizar_denuncia: handleExportButton,
@@ -403,7 +451,10 @@ const ROTAS = {
       [BOTAO_INCERTO_OK, handleIncertoGm],
       [BOTAO_INCERTO_REENVIAR, handleIncertoGm],
       [BOTAO_GM_APLICADA, handleIncertoDaPunicaoGm],
-      [BOTAO_GM_REAPLICAR, handleIncertoDaPunicaoGm]
+      [BOTAO_GM_REAPLICAR, handleIncertoDaPunicaoGm],
+      [BOTAO_DESBANIR, handleDesbanirBotao],
+      [provaStaff.BOTAO_ACEITAR, provaStaff.handleBotaoAceitar],
+      [provaStaff.BOTAO_RECUSAR, provaStaff.handleBotaoRecusar]
     ]
   },
   modal: {
@@ -420,6 +471,8 @@ const ROTAS = {
       roles_modal_2: handlePanelModalSubmit,
       auto_analysis_modal: handlePanelModalSubmit,
       [MODAL_LINK]: handleLinkModal,
+      [MODAL_DESBANIR]: handleDesbanirModal,
+      [provaStaff.MODAL_REGISTRO]: provaStaff.handleModalRegistro,
       global_exempt_users_modal: handleGlobalExemptUsersSubmit,
       [MODAL_TEMPLATES]: handlePonteTemplatesModal,
       [MODAL_MOTIVOS]: handlePonteMotivosModal,
@@ -428,6 +481,8 @@ const ROTAS = {
     prefixos: [
       ['feedback:modal:', handleFeedbackModalSubmit],
       ['corrigir_modal_aceite_', handleSalvarCorrigirDenuncia],
+      [MODAL_SENHA, handleSenhaCadeiaModal],
+      [provaStaff.MODAL_ACEITE, provaStaff.handleModalAceite],
       [MODAL_ALVO, handleModalAlvoGm]
     ]
   },

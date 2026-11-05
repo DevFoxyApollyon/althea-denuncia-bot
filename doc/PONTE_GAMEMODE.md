@@ -137,7 +137,7 @@ Corpo (JSON, até 2 KB):
 | campo | regra |
 |---|---|
 | `id` | ObjectId, 24 hex minúsculos |
-| `tipo` | `ban` (dias; 0 = permanente), `cadeia` (minutos), `desbanir`, `soltar` (tempo 0, avisos 0) |
+| `tipo` | `ban` (dias; 0 = permanente), `cadeia` (minutos), `desbanir`, `soltar` (tempo 0; em `avisos`, quantos avisos tirar com `/limpaaviso`; soltar = a cadeia com tempo 0) |
 | `conta` | ID fixo da conta (1 a 999999999), ou 0 quando só há o nick |
 | `nick` | vazio, ou de 3 a 24 caracteres de `[A-Za-z0-9_[].$@=()]` |
 | `avisos` | de 0 ao máximo da guild. É o **total** de avisos da punição (a gamemode decide como dar) |

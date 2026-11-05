@@ -277,7 +277,8 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
     return gravado && mesmo(gravado) ? { http: 200, pedido: gravado, novo: false } : { http: 409, pedido: gravado };
   }
 
-  if (pedido.status === 'aplicada') await registrarAplicada(pedido, conexao, dados, agora);
+  // Desbanimento não entra no histórico de punições aplicadas.
+  if (pedido.status === 'aplicada' && !['desbanir', 'soltar'].includes(pedido.tipo)) await registrarAplicada(pedido, conexao, dados, agora);
   if (STATUS_FINAIS.includes(pedido.status)) await fecharPunicaoSePronta({ client, punicaoId: pedido.punicaoId, conexao, agora });
   // TIMEOUT: tenta de novo na hora (uma vez).
   const reenvio = pedido.status === 'incerto' && dados.codigo === 'TIMEOUT_GAMEMODE' ? await reenviarSozinho(pedido, agora) : null;

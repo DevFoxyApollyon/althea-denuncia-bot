@@ -830,3 +830,44 @@ test('motivos: quem não é o dono muda e adiciona, mas não apaga, renomeia nem
   assert.match((await motivos.salvarTabela([], 'staff', { podeApagar: false })).erro, /tabela padrão/);
   assert.equal((await motivos.salvarTabela([], 'dono')).propria, false, 'o dono volta ao padrão');
 });
+
+test('/provastaff: aceitar pede ID e motivo, manda para a Cadeia Staff com Aceitar/Recusar e vira denúncia para o jogo', async () => {
+  const Config = require('../models/Config');
+  const DenunciaStaff = require('../models/DenunciaStaff');
+  await DenunciaStaff.init(); // índices criados antes: o arquivo termina logo depois
+  const provaStaff = require('../commands/provaStaff');
+  await Config.create({ guildId: '813', channels: { logs: '600000000000000813', provasStaff: '600000000000000814' }, roles: { responsavel_admin: '777000000000000813' } });
+  const doc = await DenunciaStaff.create({ guildId: '813', contas: ['111', '222'], motivo: 'SAAV', punicao: 'Ban 3d', channelId: '600000000000000814', messageId: '600000000000000999', threadId: '600000000000000998' });
+
+  const enviadas = [];
+  const editadas = [];
+  const cadeia = { send: async (msg) => { enviadas.push(msg); return { id: '700', channelId: '600000000000000813', url: 'https://x' }; } };
+  const registro = { content: '➥ Status: `Pendente`', edit: async (msg) => editadas.push(msg) };
+  let resposta = '';
+  const interacao = {
+    customId: `${provaStaff.MODAL_ACEITE}${doc._id}`,
+    guild: { id: '813', channels: { fetch: async () => cadeia } },
+    member: { displayName: 'Resp', roles: { cache: new Map([['777000000000000813', {}]]) } },
+    user: { id: '1', username: 'resp', toString: () => '<@1>' },
+    client: { channels: { fetch: async () => ({ messages: { fetch: async () => registro } }) } },
+    fields: { getTextInputValue: (id) => ({ acusado: ' 111 + 222 ', motivo: 'SAAV' })[id] },
+    deferReply: async () => {},
+    editReply: async (r) => { resposta = typeof r === 'string' ? r : r.content; }
+  };
+  await provaStaff.handleModalAceite(interacao);
+  assert.match(resposta, /Cadeia Staff/);
+  assert.match(enviadas[0].content, /Acusado \(111\+222\)/);
+  const botoes = enviadas[0].components[0].toJSON().components.map(b => b.custom_id);
+  assert.deepEqual(botoes, ['log_aceitar_600000000000000999', 'log_recusar_600000000000000999']);
+  assert.match(editadas[0].content, /Status: `Aceita`/);
+  const salvo = await DenunciaStaff.findById(doc._id).lean();
+  assert.deepEqual([salvo.status, salvo.acusadoAceite, salvo.cadeia.msgId], ['aceita', '111+222', '700']);
+
+  // O aceite da Cadeia Staff usa a denúncia da staff como uma denúncia comum.
+  const comoDenuncia = provaStaff.comoDenuncia(salvo);
+  assert.deepEqual([comoDenuncia.acusadoId, comoDenuncia.motivoAceite, String(comoDenuncia._id)], ['111+222', 'SAAV', String(doc._id)]);
+
+  // Segunda vez: já decidido.
+  await provaStaff.handleModalAceite(interacao);
+  assert.match(resposta, /já foi decidido/);
+});

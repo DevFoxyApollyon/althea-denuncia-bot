@@ -19,10 +19,10 @@ const { resolverPessoas, ErroHttp, assincrono } = require('./comum');
 const { obterTabela } = require('../../services/ponteSamp/motivos');
 
 // Canais do próprio servidor (escolhidos numa lista) e de outros servidores (pelo ID).
-const CANAIS_LOCAIS = ['pc', 'mobile', 'logs', 'log', 'backup', 'armazem', 'analysis', 'topDaily', 'relatorioPunicoes'];
+const CANAIS_LOCAIS = ['pc', 'mobile', 'logs', 'log', 'backup', 'armazem', 'analysis', 'topDaily', 'relatorioPunicoes', 'provasStaff'];
 const CANAIS_EXTERNOS = ['registro', 'cloud', 'canalDenuncia'];
 const CANAIS_OBRIGATORIOS = ['pc', 'mobile', 'logs'];
-const CARGOS = ['permitido', 'pc', 'administrador', 'responsavel_admin'];
+const CARGOS = ['permitido', 'pc', 'administrador', 'responsavel_admin', 'fundador'];
 const CARGOS_OBRIGATORIOS = ['permitido', 'pc', 'responsavel_admin'];
 const MAX_ISENTOS = 200;
 
@@ -57,8 +57,12 @@ function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, ca
     roles[chave] = valor;
   }
 
-  // Quem salva precisa continuar sendo responsável, senão perde esta tela.
-  if (!cargosDeQuemSalva.has(roles.responsavel_admin)) {
+  // Quem salva precisa continuar entrando nesta tela: com fundador escolhido, precisa
+  // ter o cargo de fundador; sem ele, o de responsável.
+  if (roles.fundador && !cargosDeQuemSalva.has(roles.fundador)) {
+    throw new Error('Você não tem o cargo escolhido como fundador e ficaria sem acesso a esta tela. Pegue o cargo no Discord antes de trocar.');
+  }
+  if (!roles.fundador && !cargosDeQuemSalva.has(roles.responsavel_admin)) {
     throw new Error('Você não tem o cargo escolhido como responsável e ficaria sem acesso a esta tela. Pegue o cargo no Discord antes de trocar.');
   }
 
@@ -84,6 +88,7 @@ function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, ca
     analiseAutomatica: entrada?.analiseAutomatica !== false,
     minutosAnaliseAutomatica: minutosDaAnalise(entrada?.minutosAnalise),
     topicosPrivados: entrada?.topicosPrivados !== false,
+    senhaCadeiaStaff: entrada?.senhaCadeia === true,
     isentos
   };
 }
@@ -131,7 +136,7 @@ function minutosDaAnalise(valor) {
 function registrarRotasDoPainelDoBot(router, { client }) {
   async function acessoDoResponsavel(req, guildId) {
     const acesso = await acessoAoServidor(client, req.usuario.id, String(guildId || ''));
-    if (!acesso?.papeis.responsavel) throw new ErroHttp(403, 'O painel do bot é restrito ao responsável.');
+    if (!acesso?.papeis.podeConfigurar) throw new ErroHttp(403, acesso?.config?.roles?.fundador ? 'O painel do bot é restrito ao fundador.' : 'O painel do bot é restrito ao responsável.');
     return acesso;
   }
 
@@ -161,6 +166,7 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         analiseAutomatica: analiseAutomaticaAtiva(config),
         minutosAnalise: minutosAnaliseAutomatica(config),
         topicosPrivados: config?.topicosPrivados !== false,
+        senhaCadeia: config?.senhaCadeiaStaff === true,
         isentos: isentos.map(id => ({ id, nome: pessoas[id]?.nome || null }))
       },
       canais: [...guild.channels.cache.values()]
@@ -242,7 +248,7 @@ async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos 
   }
 
   const quem = member.user?.tag || usuarioId;
-  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, minutosEntreDenuncias: novo.minutosEntreDenuncias, avisoReivindicacao: novo.avisoReivindicacao, minutosAvisoReivindicacao: novo.minutosAvisoReivindicacao, minutosArquivarTopico: novo.minutosArquivarTopico, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, analiseAutomatica: novo.analiseAutomatica, minutosAnaliseAutomatica: novo.minutosAnaliseAutomatica, topicosPrivados: novo.topicosPrivados, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
+  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, minutosEntreDenuncias: novo.minutosEntreDenuncias, avisoReivindicacao: novo.avisoReivindicacao, minutosAvisoReivindicacao: novo.minutosAvisoReivindicacao, minutosArquivarTopico: novo.minutosArquivarTopico, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, analiseAutomatica: novo.analiseAutomatica, minutosAnaliseAutomatica: novo.minutosAnaliseAutomatica, topicosPrivados: novo.topicosPrivados, senhaCadeiaStaff: novo.senhaCadeiaStaff, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
   for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
   for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
 
