@@ -169,7 +169,6 @@ async function registrarAceite({ client, denuncia, origem, staff, canalMensagem 
       return { jaExistia: true, aceitoPor: punicao?.aceitoPor?.nome || '', status: punicao?.status || '' };
     }
 
-    log.info(`Denúncia ${denuncia._id} na fila do jogo (${alvos.length} alvo(s), guild ${denuncia.guildId}).`);
     // Motivo fora da tabela: o automático não aplica; a staff confere no painel.
     if (alvos.some(a => !a.regra)) {
       await atualizarMensagensDiscord(client, punicao, AGUARDANDO).catch(() => {});
