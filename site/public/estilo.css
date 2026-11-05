@@ -2417,8 +2417,17 @@ select { padding-block: 0; }
 .bot-controle small { color: var(--texto-3); font-size: 12px; overflow-wrap: anywhere; }
 .bot-isentos-nomes { margin: 10px 0 0; }
 
-.bot-minutos { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--texto-2); font-size: 13px; }
-.bot-minutos input { width: 76px; }
+.bot-minutos { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.bot-minutos small { color: var(--texto-3); font-size: 12px; }
+.bot-passo { display: inline-flex; align-items: stretch; height: 34px; border: 1px solid var(--linha-forte); border-radius: 999px; background: var(--elevada); overflow: hidden; }
+.bot-passo:focus-within { border-color: var(--marca); box-shadow: 0 0 0 3px var(--marca-suave); }
+.bot-passo button { all: unset; display: grid; place-items: center; width: 34px; color: var(--texto-2); font-size: 17px; line-height: 1; cursor: pointer; transition: background .15s, color .15s; }
+.bot-passo button:hover:not(:disabled) { background: var(--marca-suave); color: var(--marca); }
+.bot-passo button:focus-visible { background: var(--marca-suave); color: var(--marca); }
+.bot-passo button:disabled { opacity: .35; cursor: default; }
+.bot-passo label { display: flex; align-items: center; gap: 3px; padding: 0 4px; border-inline: 1px solid var(--linha); color: var(--texto-2); font-size: 12.5px; cursor: text; }
+.bot-passo input { all: unset; width: 3ch; color: var(--texto); font-size: 14px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.bot-passo input::-webkit-outer-spin-button, .bot-passo input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .bot-interruptor { display: inline-flex; align-items: center; gap: 10px; min-height: 36px; cursor: pointer; font-size: 13.5px; font-weight: 500; }
 .bot-interruptor { position: relative; }
 .bot-interruptor input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -2484,6 +2493,25 @@ button.bot-resumo-item:hover { background: var(--elevada); }
 
 .bot-efeitos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 24px; margin: 0; padding: 14px 18px 4px 36px; color: var(--texto-2); font-size: 13px; }
 .bot-pessoas { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 12px 18px 0; list-style: none; }
+.bot-permissoes, .bot-travadas, .bot-historico { display: grid; gap: 0; margin: 0; padding: 6px 18px 4px; list-style: none; }
+.bot-permissoes > li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--linha); }
+.bot-permissoes > li:first-child, .bot-travadas > li:first-child, .bot-historico > li:first-child { border-top: 0; }
+.bot-permissoes > li .bot-ponto { margin-top: 6px; flex: none; }
+.bot-permissoes > li.ok .bot-ponto { background: var(--aceita); }
+.bot-permissoes > li.falta .bot-ponto, .bot-permissoes > li.sumiu .bot-ponto { background: var(--recusada); }
+.bot-permissoes strong { font-size: 13.5px; }
+.bot-permissoes-canal { margin-left: 8px; color: var(--texto-2); font-size: 12.5px; }
+.bot-permissoes p, .bot-travadas p { margin: 3px 0 0; color: var(--texto-2); font-size: 12.5px; }
+.bot-permissoes > li.falta p, .bot-permissoes > li.sumiu p { color: var(--recusada); }
+.bot-travadas > li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--linha); }
+.bot-travadas > li > div { min-width: 0; }
+.bot-travadas strong { font-size: 13.5px; overflow-wrap: anywhere; }
+.bot-acoes-cartao { padding: 10px 18px 16px; justify-content: flex-end; }
+.bot-historico > li { padding: 10px 0; border-top: 1px solid var(--linha); }
+.bot-historico-quem { margin: 0 0 4px; color: var(--texto-2); font-size: 12.5px; }
+.bot-historico-quem strong { color: var(--texto); }
+.bot-historico ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--texto-2); }
+.bot-historico ul span { color: var(--texto); font-weight: 500; }
 .bot-pessoas li { padding: 3px 10px; border: 1px solid var(--linha-forte); border-radius: 20px; background: var(--elevada); font-size: 12.5px; }
 .bot .cartao > .campo { margin: 0; padding: 14px 18px 18px; }
 

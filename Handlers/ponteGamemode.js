@@ -5,7 +5,7 @@ const {
 } = require('discord.js');
 const PontePunicao = require('../models/PontePunicao');
 const gm = require('../services/ponteSamp/discordGm');
-const { BOTAO_INCERTO_OK, resolverIncerto } = require('../services/ponteSamp/incertosGm');
+const { BOTAO_INCERTO_OK, resolverIncerto, resolverIncertosDaPunicao } = require('../services/ponteSamp/incertosGm');
 const { getConfig } = require('../utils/configCache');
 const { Logger } = require('../utils/logger');
 
@@ -156,4 +156,23 @@ async function handleIncertoGm(interaction) {
   }).catch(() => {});
 }
 
-module.exports = { handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, modalDoAlvo };
+// Botões do embed travado no Relatório de punições: "Foi aplicada" ou "Tentar novamente".
+async function handleIncertoDaPunicaoGm(interaction) {
+  const aplicada = interaction.customId.startsWith(gm.BOTAO_GM_APLICADA);
+  const [punicaoId] = partes(interaction.customId, aplicada ? gm.BOTAO_GM_APLICADA : gm.BOTAO_GM_REAPLICAR) || [];
+  if (!punicaoId || !(await exigirResponsavel(interaction))) return;
+  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+  const r = await resolverIncertosDaPunicao({ client: interaction.client, punicaoId, guildId: interaction.guild.id, staff: staffDe(interaction), aplicada })
+    .catch((error) => {
+      log.error('Falha ao resolver os pedidos incertos da punição', error);
+      return { erro: 'Não foi possível registrar. Tente de novo.' };
+    });
+  let texto;
+  if (r.erro) texto = `❌ ${r.erro}`;
+  else if (aplicada) texto = '✅ Registrado como aplicado.';
+  else if (r.destino === 'pc') texto = '🔁 A punição voltou para a fila do PC da staff.';
+  else texto = '🔁 Enviada de novo para a gamemode.';
+  await interaction.editReply({ content: texto }).catch(() => {});
+}
+
+module.exports = { handleIncertoDaPunicaoGm, handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, modalDoAlvo };

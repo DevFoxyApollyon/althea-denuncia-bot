@@ -3,9 +3,16 @@
 const express = require('express');
 const { ChannelType } = require('discord.js');
 const Config = require('../../models/Config');
-const { atualizarMensagemDenuncia } = require('../../commands/denuncia');
+const { atualizarMensagemDenuncia, liberarTopicosPrivadosNoServidor } = require('../../commands/denuncia');
 const { cachePanelConfig, bloqueioPendentesAtivo, alertaMotivoCriticoAtivo } = require('../../commands/painel');
-const { esperaEntreDenunciasAtiva, esperaEntreReivindicacoesAtiva, minutosEntreReivindicacoes, MINUTOS_ENTRE_REIVINDICACOES } = require('../../utils/esperas');
+const {
+  esperaEntreDenunciasAtiva, esperaEntreReivindicacoesAtiva, minutosEntreReivindicacoes, MINUTOS_ENTRE_REIVINDICACOES, MINUTOS_ANALISE_AUTOMATICA,
+  analiseAutomaticaAtiva, minutosAnaliseAutomatica, MINUTOS_ENTRE_DENUNCIAS, MINUTOS_AVISO_REIVINDICACAO, OPCOES_ARQUIVAR_TOPICO,
+  minutosEntreDenuncias, avisoReivindicacaoAtivo, minutosAvisoReivindicacao, minutosArquivarTopico
+} = require('../../utils/esperas');
+const { verificarPermissoes } = require('../../utils/permissoesDoBot');
+const { procurarTravadas, tirarDaFila } = require('../../utils/denunciasTravadas');
+const { registrarAlteracao, ultimasAlteracoes } = require('../../utils/historicoPainel');
 const { getUsuariosIsentos, salvarUsuariosIsentos, normalizarIds } = require('../../utils/usuariosIsentos');
 const { acessoAoServidor, limparCacheDeAcesso } = require('../acesso');
 const { resolverPessoas, ErroHttp, assincrono } = require('./comum');
@@ -68,9 +75,14 @@ function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, ca
     siteSomenteLeitura: entrada?.somenteLeitura === true,
     alertaMotivoCritico: entrada?.alertaCritico !== false,
     esperaEntreDenuncias: entrada?.esperaDenuncia !== false,
+    minutosEntreDenuncias: minutosNoLimite(entrada?.minutosDenuncia, MINUTOS_ENTRE_DENUNCIAS, 'O tempo entre denúncias'),
+    avisoReivindicacao: entrada?.avisoReivindicar !== false,
+    minutosAvisoReivindicacao: minutosNoLimite(entrada?.minutosAviso, MINUTOS_AVISO_REIVINDICACAO, 'O tempo do aviso de reivindicação'),
+    minutosArquivarTopico: arquivamentoValido(entrada?.arquivarTopico),
     esperaEntreReivindicacoes: entrada?.esperaReivindicar === true,
     minutosEntreReivindicacoes: minutosValidos(entrada?.minutosReivindicar),
-    staffNosTopicosPrivados: entrada?.staffNosTopicos !== false,
+    analiseAutomatica: entrada?.analiseAutomatica !== false,
+    minutosAnaliseAutomatica: minutosDaAnalise(entrada?.minutosAnalise),
     topicosPrivados: entrada?.topicosPrivados !== false,
     isentos
   };
@@ -83,6 +95,35 @@ function minutosValidos(valor) {
   const { minimo, maximo } = MINUTOS_ENTRE_REIVINDICACOES;
   if (!Number.isInteger(minutos) || minutos < minimo || minutos > maximo) {
     throw new Error(`O tempo para reivindicar deve ser um número inteiro de ${minimo} a ${maximo} minutos.`);
+  }
+  return minutos;
+}
+
+// Minutos dentro de um limite: vazio vale o padrão; fora do limite é erro.
+function minutosNoLimite(valor, { padrao, minimo, maximo }, nome) {
+  if (valor === undefined || valor === null || valor === '') return padrao;
+  const minutos = Number(valor);
+  if (!Number.isInteger(minutos) || minutos < minimo || minutos > maximo) {
+    throw new Error(`${nome} deve ser um número inteiro de ${minimo} a ${maximo} minutos.`);
+  }
+  return minutos;
+}
+
+// Arquivamento dos tópicos: só os tempos que o Discord aceita.
+function arquivamentoValido(valor) {
+  if (valor === undefined || valor === null || valor === '') return 1440;
+  const minutos = Number(valor);
+  if (!OPCOES_ARQUIVAR_TOPICO.includes(minutos)) throw new Error('Tempo de arquivamento inválido: escolha 1 hora, 1 dia, 3 dias ou 1 semana.');
+  return minutos;
+}
+
+// Minutos da análise automática: vazio vale o padrão; fora do limite é erro.
+function minutosDaAnalise(valor) {
+  if (valor === undefined || valor === null || valor === '') return MINUTOS_ANALISE_AUTOMATICA.padrao;
+  const minutos = Number(valor);
+  const { minimo, maximo } = MINUTOS_ANALISE_AUTOMATICA;
+  if (!Number.isInteger(minutos) || minutos < minimo || minutos > maximo) {
+    throw new Error(`O tempo da análise automática deve ser um número inteiro de ${minimo} a ${maximo} minutos.`);
   }
   return minutos;
 }
@@ -111,9 +152,14 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         somenteLeitura: Boolean(config?.siteSomenteLeitura),
         alertaCritico: alertaMotivoCriticoAtivo(config),
         esperaDenuncia: esperaEntreDenunciasAtiva(config),
+        minutosDenuncia: minutosEntreDenuncias(config),
+        avisoReivindicar: avisoReivindicacaoAtivo(config),
+        minutosAviso: minutosAvisoReivindicacao(config),
+        arquivarTopico: minutosArquivarTopico(config),
         esperaReivindicar: esperaEntreReivindicacoesAtiva(config, guild.id),
         minutosReivindicar: minutosEntreReivindicacoes(config),
-        staffNosTopicos: config?.staffNosTopicosPrivados !== false,
+        analiseAutomatica: analiseAutomaticaAtiva(config),
+        minutosAnalise: minutosAnaliseAutomatica(config),
         topicosPrivados: config?.topicosPrivados !== false,
         isentos: isentos.map(id => ({ id, nome: pessoas[id]?.nome || null }))
       },
@@ -131,6 +177,9 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         return [chave, canal ? `#${canal.name} em ${canal.guild?.name || 'outro servidor'}` : null];
       })),
       atualizado: config ? { em: config.lastUpdated || null, por: config.updatedBy || null } : null,
+      // O que falta ao bot em cada canal configurado.
+      permissoes: verificarPermissoes(client, guild, config),
+      historico: (await ultimasAlteracoes(guild.id).catch(() => [])).map(item => ({ em: item.em, por: item.por, via: item.via, mudancas: item.mudancas })),
       // Tabela de motivos da ponte com o jogo (só leitura aqui; a mesma em todos os servidores).
       motivosPonte: {
         propria: motivos.propria,
@@ -142,6 +191,27 @@ function registrarRotasDoPainelDoBot(router, { client }) {
   router.get('/painel-bot', assincrono(async (req, res) => {
     const acesso = await acessoDoResponsavel(req, req.query.guildId);
     res.json(await montar(acesso.guild));
+  }));
+
+  // Denúncias pendentes cujo tópico foi apagado: procurar e tirar da fila.
+  router.get('/painel-bot/travadas', assincrono(async (req, res) => {
+    const acesso = await acessoDoResponsavel(req, req.query.guildId);
+    const { travadas, conferidas } = await procurarTravadas(client, acesso.guild.id);
+    res.json({
+      conferidas,
+      travadas: travadas.map(d => ({
+        id: String(d._id), acusado: d.acusado || '', denunciante: d.denunciante || '', motivo: d.motivo || '', em: d.dataCriacao
+      }))
+    });
+  }));
+
+  router.post('/painel-bot/travadas', express.json({ limit: '16kb' }), assincrono(async (req, res) => {
+    const acesso = await acessoDoResponsavel(req, req.body?.guildId);
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(String).filter(id => /^[0-9a-f]{24}$/.test(id)).slice(0, 50);
+    if (!ids.length) throw new ErroHttp(400, 'Escolha ao menos uma denúncia.');
+    const quem = acesso.member.user?.tag || req.usuario.id;
+    const tiradas = await tirarDaFila(client, acesso.guild.id, ids, `${quem} (site)`);
+    res.json({ ok: true, tiradas, mensagem: tiradas === 1 ? '1 denúncia saiu da fila.' : `${tiradas} denúncias saíram da fila.` });
   }));
 
   router.post('/painel-bot', express.json({ limit: '32kb' }), assincrono(async (req, res) => {
@@ -172,12 +242,14 @@ async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos 
   }
 
   const quem = member.user?.tag || usuarioId;
-  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, staffNosTopicosPrivados: novo.staffNosTopicosPrivados, topicosPrivados: novo.topicosPrivados, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
+  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, minutosEntreDenuncias: novo.minutosEntreDenuncias, avisoReivindicacao: novo.avisoReivindicacao, minutosAvisoReivindicacao: novo.minutosAvisoReivindicacao, minutosArquivarTopico: novo.minutosArquivarTopico, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, analiseAutomatica: novo.analiseAutomatica, minutosAnaliseAutomatica: novo.minutosAnaliseAutomatica, topicosPrivados: novo.topicosPrivados, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
   for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
   for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
 
   const salvo = await Config.findOneAndUpdate({ guildId: guild.id }, { $set: ajustes }, { new: true, upsert: true });
   cachePanelConfig(guild.id, salvo);
+  registrarAlteracao({ guildId: guild.id, por: quem, via: 'site', antes: atual, depois: salvo }).catch(() => {});
+  liberarTopicosPrivadosNoServidor(client, salvo).catch(() => {});
   // Os cargos podem ter mudado: o acesso de todo mundo é conferido de novo.
   limparCacheDeAcesso();
 

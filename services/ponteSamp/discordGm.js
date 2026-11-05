@@ -23,6 +23,10 @@ const BOTAO_EDITAR = 'ponte_gm_editar:';
 const BOTAO_CANCELAR = 'ponte_gm_cancelar:';
 const MENU_ALVO = 'ponte_gm_alvo:';
 const MODAL_ALVO = 'ponte_gm_modal:';
+// Embed travado com pedido incerto (a gamemode não respondeu): o responsável
+// confirma que foi aplicada ou manda de novo (ver incertosGm.resolverIncertosDaPunicao).
+const BOTAO_GM_APLICADA = 'ponte_gm_aplicada:';
+const BOTAO_GM_REAPLICAR = 'ponte_gm_reaplicar:';
 
 const EXECUTORES_GM = ['gamemode', 'ambos'];
 
@@ -178,6 +182,13 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
       new ButtonBuilder().setCustomId(BOTAO_CANCELAR + id).setLabel('Cancelar').setEmoji('✖️').setStyle(ButtonStyle.Danger)
     );
   } else if (punicao.status === 'executando' && punicao.executor === 'gamemode') {
+    // A gamemode não respondeu: o responsável confere no jogo e decide aqui mesmo.
+    if (pedidosDaVez.some(p => p.status === 'incerto')) {
+      botoes.push(
+        new ButtonBuilder().setCustomId(BOTAO_GM_APLICADA + id).setLabel('Foi aplicada').setEmoji('✅').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(BOTAO_GM_REAPLICAR + id).setLabel(peloPc ? 'Tentar novamente (PC)' : 'Tentar novamente').setEmoji('🔁').setStyle(ButtonStyle.Primary)
+      );
+    }
     botoes.push(new ButtonBuilder().setCustomId(BOTAO_CANCELAR + id).setLabel('Cancelar envio').setEmoji('✖️').setStyle(ButtonStyle.Danger));
   }
   if (punicao.mensagens?.topicoPrivado && punicao.mensagens.topicoId) botoes.push(botaoSoltoEntrarNoTopico(punicao.mensagens.topicoId));
@@ -401,6 +412,8 @@ module.exports = {
   BOTAO_ENVIAR,
   BOTAO_EDITAR,
   BOTAO_CANCELAR,
+  BOTAO_GM_APLICADA,
+  BOTAO_GM_REAPLICAR,
   MENU_ALVO,
   MODAL_ALVO,
   EXECUTORES_GM,

@@ -406,8 +406,94 @@ function itemDeAtividade(a) {
       el('small', {}, `${a.guild || a.guildId || 'todos os servidores'} · ${relativo(a.em)}`)));
 }
 
+// ---------- Status ao vivo (Visão geral) ----------
+const NOME_EXECUTOR = { pc: 'PC da staff', gamemode: 'Gamemode', ambos: 'PC + gamemode' };
+let relogioStatus = null;
+
+function estadoDoServidor(s) {
+  const usaGm = s.executor !== 'pc';
+  const usaPc = s.executor !== 'gamemode';
+  if (usaGm && s.pausado) return { tom: 'aviso', texto: 'Pausado' };
+  if (s.fila.incertos) return { tom: 'aviso', texto: 'Precisa de atenção' };
+  const gmOk = !usaGm || s.gamemode.online;
+  const pcOk = !usaPc || s.pcs.online > 0;
+  if (gmOk && pcOk) return { tom: 'ok', texto: 'Funcionando' };
+  if (gmOk || pcOk) return { tom: 'aviso', texto: 'Parcial' };
+  return { tom: 'perigo', texto: 'Offline' };
+}
+
+function linhaStatus(rotuloLinha, valor, tom = '') {
+  return el('div', { classe: `status-linha ${tom}` }, el('dt', {}, rotuloLinha), el('dd', {}, valor));
+}
+
+function cartaoDeStatus(s) {
+  const estado = estadoDoServidor(s);
+  const usaGm = s.executor !== 'pc';
+  const usaPc = s.executor !== 'gamemode';
+  const naFila = s.fila.esperando + s.fila.paraGamemode + s.fila.comGamemode;
+  const pausar = dono && usaGm && el('button', {
+    type: 'button', classe: `pequeno ${s.pausado ? '' : 'perigo'}`,
+    onclick: async (evento) => {
+      const pausado = !s.pausado;
+      if (pausado && !confirm(`Pausar a gamemode em ${s.nome || s.guildId}? Nada novo vai para o jogo até retomar.`)) return;
+      evento.currentTarget.disabled = true;
+      try {
+        await post(`/servidores/${s.guildId}/gamemode`, { pausado });
+        aviso(pausado ? 'Gamemode pausada.' : 'Gamemode retomada.');
+        atualizarStatus();
+      } catch (e) { aviso(e.message); evento.currentTarget.disabled = false; }
+    }
+  }, s.pausado ? '▶ Retomar' : '⏸ Pausar');
+
+  return el('article', { classe: `cartao-status tom-${estado.tom}` },
+    el('header', {},
+      el('span', { classe: 'farol', 'aria-hidden': 'true' }),
+      el('h3', {}, s.nome || 'Servidor sem nome'),
+      el('span', { classe: `selo ${estado.tom === 'ok' ? 'ok' : estado.tom === 'perigo' ? 'perigo' : 'neutro'}` }, estado.texto)),
+    el('dl', {},
+      linhaStatus('Quem aplica', NOME_EXECUTOR[s.executor] || s.executor),
+      usaGm && linhaStatus('Gamemode', !s.gamemode.credenciais ? 'sem credencial'
+        : s.pausado ? `pausada · ${s.gamemode.online ? 'online' : 'offline'}`
+          : s.gamemode.online ? `● online · ${relativo(s.gamemode.ultimoContatoEm)}`
+            : `○ offline${s.gamemode.ultimoContatoEm ? ` · visto ${relativo(s.gamemode.ultimoContatoEm)}` : ''}`,
+      s.gamemode.online && !s.pausado ? 'ok' : 'atencao'),
+      usaPc && linhaStatus('PCs', `${s.pcs.online} online de ${s.pcs.total}`, s.pcs.online ? 'ok' : 'atencao'),
+      linhaStatus('Na fila', naFila
+        ? [s.fila.esperando && `${s.fila.esperando} esperando envio`, s.fila.paraGamemode && `${s.fila.paraGamemode} para a gamemode buscar`, s.fila.comGamemode && `${s.fila.comGamemode} com a gamemode`].filter(Boolean).join(' · ')
+        : 'vazia'),
+      s.fila.incertos > 0 && linhaStatus('Incertos', `${s.fila.incertos} sem resposta: resolver no Relatório de punições`, 'atencao'),
+      s.modoTeste && usaGm && linhaStatus('Modo teste', 'ligado: a gamemode só simula', 'atencao'),
+      linhaStatus('Última aplicada', s.ultimaAplicada
+        ? `${s.ultimaAplicada.alvo ? `${s.ultimaAplicada.alvo} · ` : ''}${s.ultimaAplicada.por === 'gamemode' ? 'pela gamemode' : 'pelo PC'} · ${relativo(s.ultimaAplicada.em)}`
+        : 'nenhuma ainda')),
+    pausar && el('footer', {}, pausar));
+}
+
+async function atualizarStatus() {
+  if ($('#aba-geral')?.hidden) return;
+  try {
+    const { em, servidores } = await api('/status');
+    $('#status-servidores').replaceChildren(...(servidores.length
+      ? servidores.map(cartaoDeStatus)
+      : [el('p', { classe: 'vazio' }, 'Nenhum servidor com a ponte ativa.')]));
+    $('#status-atualizado').textContent = `Atualizado ${new Date(em).toLocaleTimeString('pt-BR')} · a cada 15 s`;
+  } catch (e) {
+    $('#status-atualizado').textContent = `Sem atualizar: ${e.message}`;
+  }
+}
+
+function ligarStatusAoVivo() {
+  clearInterval(relogioStatus);
+  atualizarStatus();
+  relogioStatus = setInterval(() => {
+    if (document.hidden || $('#aba-geral')?.hidden) return;
+    atualizarStatus();
+  }, 15000);
+}
+
 const carregadores = {
   async geral() {
+    ligarStatusAoVivo();
     const [servidores, atividade, instalacoes, guia] = await Promise.all([
       api('/servidores'), api('/atividade'), api('/instalacoes'), api('/gamemode/guia').catch(() => null)
     ]);

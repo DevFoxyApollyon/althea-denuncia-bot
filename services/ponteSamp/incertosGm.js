@@ -8,7 +8,7 @@ const PonteConexaoGm = require('../../models/PonteConexaoGm');
 const PonteServidor = require('../../models/PonteServidor');
 const PonteUso = require('../../models/PonteUso');
 const { marcarIncertos, registrarAplicada, fecharPunicaoSePronta } = require('./pedidosGm');
-const { atualizarMensagemGm, descreverPunicao } = require('./discordGm');
+const { atualizarMensagemGm, descreverPunicao, EXECUTORES_GM } = require('./discordGm');
 const { nomeParaGamemode } = require('./protocoloGm');
 const { LIMITES_GM_PADRAO } = require('./constantes');
 const { ponteLigada } = require('./gestao');
@@ -142,6 +142,58 @@ async function resolverIncerto({ client = null, pedidoId, guildId, staff, aplica
   return { ok: true, pedido, novo };
 }
 
+// Botões do embed no Relatório de punições: resolve de uma vez todos os pedidos
+// incertos da punição. "Foi aplicada" registra como aplicados. "Tentar novamente"
+// manda de novo: para a gamemode (pedido novo) ou, se o servidor agora aplica pelo
+// PC, devolve a punição para a fila do PC.
+async function resolverIncertosDaPunicao({ client = null, punicaoId, guildId, staff, aplicada, agora = Date.now() }) {
+  guildId = String(guildId);
+  const incertos = await PontePedidoGm.find({ punicaoId, guildId, status: 'incerto' }, { _id: 1 }).lean();
+  if (!incertos.length) return { erro: 'Esta punição não tem pedido esperando confirmação (a gamemode respondeu ou alguém já resolveu).' };
+
+  if (!aplicada) {
+    const servidor = await PonteServidor.findOne({ guildId }, { executor: 1 }).lean();
+    if (servidor?.executor && !EXECUTORES_GM.includes(servidor.executor)) {
+      return devolverParaPc({ client, punicaoId, guildId, staff, agora });
+    }
+  }
+
+  let resolvidos = 0;
+  for (const { _id } of incertos) {
+    const r = await resolverIncerto({ client, pedidoId: _id, guildId, staff, aplicada, agora });
+    if (r.ok) resolvidos += 1;
+  }
+  return resolvidos ? { ok: true, resolvidos, destino: aplicada ? null : 'gamemode' } : { erro: 'Alguém já resolveu estes pedidos.' };
+}
+
+// O servidor agora aplica pelo PC: os pedidos incertos são fechados e a punição
+// volta para a fila do PC. Se a gamemode já aplicou algum jogador desta punição,
+// não devolve (o PC aplicaria de novo em todos).
+async function devolverParaPc({ client, punicaoId, guildId, staff, agora }) {
+  if (await PontePedidoGm.exists({ punicaoId, status: { $in: ['aplicada', 'entregue'] } })) {
+    return { erro: 'Parte desta punição já foi aplicada ou está com a gamemode: não dá para mandar ao PC. Use "Foi aplicada" ou confira no jogo.' };
+  }
+  const resolvidoPor = { id: String(staff.id), nome: String(staff.nome || '').slice(0, 64), em: new Date(agora) };
+  const pedidos = await PontePedidoGm.find({ punicaoId, guildId, status: 'incerto' }).lean();
+  await PontePedidoGm.updateMany({ punicaoId, guildId, status: { $in: ['incerto', 'aprovado'] } }, { $set: { status: 'cancelado', resolvidoPor } });
+  const r = await PontePunicao.updateOne(
+    { _id: punicaoId, guildId, status: 'executando', executor: 'gamemode' },
+    { $set: { status: 'aceita', executor: '' }, $inc: { versao: 1 } }
+  );
+  if (!r.modifiedCount) return { erro: 'A punição mudou. Confira o embed.' };
+
+  await PonteUso.create({
+    guildId, acao: 'gm_incerto_reenviar', punicaoId,
+    detalhes: { por: resolvidoPor.id, nome: resolvidoPor.nome, destino: 'pc', pedidos: pedidos.map(p => String(p._id)) }
+  }).catch(() => {});
+  const punicao = await PontePunicao.findById(punicaoId).lean();
+  for (const pedido of pedidos) {
+    await fecharAviso(client, pedido, punicao, `🔁 Devolvida para a fila do PC por **${resolvidoPor.nome}**.`);
+  }
+  atualizarMensagemGm(client, punicaoId).catch(() => {});
+  return { ok: true, resolvidos: pedidos.length, destino: 'pc' };
+}
+
 function iniciarJobGamemode(client) {
   if (intervalo || !ponteLigada()) return;
   intervalo = setInterval(() => {
@@ -154,6 +206,7 @@ function iniciarJobGamemode(client) {
 module.exports = {
   BOTAO_INCERTO_OK,
   BOTAO_INCERTO_REENVIAR,
+  resolverIncertosDaPunicao,
   mensagemDoIncerto,
   avisarIncertos,
   verificarIncertos,

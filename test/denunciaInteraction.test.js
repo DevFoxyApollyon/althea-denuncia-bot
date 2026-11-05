@@ -90,33 +90,6 @@ test('tópico privado: põe denunciante e acusados; se o Discord recusar alguém
   }
   assert.equal(falha.registro.apagados, 1);
 
-  // Cargos de administrador e responsável: marcados por edição (sem notificar) e
-  // quem o bot já conhece com o cargo entra direto.
-  const mensagens = [];
-  const adicionados = [];
-  const comCargos = {
-    threads: {
-      async create() {
-        return {
-          guild: { roles: { cache: new Map([['300000000000000001', { members: new Map([['400000000000000001', {}]]) }]]) } },
-          members: { async add(id) { adicionados.push(id); } },
-          async send(payload) {
-            const mensagem = { ...payload, apagada: false, async edit(novo) { Object.assign(mensagem, novo); }, async delete() { mensagem.apagada = true; } };
-            mensagens.push(mensagem);
-            return mensagem;
-          },
-          async delete() {}
-        };
-      }
-    }
-  };
-  assert.ok(await criarTopicoPrivado(comCargos, 'x', ['1'], ['300000000000000001', undefined, '300000000000000002']));
-  await new Promise(resolve => setTimeout(resolve, 20)); // a staff entra em segundo plano
-  assert.equal(mensagens.length, 1);
-  assert.equal(mensagens[0].content, '<@&300000000000000001> <@&300000000000000002>');
-  assert.deepEqual(mensagens[0].allowedMentions, { roles: ['300000000000000001', '300000000000000002'] });
-  assert.equal(mensagens[0].apagada, true);
-  assert.deepEqual(adicionados, ['1', '400000000000000001']);
 
   const semPermissao = { threads: { async create() { throw new Error('Missing Permissions'); } } };
   console.warn = () => {};
@@ -249,4 +222,30 @@ test('relatório de punições: botão Entrar no tópico só com tópico privado
   const ids = (msg) => msg.components.flatMap(linha => linha.toJSON().components.map(botao => botao.custom_id));
   assert.deepEqual(ids(montarMensagemGm({ ...base, mensagens: { ...base.mensagens, topicoPrivado: true } }, [], {})), ['entrar_topico:700000000000000003']);
   assert.deepEqual(ids(montarMensagemGm(base, [], {})), []);
+});
+
+test('tópico privado: o cargo escolhido ganha "Gerenciar tópicos" no canal, uma vez só', async () => {
+  const { PermissionFlagsBits } = require('discord.js');
+  const { liberarTopicosPrivadosParaCargos } = require('../commands/denuncia');
+  const editados = [];
+  const jaLiberado = { allow: { has: (flag) => flag === PermissionFlagsBits.ManageThreads || flag === PermissionFlagsBits.ViewChannel } };
+  const canal = {
+    id: '1',
+    permissionOverwrites: {
+      cache: new Map([['300000000000000002', jaLiberado]]),
+      async edit(id, permissoes) { editados.push([id, permissoes]); }
+    }
+  };
+  const liberados = await liberarTopicosPrivadosParaCargos(canal, ['300000000000000001', '300000000000000002', '', undefined, '300000000000000001']);
+  assert.equal(liberados, 1);
+  assert.deepEqual(editados, [['300000000000000001', { ViewChannel: true, ManageThreads: true }]]);
+
+  const semPermissao = { id: '1', permissionOverwrites: { cache: new Map(), async edit() { throw new Error('Missing Permissions'); } } };
+  const avisoOriginal = console.warn;
+  console.warn = () => {};
+  try {
+    assert.equal(await liberarTopicosPrivadosParaCargos(semPermissao, ['300000000000000001']), 0);
+  } finally {
+    console.warn = avisoOriginal;
+  }
 });

@@ -62,6 +62,8 @@ let servidorDoSite = null;
 registerMemberEvents(client, log);
 registerMessageEvents(client, { log, getConfig });
 registerInteractionEvents(client, log);
+// Tópico de denúncia apagado: a denúncia sai da fila (não trava o bloqueio de pendências).
+require('./utils/denunciasTravadas').registrarEventoDeTopicoApagado(client);
 // Esperas curtas do Discord são normais (o discord.js espera sozinho): só as longas vão para o log.
 client.rest.on('rateLimited', (info) => {
     if (info.timeToReset < 30_000) return;
@@ -143,6 +145,10 @@ client.once('clientReady', async (readyClient) => {
 
     iniciarAutoFinalizador(client);
     iniciarAvisoReivindicacao(client);
+    // O responsável vê os tópicos privados (até os antigos) sem precisar entrar.
+    Config.find({ guildId: { $in: [...readyClient.guilds.cache.keys()] } }).lean()
+        .then(configs => Promise.all(configs.map(config => require('./commands/denuncia').liberarTopicosPrivadosNoServidor(client, config))))
+        .catch(err => log.warn('Falha ao liberar os tópicos privados para o responsável: ' + err.message));
     iniciarBackupDoBanco(); // cópia diária do banco principal no secundário
     iniciarAlertaGamemode(client); // avisa quando a gamemode para de buscar pedidos
     iniciarJobGamemode(client); // ponte com a gamemode: pedido sem resposta vira incerto e vai para o Log Admin

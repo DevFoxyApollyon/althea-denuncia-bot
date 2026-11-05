@@ -11,6 +11,7 @@ const PonteCodigo = require('../../models/PonteCodigo');
 const PonteUso = require('../../models/PonteUso');
 const PonteConexaoGm = require('../../models/PonteConexaoGm');
 const PontePedidoGm = require('../../models/PontePedidoGm');
+const PontePunicao = require('../../models/PontePunicao');
 const gestao = require('../../services/ponteSamp/gestao');
 const motivos = require('../../services/ponteSamp/motivos');
 const { reclassificarFila } = require('../../services/ponteSamp/aceite');
@@ -124,6 +125,64 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
         ultimoUso: ultimo ? { em: ultimo.em, acao: ultimo.acao, quem: autor(ultimo) } : null
       };
     }));
+  }));
+
+  // Status ao vivo de cada servidor ativo: quem aplica, se a gamemode e os PCs
+  // estão online, o que está na fila e a última punição aplicada. A tela pede de
+  // novo a cada 15 segundos enquanto a Visão geral está aberta.
+  router.get('/api/status', rota(async (req, res) => {
+    const servidores = await PonteServidor.find({ ativo: true }, { guildId: 1, executor: 1, gm: 1 }).lean();
+    const guilds = servidores.map(s => s.guildId);
+    const [conexoes, instalacoes, punicoes, pedidos, aplicadas] = await Promise.all([
+      PonteConexaoGm.find({ guildId: { $in: guilds }, status: 'ativa' }, { guildId: 1, ultimoContatoEm: 1, pausada: 1 }).lean(),
+      PonteInstalacao.find({ guildId: { $in: guilds }, status: 'ativa' }, { guildId: 1, ultimoPingEm: 1 }).lean(),
+      PontePunicao.aggregate([
+        { $match: { guildId: { $in: guilds }, status: { $in: ['aceita', 'executando'] } } },
+        { $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }
+      ]),
+      PontePedidoGm.aggregate([
+        { $match: { guildId: { $in: guilds }, status: { $in: ['aprovado', 'entregue', 'incerto'] } } },
+        { $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }
+      ]),
+      PonteUso.aggregate([
+        { $match: { guildId: { $in: guilds }, acao: { $in: ['aplicar', 'gm_resultado'] } } },
+        { $sort: { em: -1 } },
+        { $group: { _id: '$guildId', em: { $first: '$em' }, acao: { $first: '$acao' }, nick: { $first: '$nick' }, contaId: { $first: '$contaId' } } }
+      ])
+    ]);
+    const agora = Date.now();
+    const conta = (lista, guildId, status) => lista.find(p => p._id.guildId === guildId && p._id.status === status)?.total || 0;
+    res.json({
+      em: new Date(agora),
+      servidores: servidores.map(s => {
+        const gms = conexoes.filter(c => c.guildId === s.guildId);
+        const contato = gms.map(c => c.ultimoContatoEm).filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
+        const pcs = instalacoes.filter(i => i.guildId === s.guildId);
+        const ultima = aplicadas.find(a => a._id === s.guildId);
+        return {
+          guildId: s.guildId,
+          nome: nomeGuild(s.guildId),
+          executor: s.executor || 'pc',
+          pausado: s.gm?.pausado === true,
+          modoTeste: s.gm?.modoTeste !== false,
+          gamemode: {
+            credenciais: gms.length,
+            pausadas: gms.filter(c => c.pausada).length,
+            online: !!contato && agora - new Date(contato).getTime() < ONLINE_GM_MS,
+            ultimoContatoEm: contato
+          },
+          pcs: { total: pcs.length, online: pcs.filter(i => i.ultimoPingEm && agora - new Date(i.ultimoPingEm).getTime() < ONLINE_MS).length },
+          fila: {
+            esperando: conta(punicoes, s.guildId, 'aceita'),
+            executando: conta(punicoes, s.guildId, 'executando'),
+            paraGamemode: conta(pedidos, s.guildId, 'aprovado'),
+            comGamemode: conta(pedidos, s.guildId, 'entregue'),
+            incertos: conta(pedidos, s.guildId, 'incerto')
+          },
+          ultimaAplicada: ultima ? { em: ultima.em, por: ultima.acao === 'gm_resultado' ? 'gamemode' : 'pc', alvo: ultima.nick || ultima.contaId || '' } : null
+        };
+      })
+    });
   }));
 
   // O que aconteceu por último na ponte, em todos os servidores (sem as ações de rotina).

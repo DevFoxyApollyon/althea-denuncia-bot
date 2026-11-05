@@ -31,16 +31,26 @@ const configSchema = new mongoose.Schema({
   alertaMotivoCritico: { type: Boolean, default: true },
   // Espera de 1 minuto entre uma denúncia e outra da mesma pessoa.
   esperaEntreDenuncias: { type: Boolean, default: true },
+  // Quantos minutos dura a espera entre denúncias (1 a 60).
+  minutosEntreDenuncias: { type: Number, default: 1, min: 1, max: 60 },
+  // Aviso no tópico, no Log Admin e por DM quando a denúncia reivindicada fica parada.
+  avisoReivindicacao: { type: Boolean, default: true },
+  // Depois de quantos minutos reivindicada o aviso sai (5 a 120).
+  minutosAvisoReivindicacao: { type: Number, default: 15, min: 5, max: 120 },
+  // Tópico das denúncias arquiva depois deste tempo sem mensagem (valores do Discord).
+  minutosArquivarTopico: { type: Number, default: 1440, enum: [60, 1440, 4320, 10080] },
   // Espera de 1 minuto entre uma reivindicação e outra da staff. Sem valor, vale o
   // que estava no .env (CLAIM_COOLDOWN_GUILD_IDS); ver utils/esperas.js.
   esperaEntreReivindicacoes: { type: Boolean, default: undefined },
-  // Põe os cargos de administrador e responsável em cada tópico privado novo.
-  staffNosTopicosPrivados: { type: Boolean, default: true },
   // Denúncia com todos os acusados identificados abre em tópico privado. Desligado,
   // abre em tópico público (só as partes e a staff falam nele, como antes).
   topicosPrivados: { type: Boolean, default: true },
   // Quantos minutos dura a espera para reivindicar (1 a 60).
   minutosEntreReivindicacoes: { type: Number, default: 1, min: 1, max: 60 },
+  // Denúncia reivindicada e parada vai sozinha para análise depois deste tempo.
+  analiseAutomatica: { type: Boolean, default: true },
+  // Quantos minutos depois de reivindicar (5 a 240).
+  minutosAnaliseAutomatica: { type: Number, default: 30, min: 5, max: 240 },
   roles: {
     permitido: { type: String, required: false, default: '' },
     pc: { type: String, required: false, default: '' },

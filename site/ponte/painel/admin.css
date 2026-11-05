@@ -197,6 +197,28 @@ ol.passos .dica { margin: 6px 0 0; }
 
 .duas-colunas { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 
+.status-vivo { margin-bottom: 16px; }
+.status-vivo h2 { display: inline-flex; align-items: center; gap: 8px; }
+.pulso { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); animation: pulso 2s infinite; }
+@keyframes pulso { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .pulso { animation: none; } }
+.cartao-status { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--borda); border-left: 3px solid var(--borda-forte); border-radius: 12px; background: var(--elevada); min-width: 0; }
+.cartao-status.tom-ok { border-left-color: var(--ok); }
+.cartao-status.tom-aviso { border-left-color: var(--aviso); }
+.cartao-status.tom-perigo { border-left-color: var(--perigo); }
+.cartao-status header { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cartao-status h3 { flex: 1; min-width: 0; margin: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.farol { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--fraca); }
+.tom-ok .farol { background: var(--ok); }
+.tom-aviso .farol { background: var(--aviso); }
+.tom-perigo .farol { background: var(--perigo); }
+.cartao-status dl { display: grid; gap: 6px; margin: 0; }
+.status-linha { display: grid; grid-template-columns: 112px 1fr; gap: 8px; font-size: 13px; }
+.status-linha dt { color: var(--fraca); }
+.status-linha dd { margin: 0; color: var(--texto); overflow-wrap: anywhere; }
+.status-linha.ok dd { color: var(--ok); }
+.status-linha.atencao dd { color: var(--aviso); }
+.cartao-status footer { display: flex; justify-content: flex-end; margin-top: auto; }
 .cartoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 .cartao-servidor { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--borda); border-radius: 12px; background: var(--elevada); min-width: 0; }
 .cartao-servidor.apagado { opacity: .65; }

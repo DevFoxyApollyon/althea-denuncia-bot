@@ -7,7 +7,8 @@ const {
   handleMyDenunciasButton,    
   handleEntrarNoTopico,
   handleConsultaModalSubmit,
-  atualizarMensagemDenuncia
+  atualizarMensagemDenuncia,
+  liberarTopicosPrivadosNoServidor
 } = require('../commands/denuncia');
 
 const {
@@ -22,10 +23,10 @@ const {
 
 const { handleExportButton } = require('../Handlers/exportDenuncia');
 const { MODAL_TEMPLATES, handlePonteTemplatesModal, MODAL_MOTIVOS, handlePonteMotivosModal } = require('../commands/ponte');
-const { handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm } = require('./ponteGamemode');
+const { handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, handleIncertoDaPunicaoGm } = require('./ponteGamemode');
 const { BOTAO_INCERTO_OK, BOTAO_INCERTO_REENVIAR } = require('../services/ponteSamp/incertosGm');
 const { MODAL_LIMITES, handleLimitesGmModal } = require('../commands/ponteGamemode');
-const { BOTAO_ENVIAR, BOTAO_EDITAR, BOTAO_CANCELAR, MENU_ALVO, MODAL_ALVO } = require('../services/ponteSamp/discordGm');
+const { BOTAO_ENVIAR, BOTAO_EDITAR, BOTAO_CANCELAR, BOTAO_GM_APLICADA, BOTAO_GM_REAPLICAR, MENU_ALVO, MODAL_ALVO } = require('../services/ponteSamp/discordGm');
 
 const {
   handleCorrigirDenunciaButton,
@@ -39,6 +40,7 @@ const {
   createRolesModal1,
   createRolesModal2,
   createExemptUsersModal,
+  createAutoAnalysisModal,
   atualizarPainelMensagem,
   atualizarPainelCategoria,
   saveExemptUsers,
@@ -56,12 +58,16 @@ const { handleSlashCommand } = require('../commands/slash');
 const { handleFeedbackMenu, handleFeedbackModal } = require('../utils/feedback');
 const { getConfig: getCachedConfig } = require('../utils/configCache');
 const Denuncia = require('../models/Denuncia');
+const { MODAL_LINK, handleLinkModal } = require('../commands/link');
+const { MINUTOS_ANALISE_AUTOMATICA } = require('../utils/esperas');
+const { registrarAlteracao } = require('../utils/historicoPainel');
 
 async function handlePanelModalSubmit(interaction) {
   try {
     await interaction.deferReply({ flags: 64 });
     const fields = interaction.fields;
     let config = await Config.findOne({ guildId: interaction.guild.id });
+    const antes = config?.toObject ? config.toObject() : null;
 
     if (!config) {
       config = new Config({
@@ -99,6 +105,20 @@ async function handlePanelModalSubmit(interaction) {
         config.roles.administrador = fields.getTextInputValue('admin_role').trim();
         config.roles.responsavel_admin = fields.getTextInputValue('resp_admin_role').trim();
         break;
+      case 'auto_analysis_modal': {
+        const { minimo, maximo } = MINUTOS_ANALISE_AUTOMATICA;
+        const minutos = Number(fields.getTextInputValue('auto_analysis_minutes').trim());
+        if (minutos === 0) {
+          config.analiseAutomatica = false;
+        } else if (Number.isInteger(minutos) && minutos >= minimo && minutos <= maximo) {
+          config.analiseAutomatica = true;
+          config.minutosAnaliseAutomatica = minutos;
+        } else {
+          await interaction.editReply({ content: `❌ Use um número inteiro de ${minimo} a ${maximo}, ou 0 para desligar.` });
+          return;
+        }
+        break;
+      }
       default:
         return;
     }
@@ -107,6 +127,8 @@ async function handlePanelModalSubmit(interaction) {
     config.updatedBy = interaction.user.tag;
     await config.save();
     cachePanelConfig(interaction.guild.id, config);
+    registrarAlteracao({ guildId: interaction.guild.id, por: interaction.user.tag, via: 'discord', antes, depois: config }).catch(() => {});
+    liberarTopicosPrivadosNoServidor(interaction.client, config).catch(() => {});
     await atualizarPainelMensagem(interaction, config);
 
     await interaction.editReply({ content: '✅ Configuração salva com sucesso!' });
@@ -188,6 +210,7 @@ async function handlePanelMenu(interaction) {
         { new: true, upsert: true }
       );
       cachePanelConfig(interaction.guild.id, configAtualizada);
+      registrarAlteracao({ guildId: interaction.guild.id, por: interaction.user.tag, via: 'discord', antes: config, depois: configAtualizada }).catch(() => {});
       await atualizarMensagemDenuncia(interaction.client, interaction.guild, configAtualizada);
       await atualizarPainelMensagem(interaction, configAtualizada);
       await interaction.followUp({
@@ -207,6 +230,7 @@ async function handlePanelMenu(interaction) {
         { new: true, upsert: true }
       );
       cachePanelConfig(interaction.guild.id, configAtualizada);
+      registrarAlteracao({ guildId: interaction.guild.id, por: interaction.user.tag, via: 'discord', antes: config, depois: configAtualizada }).catch(() => {});
       await atualizarPainelMensagem(interaction, configAtualizada);
       await interaction.followUp({
         content: bloquearReivindicacaoComPendentes
@@ -225,6 +249,7 @@ async function handlePanelMenu(interaction) {
         { new: true, upsert: true }
       );
       cachePanelConfig(interaction.guild.id, configAtualizada);
+      registrarAlteracao({ guildId: interaction.guild.id, por: interaction.user.tag, via: 'discord', antes: config, depois: configAtualizada }).catch(() => {});
       await atualizarPainelMensagem(interaction, configAtualizada);
       await interaction.followUp({
         content: topicosPrivados
@@ -243,6 +268,7 @@ async function handlePanelMenu(interaction) {
         { new: true, upsert: true }
       );
       cachePanelConfig(interaction.guild.id, configAtualizada);
+      registrarAlteracao({ guildId: interaction.guild.id, por: interaction.user.tag, via: 'discord', antes: config, depois: configAtualizada }).catch(() => {});
       await atualizarPainelMensagem(interaction, configAtualizada);
       await interaction.followUp({
         content: alertaMotivoCritico
@@ -281,6 +307,10 @@ async function handlePanelMenu(interaction) {
       break;
     case 'edit_roles_2':
       await interaction.showModal(createRolesModal2(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
+      break;
+    case 'edit_auto_analysis':
+      await interaction.showModal(createAutoAnalysisModal(config));
       await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     default:
@@ -371,7 +401,9 @@ const ROTAS = {
       [BOTAO_EDITAR, handleEditarGm],
       [BOTAO_CANCELAR, handleCancelarGm],
       [BOTAO_INCERTO_OK, handleIncertoGm],
-      [BOTAO_INCERTO_REENVIAR, handleIncertoGm]
+      [BOTAO_INCERTO_REENVIAR, handleIncertoGm],
+      [BOTAO_GM_APLICADA, handleIncertoDaPunicaoGm],
+      [BOTAO_GM_REAPLICAR, handleIncertoDaPunicaoGm]
     ]
   },
   modal: {
@@ -386,6 +418,8 @@ const ROTAS = {
       channels_modal_3: handlePanelModalSubmit,
       roles_modal_1: handlePanelModalSubmit,
       roles_modal_2: handlePanelModalSubmit,
+      auto_analysis_modal: handlePanelModalSubmit,
+      [MODAL_LINK]: handleLinkModal,
       global_exempt_users_modal: handleGlobalExemptUsersSubmit,
       [MODAL_TEMPLATES]: handlePonteTemplatesModal,
       [MODAL_MOTIVOS]: handlePonteMotivosModal,

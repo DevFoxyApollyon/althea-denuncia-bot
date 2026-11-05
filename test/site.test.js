@@ -418,8 +418,15 @@ test('painel do bot: valida canais, cargos e isentos antes de salvar', () => {
   assert.equal(validarPainel(entrada(), servidor).minutosEntreReivindicacoes, 1, 'tempo para reivindicar começa em 1 minuto');
   assert.equal(validarPainel({ ...entrada(), minutosReivindicar: 5 }, servidor).minutosEntreReivindicacoes, 5);
   assert.throws(() => validarPainel({ ...entrada(), minutosReivindicar: 0 }, servidor), /de 1 a 60 minutos/);
-  assert.equal(validarPainel(entrada(), servidor).staffNosTopicosPrivados, true, 'staff entra nos tópicos privados por padrão');
-  assert.equal(validarPainel({ ...entrada(), staffNosTopicos: false }, servidor).staffNosTopicosPrivados, false);
+  assert.equal(validarPainel(entrada(), servidor).analiseAutomatica, true, 'análise automática vem ligada');
+  assert.equal(validarPainel(entrada(), servidor).minutosAnaliseAutomatica, 30, 'análise automática começa em 30 minutos');
+  assert.equal(validarPainel({ ...entrada(), analiseAutomatica: false }, servidor).analiseAutomatica, false);
+  assert.equal(validarPainel({ ...entrada(), minutosAnalise: 60 }, servidor).minutosAnaliseAutomatica, 60);
+  assert.throws(() => validarPainel({ ...entrada(), minutosAnalise: 2 }, servidor), /de 5 a 240 minutos/);
+  assert.equal(validarPainel({ ...entrada(), minutosDenuncia: 3, minutosAviso: 20, arquivarTopico: 60 }, servidor).minutosArquivarTopico, 60);
+  assert.equal(validarPainel(entrada(), servidor).minutosAvisoReivindicacao, 15);
+  assert.throws(() => validarPainel({ ...entrada(), arquivarTopico: 99 }, servidor), /arquivamento inválido/);
+  assert.throws(() => validarPainel({ ...entrada(), minutosDenuncia: 0 }, servidor), /de 1 a 60 minutos/);
   assert.equal(validarPainel(entrada(), servidor).topicosPrivados, true, 'tópicos privados ligados por padrão');
   assert.equal(validarPainel({ ...entrada(), topicosPrivados: false }, servidor).topicosPrivados, false);
   assert.throws(() => validarPainel({ ...entrada(), minutosReivindicar: 2.5 }, servidor), /de 1 a 60 minutos/);
@@ -657,4 +664,61 @@ test('esperas: 1 minuto, ligadas e desligadas pelo painel', () => {
   assert.equal(esperaEntreReivindicacoesAtiva({}, '1'), false);
   assert.equal(tempoRestante(45000), '45s');
   assert.equal(tempoRestante(80000), '1m 20s');
+});
+
+test('análise automática: ligada em 30 minutos, tempo e liga/desliga pelo painel', () => {
+  const { analiseAutomaticaAtiva, minutosAnaliseAutomatica } = require('../utils/esperas');
+  assert.equal(analiseAutomaticaAtiva({}), true);
+  assert.equal(analiseAutomaticaAtiva({ analiseAutomatica: false }), false);
+  assert.equal(minutosAnaliseAutomatica({}), 30);
+  assert.equal(minutosAnaliseAutomatica({ minutosAnaliseAutomatica: 45 }), 45);
+  assert.equal(minutosAnaliseAutomatica({ minutosAnaliseAutomatica: 1 }), 5, 'no mínimo 5 minutos');
+  assert.equal(minutosAnaliseAutomatica({ minutosAnaliseAutomatica: 999 }), 240, 'no máximo 240 minutos');
+});
+
+test('painel: tempos novos (espera entre denúncias, aviso de reivindicação, arquivamento)', () => {
+  const e = require('../utils/esperas');
+  assert.equal(e.esperaEntreDenunciasMs({}), 60000);
+  assert.equal(e.esperaEntreDenunciasMs({ minutosEntreDenuncias: 5 }), 300000);
+  assert.equal(e.minutosAvisoReivindicacao({}), 15);
+  assert.equal(e.minutosAvisoReivindicacao({ minutosAvisoReivindicacao: 1 }), 5, 'no mínimo 5');
+  assert.equal(e.avisoReivindicacaoAtivo({ avisoReivindicacao: false }), false);
+  assert.equal(e.minutosArquivarTopico({}), 1440);
+  assert.equal(e.minutosArquivarTopico({ minutosArquivarTopico: 60 }), 60);
+  assert.equal(e.minutosArquivarTopico({ minutosArquivarTopico: 99 }), 1440, 'valor que o Discord não aceita volta ao padrão');
+});
+
+test('histórico do painel: só registra o que mudou, com nome legível', () => {
+  const { diferencas } = require('../utils/historicoPainel');
+  const lista = diferencas(
+    { analiseAutomatica: true, channels: { pc: '1' }, roles: { responsavel_admin: '9' } },
+    { analiseAutomatica: false, channels: { pc: '1' }, roles: { responsavel_admin: '8' }, minutosAnaliseAutomatica: 30 }
+  );
+  assert.deepEqual(lista, [
+    { campo: 'Análise automática', antes: 'ligado', depois: 'desligado' },
+    { campo: 'Minutos da análise automática', antes: '(vazio)', depois: '30' },
+    { campo: 'Cargo Responsável', antes: '9', depois: '8' }
+  ]);
+  assert.deepEqual(diferencas({ topicosPrivados: true }, { topicosPrivados: true }), []);
+});
+
+test('permissões do bot: aponta o que falta em cada canal e o canal sumido', () => {
+  const { PermissionFlagsBits: P } = require('discord.js');
+  const { verificarPermissoes } = require('../utils/permissoesDoBot');
+  const me = {};
+  const canal = (id, name, tem) => ({ id, name, guild: null, permissionsFor: () => ({ has: (flag) => tem.includes(flag) }) });
+  const guild = { id: 'g', name: 'Servidor', members: { me }, roles: { cache: new Map([['r', { name: 'Responsável' }]]) } };
+  const todas = Object.values(P);
+  const pc = canal('1', 'denuncias-pc', todas.filter(f => f !== P.ManageRoles && f !== P.Administrator));
+  const logs = canal('2', 'cadeia', todas.filter(f => f !== P.Administrator));
+  for (const c of [pc, logs]) c.guild = guild;
+  guild.channels = { cache: new Map([['1', pc], ['2', logs]]) };
+  const r = verificarPermissoes({ channels: { cache: new Map() } }, guild, { channels: { pc: '1', logs: '2', log: '3' }, roles: { responsavel_admin: 'r' } });
+  assert.deepEqual(r.canais.map(c => [c.chave, c.situacao, c.faltando]), [
+    ['pc', 'falta', ['Gerenciar permissões']],
+    ['logs', 'ok', []],
+    ['log', 'sumiu', []]
+  ]);
+  assert.deepEqual(r.responsavel.canais.map(c => c.situacao), ['ok']);
+  assert.equal(r.responsavel.cargo, 'Responsável');
 });

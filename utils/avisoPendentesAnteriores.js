@@ -44,6 +44,8 @@ async function buscarPendentesAnteriores(interaction) {
         channelId: atual.channelId,
         _id: { $ne: atual._id },
         status: 'pendente',
+        // tópico apagado no Discord não trava a fila
+        topicoApagadoEm: null,
         // não reivindicada = campo ausente, null ou string vazia
         claimedBy: { $in: [null, ''] },
         reivindicadoPor: { $in: [null, ''] },

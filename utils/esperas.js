@@ -30,6 +30,36 @@ function esperaEntreReivindicacoesAtiva(config, guildId) {
   return SERVIDORES_COM_ESPERA_PARA_REIVINDICAR.has(String(guildId || config?.guildId || ''));
 }
 
+// Análise automática: denúncia reivindicada que fica parada vai sozinha para
+// análise depois do tempo escolhido no painel (padrão 30 minutos).
+const MINUTOS_ANALISE_AUTOMATICA = { padrao: 30, minimo: 5, maximo: 240 };
+const analiseAutomaticaAtiva = (config) => config?.analiseAutomatica !== false;
+
+function minutosAnaliseAutomatica(config) {
+  const valor = Math.round(Number(config?.minutosAnaliseAutomatica));
+  if (!Number.isFinite(valor) || !config?.minutosAnaliseAutomatica) return MINUTOS_ANALISE_AUTOMATICA.padrao;
+  return Math.min(MINUTOS_ANALISE_AUTOMATICA.maximo, Math.max(MINUTOS_ANALISE_AUTOMATICA.minimo, valor));
+}
+
+// Espera entre denúncias, aviso de reivindicação parada e arquivamento dos
+// tópicos: tempos escolhidos no painel.
+const MINUTOS_ENTRE_DENUNCIAS = { padrao: 1, minimo: 1, maximo: 60 };
+const MINUTOS_AVISO_REIVINDICACAO = { padrao: 15, minimo: 5, maximo: 120 };
+// O Discord só aceita estes tempos de arquivamento (1 hora, 1 dia, 3 dias, 1 semana).
+const OPCOES_ARQUIVAR_TOPICO = [60, 1440, 4320, 10080];
+
+function minutosDentro(valor, { padrao, minimo, maximo }) {
+  const minutos = Math.round(Number(valor));
+  if (!valor || !Number.isFinite(minutos)) return padrao;
+  return Math.min(maximo, Math.max(minimo, minutos));
+}
+
+const minutosEntreDenuncias = (config) => minutosDentro(config?.minutosEntreDenuncias, MINUTOS_ENTRE_DENUNCIAS);
+const esperaEntreDenunciasMs = (config) => minutosEntreDenuncias(config) * 60 * 1000;
+const avisoReivindicacaoAtivo = (config) => config?.avisoReivindicacao !== false;
+const minutosAvisoReivindicacao = (config) => minutosDentro(config?.minutosAvisoReivindicacao, MINUTOS_AVISO_REIVINDICACAO);
+const minutosArquivarTopico = (config) => (OPCOES_ARQUIVAR_TOPICO.includes(Number(config?.minutosArquivarTopico)) ? Number(config.minutosArquivarTopico) : 1440);
+
 // "1m 20s" ou "45s".
 function tempoRestante(ms) {
   const segundos = Math.ceil(ms / 1000);
@@ -44,5 +74,16 @@ module.exports = {
   esperaEntreReivindicacoesMs,
   esperaEntreDenunciasAtiva,
   esperaEntreReivindicacoesAtiva,
-  tempoRestante
+  tempoRestante,
+  MINUTOS_ANALISE_AUTOMATICA,
+  analiseAutomaticaAtiva,
+  minutosAnaliseAutomatica,
+  MINUTOS_ENTRE_DENUNCIAS,
+  MINUTOS_AVISO_REIVINDICACAO,
+  OPCOES_ARQUIVAR_TOPICO,
+  minutosEntreDenuncias,
+  esperaEntreDenunciasMs,
+  avisoReivindicacaoAtivo,
+  minutosAvisoReivindicacao,
+  minutosArquivarTopico
 };

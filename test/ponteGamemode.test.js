@@ -1522,3 +1522,64 @@ test('histórico no jogo: punições aplicadas nas mesmas contas, com nick, orga
   );
   assert.equal(await historicoNoJogo({ _id: new mongoose.Types.ObjectId(), guildId, acusado: 'Fulano_Tal' }), null, 'acusado só por nick');
 });
+
+test('embed travado com incerto: "Foi aplicada" e "Tentar novamente" (gamemode ou de volta ao PC)', async () => {
+  // Gamemode: os dois incertos viram aplicados de uma vez.
+  const g1 = await guildGm('872');
+  const { client } = discordComDm();
+  const p1 = await punicaoAceita('872', [
+    { contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' },
+    { contaId: '2', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }
+  ]);
+  await discordGm().enviarAoJogo({ punicaoId: p1._id, guildId: '872', staff: staffA });
+  for (const p of (await chamar(g1.conexao, g1.segredo, '/pedidos', { query: 'limite=2' })).corpo.pedidos) {
+    await chamar(g1.conexao, g1.segredo, `/resultados/${p.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
+  }
+  const punicao1 = await m.PontePunicao.findById(p1._id).lean();
+  const embed = discordGm().montarMensagemGm(punicao1, await m.PontePedidoGm.find({ punicaoId: p1._id }).lean(), await m.PonteServidor.findOne({ guildId: '872' }).lean());
+  const botoes = embed.components[0].toJSON().components.map(b => b.custom_id.split(':')[0] + ':');
+  assert.deepEqual(botoes, ['ponte_gm_aplicada:', 'ponte_gm_reaplicar:', 'ponte_gm_cancelar:']);
+
+  const ok = await incertosGm().resolverIncertosDaPunicao({ client, punicaoId: p1._id, guildId: '872', staff: staffA, aplicada: true });
+  assert.equal(ok.resolvidos, 2);
+  assert.equal((await m.PontePunicao.findById(p1._id).lean()).status, 'aplicada');
+  assert.match((await incertosGm().resolverIncertosDaPunicao({ client, punicaoId: p1._id, guildId: '872', staff: staffA, aplicada: true })).erro, /não tem pedido/);
+
+  // Servidor passou para o PC: "Tentar novamente" devolve a punição à fila do PC.
+  const g2 = await guildGm('873');
+  const p2 = await punicaoAceita('873', [{ contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }]);
+  await discordGm().enviarAoJogo({ punicaoId: p2._id, guildId: '873', staff: staffA });
+  const [pedido] = (await chamar(g2.conexao, g2.segredo, '/pedidos')).corpo.pedidos;
+  await chamar(g2.conexao, g2.segredo, `/resultados/${pedido.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
+  await m.PonteServidor.updateOne({ guildId: '873' }, { $set: { executor: 'pc' } });
+
+  const pc = await incertosGm().resolverIncertosDaPunicao({ client, punicaoId: p2._id, guildId: '873', staff: staffA, aplicada: false });
+  assert.equal(pc.destino, 'pc');
+  const voltou = await m.PontePunicao.findById(p2._id).lean();
+  assert.equal(voltou.status, 'aceita');
+  assert.equal(voltou.executor, '');
+  assert.equal((await m.PontePedidoGm.findById(pedido.id).lean()).status, 'cancelado');
+});
+
+test('/admin status ao vivo: gamemode online, fila, incertos e última aplicada por servidor', async () => {
+  process.env.OWNER_DISCORD_ID = DONO;
+  const { conexao, segredo } = await guildGm('893');
+  const punicao = await punicaoAceita('893', [
+    { contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' },
+    { contaId: '2', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }
+  ]);
+  await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '893', staff: staffA });
+  const [a] = (await chamar(conexao, segredo, '/pedidos', { query: 'limite=1' })).corpo.pedidos;
+  await chamar(conexao, segredo, `/resultados/${a.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
+  await comAdmin(async (pedir) => {
+    const { status, corpo } = await pedir('/status');
+    assert.equal(status, 200);
+    const s = corpo.servidores.find(x => x.guildId === '893');
+    assert.equal(s.executor, 'gamemode');
+    assert.equal(s.gamemode.online, true, 'acabou de falar com o bot');
+    assert.equal(s.fila.executando, 1);
+    assert.equal(s.fila.incertos, 1);
+    assert.equal(s.fila.paraGamemode, 1, 'o segundo alvo espera a gamemode buscar');
+    assert.equal((await pedir('/status', { usuario: '123' })).status, 404, 'outra pessoa não vê');
+  });
+});

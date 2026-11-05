@@ -94,7 +94,7 @@ test('todo botão, menu e modal criado no código tem rota', () => {
 test('comandos de barra têm definição válida e nomes únicos', () => {
   const { comandos } = require('../commands/slash');
   const nomes = comandos.map(comando => comando.data.toJSON().name);
-  assert.deepEqual([...nomes].sort(), ['ativar', 'denuncia', 'instalacao', 'painel', 'ponte', 'ponte-codigo', 'rank', 'status']);
+  assert.deepEqual([...nomes].sort(), ['ativar', 'denuncia', 'instalacao', 'link', 'painel', 'ponte', 'ponte-codigo', 'rank', 'status']);
   for (const comando of comandos) {
     assert.equal(typeof comando.executar, 'function', comando.data.name);
     assert.ok(comando.data.toJSON().description.length <= 100);
@@ -195,4 +195,14 @@ test('comando já registrado igual ao do código não é editado de novo a cada 
   assert.equal(editados, 0);
   assert.equal(criados, 0);
   client.destroy();
+});
+
+test('/link: lê o link do tópico, de uma mensagem dele ou de outro domínio do Discord', () => {
+  const { lerLinkDoDiscord } = require('../commands/link');
+  assert.deepEqual(lerLinkDoDiscord('https://discord.com/channels/817924556358156360/1567751196804911145'),
+    { guildId: '817924556358156360', canalId: '1567751196804911145', mensagemId: null });
+  assert.deepEqual(lerLinkDoDiscord('olha https://ptb.discord.com/channels/817924556358156360/1547188378037002280/1567751210776404015 aqui'),
+    { guildId: '817924556358156360', canalId: '1547188378037002280', mensagemId: '1567751210776404015' });
+  assert.equal(lerLinkDoDiscord('https://exemplo.com/channels/1/2'), null);
+  assert.equal(lerLinkDoDiscord(''), null);
 });

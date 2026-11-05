@@ -9,7 +9,8 @@ const {
     TextInputStyle,
     LabelBuilder,
     FileUploadBuilder,
-    ChannelType
+    ChannelType,
+    PermissionFlagsBits
 } = require('discord.js');
 
 const { garantirAvisoNoTopo } = require('../Handlers/leiaAvisoHandler');
@@ -26,7 +27,7 @@ const { registrarTopicoRestrito, botaoEntrarNoTopico } = require('../utils/restr
 const { registrarMensagens, buscarCanal } = require('../utils/denunciaMensagens');
 const { ARQUIVAR_APOS_MINUTOS } = require('../utils/espelhos');
 const { alertarMotivoCritico } = require('../utils/alertaMotivoCritico');
-const { ESPERA_ENTRE_DENUNCIAS_MS, esperaEntreDenunciasAtiva, tempoRestante } = require('../utils/esperas');
+const { esperaEntreDenunciasMs, esperaEntreDenunciasAtiva, minutosArquivarTopico, tempoRestante } = require('../utils/esperas');
 
 require('dotenv').config();
 
@@ -252,23 +253,46 @@ function validarMotivoTamanho(motivo) {
     return null;
 }
 
-// Põe no tópico privado quem tem os cargos de administrador e responsável. Marcar
-// o cargo numa mensagem coloca os membros dele no tópico; como a marcação entra
-// por edição, ninguém é notificado, e a mensagem é apagada logo depois. Quem o
-// bot já tem em memória com o cargo também é adicionado direto. Falhas aqui não
-// impedem a denúncia: quem tem "Gerenciar tópicos" vê o tópico de todo jeito.
-async function adicionarCargosAoTopico(topico, cargos) {
-    const ids = [...new Set(cargos.filter(id => /^\d{15,21}$/.test(String(id || ''))))];
-    if (!ids.length) return;
-    try {
-        const marcacao = await topico.send({ content: '⠀', allowedMentions: { parse: [] } });
-        await marcacao.edit({ content: ids.map(id => `<@&${id}>`).join(' '), allowedMentions: { roles: ids } });
-        await marcacao.delete().catch(() => {});
-    } catch (erro) {
-        console.warn(`Não foi possível marcar os cargos da staff no tópico privado: ${erro.message}`);
+// No Discord, quem tem "Gerenciar tópicos" no canal vê todo tópico privado dele
+// sem precisar entrar: abre pelo link ou pela lista de tópicos, e ninguém vê
+// aviso de "adicionou". Como a mesma permissão deixa apagar e arquivar tópicos,
+// o bot dá isso (com "Ver canal") só ao cargo de responsável no canal da
+// denúncia, uma vez só: se o cargo já
+// tem as duas permissões no canal, não mexe. Precisa de "Gerenciar cargos" no
+// bot; sem isso, só avisa no log e a denúncia segue.
+async function liberarTopicosPrivadosParaCargos(canal, cargos) {
+    const ids = [...new Set(cargos.map(String).filter(id => /^\d{15,21}$/.test(id)))];
+    const permissoes = canal?.permissionOverwrites;
+    if (!ids.length || !permissoes?.edit) return 0;
+    let liberados = 0;
+    for (const id of ids) {
+        const atual = permissoes.cache?.get(id);
+        if (atual?.allow?.has?.(PermissionFlagsBits.ManageThreads) && atual.allow.has(PermissionFlagsBits.ViewChannel)) continue;
+        try {
+            await permissoes.edit(id, { ViewChannel: true, ManageThreads: true },
+                { reason: 'O responsável vê os tópicos privados das denúncias sem precisar entrar.' });
+            liberados++;
+        } catch (erro) {
+            console.warn(`Não foi possível dar "Gerenciar tópicos" ao cargo ${id} no canal ${canal.id}: ${erro.message}`);
+        }
     }
-    const membros = new Set(ids.flatMap(id => [...(topico.guild?.roles?.cache?.get(id)?.members?.keys?.() || [])]));
-    await Promise.all([...membros].slice(0, 50).map(id => topico.members.add(id).catch(() => {})));
+    return liberados;
+}
+
+// O mesmo, nos canais de denúncia PC e Mobile do servidor de uma vez: roda
+// quando o bot liga e quando o painel é salvo, para os tópicos privados antigos
+// também abrirem para o responsável, sem esperar uma denúncia nova.
+async function liberarTopicosPrivadosNoServidor(client, config) {
+    const cargo = config?.roles?.responsavel_admin;
+    if (!client || !cargo) return 0;
+    const ids = [...new Set([config.channels?.pc, config.channels?.mobile].filter(Boolean))];
+    let liberados = 0;
+    for (const id of ids) {
+        const canal = client.channels.cache.get(id) || await client.channels.fetch(id).catch(() => null);
+        if (!canal || canal.guildId !== config.guildId) continue;
+        liberados += await liberarTopicosPrivadosParaCargos(canal, [cargo]);
+    }
+    return liberados;
 }
 
 // Cria o tópico privado da denúncia e põe cada pessoa nele. O primeiro da lista
@@ -276,14 +300,14 @@ async function adicionarCargosAoTopico(topico, cargos) {
 // privado), apaga o que criou e devolve null para a denúncia abrir em tópico
 // público. Acusado que não vê o canal (Missing Access) fica de fora, como
 // ficaria num tópico público, e a denúncia segue privada.
-async function criarTopicoPrivado(canal, nome, membros, cargos = []) {
+async function criarTopicoPrivado(canal, nome, membros, arquivarAposMinutos = 1440) {
     let topico = null;
     try {
         topico = await canal.threads.create({
             name: nome,
             type: ChannelType.PrivateThread,
             invitable: false,
-            autoArchiveDuration: 1440,
+            autoArchiveDuration: arquivarAposMinutos,
             reason: 'Denúncia com acusado identificado: tópico visível só para as partes e a staff.'
         });
         const [denunciante, ...outros] = [...new Set(membros)];
@@ -291,8 +315,6 @@ async function criarTopicoPrivado(canal, nome, membros, cargos = []) {
         await Promise.all(outros.map(id => topico.members.add(id).catch(erro => {
             console.warn(`Acusado ${id} não entrou no tópico privado: ${erro.message}`);
         })));
-        // A staff entra em segundo plano: a denúncia não espera por isso.
-        adicionarCargosAoTopico(topico, cargos).catch(() => {});
         return topico;
     } catch (erro) {
         console.warn(`Tópico privado não criado, a denúncia abre pública: ${erro.message}`);
@@ -454,9 +476,9 @@ async function handleDenunciaSubmit(interaction, platform) {
         const config = await getCachedConfig(interaction.guild.id);
 
         // Espera entre uma denúncia e outra (liga e desliga no painel do bot).
-        if (esperaEntreDenunciasAtiva(config) && ultimaEnvio && agora - ultimaEnvio < ESPERA_ENTRE_DENUNCIAS_MS) {
+        if (esperaEntreDenunciasAtiva(config) && ultimaEnvio && agora - ultimaEnvio < esperaEntreDenunciasMs(config)) {
             return await interaction.editReply({
-                content: `⏳ Você precisa aguardar **${tempoRestante(ESPERA_ENTRE_DENUNCIAS_MS - (agora - ultimaEnvio))}** antes de enviar outra denúncia.`,
+                content: `⏳ Você precisa aguardar **${tempoRestante(esperaEntreDenunciasMs(config) - (agora - ultimaEnvio))}** antes de enviar outra denúncia.`,
             });
         }
 
@@ -620,9 +642,10 @@ async function handleDenunciaSubmit(interaction, platform) {
         try {
             // Os tópicos privados podem ser desligados no painel (site ou /painel).
             if (restritoParticipacao && config.topicosPrivados !== false) {
-                // A staff só entra sozinha com a opção ligada no painel do bot.
-                const cargosDaStaff = config.staffNosTopicosPrivados === false ? [] : [config.roles?.administrador, config.roles?.responsavel_admin];
-                thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds], cargosDaStaff);
+                // O responsável vê o tópico mesmo sem entrar nele (o administrador não:
+                // "Gerenciar tópicos" também deixa apagar o tópico).
+                liberarTopicosPrivadosParaCargos(channel, [config.roles?.responsavel_admin]).catch(() => {});
+                thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds], minutosArquivarTopico(config));
                 if (thread) {
                     // O tópico privado não fica preso à mensagem: o link vai no texto.
                     // A linha em branco no fim (caractere ⠀, que o Discord não
@@ -645,7 +668,7 @@ async function handleDenunciaSubmit(interaction, platform) {
                 });
                 thread = await mainMessage.startThread({
                     name: `Denúncia: ${denunciante}`,
-                    autoArchiveDuration: 1440
+                    autoArchiveDuration: minutosArquivarTopico(config)
                 });
             }
         } catch (e) {
@@ -1172,5 +1195,7 @@ module.exports = {
     handleConsultaModalSubmit,
     atualizarMensagemDenuncia,
     atualizarStatusNaMensagem,
-    criarTopicoPrivado
+    criarTopicoPrivado,
+    liberarTopicosPrivadosParaCargos,
+    liberarTopicosPrivadosNoServidor
 };

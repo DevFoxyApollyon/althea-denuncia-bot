@@ -4,6 +4,7 @@ const { handlePainelSlash } = require('./painel');
 const { handleStatusSlash } = require('./status');
 const { handleDenunciaSlash } = require('./denuncia');
 const ponte = require('./ponte');
+const { handleLinkSlash } = require('./link');
 
 const comandos = [
     {
@@ -38,6 +39,12 @@ const comandos = [
             .setName('denuncia')
             .setDescription('Publica ou atualiza a mensagem do sistema de denúncias no canal configurado.'),
         executar: handleDenunciaSlash
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('link')
+            .setDescription('Pega o link de um tópico de denúncia e devolve o link da mensagem principal.'),
+        executar: handleLinkSlash
     },
     {
         data: new SlashCommandBuilder()

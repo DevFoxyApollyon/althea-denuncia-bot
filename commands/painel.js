@@ -12,6 +12,7 @@ const Config = require('../models/Config');
 const { getConfig } = require('../utils/configCache');
 const { getUsuariosIsentos, salvarUsuariosIsentos, normalizarIds } = require('../utils/usuariosIsentos');
 const { alertaMotivoCriticoAtivo } = require('../utils/alertaMotivoCritico');
+const { MINUTOS_ANALISE_AUTOMATICA, analiseAutomaticaAtiva, minutosAnaliseAutomatica } = require('../utils/esperas');
 require('dotenv').config();
  
 const MESSAGE_TIMEOUT = 5 * 60 * 1000; 
@@ -207,6 +208,27 @@ function createRolesModal2(currentConfig = null) {
     new ActionRowBuilder().addComponents(resp)
   );
 }
+
+// Análise automática: um campo só. 0 desliga; de 5 a 240 é o tempo em minutos.
+function createAutoAnalysisModal(currentConfig = null) {
+  const { minimo, maximo } = MINUTOS_ANALISE_AUTOMATICA;
+  const minutos = new TextInputBuilder()
+    .setCustomId('auto_analysis_minutes')
+    .setLabel(`Minutos (${minimo} a ${maximo}) ou 0 para desligar`)
+    .setPlaceholder('Ex.: 30')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMaxLength(3)
+    .setValue(analiseAutomaticaAtiva(currentConfig) ? String(minutosAnaliseAutomatica(currentConfig)) : '0');
+  return new ModalBuilder()
+    .setCustomId('auto_analysis_modal')
+    .setTitle('Análise automática')
+    .addComponents(new ActionRowBuilder().addComponents(minutos));
+}
+
+const textoAnaliseAutomatica = (config) => (analiseAutomaticaAtiva(config)
+  ? `🟢 **Após ${minutosAnaliseAutomatica(config)} min** reivindicada`
+  : '⚪ **Desligada**');
 
 function createExemptUsersModal(userIds = []) {
   const modal = new ModalBuilder()
@@ -409,6 +431,11 @@ function buildPanelEmbed(interaction, config, exemptUsers = []) {
         name: '🧵 Tópicos das denúncias',
         value: textoTopicosPrivados(config),
         inline: true
+      },
+      {
+        name: '🔎 Análise automática',
+        value: textoAnaliseAutomatica(config),
+        inline: true
       }
     )
     .setFooter({ text: 'Selecione uma categoria abaixo para editar' })
@@ -454,7 +481,8 @@ async function atualizarPainelCategoria(interaction, category, config) {
     edit_roles_2: ['🧑‍💼 Cargos administrativos', [
       `🧑‍💼 Administrador: ${getRoleName(interaction, config?.roles?.administrador)}`,
       `🧑‍🔧 Responsável: ${getRoleName(interaction, config?.roles?.responsavel_admin)}`
-    ].join('\n'), 'Cargos usados nas ações administrativas.']
+    ].join('\n'), 'Cargos usados nas ações administrativas.'],
+    edit_auto_analysis: ['🔎 Análise automática', textoAnaliseAutomatica(config), 'Denúncia reivindicada e parada vai sozinha para análise depois desse tempo. Escreva 0 para desligar.']
   }[category] || ['⚙️ Configuração', 'Nenhuma categoria selecionada.', ''];
 
   await interaction.message.edit({
@@ -481,6 +509,7 @@ async function createPanelSelectMenu(interaction, currentConfig = null) {
     { label: 'Bloqueio de pendências anteriores', value: 'toggle_pending_claim_block', description: bloqueioPendentesAtivo(currentConfig) ? 'Desativar neste servidor' : 'Ativar neste servidor', emoji: '⏳' },
     { label: 'Alerta de motivo crítico', value: 'toggle_critical_alert', description: alertaMotivoCriticoAtivo(currentConfig) ? 'Parar de marcar o responsável (zaralho, hack...)' : 'Voltar a marcar o responsável (zaralho, hack...)', emoji: '🚨' },
     { label: 'Tópicos privados', value: 'toggle_private_threads', description: topicosPrivadosAtivos(currentConfig) ? 'Desligar: toda denúncia abre em tópico público' : 'Ligar: denúncia com acusado no banco abre privada', emoji: '🔒' },
+    { label: 'Análise automática', value: 'edit_auto_analysis', description: analiseAutomaticaAtiva(currentConfig) ? `Ligada: após ${minutosAnaliseAutomatica(currentConfig)} min. Mudar tempo ou desligar` : 'Desligada. Ligar e escolher o tempo', emoji: '🔎' },
     { label: 'Cargos principais', value: 'edit_roles_1', description: 'Cargos Mobile e PC', emoji: '👥' },
     { label: 'Cargos administrativos', value: 'edit_roles_2', description: 'Administrador e responsável', emoji: '🧑‍💼' }
   ];
@@ -661,6 +690,7 @@ module.exports = {
   createRolesModal1,
   createRolesModal2,
   createExemptUsersModal,
+  createAutoAnalysisModal,
   saveExemptUsers,
   hasPermission,
   cachePanelConfig,

@@ -269,7 +269,12 @@ const painelDoBot = {
     esperaDenuncia: true,
     esperaReivindicar: false,
     minutosReivindicar: 1,
-    staffNosTopicos: true,
+    analiseAutomatica: true,
+    minutosAnalise: 30,
+    minutosDenuncia: 1,
+    avisoReivindicar: true,
+    minutosAviso: 15,
+    arquivarTopico: 1440,
     isentos: [{ id: '200000000000000200', nome: 'Lucas Prado' }]
   },
   canais: [
@@ -280,6 +285,19 @@ const painelDoBot = {
   cargos: [{ id: '24', nome: 'Responsável', cor: '#e84fd0' }, { id: '23', nome: 'Administrador', cor: '#5bc0eb' }, { id: '21', nome: 'Autenticado PC' }, { id: '22', nome: 'Autenticado Mobile' }],
   externos: { registro: '#registro em Althea Cloud', cloud: '#cloud em Althea Cloud', canalDenuncia: null },
   atualizado: { em: horas(30), por: 'rafael (site)' },
+  permissoes: {
+    canais: [
+      { chave: 'pc', canalId: '11', nome: '#denuncias-pc', situacao: 'falta', faltando: ['Gerenciar permissões'], para: 'Abrir os tópicos (públicos e privados), apagar mensagens proibidas e liberar os tópicos privados para o responsável.' },
+      { chave: 'mobile', canalId: '12', nome: '#denuncias-mobile', situacao: 'ok', faltando: [], para: 'Abrir os tópicos (públicos e privados), apagar mensagens proibidas e liberar os tópicos privados para o responsável.' },
+      { chave: 'logs', canalId: '13', nome: '#cadeia-staff', situacao: 'ok', faltando: [], para: 'Publicar cada denúncia que entra.' },
+      { chave: 'armazem', canalId: '900000000000000001', nome: null, situacao: 'sumiu', faltando: [], para: 'Criar a cópia (tópico espelho) de cada denúncia.' }
+    ],
+    responsavel: { cargo: 'Responsável', canais: [{ canalId: '11', nome: '#denuncias-pc', situacao: 'falta' }, { canalId: '12', nome: '#denuncias-mobile', situacao: 'ok' }] }
+  },
+  historico: [
+    { em: horas(2), por: 'rafael', via: 'site', mudancas: [{ campo: 'Análise automática', antes: 'ligado', depois: 'desligado' }, { campo: 'Minutos para reivindicar', antes: '1', depois: '5' }] },
+    { em: horas(30), por: 'lucas', via: 'discord', mudancas: [{ campo: 'Tópicos privados', antes: 'desligado', depois: 'ligado' }] }
+  ],
   // Tabela de motivos da ponte com o jogo (padrão de constantes.js).
   motivosPonte: {
     propria: false,
@@ -287,6 +305,9 @@ const painelDoBot = {
   }
 };
 app.get('/api/painel-bot', (req, res) => res.json(painelDoBot));
+const travadasPrevia = [{ id: '650000000000000000000001', acusado: '1270428', denunciante: '954249', motivo: 'Hack', em: horas(50) }];
+app.get('/api/painel-bot/travadas', (req, res) => res.json({ conferidas: 12, travadas: travadasPrevia }));
+app.post('/api/painel-bot/travadas', express.json(), (req, res) => res.json({ ok: true, tiradas: req.body.ids.length, mensagem: `${req.body.ids.length} denúncia(s) saíram da fila (prévia).` }));
 const motivosPrevia = { propria: false, tabela: require('../services/ponteSamp/validacao').ITENS_TABELA.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.slice(1), cmd: t.cmd, tempo: t.tempo, avisos: t.avisos, grupo: t.grupo })) };
 app.get('/api/motivos-ponte', (req, res) => res.json(motivosPrevia));
 app.post('/api/motivos-ponte', express.json(), (req, res) => {
@@ -391,7 +412,7 @@ app.post('/api/backup', express.json(), (req, res) => {
   res.json({ ok: true, mensagem: 'Backup restaurado (prévia, nada foi gravado).' });
 });
 app.post('/api/painel-bot', express.json(), (req, res) => {
-  Object.assign(painelDoBot.valores, { channels: req.body.channels, roles: req.body.roles, manutencao: req.body.manutencao === true, bloqueio: req.body.bloqueio !== false, somenteLeitura: req.body.somenteLeitura === true, alertaCritico: req.body.alertaCritico !== false, esperaDenuncia: req.body.esperaDenuncia !== false, esperaReivindicar: req.body.esperaReivindicar === true, minutosReivindicar: Number(req.body.minutosReivindicar) || 1, staffNosTopicos: req.body.staffNosTopicos !== false });
+  Object.assign(painelDoBot.valores, { channels: req.body.channels, roles: req.body.roles, manutencao: req.body.manutencao === true, bloqueio: req.body.bloqueio !== false, somenteLeitura: req.body.somenteLeitura === true, alertaCritico: req.body.alertaCritico !== false, esperaDenuncia: req.body.esperaDenuncia !== false, esperaReivindicar: req.body.esperaReivindicar === true, minutosReivindicar: Number(req.body.minutosReivindicar) || 1, analiseAutomatica: req.body.analiseAutomatica !== false, minutosAnalise: Number(req.body.minutosAnalise) || 30 });
   res.json({ ok: true, mensagem: 'Painel do bot salvo (prévia, nada foi gravado).', ...painelDoBot });
 });
 

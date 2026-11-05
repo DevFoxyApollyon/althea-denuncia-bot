@@ -1,12 +1,12 @@
 const Denuncia = require('../models/Denuncia');
+const Config = require('../models/Config');
+const { MINUTOS_ANALISE_AUTOMATICA, MINUTOS_AVISO_REIVINDICACAO, analiseAutomaticaAtiva, minutosAnaliseAutomatica, avisoReivindicacaoAtivo, minutosAvisoReivindicacao } = require('../utils/esperas');
 const { CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM } = require('../utils/dmSegura');
 const { EmbedBuilder } = require('discord.js');
 const { getConfig: getCachedConfig } = require('../utils/configCache');
 const { getBrasiliaDate } = require('../utils/dateUtils');
 const { processarAnaliseAutomatica } = require('../Handlers/handlerStatusButton');
 
-const CLAIM_WARNING_MS = 15 * 60 * 1000;
-const AUTO_ANALYSIS_MS = 30 * 60 * 1000;
 const WARNING_MESSAGE_TTL_MS = 10 * 60 * 1000;
 const AUTO_ANALYSIS_MESSAGE_TTL_MS = 5 * 60 * 1000;
 const CHECK_INTERVAL_MS = 60 * 1000;
@@ -100,8 +100,12 @@ async function verificarReivindicacoesSemAnalise(client) {
     await limparAvisosExpirados(client);
     await limparAvisosAnaliseExpirados(client);
 
-    const limite = new Date(Date.now() - CLAIM_WARNING_MS);
+    // O tempo do aviso vem do painel de cada servidor; servidores com o aviso
+    // desligado nem entram na busca.
+    const limite = new Date(Date.now() - MINUTOS_AVISO_REIVINDICACAO.minimo * 60 * 1000);
+    const semAviso = await Config.distinct('guildId', { avisoReivindicacao: false }).catch(() => []);
     const candidatas = await Denuncia.find({
+      guildId: { $nin: semAviso },
       status: 'reivindicacao',
       claimedBy: { $nin: [null, ''] },
       claimedAt: { $ne: null, $lte: limite },
@@ -116,9 +120,14 @@ async function verificarReivindicacoesSemAnalise(client) {
       claimedAt: 1,
       acusado: 1,
       motivo: 1,
-    }).limit(50).lean();
+    }).sort({ claimedAt: 1 }).limit(100).lean();
 
     for (const candidata of candidatas) {
+      const config = await getCachedConfig(candidata.guildId);
+      if (!avisoReivindicacaoAtivo(config)) continue;
+      const minutosAviso = minutosAvisoReivindicacao(config);
+      if (new Date(candidata.claimedAt).getTime() > Date.now() - minutosAviso * 60 * 1000) continue;
+
       const marcada = await Denuncia.findOneAndUpdate(
         {
           _id: candidata._id,
@@ -132,7 +141,6 @@ async function verificarReivindicacoesSemAnalise(client) {
       if (!marcada) continue;
 
       const guild = client.guilds.cache.get(candidata.guildId);
-      const config = await getCachedConfig(candidata.guildId);
       const topic = await fetchChannel(client, candidata.threadId);
       const logsChannel = await fetchChannel(client, config?.channels?.log);
       const claimedStaff = await client.users.fetch(candidata.claimedBy).catch(() => null);
@@ -148,7 +156,7 @@ async function verificarReivindicacoesSemAnalise(client) {
       const topicEmbed = new EmbedBuilder()
         .setColor('#F1C40F')
         .setTitle('⚠️ Denúncia aguardando análise')
-        .setDescription(`${staffMention}, esta denúncia foi reivindicada há mais de **15 minutos** e ainda não foi colocada em análise.`)
+        .setDescription(`${staffMention}, esta denúncia foi reivindicada há mais de **${minutosAviso} minutos** e ainda não foi colocada em análise.`)
         .addFields(
           { name: 'Responsável', value: staffMention, inline: true },
           { name: 'Reivindicada em', value: claimedAt, inline: true },
@@ -160,7 +168,7 @@ async function verificarReivindicacoesSemAnalise(client) {
       const logEmbed = new EmbedBuilder()
         .setColor('#E67E22')
         .setTitle('⚠️ Denúncia sem resposta')
-        .setDescription('Uma denúncia foi reivindicada, mas continua sem análise após 15 minutos.')
+        .setDescription(`Uma denúncia foi reivindicada, mas continua sem análise após ${minutosAviso} minutos.`)
         .addFields(
           { name: 'Responsável', value: staffMention, inline: true },
           { name: 'Tópico', value: topicMention, inline: true },
@@ -175,7 +183,7 @@ async function verificarReivindicacoesSemAnalise(client) {
       const dmEmbed = new EmbedBuilder()
         .setColor('#F1C40F')
         .setTitle('⚠️ Denúncia aguardando sua análise')
-        .setDescription('Você reivindicou esta denúncia há mais de **15 minutos**, mas ela ainda não foi colocada em análise.')
+        .setDescription(`Você reivindicou esta denúncia há mais de **${minutosAviso} minutos**, mas ela ainda não foi colocada em análise.`)
         .addFields(
           { name: 'Acusado', value: candidata.acusado || 'Não informado', inline: true },
           { name: 'Reivindicada em', value: claimedAt, inline: true },
@@ -232,9 +240,14 @@ async function verificarReivindicacoesSemAnalise(client) {
   }
 }
 
+// O tempo e o liga/desliga vêm do painel de cada servidor. A busca pega tudo
+// que passou do menor tempo possível; cada denúncia é conferida com o tempo do
+// próprio servidor. Servidores com a opção desligada nem entram na busca.
 async function colocarReivindicacoesEmAnalise(client) {
-  const limite = new Date(Date.now() - AUTO_ANALYSIS_MS);
+  const limite = new Date(Date.now() - MINUTOS_ANALISE_AUTOMATICA.minimo * 60 * 1000);
+  const desligados = await Config.distinct('guildId', { analiseAutomatica: false }).catch(() => []);
   const candidatas = await Denuncia.find({
+    guildId: { $nin: desligados },
     status: 'reivindicacao',
     claimedBy: { $nin: [null, ''] },
     claimedAt: { $ne: null, $lte: limite },
@@ -249,9 +262,14 @@ async function colocarReivindicacoesEmAnalise(client) {
     claimedAt: 1,
     acusado: 1,
     motivo: 1,
-  }).limit(50).lean();
+  }).sort({ claimedAt: 1 }).limit(100).lean();
 
   for (const candidata of candidatas) {
+    const config = await getCachedConfig(candidata.guildId);
+    if (!analiseAutomaticaAtiva(config)) continue;
+    const minutos = minutosAnaliseAutomatica(config);
+    if (new Date(candidata.claimedAt).getTime() > Date.now() - minutos * 60 * 1000) continue;
+
     const agora = getBrasiliaDate();
     const reservada = await Denuncia.findOneAndUpdate(
       {
@@ -267,7 +285,6 @@ async function colocarReivindicacoesEmAnalise(client) {
 
     if (!reservada) continue;
 
-    const config = await getCachedConfig(candidata.guildId);
     const topic = await fetchChannel(client, candidata.threadId);
     const staffMention = `<@${candidata.claimedBy}>`;
     const topicMention = `<#${candidata.threadId}>`;
@@ -284,7 +301,7 @@ async function colocarReivindicacoesEmAnalise(client) {
     const analysisEmbed = new EmbedBuilder()
       .setColor('#3498DB')
       .setTitle('🔎 Denúncia colocada em análise automaticamente')
-      .setDescription(`A denúncia ficou mais de **30 minutos** sem análise após ser reivindicada. Ela foi encaminhada automaticamente para análise de ${staffMention}.`)
+      .setDescription(`A denúncia ficou mais de **${minutos} minutos** sem análise após ser reivindicada. Ela foi encaminhada automaticamente para análise de ${staffMention}.`)
       .addFields(
         { name: 'Responsável', value: staffMention, inline: true },
         { name: 'Tópico', value: topicMention, inline: true },

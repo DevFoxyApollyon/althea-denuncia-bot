@@ -91,6 +91,10 @@ const denunciaSchema = new mongoose.Schema({
     enum: ['pendente', 'reivindicacao', 'aceita', 'recusada', 'analise', 'finalizada'],
     default: 'pendente'
   },
+  // O tópico da denúncia foi apagado no Discord: ela sai da fila (não trava o
+  // bloqueio de pendências). Ver utils/denunciasTravadas.js.
+  topicoApagadoEm: { type: Date, default: null },
+  topicoApagadoPor: { type: String, default: '' },
   dataCriacao: { 
     type: Date, 
     default: () => getBrasiliaDate(),
