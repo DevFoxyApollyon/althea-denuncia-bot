@@ -199,7 +199,7 @@ async function handleModalRegistro(interaction) {
 
 const FORA_DA_TABELA = 'Motivo fora da tabela: o responsável confere no aceite';
 const punicaoDoMotivo = (regra) => (!regra.regra ? FORA_DA_TABELA
-  : regra.cmd === 'registro' ? `${regra.texto || 'Neutro'} (neutro, não vai para o jogo)`
+  : regra.cmd === 'registro' ? (regra.texto || 'Neutro')
     : punicaoLegivel({ cmd: regra.cmd, tempo: regra.tempo, avisos: regra.avisos }));
 
 // Motivo novo cadastrado (site, /ponte motivos ou painel do jogo): os registros
