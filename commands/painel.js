@@ -192,9 +192,16 @@ function createRolesModal1(currentConfig = null) {
     .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)
     .setValue(currentConfig?.roles?.pc || '');
 
+  const suporte = new TextInputBuilder()
+    .setCustomId('suporte_role').setLabel('ID do cargo Suporte (opcional)')
+    .setPlaceholder('Pode usar o botão Upar provas do /provastaff')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)
+    .setValue(currentConfig?.roles?.suporte || '');
+
   return modal.addComponents(
     new ActionRowBuilder().addComponents(permitido),
-    new ActionRowBuilder().addComponents(pc)
+    new ActionRowBuilder().addComponents(pc),
+    new ActionRowBuilder().addComponents(suporte)
   );
 }
 
@@ -490,8 +497,9 @@ async function atualizarPainelCategoria(interaction, category, config) {
     ].join('\n'), 'Canais externos usados para espelhamento e arquivamento.'],
     edit_roles_1: ['👥 Cargos principais', [
       `📱 Mobile: ${getRoleName(interaction, config?.roles?.permitido)}`,
-      `🖥️ PC: ${getRoleName(interaction, config?.roles?.pc)}`
-    ].join('\n'), 'Cargos necessários para abrir cada tipo de denúncia.'],
+      `🖥️ PC: ${getRoleName(interaction, config?.roles?.pc)}`,
+      `🛟 Suporte: ${getRoleName(interaction, config?.roles?.suporte)}`
+    ].join('\n'), 'Cargos para abrir denúncias e o de suporte (Upar provas do /provastaff).'],
     edit_roles_2: ['🧑‍💼 Cargos administrativos', [
       `🧑‍💼 Administrador: ${getRoleName(interaction, config?.roles?.administrador)}`,
       `🧑‍🔧 Responsável: ${getRoleName(interaction, config?.roles?.responsavel_admin)}`
@@ -524,7 +532,7 @@ async function createPanelSelectMenu(interaction, currentConfig = null) {
     { label: 'Alerta de motivo crítico', value: 'toggle_critical_alert', description: alertaMotivoCriticoAtivo(currentConfig) ? 'Parar de marcar o responsável (zaralho, hack...)' : 'Voltar a marcar o responsável (zaralho, hack...)', emoji: '🚨' },
     { label: 'Tópicos privados', value: 'toggle_private_threads', description: topicosPrivadosAtivos(currentConfig) ? 'Desligar: toda denúncia abre em tópico público' : 'Ligar: denúncia com acusado no banco abre privada', emoji: '🔒' },
     { label: 'Análise automática', value: 'edit_auto_analysis', description: analiseAutomaticaAtiva(currentConfig) ? `Ligada: após ${minutosAnaliseAutomatica(currentConfig)} min. Mudar tempo ou desligar` : 'Desligada. Ligar e escolher o tempo', emoji: '🔎' },
-    { label: 'Cargos principais', value: 'edit_roles_1', description: 'Cargos Mobile e PC', emoji: '👥' },
+    { label: 'Cargos principais', value: 'edit_roles_1', description: 'Cargos Mobile, PC e Suporte', emoji: '👥' },
     { label: 'Cargos administrativos', value: 'edit_roles_2', description: 'Administrador e responsável', emoji: '🧑‍💼' }
   ];
 

@@ -22,7 +22,7 @@ const { obterTabela } = require('../../services/ponteSamp/motivos');
 const CANAIS_LOCAIS = ['pc', 'mobile', 'logs', 'log', 'backup', 'armazem', 'analysis', 'topDaily', 'relatorioPunicoes', 'provasStaff'];
 const CANAIS_EXTERNOS = ['registro', 'cloud', 'canalDenuncia'];
 const CANAIS_OBRIGATORIOS = ['pc', 'mobile', 'logs'];
-const CARGOS = ['permitido', 'pc', 'administrador', 'responsavel_admin', 'fundador'];
+const CARGOS = ['permitido', 'pc', 'administrador', 'suporte', 'responsavel_admin', 'fundador'];
 const CARGOS_OBRIGATORIOS = ['permitido', 'pc', 'responsavel_admin'];
 const MAX_ISENTOS = 200;
 
@@ -212,6 +212,45 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         id: String(d._id), acusado: d.acusado || '', denunciante: d.denunciante || '', motivo: d.motivo || '', em: d.dataCriacao
       }))
     });
+  }));
+
+  // Senhas da Cadeia Staff: quem deste servidor tem senha, e apagar a de quem esqueceu
+  // (na próxima vez que clicar em Aceitar ou Recusar, a pessoa cria outra).
+  router.get('/painel-bot/senhas', assincrono(async (req, res) => {
+    const acesso = await acessoDoResponsavel(req, req.query.guildId);
+    const SenhaStaff = require('../../models/SenhaStaff');
+    const todas = await SenhaStaff.find({}, { userId: 1, criadaEm: 1, liberadoAte: 1, bloqueadoAte: 1 }).limit(100).lean();
+    // A senha é a mesma em todos os servidores: aqui aparece só quem é membro deste.
+    const membros = todas.length ? await acesso.guild.members.fetch({ user: todas.map(s => s.userId) }).catch(() => null) : null;
+    const daGuild = todas.filter(s => acesso.guild.members.cache.has(s.userId) || membros?.has?.(s.userId));
+    const pessoas = await resolverPessoas(client, acesso.guild, daGuild.map(s => s.userId));
+    const agora = Date.now();
+    res.json({
+      senhas: daGuild.map(s => ({
+        userId: s.userId,
+        nome: pessoas[s.userId]?.nome || s.userId,
+        criadaEm: s.criadaEm,
+        liberado: !!s.liberadoAte && new Date(s.liberadoAte).getTime() > agora,
+        bloqueado: !!s.bloqueadoAte && new Date(s.bloqueadoAte).getTime() > agora
+      })).sort((a, b) => a.nome.localeCompare(b.nome))
+    });
+  }));
+
+  router.post('/painel-bot/senhas/apagar', express.json({ limit: '4kb' }), assincrono(async (req, res) => {
+    const acesso = await acessoDoResponsavel(req, req.body?.guildId);
+    const userId = String(req.body?.userId || '');
+    if (!/^\d{15,21}$/.test(userId)) throw new ErroHttp(400, 'Pessoa inválida.');
+    const membro = acesso.guild.members.cache.get(userId) || await acesso.guild.members.fetch(userId).catch(() => null);
+    if (!membro) throw new ErroHttp(404, 'Essa pessoa não está neste servidor.');
+    const pessoas = await resolverPessoas(client, acesso.guild, [userId]);
+    const { deletedCount } = await require('../../utils/senhaStaff').apagarSenha(userId);
+    if (!deletedCount) throw new ErroHttp(404, 'Essa pessoa não tem senha.');
+    const quem = acesso.member.user?.tag || req.usuario.id;
+    await require('../../models/PainelHistorico').create({
+      guildId: acesso.guild.id, por: quem, via: 'site',
+      mudancas: [{ campo: 'Senha da Cadeia Staff', antes: pessoas[userId].nome || userId, depois: 'apagada (cria outra no próximo uso)' }]
+    }).catch(() => {});
+    res.json({ ok: true, mensagem: `Senha de ${pessoas[userId].nome || userId} apagada. Na próxima vez que clicar em Aceitar ou Recusar, a pessoa cria outra.` });
   }));
 
   router.post('/painel-bot/travadas', express.json({ limit: '16kb' }), assincrono(async (req, res) => {

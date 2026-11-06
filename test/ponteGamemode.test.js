@@ -1844,6 +1844,9 @@ test('senha da Cadeia Staff: cria com confirmação, libera 30 min, erra 5 vezes
   assert.match((await validarSenha(id, { senha: 'errada' })).erro, /15 minutos/);
   assert.match((await validarSenha(id, { senha: 'segredo1' })).erro, /Tente de novo/, 'bloqueado mesmo com a certa');
   assert.equal((await validarSenha(id, { senha: 'segredo1' }, Date.now() + 16 * 60 * 1000)).ok, true);
+  // Esqueceu: o responsável apaga pelo site e a pessoa cria outra.
+  await require('../utils/senhaStaff').apagarSenha(id);
+  assert.deepEqual(await situacaoDaSenha(id), { liberado: false, temSenha: false });
 });
 
 test('conta protegida: a gamemode recusa e o Relatório de punições avisa marcando o responsável', async () => {

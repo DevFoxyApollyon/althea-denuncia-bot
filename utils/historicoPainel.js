@@ -7,7 +7,7 @@ const CANAIS = {
   analysis: 'Canal Em análise', topDaily: 'Canal Top diário', relatorioPunicoes: 'Canal Relatório de punições', provasStaff: 'Canal Provas da staff',
   backup: 'Canal Backup', armazem: 'Canal Armazém', registro: 'Canal Registro', cloud: 'Canal Cloud', canalDenuncia: 'Canal fixo de denúncias'
 };
-const CARGOS = { pc: 'Cargo PC', permitido: 'Cargo Mobile', administrador: 'Cargo Staff', responsavel_admin: 'Cargo Responsável', fundador: 'Cargo Fundador' };
+const CARGOS = { pc: 'Cargo PC', permitido: 'Cargo Mobile', administrador: 'Cargo Staff', responsavel_admin: 'Cargo Responsável', fundador: 'Cargo Fundador', suporte: 'Cargo Suporte' };
 const OPCOES = {
   manutencaoDenuncia: 'Manutenção das denúncias',
   bloquearReivindicacaoComPendentes: 'Bloqueio de pendências anteriores',

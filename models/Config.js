@@ -66,7 +66,9 @@ const configSchema = new mongoose.Schema({
     responsavel_admin: { type: String, required: false, default: '' },
     // Fundador: com o cargo escolhido, só ele entra no Painel do bot (site e /painel)
     // e nas Configurações do site. Sem cargo escolhido, vale o responsável, como antes.
-    fundador: { type: String, required: false, default: '' }
+    fundador: { type: String, required: false, default: '' },
+    // Suporte: pode usar o botão "Upar provas" do /provastaff (além de administrador e responsável).
+    suporte: { type: String, required: false, default: '' }
   },
   
   lastUpdated: { 

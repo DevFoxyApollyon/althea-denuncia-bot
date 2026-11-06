@@ -307,6 +307,9 @@ const painelDoBot = {
   }
 };
 app.get('/api/painel-bot', (req, res) => res.json(painelDoBot));
+const senhasPrevia = [{ userId: '200000000000000201', nome: 'Lucas Prado', criadaEm: horas(48), liberado: true, bloqueado: false }, { userId: '200000000000000202', nome: 'Ana Dias', criadaEm: horas(120), liberado: false, bloqueado: true }];
+app.get('/api/painel-bot/senhas', (req, res) => res.json({ senhas: senhasPrevia }));
+app.post('/api/painel-bot/senhas/apagar', express.json(), (req, res) => res.json({ ok: true, mensagem: 'Senha apagada (prévia).' }));
 const travadasPrevia = [{ id: '650000000000000000000001', acusado: '1270428', denunciante: '954249', motivo: 'Hack', em: horas(50) }];
 app.get('/api/painel-bot/travadas', (req, res) => res.json({ conferidas: 12, travadas: travadasPrevia }));
 app.post('/api/painel-bot/travadas', express.json(), (req, res) => res.json({ ok: true, tiradas: req.body.ids.length, mensagem: `${req.body.ids.length} denúncia(s) saíram da fila (prévia).` }));

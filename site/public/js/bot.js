@@ -44,6 +44,7 @@ const CARGOS = [
   { chave: 'pc', nome: 'Pode denunciar no PC', obrigatorio: true, explica: 'Quem tem este cargo pode abrir denúncia de PC, no Discord e no site.' },
   { chave: 'permitido', nome: 'Pode denunciar no Mobile', obrigatorio: true, explica: 'Quem tem este cargo pode abrir denúncia de Mobile, no Discord e no site.' },
   { chave: 'administrador', nome: 'Staff (administrador)', explica: 'Atende as denúncias: reivindica, analisa, aceita e recusa. No site, vê a fila e os atendimentos.' },
+  { chave: 'suporte', nome: 'Suporte', explica: 'Opcional. Pode usar o botão "Upar provas" do /provastaff para registrar punições com provas (o responsável aceita ou recusa).' },
   { chave: 'fundador', nome: 'Fundador', explica: 'Opcional. Escolhido, só quem tem este cargo entra no Painel do bot (aqui e no /painel do Discord) e nas Configurações do site. Sem ele, vale o cargo de responsável.' },
   { chave: 'responsavel_admin', nome: 'Responsável', obrigatorio: true, explica: 'Tudo o que a staff faz, mais: finalizar denúncias, usar o /painel, ver a auditoria e mexer nas configurações do site, inclusive nesta tela.' }
 ];
@@ -289,6 +290,39 @@ function cartaoDeTravadas(painel) {
       el('button', { type: 'button', onclick: (evento) => procurar(evento.currentTarget) }, travadas ? 'Procurar de novo' : 'Procurar denúncias travadas')));
 }
 
+// Senhas da Cadeia Staff: lista de quem tem senha e "Apagar senha" para quem esqueceu.
+function cartaoDeSenhas(painel) {
+  const dados = painel.senhas;
+  const carregar = (botao) => executar(botao, async () => {
+    painel.senhas = await api(`/api/painel-bot/senhas?${new URLSearchParams({ guildId: estado.guildId })}`);
+    desenhar();
+  });
+  const apagar = async (botao, pessoa) => {
+    const confirmado = await confirmar({ titulo: 'Apagar a senha?', texto: `${pessoa.nome} vai criar uma senha nova na próxima vez que clicar em Aceitar ou Recusar na Cadeia Staff.`, rotulo: 'Apagar senha', perigo: true });
+    if (!confirmado) return;
+    await executar(botao, async () => {
+      const r = await enviarJson('/api/painel-bot/senhas/apagar', { guildId: estado.guildId, userId: pessoa.userId });
+      avisar('ok', r.mensagem);
+      painel.senhas = { senhas: dados.senhas.filter(s => s.userId !== pessoa.userId) };
+      desenhar();
+    });
+  };
+  return el('section', { class: 'cartao', id: 'bot-senhas' },
+    cabecalho('cadeado', 'Senhas da Cadeia Staff',
+      'Quem já criou a senha para Aceitar e Recusar. Esqueceu a senha? Apague aqui: na próxima vez a pessoa cria outra.',
+      dados && { texto: dados.senhas.length === 1 ? '1 pessoa' : `${dados.senhas.length} pessoas` }),
+    !dados && el('p', { class: 'bot-ajuda' }, 'A lista é carregada quando você pedir.'),
+    dados && dados.senhas.length === 0 && el('p', { class: 'bot-ajuda' }, 'Ninguém deste servidor criou senha ainda.'),
+    dados && dados.senhas.length > 0 && el('ul', { class: 'bot-travadas' },
+      dados.senhas.map(s => el('li', null,
+        el('div', null,
+          el('strong', null, s.nome),
+          el('p', null, [`Criada em ${formatarData(s.criadaEm)}`, s.liberado && 'liberada agora', s.bloqueado && 'bloqueada por senha errada'].filter(Boolean).join(' · '))),
+        el('button', { type: 'button', class: 'perigo', onclick: (evento) => apagar(evento.currentTarget, s) }, 'Apagar senha')))),
+    el('div', { class: 'acoes bot-acoes-cartao' },
+      el('button', { type: 'button', onclick: (evento) => carregar(evento.currentTarget) }, dados ? 'Atualizar lista' : 'Ver quem tem senha')));
+}
+
 // Quem mudou o quê no painel (site e /painel do Discord), das mais novas para as mais antigas.
 function cartaoDeHistorico(historico) {
   return el('section', { class: 'cartao', id: 'bot-historico' },
@@ -488,6 +522,8 @@ export function telaPainelDoBot() {
       cartaoDeMotivos(painel.motivosPonte),
 
       cartaoDeTravadas(painel),
+
+      cartaoDeSenhas(painel),
 
       cartaoDeHistorico(painel.historico),
 

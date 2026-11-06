@@ -105,6 +105,7 @@ async function handlePanelModalSubmit(interaction) {
       case 'roles_modal_1':
         config.roles.permitido = fields.getTextInputValue('permitido_role').trim();
         config.roles.pc = fields.getTextInputValue('pc_role').trim();
+        config.roles.suporte = fields.getTextInputValue('suporte_role').trim();
         break;
       case 'roles_modal_2':
         config.roles.administrador = fields.getTextInputValue('admin_role').trim();

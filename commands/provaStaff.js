@@ -33,14 +33,15 @@ const temCargo = (interaction, ids) => ids.filter(Boolean).some(id => interactio
 async function papeis(interaction) {
   const config = await getCachedConfig(interaction.guild.id);
   const responsavel = temCargo(interaction, [config?.roles?.responsavel_admin]);
-  return { config, responsavel, staff: responsavel || temCargo(interaction, [config?.roles?.administrador]) };
+  // "staff" aqui é quem pode registrar provas: administrador, responsável ou suporte.
+  return { config, responsavel, staff: responsavel || temCargo(interaction, [config?.roles?.administrador, config?.roles?.suporte]) };
 }
 
 function embedDoPainel() {
   return new EmbedBuilder()
     .setColor('#5865F2')
     .setTitle('📋 Provas da staff')
-    .setDescription('> Registre aqui a punição com as provas.\n\n**Só a staff (administrador ou responsável) usa este botão.**')
+    .setDescription('> Registre aqui a punição com as provas.\n\n**Só a staff (administrador, responsável ou suporte) usa este botão.**')
     .addFields({
       name: '📌 Como funciona',
       value: '1. Clique em **Upar provas**\n2. Preencha o ID e o motivo (e anexe vídeos ou imagens); a punição sai da tabela de motivos\n3. Um tópico guarda as provas e o responsável aceita ou recusa',
@@ -105,7 +106,7 @@ function modalDoRegistro() {
 
 async function handleBotaoUpar(interaction) {
   const { staff } = await papeis(interaction);
-  if (!staff) return interaction.reply(efemero('🚫 Só a staff (administrador ou responsável) registra provas.'));
+  if (!staff) return interaction.reply(efemero('🚫 Só a staff (administrador, responsável ou suporte) registra provas.'));
   return interaction.showModal(modalDoRegistro());
 }
 
@@ -117,7 +118,7 @@ const linhaDeDecisao = (id) => new ActionRowBuilder().addComponents(
 async function handleModalRegistro(interaction) {
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
   const { config, staff } = await papeis(interaction);
-  if (!staff) return interaction.editReply('🚫 Só a staff (administrador ou responsável) registra provas.');
+  if (!staff) return interaction.editReply('🚫 Só a staff (administrador, responsável ou suporte) registra provas.');
   const canal = await canalFixo(interaction, config) || interaction.channel;
 
   const ler = (id) => { try { return String(interaction.fields.getTextInputValue(id) || '').trim(); } catch { return ''; } };
