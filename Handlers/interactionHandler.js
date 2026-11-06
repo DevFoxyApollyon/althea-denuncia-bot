@@ -369,6 +369,7 @@ async function handleLogButton(interaction) {
   // formulário de criar ou digitar a senha; a ação continua depois dele.
   const config = await getCachedConfig(interaction.guild.id);
   if (senhaCadeiaAtiva(config)) {
+    if (!await recusaSemCargoResponsavel(interaction, config)) return;
     const senha = await situacaoDaSenha(interaction.user.id);
     if (!senha.liberado) return interaction.showModal(modalDaSenha({ temSenha: senha.temSenha, acao, messageId }));
   }
@@ -397,10 +398,22 @@ async function executarAcaoDaCadeia(interaction, acao, messageId) {
   else await handleLogRecusarButton(interaction, denuncia);
 }
 
+// Só o cargo Responsável usa Aceitar/Recusar da Cadeia Staff: sem ele, nem cria nem digita a senha.
+// Devolve true se pode seguir; senão já respondeu a pessoa.
+async function recusaSemCargoResponsavel(interaction, config) {
+  const cargo = config?.roles?.responsavel_admin;
+  const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  if (cargo && member?.roles?.cache?.has(cargo)) return true;
+  const nome = cargo ? `<@&${cargo}>` : '`Responsável Admin não configurado`';
+  await interaction.reply({ content: `❌ Apenas o cargo ${nome} pode usar estes botões.`, flags: [64] }).catch(() => {});
+  return false;
+}
+
 // Formulário da senha: criou ou acertou, libera por 30 minutos e faz o que a pessoa clicou.
 async function handleSenhaCadeiaModal(interaction) {
   const [acao, messageId] = interaction.customId.slice(MODAL_SENHA.length).split(':');
   if (!['aceitar', 'recusar'].includes(acao) || !/^\d{15,21}$/.test(messageId || '')) return;
+  if (!await recusaSemCargoResponsavel(interaction, await getCachedConfig(interaction.guild.id))) return;
   let confirmar;
   try { confirmar = interaction.fields.getTextInputValue('confirmar'); } catch { confirmar = undefined; }
   const r = await validarSenha(interaction.user.id, { senha: interaction.fields.getTextInputValue('senha'), confirmar });
