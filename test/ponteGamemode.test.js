@@ -1706,37 +1706,40 @@ test('incerto avisado antes da versão com o Relatório de punições: resolver 
 });
 
 
-test('TIMEOUT na primeira tentativa: reenvia na hora uma vez; ban que volta "já banido" conta como aplicada', async () => {
+test('TIMEOUT na primeira tentativa: espera 2 min por resposta atrasada, depois reenvia uma vez com o mesmo somar', async () => {
   const { conexao, segredo } = await guildGm('898');
   const punicao = await punicaoAceita('898', [{ contaId: '5', cmd: 'ban', tempo: 2, avisos: 1, motivo: 'MG', regra: 'MG' }]);
   await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '898', staff: staffA });
   const [primeiro] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
+  assert.equal(primeiro.somar, true, 'ban soma no ban que a conta já tem');
   await chamar(conexao, segredo, `/resultados/${primeiro.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
-  assert.equal((await m.PontePedidoGm.findById(primeiro.id).lean()).status, 'cancelado', 'a primeira sai do caminho');
+  const esperando = await m.PontePedidoGm.findById(primeiro.id).lean();
+  assert.equal(esperando.status, 'incerto');
+  assert.ok(esperando.reenviarApos, 'espera a resposta atrasada');
+  assert.equal((await chamar(conexao, segredo, '/pedidos')).corpo.pedidos.length, 0, 'não reenvia na hora');
 
+  // Depois da espera o job reenvia, com o mesmo somar.
+  const { client } = discordComDm();
+  await incertosGm().verificarIncertos(client, Date.now() + m.pedidosGm.ESPERA_REENVIO_MS + 1000);
+  assert.equal((await m.PontePedidoGm.findById(primeiro.id).lean()).status, 'cancelado');
   const [segundo] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
-  assert.ok(segundo, 'a segunda tentativa vai na próxima busca');
-  assert.notEqual(segundo.id, primeiro.id);
-  assert.equal(segundo.somar, false, 'ban reenviado não soma');
+  assert.equal(segundo.somar, true);
   const salvo = await m.PontePedidoGm.findById(segundo.id).lean();
   assert.deepEqual([salvo.rodada, salvo.reenvioAutomatico], [2, true]);
-
+  // JA_BANIDO não vira "aplicada" (a conta podia estar banida por outra punição).
   await chamar(conexao, segredo, `/resultados/${segundo.id}`, { metodo: 'POST', corpo: resultado('recusada', 'JA_BANIDO') });
-  assert.equal((await m.PontePedidoGm.findById(segundo.id).lean()).status, 'aplicada');
-  assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'aplicada');
-  assert.ok(await m.PonteUso.exists({ acao: 'gm_incerto_reenviar', punicaoId: punicao._id, 'detalhes.automatico': true }));
+  assert.equal((await m.PontePedidoGm.findById(segundo.id).lean()).status, 'recusada');
 
-  // Segunda tentativa que também dá TIMEOUT fica incerta (não há terceira).
-  const outra = await punicaoAceita('898', [{ contaId: '6', cmd: 'cadeia', tempo: 30, avisos: 0, motivo: 'MG', regra: 'MG' }]);
+  // Resposta atrasada dentro da espera: aplicada, sem reenvio.
+  const outra = await punicaoAceita('898', [{ contaId: '6', cmd: 'ban', tempo: 1, avisos: 0, motivo: 'MG', regra: 'MG' }]);
   await discordGm().enviarAoJogo({ punicaoId: outra._id, guildId: '898', staff: staffA });
   const [c1] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
   await chamar(conexao, segredo, `/resultados/${c1.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
-  const [c2] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
-  await chamar(conexao, segredo, `/resultados/${c2.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
-  assert.equal((await m.PontePedidoGm.findById(c2.id).lean()).status, 'incerto');
-  assert.equal(await m.PontePedidoGm.countDocuments({ punicaoId: outra._id }), 2);
+  await chamar(conexao, segredo, `/resultados/${c1.id}`, { metodo: 'POST', corpo: resultado('aplicada', 'OK') });
+  await incertosGm().verificarIncertos(client, Date.now() + m.pedidosGm.ESPERA_REENVIO_MS + 1000);
+  assert.equal((await m.PontePedidoGm.findById(c1.id).lean()).status, 'aplicada');
+  assert.equal(await m.PontePedidoGm.countDocuments({ punicaoId: outra._id }), 1, 'sem segunda tentativa');
 });
-
 test('/desbanir: só denúncia aplicada pelo bot; pedido "desbanir" para cada banido; resultado não entra no histórico', async () => {
   const { conexao, segredo } = await guildGm('899');
   const Denuncia = require('../models/Denuncia');

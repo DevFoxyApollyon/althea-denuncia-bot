@@ -135,10 +135,6 @@ async function handleModalRegistro(interaction) {
 
   // A punição sai da tabela de motivos (a mesma do aceite da denúncia).
   const regra = classificarMotivo(motivo, (await obterTabela()).tabela);
-  // Trava (liga e desliga no Painel do bot): motivo fora da tabela não registra.
-  if (!regra.regra && config?.provasExigirMotivo !== false) {
-    return interaction.editReply(`❌ O motivo **${motivo.slice(0, 100)}** não está na tabela de motivos. Cadastre o motivo e o tempo em **Motivos de punição** no site (ou como "Neutro", se não for ban nem cadeia) e envie de novo.`);
-  }
   const punicao = punicaoDoMotivo(regra);
 
   // Discord de cada conta (quem tem a conta no nick).
@@ -229,6 +225,15 @@ async function atualizarProvasForaDaTabela({ client, tabela }) {
   return atualizadas;
 }
 
+// Trava (liga e desliga no Painel do bot): para aceitar ou recusar, o motivo precisa
+// estar na tabela de motivos. O registro em si entra com qualquer motivo.
+async function motivoForaDaTabela(config, motivo) {
+  if (config?.provasExigirMotivo === false) return null;
+  const regra = classificarMotivo(motivo, (await obterTabela()).tabela);
+  return regra.regra ? null
+    : `❌ O motivo **${String(motivo).slice(0, 100)}** não está na tabela de motivos. Cadastre o motivo e o tempo em **Motivos de punição** no site (ou como "Neutro", se não for ban nem cadeia) e tente de novo.`;
+}
+
 async function registroDoBotao(interaction, prefixo) {
   const id = interaction.customId.slice(prefixo.length);
   if (!/^[0-9a-f]{24}$/.test(id)) return null;
@@ -280,6 +285,8 @@ async function handleModalAceite(interaction) {
   const motivo = interaction.fields.getTextInputValue('motivo').trim();
   if (!acusado || !acusado.split('+').every(c => /^\d{1,9}$/.test(c))) return interaction.editReply('❌ ID inválido: use só números, vários com `+`.');
   if (motivo.length < 2) return interaction.editReply('❌ Escreva o motivo.');
+  const fora = await motivoForaDaTabela(config, motivo);
+  if (fora) return interaction.editReply(fora);
 
   const quem = { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username, em: new Date() };
   const doc = await DenunciaStaff.findOneAndUpdate(
@@ -314,6 +321,9 @@ async function handleBotaoRecusar(interaction) {
   if (!responsavel) return interaction.reply(efemero('🚫 Só o responsável aceita ou recusa as provas.'));
   const id = interaction.customId.slice(BOTAO_RECUSAR.length);
   if (!/^[0-9a-f]{24}$/.test(id)) return interaction.reply(efemero('❌ Botão inválido.'));
+  const pendente = await DenunciaStaff.findOne({ _id: id, guildId: interaction.guild.id }).lean();
+  const fora = pendente ? await motivoForaDaTabela(await getCachedConfig(interaction.guild.id), pendente.motivo) : null;
+  if (fora) return interaction.reply(efemero(fora));
   const quem = { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username, em: new Date() };
   const doc = await DenunciaStaff.findOneAndUpdate({ _id: id, guildId: interaction.guild.id, status: 'pendente' }, { $set: { status: 'recusada', decididoPor: quem } }, { new: true }).lean();
   if (!doc) return interaction.reply(efemero('ℹ️ Este registro já foi decidido.'));

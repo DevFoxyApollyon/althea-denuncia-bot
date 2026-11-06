@@ -225,8 +225,7 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
       // Só o que deu errado aparece no console; aplicada e simulada ficam na auditoria.
       if (!['aplicada', 'simulada'].includes(dados.status)) log?.warn?.(linha);
       if (r.reenvio) {
-        log?.warn?.(`[PonteGm] Pedido ${r.pedido._id}: TIMEOUT na primeira tentativa, reenviado sozinho (pedido novo ${r.reenvio._id}). Se a segunda também não responder, vira incerto.`);
-        atualizarMensagemGm(client, r.pedido.punicaoId).catch(() => {});
+        log?.warn?.(`[PonteGm] Pedido ${r.pedido._id}: TIMEOUT na primeira tentativa. Esperando 2 min por uma resposta atrasada; sem ela, reenvia sozinho uma vez.`);
       }
       if (dados.codigo === 'TIMEOUT_GAMEMODE') {
         log?.warn?.(`[PonteGm] Diagnóstico do pedido ${r.pedido._id}: a gamemode "${conexao.nome}" buscou o pedido`

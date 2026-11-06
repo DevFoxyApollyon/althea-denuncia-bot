@@ -130,19 +130,21 @@ async function entregarPedidos({ conexao, segredo, limite, agora = Date.now() })
 }
 
 // Entregue sem resposta depois do lease: vira incerto (conferência humana, nunca volta sozinho).
-// A gamemode não respondeu (TIMEOUT ou prazo vencido): manda de novo na hora, uma
-// vez só, para ban e cadeia. O pedido antigo vira "cancelado" e o novo é a rodada
-// seguinte. O ban vai sem "somar": se o primeiro já tinha aplicado, a gamemode
-// responde JA_BANIDO e o bot conta como aplicada. Na cadeia não há essa proteção
-// (escolha do JV: pode prender duas vezes). Se a segunda também não responder, vira
-// incerto e espera alguém conferir no jogo, como antes.
+// A gamemode não respondeu (TIMEOUT ou prazo vencido): manda de novo, uma vez só,
+// para ban e cadeia. No TIMEOUT espera antes 2 minutos por uma resposta atrasada
+// (a gamemode às vezes aplica depois dos 60 s da include 1.0.0); se ela chegar, não
+// reenvia. O pedido antigo vira "cancelado" e o novo é a rodada seguinte, com o
+// mesmo "somar" (um segundo ban soma os dias ao ban que a conta já tem). Se a
+// segunda também não responder, vira incerto e espera alguém conferir no jogo.
 const TIPOS_COM_REENVIO = ['ban', 'cadeia'];
+const ESPERA_REENVIO_MS = 2 * 60 * 1000;
+const podeReenviarSozinho = (pedido) => !!pedido && !pedido.reenvioAutomatico && TIPOS_COM_REENVIO.includes(pedido.tipo);
 
 async function reenviarSozinho(pedido, agora = Date.now()) {
-  if (!pedido || pedido.reenvioAutomatico || !TIPOS_COM_REENVIO.includes(pedido.tipo)) return null;
+  if (!podeReenviarSozinho(pedido)) return null;
   const resolvidoPor = { id: 'althea', nome: 'Althea (reenvio automático)', em: new Date(agora) };
   const fechado = await PontePedidoGm.findOneAndUpdate(
-    { _id: pedido._id, status: 'incerto' }, { $set: { status: 'cancelado', resolvidoPor } }, { new: true }
+    { _id: pedido._id, status: 'incerto' }, { $set: { status: 'cancelado', resolvidoPor, reenviarApos: null } }, { new: true }
   ).lean();
   if (!fechado) return null;
   const ultimo = await PontePedidoGm.findOne({ punicaoId: pedido.punicaoId, alvoId: pedido.alvoId }).sort({ rodada: -1 }).lean();
@@ -157,7 +159,7 @@ async function reenviarSozinho(pedido, agora = Date.now()) {
     nick: pedido.nick,
     tempo: pedido.tempo,
     avisos: pedido.avisos,
-    somar: false,
+    somar: pedido.somar === true,
     motivo: pedido.motivo,
     aprovadoPor: pedido.aprovadoPor,
     teste: pedido.teste,
@@ -254,9 +256,7 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   if (!atual) return { http: 404 };
 
   const devolvida = dados.status === 'devolvida';
-  // Reenvio automático de ban que volta "já banido": o primeiro envio tinha aplicado.
-  const jaAplicadaAntes = atual.reenvioAutomatico && dados.codigo === 'JA_BANIDO';
-  const destinoNormal = jaAplicadaAntes ? 'aplicada' : DESTINO[dados.status];
+  const destinoNormal = DESTINO[dados.status];
   const destino = devolvida && atual.devolucoes + 1 > MAX_DEVOLUCOES ? 'erro' : destinoNormal;
   const mesmo = (p) => p.codigo === dados.codigo && (devolvida ? p.status === 'aprovado' || p.status === 'erro' : p.status === destinoNormal);
 
@@ -272,6 +272,7 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
       ...(dados.banido !== undefined ? { banido: dados.banido, preso: dados.preso, avisos: dados.avisos } : {})
     },
     leaseAte: null,
+    reenviarApos: null,
     respondidoEm: new Date(agora),
     segundosResposta: atual.entregueEm ? Math.max(0, Math.round((agora - new Date(atual.entregueEm).getTime()) / 1000)) : null
   };
@@ -289,8 +290,12 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   // Desbanimento não entra no histórico de punições aplicadas.
   if (pedido.status === 'aplicada' && ['ban', 'cadeia'].includes(pedido.tipo)) await registrarAplicada(pedido, conexao, dados, agora);
   if (STATUS_FINAIS.includes(pedido.status)) await fecharPunicaoSePronta({ client, punicaoId: pedido.punicaoId, conexao, agora });
-  // TIMEOUT: tenta de novo na hora (uma vez).
-  const reenvio = pedido.status === 'incerto' && dados.codigo === 'TIMEOUT_GAMEMODE' ? await reenviarSozinho(pedido, agora) : null;
+  // TIMEOUT: espera uma resposta atrasada e depois tenta de novo (uma vez; ver verificarIncertos).
+  let reenvio = null;
+  if (pedido.status === 'incerto' && dados.codigo === 'TIMEOUT_GAMEMODE' && podeReenviarSozinho(pedido)) {
+    reenvio = { reenviarApos: new Date(agora + ESPERA_REENVIO_MS) };
+    await PontePedidoGm.updateOne({ _id: pedido._id, status: 'incerto' }, { $set: { reenviarApos: reenvio.reenviarApos } });
+  }
 
   const alerta = dados.codigo === 'SELO_INVALIDO' ? 'selo' : (devolvida && pedido.status === 'erro' ? 'devolucoes' : null);
   return { http: 200, pedido, novo: true, alerta, reenvio };
@@ -308,6 +313,7 @@ module.exports = {
   entregarPedidos,
   marcarIncertos,
   reenviarSozinho,
+  ESPERA_REENVIO_MS,
   registrarAplicada,
   fecharPunicaoSePronta,
   registrarResultado

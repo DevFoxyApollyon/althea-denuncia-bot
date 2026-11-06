@@ -195,7 +195,8 @@ async function consultarConta({ guildId, conta, staff, esperarMs = 45000, interv
       return { ok: true, banido: atual.resultado.banido, preso: atual.resultado.preso, avisos: atual.resultado.avisos || 0, nome: atual.resultado.nome || '' };
     }
     if (['recusada', 'erro', 'incerto', 'cancelado'].includes(atual?.status)) {
-      return { erro: atual.codigo === 'CONTA_INEXISTENTE' ? 'Essa conta não existe no jogo.' : atual.codigo === 'RECUSADO'
+      return { erro: atual.codigo === 'CONTA_INEXISTENTE' ? 'Essa conta não existe no jogo.' : atual.codigo === 'DADOS_INVALIDOS'
+        ? 'A gamemode ainda não conhece a consulta: precisa da include 1.0.1 (e da Althea_Consultar na gamemode).' : atual.codigo === 'RECUSADO'
         ? 'A gamemode ainda não sabe responder a consulta (falta a Althea_Consultar na gamemode).' : `A gamemode não respondeu a consulta (${atual.codigo || atual.status}).` };
     }
   }

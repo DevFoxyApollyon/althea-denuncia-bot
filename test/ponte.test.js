@@ -855,6 +855,14 @@ test('/provastaff: aceitar pede ID e motivo, manda para a Cadeia Staff com Aceit
     deferReply: async () => {},
     editReply: async (r) => { resposta = typeof r === 'string' ? r : r.content; }
   };
+  // Motivo fora da tabela: não aceita (a trava vem ligada).
+  const original = interacao.fields;
+  interacao.fields = { getTextInputValue: (id) => ({ acusado: '111', motivo: 'rrrr' })[id] };
+  await provaStaff.handleModalAceite(interacao);
+  assert.match(resposta, /não está na tabela de motivos/);
+  assert.equal((await DenunciaStaff.findById(doc._id).lean()).status, 'pendente');
+  interacao.fields = original;
+
   await provaStaff.handleModalAceite(interacao);
   assert.match(resposta, /Cadeia Staff/);
   assert.match(enviadas[0].content, /Acusado \(111\+222\)/);

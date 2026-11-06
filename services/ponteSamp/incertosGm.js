@@ -50,7 +50,7 @@ async function avisarIncertos(client, agora = Date.now()) {
   let avisados = 0;
   for (let i = 0; i < 20; i++) {
     const pedido = await PontePedidoGm.findOneAndUpdate(
-      { status: 'incerto', alertaIncertoEm: null, tipo: { $ne: 'consultar' } }, { $set: { alertaIncertoEm: new Date(agora) } }, { new: true }
+      { status: 'incerto', alertaIncertoEm: null, reenviarApos: null, tipo: { $ne: 'consultar' } }, { $set: { alertaIncertoEm: new Date(agora) } }, { new: true }
     ).lean();
     if (!pedido) break;
     try {
@@ -85,8 +85,10 @@ async function avisarIncertos(client, agora = Date.now()) {
 async function verificarIncertos(client, agora = Date.now()) {
   if (!ponteLigada()) return { marcados: 0, avisados: 0 };
   const marcados = await marcarIncertos(agora);
+  // TIMEOUT cuja espera por resposta atrasada acabou: vai de novo agora.
+  const esperando = await PontePedidoGm.find({ status: 'incerto', reenviarApos: { $ne: null, $lte: new Date(agora) } }).limit(50).lean();
   // Prazo vencido sem resposta: a primeira tentativa vai de novo sozinha.
-  for (const pedido of marcados) {
+  for (const pedido of [...esperando, ...marcados]) {
     const novo = await reenviarSozinho(pedido, agora).catch(() => null);
     if (novo) {
       log.warn(`Pedido ${pedido._id} sem resposta da gamemode no prazo: reenviado sozinho (pedido novo ${novo._id}).`);

@@ -36,6 +36,8 @@ const pontePedidoGmSchema = new mongoose.Schema({
   entregueEm: { type: Date, default: null },
   // Segunda tentativa criada sozinha depois de um TIMEOUT (só uma por alvo).
   reenvioAutomatico: { type: Boolean, default: false },
+  // TIMEOUT na primeira tentativa: espera uma resposta atrasada até esta hora antes de reenviar.
+  reenviarApos: { type: Date, default: null },
   // Quando a gamemode respondeu e quantos segundos levou desde a entrega.
   respondidoEm: { type: Date, default: null },
   segundosResposta: { type: Number, default: null },
