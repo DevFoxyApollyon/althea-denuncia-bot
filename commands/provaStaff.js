@@ -223,9 +223,11 @@ async function handleTempbanSlash(interaction) {
   return interaction.showModal(modalDoRegistro({ customId: MODAL_TEMPBAN, titulo: '🔨 Tempban direto no jogo' }));
 }
 
-// Texto da linha "Jogo" conforme o que a ponte respondeu.
+// Texto do resultado no jogo conforme o que a ponte respondeu.
 function resultadoNoJogo(ponte, envio) {
   if (ponte?.soRegistro) return '📝 Motivo neutro: só visual, não vai para o jogo.';
+  const permanente = (ponte?.punicao?.alvos || []).some(a => a.cmd === 'ban' && Number(a.tempo) === 0);
+  if (permanente && !envio?.erro) return '🔨 Ban permanente: a conta já está sendo banida no jogo.';
   if (envio?.ok) return `📤 Enviada à gamemode (${envio.pedidos} pedido(s)).${envio.teste ? ' 🧪 Modo teste: só simula.' : ''}`;
   if (envio?.erro) return `⚠️ Não foi para a gamemode: ${envio.erro} Use "Enviar ao jogo" no Relatório de punições.`;
   if (ponte?.criado) return '🎮 Enviada para o painel do jogo.';
@@ -234,11 +236,12 @@ function resultadoNoJogo(ponte, envio) {
 }
 
 // Ponte com o jogo: a punição entra na fila e, no modo gamemode, já é enviada.
-// "mensagem" é o registro no canal das provas (a ponte edita o andamento nele).
+// "mensagem" é o registro no canal das provas: só serve de link. A ponte não escreve
+// nada nele (o andamento fica no Relatório de punições e na resposta de quem usou).
 async function mandarParaOJogo(interaction, doc, mensagem, quem) {
   const denuncia = comoDenuncia({ ...doc, channelId: mensagem?.channelId || doc.channelId, messageId: mensagem?.id || doc.messageId });
   const ponte = await require('../services/ponteSamp/aceite').registrarAceite({
-    client: interaction.client, denuncia, origem: 'canal_staff', staff: quem, canalMensagem: mensagem
+    client: interaction.client, denuncia, origem: 'canal_staff', staff: quem, canalMensagem: null
   }).catch(() => null);
   const envio = ponte ? await require('../Handlers/statusDenuncia/acoesStatus').enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;
   if (envio?.erro) log.warn(`[PonteGm] Provas da staff ${doc._id} não foram para a gamemode: ${envio.erro}`);

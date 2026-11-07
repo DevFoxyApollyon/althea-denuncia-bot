@@ -597,9 +597,10 @@ test('pedido do alvo respeita os limites gm.* da guild', () => {
   const ok = pedidoDoAlvo(alvo(), servidor).pedido;
   assert.deepEqual([ok.tipo, ok.conta, ok.nick, ok.tempo, ok.avisos, ok.somar, ok.motivo], ['ban', 472860, '', 5, 1, true, 'DM [DC]']);
   assert.ok(pedidoDoAlvo(alvo({ tempo: 0 }), servidor).pedido, 'permanente liberado');
+  assert.equal(pedidoDoAlvo(alvo({ tempo: 0, avisos: 5 }), servidor).pedido.avisos, 0, 'permanente não leva aviso nem passa do limite');
   assert.match(pedidoDoAlvo(alvo({ tempo: 0 }), { gm: { ...servidor.gm, permitirPermanente: false } }).erro, /permanente/);
   assert.match(pedidoDoAlvo(alvo({ tempo: 31 }), servidor).erro, /máximo/);
-  assert.match(pedidoDoAlvo(alvo({ avisos: 4 }), servidor).erro, /avisos/);
+  assert.equal(pedidoDoAlvo(alvo({ avisos: 5 }), servidor).pedido.avisos, 3, 'acima do máximo vai o máximo');
   assert.match(pedidoDoAlvo(alvo({ regra: '' }), servidor).erro, /fora da tabela/);
   assert.match(pedidoDoAlvo(alvo({ cmd: 'cadeia', tempo: 301 }), servidor).erro, /cadeia/);
   const cadeia = pedidoDoAlvo(alvo({ cmd: 'cadeia', tempo: 120, avisos: 0 }), servidor).pedido;

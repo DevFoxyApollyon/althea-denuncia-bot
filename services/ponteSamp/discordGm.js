@@ -53,7 +53,9 @@ function pedidoDoAlvo(alvo, servidor, nickDaConta = '') {
   if (!alvo.regra) return { erro: `${quem}: motivo fora da tabela. Edite o alvo antes de enviar.` };
   const tipo = alvo.cmd;
   const tempo = Number(alvo.tempo) || 0;
-  const avisos = Number(alvo.avisos) || 0;
+  // Ban permanente não leva aviso (punições antigas podem ter avisos somados de outros motivos).
+  // Acima do máximo da gamemode, vai o máximo e o resto é ignorado.
+  const avisos = tipo === 'ban' && tempo === 0 ? 0 : Math.min(Number(alvo.avisos) || 0, limites.maxAvisos);
   const conta = Number(alvo.contaId) || 0;
   const nick = conta ? [alvo.nick, nickDaConta].map(n => String(n || '')).find(n => RE_NICK.test(n)) || '' : String(alvo.nick || '');
   if (!conta && !RE_NICK.test(nick)) return { erro: `${quem}: sem ID de conta nem nick válido.` };
@@ -65,7 +67,6 @@ function pedidoDoAlvo(alvo, servidor, nickDaConta = '') {
   } else {
     return { erro: `${quem}: tipo "${tipo}" não vai para a gamemode.` };
   }
-  if (avisos > limites.maxAvisos) return { erro: `${quem}: ${avisos} avisos passam do máximo (${limites.maxAvisos}).` };
   const motivo = motivoParaGamemode(motivoComSufixo(alvo.motivo));
   if (!motivoGmValido(motivo)) return { erro: `${quem}: motivo vazio ou inválido para a gamemode. Edite o alvo.` };
   return { pedido: { alvoId: alvo._id, tipo, conta, nick, tempo, avisos, somar: tipo === 'ban', motivo } };

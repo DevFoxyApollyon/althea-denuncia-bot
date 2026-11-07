@@ -67,7 +67,8 @@ function combinarMotivos(todos) {
   const cmd = bans.length ? 'ban' : (itens[0]?.cmd || CMD_PADRAO);
   const permanente = bans.some(m => m.tempo === 0);
   const tempo = permanente ? 0 : Math.min(99999, usados.reduce((t, m) => t + m.tempo, 0));
-  const avisos = Math.min(10, usados.reduce((t, m) => t + (m.avisos || 0), 0));
+  // Permanente (/blackban) não leva aviso: a conta não volta a jogar.
+  const avisos = permanente ? 0 : Math.min(10, usados.reduce((t, m) => t + (m.avisos || 0), 0));
   const nomes = usados.map(m => m.nome);
   const regra = (usados.length === 1 ? `${nomes[0]}: ${usados[0].grupo}` : nomes.join(' + ')).slice(0, 60);
   return { cmd, tempo, avisos, regra, motivos: nomes };
