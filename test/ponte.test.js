@@ -865,11 +865,12 @@ test('/provastaff: aceitar pede ID e motivo e manda direto para o jogo, sem a Ca
 
   // Aceito: não passa pela Cadeia Staff, vai direto para o jogo (aqui a ponte está desligada).
   await provaStaff.handleModalAceite(interacao);
-  assert.match(resposta, /Provas aceitas\./);
+  assert.match(resposta, /Provas aceitas\.\n⚠️ A ponte com o jogo não está ativa/);
   assert.equal(enviadas.length, 0, 'nada na Cadeia Staff');
-  assert.match(editadas[0].content, /Status: `Aceita` por <@1>\n➥ Jogo: ⚠️ A ponte com o jogo não está ativa/);
+  assert.match(editadas[0].content, /Status: `Aceita` por <@1>$/);
+  assert.doesNotMatch(editadas[0].content, /➥ Jogo/);
   assert.deepEqual(editadas[0].components, []);
-  assert.match(noTopico[0], /Provas aceitas por <@1>\n⚠️ A ponte/);
+  assert.equal(noTopico[0], '✅ Provas aceitas por <@1>');
   const salvo = await DenunciaStaff.findById(doc._id).lean();
   assert.deepEqual([salvo.status, salvo.acusadoAceite, salvo.cadeia.status], ['aceita', '111+222', 'aceita']);
 

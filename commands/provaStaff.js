@@ -351,12 +351,11 @@ async function buscarRegistro(client, doc) {
   return canal?.messages ? canal.messages.fetch(doc.messageId).catch(() => null) : null;
 }
 
-// Troca o status do registro, tira os botões e (no aceite) põe a linha do jogo.
-async function editarRegistro(client, doc, status, quem, jogo = '', msg = null) {
+// Troca o status do registro e tira os botões.
+async function editarRegistro(client, doc, status, quem, msg = null) {
   msg = msg || await buscarRegistro(client, doc);
   if (!msg) return;
-  let texto = msg.content.replace(/➥ Status: `[^`]*`.*$/m, `➥ Status: \`${status}\` por ${quem}`);
-  if (jogo) texto = `${texto.replace(/\n➥ Jogo: .*$/m, '')}\n➥ Jogo: ${jogo}`;
+  const texto = msg.content.replace(/➥ Status: `[^`]*`.*$/m, `➥ Status: \`${status}\` por ${quem}`);
   await msg.edit({ content: texto.slice(0, 2000), components: [], allowedMentions: { parse: [] } }).catch(() => {});
 }
 
@@ -391,8 +390,9 @@ async function handleModalAceite(interaction) {
   await DenunciaStaff.updateOne({ _id: doc._id }, { $set: { 'cadeia.status': 'aceita' } }).catch(() => {});
   const registro = await buscarRegistro(interaction.client, doc);
   const jogo = await mandarParaOJogo(interaction, doc, registro, quem);
-  await editarRegistro(interaction.client, doc, 'Aceita', interaction.user, jogo, registro);
-  await avisarNoTopico(interaction.client, doc, `✅ Provas aceitas por ${interaction.user}\n${jogo}`);
+  // O resultado no jogo só aparece para quem aceitou (o registro e o tópico ficam limpos).
+  await editarRegistro(interaction.client, doc, 'Aceita', interaction.user, registro);
+  await avisarNoTopico(interaction.client, doc, `✅ Provas aceitas por ${interaction.user}`);
   return interaction.editReply(`✅ Provas aceitas.\n${jogo}`);
 }
 
