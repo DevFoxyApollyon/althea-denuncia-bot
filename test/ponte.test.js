@@ -1080,13 +1080,14 @@ test('/provastaff: recusar vale com motivo fora da tabela e apaga o registro do 
   const Config = require('../models/Config');
   const DenunciaStaff = require('../models/DenunciaStaff');
   const provaStaff = require('../commands/provaStaff');
-  await Config.create({ guildId: '820', roles: { responsavel_admin: '777000000000000820' } });
+  await Config.create({ guildId: '820', channels: { log: '600000000000000940' }, roles: { responsavel_admin: '777000000000000820' } });
   const doc = await DenunciaStaff.create({ guildId: '820', contas: ['1269187'], motivo: '63 + falando que não era para mim tar ali', punicao: 'Fora da tabela', channelId: 'c', messageId: '600000000000000920', threadId: 't' });
   let apagada = false;
   const noTopico = [];
+  const noLog = [];
   await provaStaff.handleBotaoRecusar({
     customId: `${provaStaff.BOTAO_RECUSAR}${doc._id}`,
-    guild: { id: '820' },
+    guild: { id: '820', channels: { fetch: async (id) => (id === '600000000000000940' ? { send: async (msg) => { noLog.push(msg); return {}; } } : null) } },
     member: { displayName: 'Resp', roles: { cache: new Map([['777000000000000820', {}]]) } },
     user: { id: '1', username: 'resp', toString: () => '<@1>' },
     message: { id: '600000000000000920', delete: async () => { apagada = true; } },
@@ -1097,6 +1098,9 @@ test('/provastaff: recusar vale com motivo fora da tabela e apaga o registro do 
   assert.equal(apagada, true);
   assert.equal((await DenunciaStaff.findById(doc._id).lean()).status, 'recusada');
   assert.equal(noTopico[0], '❌ Provas recusadas por <@1>');
+  const embed = noLog[0].embeds[0].toJSON();
+  assert.equal(embed.title, '❌ Provas da staff recusadas');
+  assert.deepEqual(embed.fields.map(f => f.value).slice(1, 4), ['1269187', '<@1>', '63 + falando que não era para mim tar ali']);
 });
 
 test('Entrar no tópico: diz se o tópico foi apagado ou se o bot está sem acesso', async () => {

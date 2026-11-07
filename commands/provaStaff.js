@@ -454,6 +454,28 @@ async function handleModalAceite(interaction) {
   return interaction.editReply(`✅ Provas aceitas.\n${jogo}`);
 }
 
+// O registro recusado some do canal das provas: o Log administrativo guarda quem
+// registrou, os IDs, o motivo, quem recusou e o link do tópico com as provas.
+async function registrarRecusaNoLog(interaction, doc) {
+  const config = await getCachedConfig(interaction.guild.id);
+  const canal = config?.channels?.log ? await interaction.guild.channels?.fetch?.(config.channels.log).catch(() => null) : null;
+  if (!canal?.send) return false;
+  const embed = new EmbedBuilder()
+    .setColor('#E74C3C')
+    .setTitle('❌ Provas da staff recusadas')
+    .addFields(
+      { name: '👮 Staff', value: doc.autor?.id ? `<@${doc.autor.id}>` : (doc.autor?.nome || '?'), inline: true },
+      { name: '🎯 ID(s)', value: (doc.contas || []).join(', ').slice(0, 1024) || '?', inline: true },
+      { name: '🚫 Recusada por', value: `${interaction.user}`, inline: true },
+      { name: '📝 Motivo', value: String(doc.motivo || '?').slice(0, 1024) },
+      { name: '⚖️ Punição', value: String(doc.punicao || '?').slice(0, 1024), inline: true },
+      ...(doc.threadId ? [{ name: '🔗 Tópico das provas', value: `https://discord.com/channels/${doc.guildId}/${doc.threadId}`, inline: true }] : [])
+    )
+    .setTimestamp();
+  return canal.send({ embeds: [embed], allowedMentions: { parse: [] } }).then(() => true)
+    .catch((erro) => { log.warn(`Recusa das provas ${doc._id} não foi para o Log administrativo: ${erro.message}`); return false; });
+}
+
 async function handleBotaoRecusar(interaction) {
   const { responsavel } = await papeis(interaction);
   if (!responsavel) return interaction.reply(efemero('🚫 Só o responsável aceita ou recusa as provas.'));
@@ -464,6 +486,7 @@ async function handleBotaoRecusar(interaction) {
   const doc = await DenunciaStaff.findOneAndUpdate({ _id: id, guildId: interaction.guild.id, status: 'pendente' }, { $set: { status: 'recusada', decididoPor: quem } }, { new: true }).lean();
   if (!doc) return interaction.reply(efemero('ℹ️ Este registro já foi decidido.'));
   await interaction.deferUpdate();
+  await registrarRecusaNoLog(interaction, doc);
   // O registro recusado sai do canal; o tópico com as provas fica, com o aviso.
   const registro = interaction.message?.id === doc.messageId ? interaction.message : await buscarRegistro(interaction.client, doc);
   const apagado = registro ? await registro.delete().then(() => true).catch(() => false) : false;
