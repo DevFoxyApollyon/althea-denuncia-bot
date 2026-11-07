@@ -1,10 +1,10 @@
 // /provastaff: painel no canal fixo (configurado no /painel ou no site) para a staff
 // registrar uma punição com as provas. Cada registro ganha um tópico com os arquivos
-// e os botões Aceitar e Recusar (só o responsável). Aceitar pede o ID e o motivo e
-// manda para a Cadeia Staff, com Aceitar e Recusar como uma denúncia comum; o aceite
-// lá segue para o jogo pela ponte. Fica no banco principal como DenunciaStaff.
+// e os botões Aceitar e Recusar (só o responsável). Aceitar pede o ID e o motivo e a
+// punição vai direto para a fila do jogo (no modo gamemode, já é enviada), sem passar
+// pela Cadeia Staff. Fica no banco principal como DenunciaStaff.
 // /tempban: o responsável registra no mesmo canal já aceito, sem botões, e a punição
-// vai direto para o jogo (sem passar pela Cadeia Staff).
+// também vai direto para o jogo.
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, FileUploadBuilder, LabelBuilder,
   MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle
@@ -233,6 +233,18 @@ function resultadoNoJogo(ponte, envio) {
   return '⚠️ A ponte com o jogo não está ativa neste servidor: nada foi enviado.';
 }
 
+// Ponte com o jogo: a punição entra na fila e, no modo gamemode, já é enviada.
+// "mensagem" é o registro no canal das provas (a ponte edita o andamento nele).
+async function mandarParaOJogo(interaction, doc, mensagem, quem) {
+  const denuncia = comoDenuncia({ ...doc, channelId: mensagem?.channelId || doc.channelId, messageId: mensagem?.id || doc.messageId });
+  const ponte = await require('../services/ponteSamp/aceite').registrarAceite({
+    client: interaction.client, denuncia, origem: 'canal_staff', staff: quem, canalMensagem: mensagem
+  }).catch(() => null);
+  const envio = ponte ? await require('../Handlers/statusDenuncia/acoesStatus').enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;
+  if (envio?.erro) log.warn(`[PonteGm] Provas da staff ${doc._id} não foram para a gamemode: ${envio.erro}`);
+  return resultadoNoJogo(ponte, envio);
+}
+
 // Registro já aceito, sem botões, no canal das provas; a punição vai direto para o jogo.
 async function handleModalTempban(interaction) {
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
@@ -264,14 +276,7 @@ async function handleModalTempban(interaction) {
     contas, motivo, punicao, provas, arquivos, status: `\`Aceita\` por ${interaction.user} (/tempban)`, components: []
   });
 
-  // Ponte com o jogo: entra na fila e, no modo gamemode, já é enviada.
-  const denuncia = comoDenuncia({ ...doc.toObject(), channelId: registro.channelId, messageId: registro.id, threadId: topico?.id || '' });
-  const ponte = await require('../services/ponteSamp/aceite').registrarAceite({
-    client: interaction.client, denuncia, origem: 'canal_staff', staff: quem, canalMensagem: registro
-  }).catch(() => null);
-  const envio = ponte ? await require('../Handlers/statusDenuncia/acoesStatus').enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;
-  const jogo = resultadoNoJogo(ponte, envio);
-  if (envio?.erro) log.warn(`[PonteGm] /tempban ${doc._id} não foi para a gamemode: ${envio.erro}`);
+  const jogo = await mandarParaOJogo(interaction, { ...doc.toObject(), threadId: topico?.id || '' }, registro, quem);
   await registro.edit({ content: `${registro.content}\n➥ Jogo: ${jogo}`.slice(0, 2000), allowedMentions: { parse: [] } }).catch(() => {});
 
   await publicarPainel(canal).catch(() => {});
@@ -325,7 +330,7 @@ async function registroDoBotao(interaction, prefixo) {
   return DenunciaStaff.findOne({ _id: id, guildId: interaction.guild.id }).lean();
 }
 
-// Aceitar: pede o ID e o motivo (já preenchidos) antes de ir para a Cadeia Staff.
+// Aceitar: pede o ID e o motivo (já preenchidos) antes de ir para o jogo.
 async function handleBotaoAceitar(interaction) {
   const { responsavel } = await papeis(interaction);
   if (!responsavel) return interaction.reply(efemero('🚫 Só o responsável aceita ou recusa as provas.'));
@@ -341,20 +346,21 @@ async function handleBotaoAceitar(interaction) {
   ));
 }
 
-const linhaDaCadeia = (messageId) => new ActionRowBuilder().addComponents(
-  new ButtonBuilder().setCustomId(`log_aceitar_${messageId}`).setLabel('Aceitar').setEmoji('✅').setStyle(ButtonStyle.Success),
-  new ButtonBuilder().setCustomId(`log_recusar_${messageId}`).setLabel('Recusar').setEmoji('❌').setStyle(ButtonStyle.Danger)
-);
-
-async function editarRegistro(client, doc, status, quem) {
+async function buscarRegistro(client, doc) {
   const canal = doc.channelId ? await client.channels.fetch(doc.channelId).catch(() => null) : null;
-  const msg = canal?.messages ? await canal.messages.fetch(doc.messageId).catch(() => null) : null;
-  if (!msg) return;
-  const texto = msg.content.replace(/➥ Status: `[^`]*`.*$/m, `➥ Status: \`${status}\` por ${quem}`);
-  await msg.edit({ content: texto, components: [], allowedMentions: { parse: [] } }).catch(() => {});
+  return canal?.messages ? canal.messages.fetch(doc.messageId).catch(() => null) : null;
 }
 
-// No tópico das provas: aceita (com o link da Cadeia Staff) ou recusada, como nas denúncias.
+// Troca o status do registro, tira os botões e (no aceite) põe a linha do jogo.
+async function editarRegistro(client, doc, status, quem, jogo = '', msg = null) {
+  msg = msg || await buscarRegistro(client, doc);
+  if (!msg) return;
+  let texto = msg.content.replace(/➥ Status: `[^`]*`.*$/m, `➥ Status: \`${status}\` por ${quem}`);
+  if (jogo) texto = `${texto.replace(/\n➥ Jogo: .*$/m, '')}\n➥ Jogo: ${jogo}`;
+  await msg.edit({ content: texto.slice(0, 2000), components: [], allowedMentions: { parse: [] } }).catch(() => {});
+}
+
+// No tópico das provas: aceita (com o resultado no jogo) ou recusada, como nas denúncias.
 async function avisarNoTopico(client, doc, texto) {
   const topico = doc.threadId ? await client.channels.fetch(doc.threadId).catch(() => null) : null;
   if (topico?.archived) await topico.setArchived(false).catch(() => {});
@@ -381,24 +387,13 @@ async function handleModalAceite(interaction) {
   ).lean();
   if (!doc) return interaction.editReply('ℹ️ Este registro já foi decidido.');
 
-  const cadeia = config?.channels?.logs ? await interaction.guild.channels.fetch(config.channels.logs).catch(() => null) : null;
-  const link = `https://discord.com/channels/${doc.guildId}/${doc.channelId}/${doc.messageId}`;
-  let cadeiaMsg = null;
-  if (cadeia?.send) {
-    cadeiaMsg = await cadeia.send({
-      content: `➱ Provas da staff aceitas Acusado (${acusado}) tomará punição por (${motivo}) Data ${getBrasiliaDateTime()} Link:|| ${link} ||`,
-      components: [linhaDaCadeia(doc.messageId)],
-      allowedMentions: { parse: [] }
-    }).catch((erro) => { log.warn(`Provas ${doc._id} não foram para a Cadeia Staff: ${erro.message}`); return null; });
-  }
-  if (cadeiaMsg) await DenunciaStaff.updateOne({ _id: doc._id }, { $set: { 'cadeia.canalId': cadeiaMsg.channelId, 'cadeia.msgId': cadeiaMsg.id } });
-  await editarRegistro(interaction.client, doc, 'Aceita', interaction.user);
-  await avisarNoTopico(interaction.client, doc, cadeiaMsg
-    ? `✅ Provas aceitas por ${interaction.user}\n🔗 **Link para compartilhar:** ${cadeiaMsg.url}`
-    : `✅ Provas aceitas por ${interaction.user}`);
-  return interaction.editReply(cadeiaMsg
-    ? `✅ Aceita e enviada para a Cadeia Staff: ${cadeiaMsg.url}`
-    : '⚠️ Aceita, mas a Cadeia Staff não está configurada ou o bot não consegue enviar lá.');
+  // Não passa pela Cadeia Staff: vai direto para a fila do jogo.
+  await DenunciaStaff.updateOne({ _id: doc._id }, { $set: { 'cadeia.status': 'aceita' } }).catch(() => {});
+  const registro = await buscarRegistro(interaction.client, doc);
+  const jogo = await mandarParaOJogo(interaction, doc, registro, quem);
+  await editarRegistro(interaction.client, doc, 'Aceita', interaction.user, jogo, registro);
+  await avisarNoTopico(interaction.client, doc, `✅ Provas aceitas por ${interaction.user}\n${jogo}`);
+  return interaction.editReply(`✅ Provas aceitas.\n${jogo}`);
 }
 
 async function handleBotaoRecusar(interaction) {

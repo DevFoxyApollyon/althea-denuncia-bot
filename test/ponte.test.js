@@ -831,7 +831,7 @@ test('motivos: quem não é o dono muda e adiciona, mas não apaga, renomeia nem
   assert.equal((await motivos.salvarTabela([], 'dono')).propria, false, 'o dono volta ao padrão');
 });
 
-test('/provastaff: aceitar pede ID e motivo, manda para a Cadeia Staff com Aceitar/Recusar e vira denúncia para o jogo', async () => {
+test('/provastaff: aceitar pede ID e motivo e manda direto para o jogo, sem a Cadeia Staff', async () => {
   const Config = require('../models/Config');
   const DenunciaStaff = require('../models/DenunciaStaff');
   await DenunciaStaff.init(); // índices criados antes: o arquivo termina logo depois
@@ -863,15 +863,15 @@ test('/provastaff: aceitar pede ID e motivo, manda para a Cadeia Staff com Aceit
   assert.equal((await DenunciaStaff.findById(doc._id).lean()).status, 'pendente');
   interacao.fields = original;
 
+  // Aceito: não passa pela Cadeia Staff, vai direto para o jogo (aqui a ponte está desligada).
   await provaStaff.handleModalAceite(interacao);
-  assert.match(resposta, /Cadeia Staff/);
-  assert.match(enviadas[0].content, /Acusado \(111\+222\)/);
-  const botoes = enviadas[0].components[0].toJSON().components.map(b => b.custom_id);
-  assert.deepEqual(botoes, ['log_aceitar_600000000000000999', 'log_recusar_600000000000000999']);
-  assert.match(editadas[0].content, /Status: `Aceita`/);
-  assert.match(noTopico[0], /Provas aceitas por <@1>\n🔗 \*\*Link para compartilhar:\*\* https:\/\/x/);
+  assert.match(resposta, /Provas aceitas\./);
+  assert.equal(enviadas.length, 0, 'nada na Cadeia Staff');
+  assert.match(editadas[0].content, /Status: `Aceita` por <@1>\n➥ Jogo: ⚠️ A ponte com o jogo não está ativa/);
+  assert.deepEqual(editadas[0].components, []);
+  assert.match(noTopico[0], /Provas aceitas por <@1>\n⚠️ A ponte/);
   const salvo = await DenunciaStaff.findById(doc._id).lean();
-  assert.deepEqual([salvo.status, salvo.acusadoAceite, salvo.cadeia.msgId], ['aceita', '111+222', '700']);
+  assert.deepEqual([salvo.status, salvo.acusadoAceite, salvo.cadeia.status], ['aceita', '111+222', 'aceita']);
 
   // O aceite da Cadeia Staff usa a denúncia da staff como uma denúncia comum.
   const comoDenuncia = provaStaff.comoDenuncia(salvo);
