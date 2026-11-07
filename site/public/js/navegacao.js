@@ -194,6 +194,18 @@ export function barraSuperior() {
   );
 }
 
+// Nome curto de cada aba na barra de baixo do celular, onde o nome inteiro não cabe.
+const NOMES_CURTOS = {
+  'Visão geral': 'Geral', 'Todas as denúncias': 'Denúncias', 'Perfil do jogador': 'Jogador',
+  'Testes da staff': 'Testes', 'Testes (obrigatório)': 'Testes', 'Chat do servidor': 'Chat', 'Chat (marcaram você)': 'Chat',
+  'Configurações do site': 'Site', 'Painel do bot': 'Bot', 'Motivos de punição': 'Motivos', 'Saúde do bot': 'Saúde',
+  'Meus atendimentos': 'Meus casos', 'Fazer denúncia': 'Denunciar', 'Denúncias abertas': 'Abertas', 'Painel da ponte': 'Ponte'
+};
+const nomeDaAba = (rotulo) => [
+  el('span', { class: 'menu-rotulo' }, rotulo),
+  NOMES_CURTOS[rotulo] && el('span', { class: 'menu-curto', 'aria-hidden': 'true' }, NOMES_CURTOS[rotulo])
+];
+
 export function menuLateral() {
   const rota = rotaAtual();
 
@@ -204,7 +216,7 @@ export function menuLateral() {
     onclick: aoClicar
   },
   icone(nomeIcone),
-  el('span', null, rotulo),
+  ...nomeDaAba(rotulo),
   typeof contagem === 'number' && contagem > 0 && el('span', { class: 'menu-contagem' }, String(contagem)));
 
   const itemDaVista = (vista) => item({
@@ -269,7 +281,7 @@ export function menuLateral() {
   if (estado.painelPonte) {
     itens.push(
       grupo('Dono do bot'),
-      el('a', { class: 'menu-item', href: '/admin' }, icone('escudo'), el('span', null, 'Painel da ponte'))
+      el('a', { class: 'menu-item', href: '/admin' }, icone('escudo'), ...nomeDaAba('Painel da ponte'))
     );
   }
 

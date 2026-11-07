@@ -2793,3 +2793,36 @@ button.teste-cartao.rascunho { border-style: dashed; }
   .linha-abrir .caso-ref { padding-left: 0; }
   .linha-abrir .caso-motivo { min-width: 0; }
 }
+
+/* Celular: topo compacto que rola junto com a página (sobra tela para o conteúdo),
+   abas de baixo com nome curto e barra de salvar dos motivos em duas linhas. */
+.menu-curto { display: none; }
+@media (max-width: 860px) {
+  .topo, :root:not([data-tema="claro"]) .topo { position: relative; row-gap: 8px; padding: 8px 12px 10px; }
+  .topo > .areas button, .areas button { min-height: 38px; font-size: 14px; }
+  .topo-busca input { min-height: 40px; }
+
+  .menu-item, :root:not([data-tema="claro"]) .menu-item { flex: 1 0 64px; }
+  .menu-item:has(.menu-curto) > .menu-rotulo { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .menu-curto { display: block; max-width: 84px; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+
+  .bot-barra.motivos-barra { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 10px; }
+  .motivos-barra-acoes { display: contents; }
+  .motivos-barra .acoes { flex-wrap: nowrap; gap: 6px; }
+  .motivos-barra .acoes:has(button + button) { grid-column: 1 / -1; }
+  .motivos-barra .acoes:has(button + button) button { flex: 1 1 0; min-width: 0; }
+  .motivos-barra .acoes:last-child { grid-column: 1 / -1; }
+  .motivos-barra .acoes:last-child button { flex: 1 1 0; min-width: 0; }
+}
+
+/* Motivos de punição em grupos: cadeia, banimento, permanente e neutro, cada um com seus cartões lado a lado. */
+.motivo-grupo { margin-top: 22px; }
+.motivo-grupo + .motivo-grupo { padding-top: 18px; border-top: 1px solid var(--linha); }
+.motivo-grupo-titulo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 15px; }
+.motivo-grupo-titulo::before { content: ""; align-self: center; width: 10px; height: 10px; border-radius: 3px; background: var(--analise); }
+.motivo-grupo.cadeia .motivo-grupo-titulo::before { background: var(--reivindicacao); }
+.motivo-grupo.permanente .motivo-grupo-titulo::before { background: var(--recusada); }
+.motivo-grupo.neutro .motivo-grupo-titulo::before { background: var(--texto-3); }
+.motivo-grupo-conta { min-width: 22px; padding: 0 7px; border-radius: 999px; background: var(--elevada); color: var(--texto-2); font-size: 12px; font-weight: 650; text-align: center; }
+.motivo-grupo-titulo small { color: var(--texto-3); font-size: 12.5px; font-weight: 500; }
+.motivo-grupo .motivo-lista { margin-top: 10px; }

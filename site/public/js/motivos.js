@@ -57,14 +57,28 @@ async function salvar(botao, tabela, mensagemConfirmacao) {
   });
 }
 
+// A tela mostra os motivos em grupos, nesta ordem. Só muda a exibição: a tabela salva
+// continua na ordem em que foi criada.
+const GRUPOS = [
+  { chave: 'cadeia', titulo: 'Cadeia', explica: 'tempo em minutos' },
+  { chave: 'ban', titulo: 'Banimento', explica: 'tempo em dias' },
+  { chave: 'permanente', titulo: 'Banimento permanente', explica: 'dias = 0, vira /blackban' },
+  { chave: 'neutro', titulo: 'Neutro', explica: 'só visual, não vai para o jogo' }
+];
+function grupoDoMotivo(m) {
+  if (m.cmd === 'cadeia') return 'cadeia';
+  if (m.cmd === 'registro') return 'neutro';
+  return (Number(m.tempo) || 0) === 0 ? 'permanente' : 'ban';
+}
+
 // Um cartão por motivo: nome e resumo no topo; tipo, tempo, avisos e sinônimos com rótulo embaixo.
 // Motivo já salvo só é apagado ou renomeado pelo dono do bot; o novo (ainda não salvo) pode sair.
 function linhaDoMotivo(m, indice, edicao, podeApagar) {
   const travado = m.salvo && !podeApagar;
   const campo = (props) => el('input', { ...props, oninput: (e) => { m[props['data-campo']] = e.target.value; }, onchange: () => desenhar() });
   const rotulado = (rotulo, controle, classe = '') => el('label', { class: `motivo-campo ${classe}`.trim() }, el('span', null, rotulo), controle);
-  const permanente = m.cmd !== 'cadeia' && (Number(m.tempo) || 0) === 0;
-  return el('article', { class: `motivo-item${m.cmd === 'cadeia' ? ' cadeia' : m.cmd === 'registro' ? ' neutro' : permanente ? ' permanente' : ''}` },
+  const grupo = grupoDoMotivo(m);
+  return el('article', { class: `motivo-item${grupo === 'ban' ? '' : ` ${grupo}`}`, 'data-indice': String(indice) },
     el('header', { class: 'motivo-topo' },
       campo({ 'data-campo': 'nome', class: 'motivo-nome', value: m.nome, maxlength: '30', 'aria-label': 'Motivo', placeholder: 'Nome do motivo (ex.: DM)', readonly: travado, title: travado ? 'Só o dono do bot renomeia motivos.' : null }),
       el('span', { class: 'motivo-resumo' }, descrever(m)),
@@ -103,7 +117,12 @@ export function telaMotivosPonte() {
       el('section', { class: 'cartao' },
         el('p', { class: 'bot-ajuda' }, 'Neutro: só visual, para punições que não são ban nem cadeia (ex.: mute já dado no jogo). A denúncia é aceita normalmente, mas nada vai para o jogo; o texto aparece como a punição.'),
         el('p', { class: 'bot-ajuda' }, 'Vários motivos na mesma denúncia: banimentos somam dias e avisos; permanente (tempo 0) vence tudo e vira /blackban; banimento vence cadeia. Todo motivo vai com [DC] no fim. Os sinônimos também são reconhecidos (ex.: MONEY FARM e MF).'),
-        el('div', { class: 'motivo-lista' }, edicao.map((m, i) => linhaDoMotivo(m, i, edicao, dados.podeApagar)))),
+        GRUPOS.map(({ chave, titulo, explica }) => {
+          const doGrupo = edicao.map((m, i) => [m, i]).filter(([m]) => grupoDoMotivo(m) === chave);
+          return doGrupo.length > 0 && el('section', { class: `motivo-grupo ${chave}` },
+            el('h2', { class: 'motivo-grupo-titulo' }, titulo, el('span', { class: 'motivo-grupo-conta' }, String(doGrupo.length)), el('small', null, explica)),
+            el('div', { class: 'motivo-lista' }, doGrupo.map(([m, i]) => linhaDoMotivo(m, i, edicao, dados.podeApagar))));
+        })),
       // Barra fixa: à esquerda o que mexe na lista; à direita descartar e salvar.
       el('div', { class: `bot-barra motivos-barra${mudou ? ' ativa' : ''}`, role: 'status' },
         el('p', null, mudou ? 'Mudanças não salvas' : 'Tudo salvo'),
@@ -133,8 +152,7 @@ export function telaMotivosPonte() {
 function adicionarMotivo(edicao) {
   edicao.push({ nome: '', sinonimos: '', cmd: 'ban', tempo: 1, avisos: 1 });
   desenhar();
-  const nomes = document.querySelectorAll('.motivo-lista .motivo-nome');
-  const ultimo = nomes[nomes.length - 1];
-  ultimo?.closest('.motivo-item')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  ultimo?.focus({ preventScroll: true });
+  const novo = document.querySelector(`.motivo-item[data-indice="${edicao.length - 1}"]`);
+  novo?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  novo?.querySelector('.motivo-nome')?.focus({ preventScroll: true });
 }
