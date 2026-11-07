@@ -7,6 +7,8 @@ const PontePunicao = require('../models/PontePunicao');
 const gm = require('../services/ponteSamp/discordGm');
 const { BOTAO_INCERTO_OK, resolverIncerto, resolverIncertosDaPunicao } = require('../services/ponteSamp/incertosGm');
 const { getConfig } = require('../utils/configCache');
+const { obterTabela } = require('../services/ponteSamp/motivos');
+const { classificarMotivo } = require('../services/ponteSamp/validacao');
 const { Logger } = require('../utils/logger');
 
 const log = new Logger({ tag: 'PonteGamemode' });
@@ -83,6 +85,16 @@ function modalDoAlvo(punicao, alvo) {
     );
 }
 
+// Ao abrir a edição, o tipo, o tempo e os avisos vêm da tabela atual quando o motivo está
+// nela (a tabela pode ter mudado depois do aceite). Fora da tabela, ficam os do jogador.
+async function comTabelaAtual(alvo) {
+  const { tabela } = await obterTabela().catch(() => ({ tabela: null }));
+  if (!tabela || !alvo?.motivo) return alvo;
+  const c = classificarMotivo(alvo.motivo, tabela);
+  if (!c.regra || c.cmd === 'registro') return alvo;
+  return { ...alvo, cmd: c.cmd, tempo: c.tempo, avisos: c.avisos };
+}
+
 async function punicaoParaEditar(interaction, punicaoId) {
   const punicao = await PontePunicao.findOne({ _id: punicaoId, guildId: interaction.guild.id }).lean();
   if (!punicao || punicao.status !== 'aceita') {
@@ -107,7 +119,7 @@ async function handleEditarGm(interaction) {
   if (!punicao) return;
   const alvos = gm.alvosAtivos(punicao);
   if (alvos.length === 0) return interaction.showModal(modalDoAlvo(punicao, alvoNovo(punicao)));
-  if (alvos.length === 1) return interaction.showModal(modalDoAlvo(punicao, alvos[0]));
+  if (alvos.length === 1) return interaction.showModal(modalDoAlvo(punicao, await comTabelaAtual(alvos[0])));
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`${gm.MENU_ALVO}${punicao._id}`)
@@ -127,7 +139,7 @@ async function handleMenuAlvoGm(interaction) {
   if (!punicao) return;
   const alvo = gm.alvosAtivos(punicao).find(a => String(a._id) === interaction.values?.[0]);
   if (!alvo) return interaction.reply(efemero('❌ Jogador não encontrado.'));
-  await interaction.showModal(modalDoAlvo(punicao, alvo));
+  await interaction.showModal(modalDoAlvo(punicao, await comTabelaAtual(alvo)));
 }
 
 async function handleModalAlvoGm(interaction) {

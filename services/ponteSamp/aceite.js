@@ -249,20 +249,21 @@ async function limparAguardando(client, punicao) {
   });
 }
 
-// Motivo que estava fora da tabela e passou a existir (cadastrado no site ou no Discord):
-// o jogador ganha tipo, tempo e avisos da tabela atual. Só mexe em quem ainda está sem
-// regra (ninguém editou à mão) e tem motivo. Quando a denúncia inteira fica com regra, a
+// Motivo que estava fora da tabela e passou a existir (cadastrado no site ou no Discord),
+// ou motivo da tabela que mudou de punição: o jogador ganha tipo, tempo e avisos da tabela
+// atual. Não mexe em quem foi editado à mão (regra "editado por ...") nem em quem está sem motivo. Quando a denúncia inteira fica com regra, a
 // mensagem do Discord troca "aguardando no painel" por "liberado". Sem lista, confere a
 // fila toda (a tabela vale para todos os servidores). Devolve a lista atualizada.
 async function reclassificarFila({ client = null, lista = null, tabela = null } = {}) {
-  const fila = lista || await PontePunicao.find({ status: 'aceita', 'alvos.regra': '' }).lean();
+  const fila = lista || await PontePunicao.find({ status: 'aceita' }).lean();
   const regras = tabela || (await obterTabela()).tabela;
   for (const [i, p] of fila.entries()) {
     let mudou = false;
     const alvos = (p.alvos || []).map(a => {
-      if (a.removido || a.regra || !a.motivo) return a;
+      if (a.removido || !a.motivo || /^editado por/i.test(a.regra || '')) return a;
       const c = classificarMotivo(a.motivo, regras);
-      if (!c.regra) return a;
+      if (!c.regra || c.cmd === 'registro') return a;
+      if (a.regra === c.regra && a.cmd === c.cmd && Number(a.tempo) === c.tempo && Number(a.avisos || 0) === c.avisos) return a;
       mudou = true;
       return { ...a, cmd: c.cmd, tempo: c.tempo, avisos: c.avisos, regra: c.regra };
     });
@@ -277,6 +278,8 @@ async function reclassificarFila({ client = null, lista = null, tabela = null } 
     if (atualizada.alvos.every(a => a.removido || a.regra)) {
       await atualizarMensagensDiscord(client, atualizada, LIBERADO).catch(() => {});
     }
+    // Modo gamemode: o embed "Punição esperando envio" mostra a punição nova.
+    await require('./discordGm').atualizarMensagemGm(client, atualizada._id).catch(() => {});
   }
   return fila;
 }

@@ -87,8 +87,12 @@ function punicaoLegivel(alvo) {
 async function discordDaConta(guildId, contaId, informado) {
   if (informado) return String(informado).slice(0, 100);
   if (!contaId) return 'Não informado';
-  const usuario = await Usuario.findOne({ guildId, conta: String(contaId) }).sort({ updatedAt: -1 }).select('userId').lean().catch(() => null);
-  return usuario?.userId ? `<@${usuario.userId}>` : 'Não informado';
+  const usuario = await Usuario.findOne({ guildId, conta: String(contaId) }).sort({ updatedAt: -1 }).select('userId username').lean().catch(() => null);
+  if (!usuario?.userId) return 'Não informado';
+  // Em embed, o Discord só troca <@id> pelo nome se já tiver a pessoa carregada; senão
+  // mostra o código cru. O nome em texto ao lado deixa sempre legível.
+  const nome = String(usuario.username || '').replace(/[<>@]/g, '').slice(0, 40).replace(/([\\`*_~|])/g, '\\$1');
+  return nome ? `<@${usuario.userId}> (${nome})` : `<@${usuario.userId}>`;
 }
 
 // Quem aplicou: a gamemode ("gamemode:brp teste") ou um PC da staff.

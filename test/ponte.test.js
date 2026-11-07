@@ -678,6 +678,16 @@ test('motivo cadastrado depois do aceite: a fila reclassifica sozinha na próxim
   assert.deepEqual([depois.cmd, depois.tempo], ['cadeia', 60]);
   assert.match(mensagem.content, /liberado no painel/);
   assert.doesNotMatch(mensagem.content, /aguardando/);
+
+  // Motivo da tabela que muda de punição: quem espera envio passa à punição nova;
+  // quem foi editado à mão fica como está.
+  const mudada = await motivos.salvarTabela([...padrao, { nome: 'FLAMING', cmd: 'ban', tempo: 1, avisos: 3 }], 'teste');
+  const manual = await m.aceite.registrarAceite({ client: clienteFalso, denuncia: { ...denunciaFalsa('870', '97'), motivoAceite: 'flaming' }, origem: 'canal_staff', staff: { id: '1', nome: 'x' } });
+  await m.PontePunicao.updateOne({ _id: manual.punicao._id }, { $set: { 'alvos.0.regra': 'editado por Corvo', 'alvos.0.tempo': 5 } });
+  await m.aceite.reclassificarFila({ tabela: mudada.tabela });
+  const nova = (await m.PontePunicao.findById(punicao._id).lean()).alvos[0];
+  assert.deepEqual([nova.cmd, nova.tempo, nova.avisos], ['ban', 1, 3]);
+  assert.equal((await m.PontePunicao.findById(manual.punicao._id).lean()).alvos[0].tempo, 5);
   await motivos.salvarTabela([], 'teste');
 });
 
@@ -1125,4 +1135,14 @@ test('Entrar no tópico: diz se o tópico foi apagado ou se o bot está sem aces
   };
   assert.match(await tentar(10003), /foi apagado/);
   assert.match(await tentar(50001), /não tem acesso/);
+});
+
+test('Relatório de punições: o Discord do jogador vem com o nome em texto ao lado da menção', async () => {
+  const Usuario = require('../models/Usuario');
+  const { discordDaConta } = require('../services/ponteSamp/avisoOrganizacao');
+  await Usuario.create({ guildId: '822', userId: '1501018070691614801', username: 'sr_delet', conta: '1242809' });
+  assert.equal(await discordDaConta('822', '1242809', ''), '<@1501018070691614801> (sr\\_delet)', 'sublinhado escapado: não vira itálico');
+  await Usuario.create({ guildId: '822', userId: '1501018070691614802', conta: '1242810' });
+  assert.equal(await discordDaConta('822', '1242810', ''), '<@1501018070691614802>');
+  assert.equal(await discordDaConta('822', '999', ''), 'Não informado');
 });
