@@ -1917,3 +1917,33 @@ test('/desbanir pelo ID: consulta a conta no jogo e manda desbanir com os avisos
   await chamar(conexao, segredo, `/resultados/${c2.id}`, { metodo: 'POST', corpo: resultado('recusada', 'RECUSADO') });
   assert.match((await semFuncao).erro, /Althea_Consultar/);
 });
+
+test('punição sem jogador: o Editar cria o jogador e o Corrigir refaz os jogadores do ID e motivo novos', async () => {
+  await guildGm('100000000000000879');
+  const staff = { id: '1', nome: 'Resp' };
+  // Aceite com o ID num formato que não vira jogador ("1270101 CL + 360429 saav").
+  const vazia = await punicaoAceita('100000000000000879', []);
+  assert.match((await discordGm().enviarAoJogo({ punicaoId: vazia._id, guildId: '100000000000000879', staff })).erro, /não tem alvos/);
+
+  assert.match((await discordGm().editarAlvoGm({
+    punicaoId: vazia._id, guildId: '100000000000000879', alvoId: 'novo', versao: 0, campos: { conta: '', tipo: 'ban', tempo: '3', avisos: '1', motivo: 'SAAV' }, staff
+  })).erro, /ID da conta/);
+  const criado = await discordGm().editarAlvoGm({
+    punicaoId: vazia._id, guildId: '100000000000000879', alvoId: 'novo', versao: 0, campos: { conta: '1270101', tipo: 'ban', tempo: '3', avisos: '1', motivo: 'SAAV' }, staff
+  });
+  assert.equal(criado.ok, true);
+  assert.deepEqual(criado.punicao.alvos.map(a => [a.contaId, a.cmd, a.tempo, a.avisos]), [['1270101', 'ban', 3, 1]]);
+  assert.ok(criado.punicao.alvos[0]._id, 'o jogador novo ganha _id');
+
+  // Corrigir: a punição esperando envio passa a ter um jogador por ID, com o motivo de cada um.
+  const outra = await punicaoAceita('100000000000000879', []);
+  const { atualizarPunicaoDoJogo } = require('../Handlers/corrigirHandler');
+  const denuncia = { _id: outra.denunciaId, acusadoId: '1270101+360429', motivoAceite: '1270101 SAAV + 360429 RUSH' };
+  assert.equal(await atualizarPunicaoDoJogo(null, denuncia), true);
+  const salva = await m.PontePunicao.findById(outra._id).lean();
+  assert.deepEqual(salva.alvos.map(a => [a.contaId, a.motivo]), [['1270101', 'SAAV'], ['360429', 'RUSH']]);
+  assert.equal(salva.versao, 1);
+  // Já enviada: o Corrigir não mexe.
+  await m.PontePunicao.updateOne({ _id: outra._id }, { $set: { status: 'executando' } });
+  assert.equal(await atualizarPunicaoDoJogo(null, { ...denuncia, acusadoId: '999' }), false);
+});

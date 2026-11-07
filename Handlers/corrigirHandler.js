@@ -118,6 +118,26 @@ const linhasDeBaixo = (texto) => {
 // Na Cadeia Staff a primeira linha ganha, depois do link, quem confirmou ("||data|| por @x").
 const depoisDoLink = (texto) => (String(texto || '').split('\n')[0].match(/Link: ?\|\| ?\S+ ?\|\|(.*)$/) || [])[1] || '';
 
+// Punição para o jogo ainda esperando envio: os jogadores saem de novo do ID e do
+// motivo corrigidos (a já enviada ou aplicada não muda). Devolve true se atualizou.
+async function atualizarPunicaoDoJogo(client, denuncia) {
+  const PontePunicao = require('../models/PontePunicao');
+  const punicao = await PontePunicao.findOne({ denunciaId: denuncia._id, status: 'aceita' }).lean();
+  if (!punicao) return false;
+  const { montarAlvos } = require('../services/ponteSamp/aceite');
+  const { tabela } = await require('../services/ponteSamp/motivos').obterTabela();
+  const alvos = montarAlvos(denuncia, tabela).filter(a => a.cmd !== 'registro');
+  if (!alvos.length) return false;
+  const salva = await PontePunicao.findOneAndUpdate(
+    { _id: punicao._id, status: 'aceita', versao: punicao.versao },
+    { $set: { alvos, 'msgDiscord.motivo': String(denuncia.motivoAceite || '').slice(0, 300) }, $inc: { versao: 1 } },
+    { new: true, runValidators: true }
+  ).lean();
+  if (!salva) return false;
+  await require('../services/ponteSamp/discordGm').atualizarMensagemGm(client, salva._id).catch(() => {});
+  return true;
+}
+
 async function handleSalvarCorrigirDenuncia(interaction) {
   const messageId = getMessageId(interaction.customId);
   const config = await getCachedConfig(interaction.guild.id);
@@ -168,6 +188,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
     });
 
     await denuncia.save();
+    const ponteAtualizada = await atualizarPunicaoDoJogo(interaction.client, denuncia).catch(() => false);
 
     let logEdited = false;
     let topicEdited = false;
@@ -223,6 +244,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
             'Os dados foram atualizados no banco de dados.',
             logEdited ? '✅ Canal de logs atualizado.' : '❌ O canal de logs não foi atualizado.',
             topicEdited ? '✅ Mensagem do tópico atualizada.' : '❌ Mensagem do tópico não foi atualizada.',
+            ponteAtualizada ? '🎮 Punição para o jogo atualizada com o ID e o motivo novos.' : '',
             errors.length ? `Detalhes: ${errors.join('; ')}` : ''
           ].filter(Boolean).join('\n'))
           .setColor(logEdited && topicEdited ? '#27ae60' : '#e67e22')
@@ -238,6 +260,7 @@ module.exports = {
   handleCorrigirDenunciaButton,
   handleSalvarCorrigirDenuncia,
   createCorrectionButtonRow,
+  atualizarPunicaoDoJogo,
   linhasDeBaixo,
   depoisDoLink
 };

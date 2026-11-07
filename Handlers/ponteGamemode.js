@@ -24,7 +24,8 @@ const staffDe = (interaction) => ({ id: interaction.user.id, nome: interaction.m
 // customId "prefixo<a>:<b>:..." → partes; null se algum id não for ObjectId.
 function partes(customId, prefixo, ids = 1) {
   const lista = customId.slice(prefixo.length).split(':');
-  return lista.slice(0, ids).every(id => RE_ID.test(id)) ? lista : null;
+  // O segundo ID pode ser "novo" (jogador que ainda não existe na punição).
+  return lista.slice(0, ids).every((id, i) => RE_ID.test(id) || (i === 1 && id === 'novo')) ? lista : null;
 }
 
 async function exigirResponsavel(interaction) {
@@ -60,16 +61,21 @@ async function handleCancelarGm(interaction) {
   await interaction.editReply({ content: texto }).catch(() => {});
 }
 
+// Punição sem jogador: o mesmo modal, com o ID da conta para criar o jogador.
+const alvoNovo = (punicao) => ({ _id: 'novo', contaId: '', cmd: 'ban', tempo: 1, avisos: 1, motivo: String(punicao.msgDiscord?.motivo || '').slice(0, 60) });
+
 function modalDoAlvo(punicao, alvo) {
   // O Discord recusa rótulo com mais de 45 letras (o modal nem abre): o detalhe vai no exemplo do campo.
   const campo = (id, rotulo, valor, estilo = TextInputStyle.Short, max = 10, exemplo = '') => new ActionRowBuilder().addComponents(
     new TextInputBuilder().setCustomId(id).setLabel(rotulo.slice(0, 45)).setStyle(estilo).setRequired(id !== 'avisos').setMaxLength(max)
       .setValue(String(valor ?? '').slice(0, max)).setPlaceholder(exemplo || rotulo.slice(0, 100))
   );
+  const novo = alvo._id === 'novo';
   return new ModalBuilder()
     .setCustomId(`${gm.MODAL_ALVO}${punicao._id}:${alvo._id}:${punicao.versao}`)
-    .setTitle(`Punição de ${String(alvo.contaId || alvo.nick || 'alvo').slice(0, 30)}`)
+    .setTitle(novo ? 'Adicionar o jogador' : `Punição de ${String(alvo.contaId || alvo.nick || 'alvo').slice(0, 30)}`)
     .addComponents(
+      ...(novo ? [campo('conta', 'ID da conta do jogador', '', TextInputStyle.Short, 9, 'Ex.: 1270101')] : []),
       campo('tipo', 'Tipo (ban ou cadeia)', alvo.cmd, TextInputStyle.Short, 6),
       campo('tempo', 'Tempo', alvo.tempo, TextInputStyle.Short, 5, 'Ban: dias (0 = permanente). Cadeia: minutos.'),
       campo('avisos', 'Avisos', alvo.avisos ?? 0, TextInputStyle.Short, 2),
@@ -100,7 +106,7 @@ async function handleEditarGm(interaction) {
   const punicao = await punicaoParaEditar(interaction, punicaoId);
   if (!punicao) return;
   const alvos = gm.alvosAtivos(punicao);
-  if (alvos.length === 0) return interaction.reply(efemero('❌ A punição não tem alvos.'));
+  if (alvos.length === 0) return interaction.showModal(modalDoAlvo(punicao, alvoNovo(punicao)));
   if (alvos.length === 1) return interaction.showModal(modalDoAlvo(punicao, alvos[0]));
 
   const menu = new StringSelectMenuBuilder()
@@ -129,14 +135,14 @@ async function handleModalAlvoGm(interaction) {
   if (!dados || !(await exigirResponsavel(interaction))) return;
   const [punicaoId, alvoId, versao] = dados;
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-  const ler = (id) => interaction.fields.getTextInputValue(id) ?? '';
+  const ler = (id) => { try { return interaction.fields.getTextInputValue(id) ?? ''; } catch { return ''; } };
   const r = await gm.editarAlvoGm({
     client: interaction.client,
     punicaoId,
     guildId: interaction.guild.id,
     alvoId,
     versao: Number(versao),
-    campos: { tipo: ler('tipo'), tempo: ler('tempo'), avisos: ler('avisos'), motivo: ler('motivo') },
+    campos: { conta: ler('conta'), tipo: ler('tipo'), tempo: ler('tempo'), avisos: ler('avisos'), motivo: ler('motivo') },
     staff: staffDe(interaction)
   }).catch((error) => {
     log.error('Falha ao editar alvo da gamemode', error);

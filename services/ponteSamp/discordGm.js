@@ -400,18 +400,22 @@ async function editarAlvoGm({ client = null, punicaoId, guildId, alvoId, versao,
   const punicao = await PontePunicao.findOne({ _id: punicaoId, guildId: String(guildId) }).lean();
   if (!punicao || punicao.status !== 'aceita') return { erro: 'Esta punição não está mais esperando envio.' };
   if (punicao.versao !== versao) return { erro: 'A punição mudou enquanto você editava. Abra a edição de novo.' };
-  const alvo = (punicao.alvos || []).find(a => String(a._id) === String(alvoId) && !a.removido);
-  if (!alvo) return { erro: 'Alvo não encontrado.' };
+  // "novo": punição sem jogador (ID do aceite fora do formato); o modal traz a conta.
+  const novo = alvoId === 'novo';
+  const alvo = novo ? null : (punicao.alvos || []).find(a => String(a._id) === String(alvoId) && !a.removido);
+  if (!novo && !alvo) return { erro: 'Alvo não encontrado.' };
 
   const cmd = String(campos.tipo || '').trim().toLowerCase();
   const tempo = Number(String(campos.tempo ?? '').trim());
   const avisos = Number(String(campos.avisos ?? '').trim() || 0);
-  const lista = punicao.alvos.map(a => (String(a._id) === String(alvoId)
-    ? { ...a, cmd, tempo, avisos, motivo: campos.motivo, regra: `editado por ${String(staff.nome || '').slice(0, 40)}` }
-    : a));
+  const regra = `editado por ${String(staff.nome || '').slice(0, 40)}`;
+  const lista = novo
+    ? [...(punicao.alvos || []), { contaId: String(campos.conta || '').trim(), nick: '', cmd, tempo, avisos, motivo: campos.motivo, regra }]
+    : punicao.alvos.map(a => (String(a._id) === String(alvoId) ? { ...a, cmd, tempo, avisos, motivo: campos.motivo, regra } : a));
+  if (novo && !String(campos.conta || '').trim()) return { erro: 'Informe o ID da conta do jogador.' };
   const validado = validarAlvos(lista, servidor.templates);
   if (validado.erro) return { erro: validado.erro };
-  const editado = validado.alvos.find(a => String(a._id) === String(alvoId));
+  const editado = novo ? validado.alvos[validado.alvos.length - 1] : validado.alvos.find(a => String(a._id) === String(alvoId));
   const previa = pedidoDoAlvo(editado, servidor);
 
   const salva = await PontePunicao.findOneAndUpdate(
