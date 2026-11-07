@@ -230,7 +230,7 @@ function resultadoNoJogo(ponte, envio) {
   if (permanente && !envio?.erro) return '🔨 Ban permanente: a conta já está sendo banida no jogo.';
   if (envio?.ok) return `📤 Enviada à gamemode (${envio.pedidos} pedido(s)).${envio.teste ? ' 🧪 Modo teste: só simula.' : ''}`;
   if (envio?.erro) return `⚠️ Não foi para a gamemode: ${envio.erro} Use "Enviar ao jogo" no Relatório de punições.`;
-  if (ponte?.criado) return '🎮 Enviada para o painel do jogo.';
+  if (ponte?.criado || ponte?.atualizada) return '🎮 Enviada para o painel do jogo.';
   if (ponte?.jaExistia) return 'ℹ️ Já estava no painel do jogo.';
   return '⚠️ A ponte com o jogo não está ativa neste servidor: nada foi enviado.';
 }

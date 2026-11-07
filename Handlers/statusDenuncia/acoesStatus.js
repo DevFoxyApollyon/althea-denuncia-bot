@@ -642,6 +642,7 @@ async function handleLogAceitarButton(interaction, denuncia) {
     };
     let linhaPonte = ponte?.soRegistro ? '\n📝 Motivo neutro: só visual, não vai para o jogo.'
       : ponte?.reaberta ? '\n🔁 Punição reaberta: estava cancelada.'
+      : ponte?.atualizada ? '\n🔁 Punição para o jogo refeita com o ID e o motivo deste aceite.'
       : ponte?.jaExistia ? (JA_EXISTIA[ponte.status] || `\nℹ️ Já está no painel do jogo (aceita por ${ponte.aceitoPor || 'outra pessoa'}).`)
         : ponte?.criado ? '\n🎮 Enviada para o painel do jogo.' : '';
     // Modo gamemode: aceitar na Cadeia Staff já manda para o jogo, sem precisar do

@@ -979,3 +979,29 @@ test('aceite com motivo "só registro": segue normal, mas não cria punição pa
     await motivos.salvarTabela([], 'teste');
   }
 });
+
+test('aceite de novo com outro ID ou motivo refaz os jogadores da punição ainda não enviada', async () => {
+  await guildAtiva('817');
+  const staff = { id: '1', nome: 'Resp' };
+  const denuncia = { _id: new mongoose.Types.ObjectId(), guildId: '817', acusado: '1270101', motivo: 'CL', acusadoId: '1270101 CL + 360429 saav', motivoAceite: '1270101 CL + 360429 saav', channelId: '1', messageId: '2' };
+  // Primeiro aceite com o ID fora do formato: punição sem jogador.
+  const primeiro = await m.aceite.registrarAceite({ client: null, denuncia, origem: 'canal_staff', staff });
+  assert.equal(primeiro.criado, true);
+  assert.equal(primeiro.punicao.alvos.length, 0);
+
+  // Aceite de novo com o ID certo: refaz os jogadores.
+  const certo = { ...denuncia, acusadoId: '1270101+360429', motivoAceite: '1270101 CL +360429 saav' };
+  const segundo = await m.aceite.registrarAceite({ client: null, denuncia: certo, origem: 'canal_staff', staff });
+  assert.equal(segundo.atualizada, true);
+  assert.deepEqual(segundo.punicao.alvos.map(a => [a.contaId, a.motivo]), [['1270101', 'CL'], ['360429', 'saav']]);
+
+  // Mesmo aceite outra vez: não mexe (edição à mão continua).
+  const terceiro = await m.aceite.registrarAceite({ client: null, denuncia: certo, origem: 'canal_staff', staff });
+  assert.equal(terceiro.jaExistia, true);
+
+  // Já enviada: não refaz.
+  await m.PontePunicao.updateOne({ _id: segundo.punicao._id }, { $set: { status: 'executando' } });
+  const enviada = await m.aceite.registrarAceite({ client: null, denuncia: { ...certo, motivoAceite: '1270101 SAAV' }, origem: 'canal_staff', staff });
+  assert.equal(enviada.jaExistia, true);
+  assert.equal((await m.PontePunicao.findById(segundo.punicao._id).lean()).alvos.length, 2);
+});

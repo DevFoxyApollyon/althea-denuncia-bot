@@ -154,6 +154,28 @@ async function registrarAceite({ client, denuncia, origem, staff, canalMensagem 
     }
 
     const punicao = resultado.value;
+    // Aceite de novo com outro ID ou motivo (ou a punição tinha ficado sem jogador) e
+    // ainda não enviada: os jogadores saem do aceite novo. Mesmo aceite não mexe, para
+    // não desfazer o que alguém editou à mão.
+    const contasDe = (lista) => (lista || []).filter(a => !a.removido).map(a => `${a.contaId}|${a.nick}`).sort().join(',');
+    const outroAceite = String(punicao?.msgDiscord?.motivo || '') !== novo.msgDiscord.motivo
+      || contasDe(punicao?.alvos) !== contasDe(alvos);
+    if (resultado.lastErrorObject?.updatedExisting && ['aceita', 'cancelada'].includes(punicao?.status) && alvos.length && outroAceite) {
+      const refeita = await PontePunicao.findOneAndUpdate(
+        { _id: punicao._id, status: punicao.status, versao: punicao.versao },
+        {
+          $set: { status: 'aceita', executor: '', alvos, aceitoPor: novo.aceitoPor, aceitoEm: new Date(), 'msgDiscord.motivo': novo.msgDiscord.motivo, 'msgDiscord.acusado': novo.msgDiscord.acusado },
+          $inc: { versao: 1 }
+        },
+        { new: true, runValidators: true }
+      ).lean();
+      if (refeita) {
+        log.info(`Punição ${refeita._id} refeita pelo aceite novo (denúncia ${denuncia._id}).`);
+        if (alvos.some(a => !a.regra)) await atualizarMensagensDiscord(client, refeita, AGUARDANDO).catch(() => {});
+        await require('./discordGm').atualizarMensagemGm(client, refeita._id).catch(() => {});
+        return { atualizada: true, punicao: refeita };
+      }
+    }
     if (resultado.lastErrorObject?.updatedExisting) {
       // Cancelada antes e aceita de novo na Cadeia Staff: é uma decisão nova, então a
       // punição volta a esperar envio (e, no modo gamemode, o aceite já envia).
