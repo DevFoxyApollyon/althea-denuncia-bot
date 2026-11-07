@@ -1,53 +1,47 @@
-﻿process.env.TZ = 'America/Sao_Paulo';
+process.env.TZ = 'America/Sao_Paulo';
 process.env.FORCE_COLOR = '3';
 console.log('\x1b[36m' + '═'.repeat(60) + '\x1b[0m');
+// Erros e avisos passam a ficar guardados para a tela "Saúde do bot" do site.
+require('./utils/registroDeErros').instalarRegistroDeErros();
+// Antes do discord.js carregar: a hospedagem às vezes mantém uma versão antiga no node_modules.
+require('./utils/garantirDependencias').garantirDependencias();
 require('dotenv').config();
+
+const { log } = require('./utils/logger');
+const { validarEnv } = require('./utils/env');
+
+// Precisa rodar antes dos demais requires: os models abrem conexões ao carregar.
+if (!validarEnv(log)) process.exit(1);
 
 const { 
     Client, 
     GatewayIntentBits, 
-    MessageFlags, 
     ActivityType,
-    Collection,
     version: discordVersion
 } = require('discord.js');
-const mongoose = require('mongoose');
 const chalk = require('chalk'); 
 const packageJson = require('./package.json');
 
-const interactionHandler = require('./Handlers/interactionHandler');
-const { handleDeletedMessage } = require('./Handlers/messageDeleteHandler');
 const commands = require('./utils/commands');
-const Config = require('./models/Config');
-const Denuncia = require('./models/Denuncia');
-const {
-    contemPalavraProibida,
-    contemMarcacaoAdmin,
-    contemLinkProibido,
-    contemEmojiFigurinhaOuGif,
-    ehMensagemEncaminhada,
-    processaStrike,
-    processaStrikeLink,
-    processaStrikeEmoji,
-    verificaEdicao,
-    podeFalarSemBloqueio
-} = require('./utils/strikeWords');
-const Strike = require('./models/Strike');
-const { handleYoutubeDenuncia } = require('./utils/youtubeUtils');
+const { getConfig } = require('./utils/configCache');
+const { registrarComandosSlash, registrarComandosNoServidor } = require('./commands/slash');
 const { advancedMonitor } = require('./utils/advancedMonitoring');
 const { setupRankJobs } = require('./jobs/rankJobs');
-const secondaryConnection = require('./utils/secondaryDb');
-const { syncUserOnNicknameChange } = require('./utils/userSyncAndNotify');
+const { primaryConnection, secondaryConnection } = require('./utils/persistencia');
+const { prepararRetencaoNoBanco } = require('./utils/retencaoDados');
+const Config = require('./models/Config');
 const { iniciarAutoFinalizador } = require('./jobs/autoFinalizador');
 const { iniciarPoller } = require('./jobs/nicknamePoller');
 const { iniciarLimpezaContasDuplicadas } = require('./jobs/Limparcontasduplicadas');
-const Usuarios = require('./models/Usuario');
-const { limparMenusOrfaos } = require('./utils/feedback');
-const { extrairContaDoNickname } = require('./utils/nickUtils');
-const { usuarioAutorizadoNoTopico } = require('./utils/restricaoTopicos');
-const { usuarioIsento } = require('./utils/usuariosIsentos');
-const { handleRecusarPorMensagem } = require('./Handlers/handlerStatusButton');
-const { serializarMensagem, buscarCanal } = require('./utils/denunciaMensagens');
+const { iniciarAvisoReivindicacao } = require('./jobs/avisoReivindicacao');
+const { iniciarBackupDoBanco } = require('./jobs/backupBanco');
+const { iniciarAlertaGamemode } = require('./jobs/alertaGamemode');
+const { iniciarJobGamemode } = require('./services/ponteSamp/incertosGm');
+const { iniciarLimpezaDeEspelhos } = require('./utils/espelhos');
+const { registerMemberEvents } = require('./Handlers/memberEvents');
+const { registerMessageEvents } = require('./Handlers/messageEvents');
+const { registerInteractionEvents } = require('./Handlers/interactionEvents');
+const { iniciarSite } = require('./site/servidor');
 
 const client = new Client({
     intents: [
@@ -63,140 +57,33 @@ const client = new Client({
     }
 });
 
-const log = {
-    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[INFO]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[SUCESSO]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[AVISO]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[ERRO]')} ${msg}`),
-    system:  (msg) => console.log(`${chalk.magenta('⚙')} ${chalk.gray('[SISTEMA]')} ${msg}`)
-};
+let servidorDoSite = null;
 
-const configCache = new Map();
-const CONFIG_CACHE_LIMIT = 100;
-
-async function getConfig(guildId) {
-    if (configCache.has(guildId)) return configCache.get(guildId);
-
-    const config = await Config.findOne({ guildId });
-
-    if (configCache.size >= CONFIG_CACHE_LIMIT) {
-        const firstKey = configCache.keys().next().value;
-        configCache.delete(firstKey);
-    }
-
-    configCache.set(guildId, config);
-    setTimeout(() => configCache.delete(guildId), 5 * 60 * 1000);
-    return config;
-}
-
-client.on('guildMemberUpdate', async (oldMember, newMember) => {
-    try {
-        await syncUserOnNicknameChange(oldMember, newMember);
-
-        if (oldMember.nickname === newMember.nickname) return;
-
-        let entry = null;
-        for (let tentativa = 0; tentativa < 3; tentativa++) {
-            await new Promise(r => setTimeout(r, 1000 * (tentativa + 1)));
-
-            const auditLogs = await newMember.guild.fetchAuditLogs({ limit: 5, type: 24 });
-
-            entry = auditLogs.entries.find(e =>
-                e.target?.id === newMember.user.id &&
-                e.executor?.id === process.env.BOT_ALVO_ID &&
-                Date.now() - e.createdTimestamp < 15000
-            );
-
-            if (entry) break;
-        }
-
-        if (!entry) return;
-
-        const nickAtual     = newMember.nickname || newMember.user.username;
-        const contaExtraida = extrairContaDoNickname(nickAtual);
-
-        const setPayload = {
-            username:  newMember.user.username,
-            nickname:  newMember.nickname,
-            updatedAt: new Date(),
-        };
-        if (contaExtraida) setPayload.conta = contaExtraida;
-
-        await Usuarios.findOneAndUpdate(
-            { guildId: newMember.guild.id, userId: newMember.user.id },
-            { $set: setPayload },
-            { upsert: true, new: true }
-        );
-
-        log.success(
-            `${chalk.white(newMember.user.username)} ${chalk.gray(`(${newMember.user.id})`)} — nickname registrado: ` +
-            `${chalk.red(oldMember.nickname ?? 'nenhum')} ${chalk.gray('→')} ${chalk.green(newMember.nickname ?? 'nenhum')}` +
-            (contaExtraida ? chalk.gray(` | conta: ${contaExtraida}`) : '') +
-            chalk.gray(` | ${newMember.guild.name}`)
-        );
-
-    } catch (e) {
-        if (e.code === 50278) return;
-        log.warn('Erro ao sincronizar nickname: ' + e.message);
-    }
+registerMemberEvents(client, log);
+registerMessageEvents(client, { log, getConfig });
+registerInteractionEvents(client, log);
+// Tópico de denúncia apagado: a denúncia sai da fila (não trava o bloqueio de pendências).
+require('./utils/denunciasTravadas').registrarEventoDeTopicoApagado(client);
+// Esperas curtas do Discord são normais (o discord.js espera sozinho): só as longas vão para o log.
+client.rest.on('rateLimited', (info) => {
+    if (info.timeToReset < 30_000) return;
+    log.warn(`Limite do Discord: ${info.method} ${info.route} — aguardando ${Math.ceil(info.timeToReset / 1000)}s.`);
 });
 
-client.on('guildMemberAdd', async (member) => {
-    try {
-        const usuario = await Usuarios.findOne({
-            guildId: member.guild.id,
-            userId:  member.user.id,
-        });
-
-        if (!usuario?.nickname) return;
-
-        await member.setNickname(usuario.nickname, 'Nickname restaurado automaticamente');
-
-        log.success(
-            `${chalk.white(member.user.username)} ${chalk.gray(`(${member.user.id})`)} — nickname restaurado: ${chalk.green(usuario.nickname)} ${chalk.gray(`| ${member.guild.name}`)}`
-        );
-    } catch (e) {
-        if (e.code === 50013) {
-            log.warn(`Sem permissão para restaurar nickname de ${member.user.username} em ${member.guild.name}`);
-            return;
-        }
-        log.error(`Erro ao restaurar nickname: ${e.message}`);
-    }
-});
-
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => {
-        log.success('Database principal conectada.');
-
-        async function limparStrikesAntigas() {
-            try {
-                const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
-                const resultado = await Strike.updateMany({}, {
-                    $pull: {
-                        strikes:      { timestamp: { $lt: limite } },
-                        strikesLink:  { timestamp: { $lt: limite } },
-                        strikesEmoji: { timestamp: { $lt: limite } },
-                    }
-                });
-                if (resultado.modifiedCount > 0) {
-                    log.info(`Limpeza de strikes: ${resultado.modifiedCount} documento(s) atualizado(s).`);
-                }
-
-                const remocao = await Strike.deleteMany({
-                    updatedAt: { $lt: limite },
-                });
-                if (remocao.deletedCount > 0) {
-                    log.info(`Limpeza de strikes: ${remocao.deletedCount} documento(s) sem atividade nas últimas 24h removido(s).`);
-                }
-            } catch (e) {
-                log.error('Erro na limpeza de strikes: ' + e.message);
-            }
-        }
-
-        limparStrikesAntigas();
-        setInterval(limparStrikesAntigas, 60 * 60 * 1000);
-
+Promise.all([primaryConnection.asPromise(), secondaryConnection.asPromise()])
+    .then(async () => {
+        log.success('Bancos principal e secundário conectados.');
         client.login(process.env.DISCORD_TOKEN).catch(err => log.error('Login falhou: ' + err.message));
+
+        // Os prazos de cada coleção (ver utils/retencaoDados.js) são aplicados em
+        // segundo plano: percorrer os dois bancos leva tempo e o bot não precisa
+        // esperar por isso para ficar online.
+        (async () => {
+            await prepararRetencaoNoBanco(primaryConnection.db);
+            await prepararRetencaoNoBanco(secondaryConnection.db);
+            await Config.createIndexes();
+            log.success('Prazos de cada coleção aplicados; configurações e cadastros são permanentes.');
+        })().catch(err => log.error('Não foi possível aplicar os prazos do banco: ' + err.message));
     })
     .catch((err) => {
         log.error('Erro Database: ' + err.message);
@@ -221,8 +108,13 @@ client.once('clientReady', async (readyClient) => {
     log.info(`${chalk.bold('Memória utilizada:')} ${chalk.green(memoryUsage)} MB`);
     log.info(`${chalk.bold('Uptime:')} ${chalk.green(uptime > 0 ? uptime + 'min' : '< 1min')}`);
 
-    const cmdList = Object.keys(commands).join(', ');
+    const cmdList = Object.keys(commands).map(nome => '!' + nome).join(', ');
     log.info(`${chalk.bold('Comandos carregados:')} ${chalk.green(cmdList)}`);
+
+    // Em segundo plano: com limite de requisições do Discord o registro pode
+    // demorar minutos e não pode segurar o resto da inicialização (site, jobs).
+    registrarComandosSlash(readyClient, log)
+        .catch(err => log.error('Falha ao registrar os comandos de barra: ' + err.message));
 
     let totalMembers = 0;
     readyClient.guilds.cache.forEach(guild => {
@@ -243,15 +135,24 @@ client.once('clientReady', async (readyClient) => {
     }, 5000);
 
     setupRankJobs(client);
+    iniciarLimpezaDeEspelhos(client);
 
     setTimeout(async () => {
         iniciarLimpezaContasDuplicadas();
-        await limparMenusOrfaos(client).catch(err => log.error('limparMenusOrfaos: ' + err.message));
         await iniciarPoller(client);
         console.log(chalk.cyan.bold('═'.repeat(60) + '\n'));
     }, 15_000);
 
     iniciarAutoFinalizador(client);
+    iniciarAvisoReivindicacao(client);
+    // O responsável vê os tópicos privados (até os antigos) sem precisar entrar.
+    Config.find({ guildId: { $in: [...readyClient.guilds.cache.keys()] } }).lean()
+        .then(configs => Promise.all(configs.map(config => require('./commands/denuncia').liberarTopicosPrivadosNoServidor(client, config))))
+        .catch(err => log.warn('Falha ao liberar os tópicos privados para o responsável: ' + err.message));
+    iniciarBackupDoBanco(); // cópia diária do banco principal no secundário
+    iniciarAlertaGamemode(client); // avisa quando a gamemode para de buscar pedidos
+    iniciarJobGamemode(client); // ponte com a gamemode: pedido sem resposta vira incerto e vai para o Log Admin
+    servidorDoSite = iniciarSite(client, log);
 
     readyClient.user.setPresence({
         activities: [{
@@ -263,240 +164,50 @@ client.once('clientReady', async (readyClient) => {
     });
 });
 
-client.on('messageCreate', async (message) => {
-    if (!message.guild) return;
-
-    if (message.channel.isThread?.()) {
-        await Denuncia.updateOne(
-            { guildId: message.guild.id, threadId: message.channel.id },
-            { $push: { mensagens: serializarMensagem(message) } }
-        ).catch(error => log.warn('Não foi possível registrar mensagem da denúncia: ' + error.message));
-    }
-
-    if (message.author.bot) return;
-
-    const config = await getConfig(message.guild.id) ?? {};
-
-    if (message.channel.isThread?.() && message.attachments.size > 0 && config.channels?.databaseprovas) {
-        const denuncia = await Denuncia.findOne({
-            guildId: message.guild.id,
-            threadId: message.channel.id,
-        }).select('_id messageId');
-        const canalProvas = await buscarCanal(client, config.channels.databaseprovas);
-
-        if (denuncia && canalProvas?.isTextBased?.()) {
-            const anexos = Array.from(message.attachments.values());
-            const copia = await canalProvas.send({
-                content: [
-                    `🗃️ **Provas arquivadas**`,
-                    `Denúncia: \`${denuncia.messageId}\``,
-                    `Autor: <@${message.author.id}>`,
-                    `Origem: ${message.url}`,
-                ].join('\n'),
-                files: anexos.map(attachment => ({
-                    attachment: attachment.url,
-                    name: attachment.name || `prova-${attachment.id}`,
-                })),
-                allowedMentions: { parse: [] },
-            }).catch(error => {
-                log.warn('Não foi possível salvar prova no canal databaseprovas: ' + error.message);
-                return null;
-            });
-
-            if (copia) {
-                const anexosSalvos = Array.from(copia.attachments.values()).map(attachment => ({
-                    id: attachment.id,
-                    nome: attachment.name || '',
-                    url: attachment.url || '',
-                    tipo: attachment.contentType || '',
-                    tamanho: attachment.size ?? null,
-                }));
-                await Denuncia.updateOne(
-                    { _id: denuncia._id, 'mensagens.mensagemId': message.id },
-                    { $set: { 'mensagens.$.anexos': anexosSalvos } }
-                ).catch(error => log.warn('Não foi possível registrar URLs das provas arquivadas: ' + error.message));
-            }
-        }
-    }
-
-    if (
-        message.channel.isThread?.() &&
-        ['recusado', 'recusada'].includes(message.content.trim().toLowerCase())
-    ) {
-        const responsavelAdmin = config.roles?.responsavel_admin;
-        const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
-        const podeRecusar = await usuarioIsento(message.author.id) ||
-            Boolean(responsavelAdmin && member?.roles.cache.has(responsavelAdmin));
-
-        if (podeRecusar) {
-            const denuncia = await Denuncia.findOne({
-                guildId: message.guild.id,
-                threadId: message.channel.id,
-                status: { $nin: ['aceita', 'recusada'] }
-            });
-
-            if (denuncia) {
-                await handleRecusarPorMensagem(message, denuncia, config).catch((error) => {
-                    log.error('Erro ao recusar denúncia por palavra-chave: ' + error.message);
-                });
-                await message.delete().catch(() => {});
-                return;
-            }
-        }
-    }
-
-    const semBloqueio = await podeFalarSemBloqueio(message, config);
-
-    if (!semBloqueio && message.channel.isThread?.()) {
-        const parentId = message.channel.parentId;
-        const ehTopicoDenuncia = parentId && (parentId === config?.channels?.pc || parentId === config?.channels?.mobile);
-
-        if (ehTopicoDenuncia) {
-            const ehAdministrador = config?.roles?.administrador
-                ? message.member?.roles.cache.has(config.roles.administrador)
-                : false;
-            const ehResponsavelAdmin = config?.roles?.responsavel_admin
-                ? message.member?.roles.cache.has(config.roles.responsavel_admin)
-                : false;
-            const ehStaff = ehAdministrador || ehResponsavelAdmin;
-
-            if (!ehStaff) {
-                const autorizado = await usuarioAutorizadoNoTopico(message.channel.id, message.author.id);
-                if (!autorizado) {
-                    await message.delete().catch(() => {});
-                    const aviso = await message.channel.send({
-                        content: `<@${message.author.id}> Este tópico é restrito ao denunciante e ao(s) acusado(s). Sua mensagem foi removida.`,
-                    }).catch(() => null);
-                    if (aviso) setTimeout(() => aviso.delete().catch(() => {}), 5000);
-                    return;
-                }
-            }
-        }
-    }
-
-        if (!semBloqueio && (contemLinkProibido(message.content) || ehMensagemEncaminhada(message))) {
-        await processaStrikeLink(message, Strike, config);
-        return;
-    }
-
-        if (!semBloqueio && contemEmojiFigurinhaOuGif(message)) {
-        await processaStrikeEmoji(message, Strike, config);
-        return;
-    }
-
-        if (!semBloqueio && (contemPalavraProibida(message.content) || await contemMarcacaoAdmin(message, config))) {
-        await processaStrike(message, Strike, config);
-        return;
-    }
-
-    if (await handleYoutubeDenuncia(message)) return;
-
-    if (!message.content.startsWith('!')) return;
-
-    const args = message.content.slice(1).trim().split(/ +/);
-    const commandName = args.shift().toLowerCase();
-    const commandFn = commands[commandName];
-
-    if (!commandFn) return;
-
-    try {
-        const startTime = Date.now();
-        await commandFn(message, args);
-
-        const duration = Date.now() - startTime;
-        if (advancedMonitor?.recordCommand) {
-            advancedMonitor.recordCommand(commandName, duration, true, message.author.id);
-        }
-    } catch (error) {
-        log.error(`Erro no comando !${commandName}: ${error.message}`);
-    }
-});
-
-client.on('messageUpdate', async (oldMessage, newMessage) => {
-    if (!newMessage.guild) return;
-    if (newMessage.channel.isThread?.()) {
-        await Denuncia.updateOne(
-            { guildId: newMessage.guild.id, threadId: newMessage.channel.id, 'mensagens.mensagemId': newMessage.id },
-            { $set: {
-                'mensagens.$.conteudo': newMessage.content || '',
-                'mensagens.$.editadaEm': new Date(),
-                'mensagens.$.embeds': (newMessage.embeds || []).map(embed =>
-                    typeof embed.toJSON === 'function' ? embed.toJSON() : embed
-                )
-            } }
-        ).catch(error => log.warn('Não foi possível atualizar mensagem da denúncia: ' + error.message));
-    }
-    const config = await getConfig(newMessage.guild.id) ?? {};
-    await verificaEdicao(oldMessage, newMessage, Strike, config);
-});
-
-client.on('interactionCreate', async (interaction) => {
-    try {
-        const startTime = Date.now();
-        await interactionHandler(interaction);
-
-        if (advancedMonitor?.recordInteraction) {
-            const duration = Date.now() - startTime;
-            const type = interaction.isButton() ? 'BUTTON' : interaction.isModalSubmit() ? 'MODAL' : 'SELECT';
-            advancedMonitor.recordInteraction(type, duration, true);
-        }
-    } catch (error) {
-        if (error.code === 50278) return;
-        if (error.code === 10062) return;
-
-        log.error(`Erro na interação (${interaction?.customId ?? 'desconhecido'}): ${error.message}`);
-
-        try {
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: '❌ Erro interno.', flags: [MessageFlags.Ephemeral] });
-            }
-        } catch (_) {}
-    }
-});
-
-client.on('messageDelete', async (msg) => {
-
-    if (msg.guild) {
-        const config = await Config.findOne({ guildId: msg.guild.id });
-    }
-
-    try {
-        if (msg.guild && msg.channel.isThread?.()) {
-            await Denuncia.updateOne(
-                { guildId: msg.guild.id, threadId: msg.channel.id, 'mensagens.mensagemId': msg.id },
-                { $set: { 'mensagens.$.apagadaEm': new Date() } }
-            ).catch(error => log.warn('Não foi possível marcar mensagem apagada da denúncia: ' + error.message));
-        }
-        await handleDeletedMessage(msg);
-    } catch (e) {
-        log.error('messageDelete: ' + e.message);
-    }
+client.on('guildCreate', guild => {
+    registrarComandosNoServidor(guild)
+        .catch(err => log.warn(`Não foi possível registrar os comandos de barra em ${guild.name}: ${err.message}`));
 });
 
 client.on('error', err => log.error('Discord API Error: ' + err.message));
 
 process.on('unhandledRejection', (reason) => {
     log.error('Rejeição não tratada: ' + (reason?.stack || reason));
+    advancedMonitor.recordError(reason instanceof Error ? reason : new Error(String(reason)), 'unhandledRejection');
 });
 
+// Depois de uma exceção não capturada o estado do processo não é confiável:
+// encerra com código de erro e deixa a hospedagem reiniciar o bot limpo.
 process.on('uncaughtException', (error) => {
-    log.error('ERRO CRÍTICO: ' + error.stack);
+    log.error('ERRO CRÍTICO (encerrando para reiniciar): ' + (error?.stack || error));
+    gracefulShutdown('uncaughtException', 1);
 });
 
-async function gracefulShutdown(signal) {
+let encerrando = false;
+
+async function gracefulShutdown(signal, exitCode = 0) {
+    if (encerrando) return;
+    encerrando = true;
+
+    // Se alguma conexão travar ao fechar, não deixa o processo pendurado.
+    setTimeout(() => process.exit(exitCode), 10_000).unref();
+
     log.warn(`Sinal ${signal} recebido. Encerrando bot com segurança...`);
     try {
+        servidorDoSite?.close();
         advancedMonitor.destroy();
         client.destroy();
-        await mongoose.connection.close();
         if (secondaryConnection.readyState === 1) {
             await secondaryConnection.close();
+        }
+        if (primaryConnection.readyState === 1) {
+            await primaryConnection.close();
         }
         log.success('Bot encerrado com sucesso.');
     } catch (e) {
         log.error('Erro ao encerrar: ' + e.message);
     } finally {
-        process.exit(0);
+        process.exit(exitCode);
     }
 }
 

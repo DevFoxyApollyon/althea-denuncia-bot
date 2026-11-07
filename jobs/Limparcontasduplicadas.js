@@ -1,19 +1,13 @@
 require('dotenv').config();
-const mongoose = require('mongoose');
 const cron = require('node-cron');
-const chalk = require('chalk');
+const { createLog } = require('../utils/logger');
 const Usuario = require('../models/Usuario');
+const { secondaryConnection } = require('../utils/persistencia');
 
-const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI;
 const APAGAR = process.argv.includes('--apagar');
 let executando = false;
 
-const log = {
-  info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[CONTAS DUPLICADAS]')} ${msg}`),
-  success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[CONTAS DUPLICADAS]')} ${msg}`),
-  warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[CONTAS DUPLICADAS]')} ${msg}`),
-  error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[CONTAS DUPLICADAS]')} ${msg}`),
-};
+const log = createLog('CONTAS DUPLICADAS');
 
 async function limparContasDuplicadas({ apagar = true, detalhar = false } = {}) {
   const duplicados = await Usuario.aggregate([
@@ -78,18 +72,13 @@ function iniciarLimpezaContasDuplicadas() {
 }
 
 async function main() {
-  if (!MONGO_URI) {
-    log.error('Defina MONGODB_URI (ou MONGO_URI) no .env antes de rodar este script.');
-    process.exit(1);
-  }
-
-  await mongoose.connect(MONGO_URI);
-  log.success('Conectado ao MongoDB.');
+  await secondaryConnection.asPromise();
+  log.success('Conectado ao banco secundário.');
 
   await limparContasDuplicadas({ apagar: APAGAR, detalhar: true });
   if (!APAGAR) log.info('Modo de simulação (nada foi apagado).');
 
-  await mongoose.disconnect();
+  await secondaryConnection.close();
 }
 
 if (require.main === module) {

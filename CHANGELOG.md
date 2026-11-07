@@ -1,8 +1,121 @@
-﻿# 📋 Changelog
+# 📋 Changelog
 
 Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 Este projeto segue o padrão de versionamento semântico (SemVer).
+
+---
+
+## [3.12.0] - 2026-10-23
+### ✨ Novidades
+- Ponte direta com a gamemode (protocolo gm/v1, `doc/PONTE_GAMEMODE.md`): a gamemode busca as punições aprovadas em `/ponte/gm/v1` e devolve o resultado, sem PC ligado. Autenticação por HMAC na query, nonce, relógio, lista de IPs e bloqueio por falhas; cada pedido vai selado.
+- Embed "🎮 Punição para o jogo" no Relatório de punições, com **Enviar ao jogo**, **Editar** e **Cancelar** (só o responsável). O embed mostra o resultado de cada alvo (aplicada, simulada, recusada, incerto).
+- Pedido sem resposta vira **incerto** e vai para o Log Admin com "Foi aplicada" e "Não foi aplicada, reenviar". Nada é reenviado sozinho.
+- Alertas: selo inválido (DM ao dono e canal de alertas; a conexão é pausada), IP bloqueado por falhas de autenticação e pedido devolvido mais de 5 vezes.
+- `/ponte gamemode`: `criar`, `listar`, `revogar`, `renovar` (só o dono; a credencial sai uma vez, em anexo) e `pausar`, `retomar`, `executor`, `limites` (responsável).
+- Executor por servidor: PC (padrão), gamemode ou os dois. No modo gamemode o PC recebe 409 ao executar.
+- Aba Gamemode no `/admin`: credenciais (online, IP, include, IPs permitidos), pedidos recentes e auditoria `gm_*`.
+- Alerta de motivo crítico (zaralho, dark RP, hack, mods proibidos) pode ser ligado e desligado no `/painel` e no Painel do bot do site.
+- Variáveis novas no `.env`: `PONTE_CHAVE_MESTRA` e `SITE_PROXIES_CONFIAVEIS` (opcional).
+
+### 🔧 Correções
+- Segurança: o cabeçalho `cf-connecting-ip` só vale para pedidos que chegam pela Cloudflare. Antes, qualquer um podia trocar o próprio IP e fugir do limite e do bloqueio do site.
+- `npm audit fix`: `body-parser` 1.20.9 e `undici` 6.29.1 (0 vulnerabilidades).
+- A liberação de "execução presa" do PC não mexe mais em punições enviadas à gamemode.
+
+### 📦 Pacote
+- `gamemode/**` fica fora do zip da SquareCloud.
+
+---
+
+## [3.5.0] - 2026-10-10
+### ✨ Novidades
+- A fila e as outras listas do site se atualizam na hora quando uma denúncia muda no Discord ou no site.
+- Denúncias abertas: mostra as dos últimos 45 dias em qualquer situação (pendente, reivindicada, em análise, aceita ou recusada) enquanto algum acusado não estiver ligado a uma conta do Discord, inclusive quando há mais acusados do que identificados.
+- Celular: letras, botões e abas maiores; o chat usa a tela inteira.
+
+### 🔧 Correções
+- O auto-finalizador e o aviso de reivindicação também param de enviar mensagens diretas enquanto o Discord bloqueia o bot.
+- Removido `utils/syncUsuarioNick.js`, sem uso e com importação inválida.
+
+### 🗑️ Removido
+- Música no chat (YouTube/Spotify) e os sons da interface.
+
+---
+
+## [3.4.0] - 2026-10-10
+### ✨ Novidades
+- Avisos do responsável: publica um aviso (informação, atenção ou urgente, com prazo opcional) que aparece no topo do site para todos os membros do servidor.
+- Menu lateral organizado em grupos (Equipe, Comunidade, Ajustes, Ferramentas).
+- Links de termos de serviço, privacidade e cookies também no menu da conta, para ficarem à mão no celular.
+
+---
+
+## [3.3.2] - 2026-10-10
+### ✨ Novidades
+- Versão para celular: barra de abas fixa no rodapé, topo compacto, chat em tela cheia e botões maiores para o toque.
+
+### 🔧 Correções
+- O site passa a servir JS e CSS em um endereço que muda a cada versão (`/v/<versão>/`), porque a hospedagem guarda esses arquivos por 31 dias e os navegadores continuavam mostrando telas antigas depois de uma atualização.
+- Os cartões de números não deixam mais o texto passar por cima do cartão vizinho.
+
+---
+
+## [3.3.1] - 2026-10-10
+### 🔧 Correções
+- O bot para de enviar mensagens diretas quando o Discord limita (erro 340002) ou coloca o bot em quarentena (erro 20026), em vez de insistir e piorar o bloqueio.
+- Os avisos por DM não essenciais (mensagem nova no tópico, denúncia reivindicada e punição ao acusado) passam a vir desligados; para ligar, defina `DM_AVISOS_EXTRAS=1`.
+- O aviso de falha de DM para a staff mostra o motivo real informado pelo Discord.
+
+---
+
+## [3.3.0] - 2026-10-10
+### ✨ Novidades
+**Portal web (site)**
+- Site de denúncias com login pelo Discord: abrir denúncia, enviar provas (com prévia e progresso), acompanhar o caso em tempo real e avaliar o atendimento.
+- Áreas separadas para jogador, staff e responsável, com escolha de servidor ao clicar na logo.
+- Painel da staff: fila por prioridade e prazo (SLA), ações do caso, notas internas, respostas prontas e perfil do jogador com reincidência.
+- Painel do responsável: visão geral, números, ranking (mesmos dados do `/rank`), auditoria e configurações de categorias, prazos e respostas prontas.
+- Teste da staff: o responsável monta o teste (vídeo do YouTube, perguntas e alternativas) e a staff responde pelo site; a correção é feita no servidor.
+- Chat por servidor: abas de conversa e avisos, respostas, reações, menções (`@nome` e `@all`), envio de imagem, áudio e vídeo, aviso fixado, música (YouTube/Spotify), lista de quem está online e sons.
+- Moderação do chat: apagar mensagem, castigo com tempo e motivo, banimento, modo lento, chat fechado, castigo automático por flood e fila de mensagens sinalizadas, tudo registrado na auditoria.
+- Notificações do navegador (Web Push) para novidades nos casos e menções no chat.
+- Categorias das denúncias reconhecidas pelo motivo (39 categorias em grupos), alerta de denúncia duplicada e rascunho salvo.
+- Denúncias abertas: quem é acusado pode se identificar pelo site.
+- Páginas de termos de serviço, política de privacidade e política de cookies, com aviso de cookies.
+
+**Bot**
+- Os botões da denúncia acompanham a situação: o que já foi feito (reivindicar, analisar, aceitar, recusar) fica desativado, também quando a ação vem do site.
+- O denunciante recebe mensagem direta quando a denúncia é reivindicada; o acusado identificado recebe quando ela é aceita e quando há mensagem nova no tópico.
+- Se a mensagem direta de arquivamento falhar por causa do anexo, o aviso é reenviado sem ele e o erro real fica no log.
+- Comandos de barra `/rank`, `/painel`, `/status` e `/denuncia` (os comandos com `!` continuam funcionando).
+- ESLint (`npm run lint`) e testes automatizados (`npm test`).
+
+### 🔧 Correções
+- Lista do responsável mostrava as denúncias de todos os servidores em vez de só o servidor escolhido.
+- A nota de avaliação do atendimento não era gravada.
+- O bot esperava a preparação dos bancos para entrar no Discord; agora entra logo e aplica os prazos em segundo plano.
+- O site consultava o Discord a cada requisição para saber os cargos; passa a usar a memória do bot, com cache de 1 minuto.
+- O reset mensal do ranking agora move as ações antigas para `moderationactions_arquivo` em vez de apagar tudo.
+- O cooldown de reivindicação passa a valer mesmo depois de um restart do bot.
+- O painel de status mostrava latência do banco, comandos e erros sempre zerados.
+- Sincronização de nickname com mais de um ID em `BOT_ALVO_ID`.
+- Datas do model `Denuncia` eram trocadas pelo horário atual ao serem gravadas.
+- Erro escondido no auto-finalizador quando a finalização de uma denúncia falhava.
+- `uuid` era usado sem estar declarado no `package.json`.
+
+### 🧱 Estrutura
+- Regras de retenção por coleção em `utils/retencaoDados.js`: configurações e cadastros são permanentes; denúncias e suas mensagens duram 45 dias, ações da staff 30 dias, acessos 15 dias, strikes 24 horas e o restante 6 meses.
+- `utils/persistencia.js` define em qual banco cada modelo fica: tudo no principal, exceto vínculo Discord/ID do jogo, notificações e sugestões (secundário).
+- `npm run bancos` lista o conteúdo dos dois bancos (somente leitura) e `npm run pacote` gera o zip para a SquareCloud.
+- Segurança do site: sessão assinada, verificação de origem, política de conteúdo (CSP) sem scripts embutidos, limites de requisição e validação do conteúdo dos arquivos enviados.
+- Nova dependência: `web-push`.
+- Cache único de configurações (`utils/configCache.js`), invalidado automaticamente ao salvar.
+- Mensagens dos tópicos gravadas na coleção `DenunciaMensagem` (denúncias antigas continuam sendo lidas do formato anterior).
+- Novos índices em `Denuncia` e índice único `{ guildId, userId }` em `Usuario`.
+- Validação de todas as variáveis do `.env` na inicialização.
+- `handlerStatusButton.js` dividido em `Handlers/statusDenuncia/`.
+- Removidos módulos sem uso e as dependências `googleapis`, `limiter` e `uuid`.
 
 ---
 

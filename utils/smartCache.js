@@ -117,10 +117,6 @@
     }
     
     this.stats.evictions += cleaned;
-    
-    if (cleaned > 0) {
-      console.log(`🧹 Cache cleanup: ${cleaned} itens removidos`);
-    }
   }
 
   setCompressed(key, data, ttl = 300000) {

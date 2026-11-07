@@ -1,10 +1,11 @@
-﻿const { AttachmentBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { AttachmentBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM, motivoDaFalha } = require('../utils/dmSegura');
 const Denuncia = require('../models/Denuncia');
-const Config = require('../models/Config');
-const archiver = require('archiver');
+const { getConfig } = require('../utils/configCache');
 const fetch = require('node-fetch');
-const { PassThrough } = require('stream');
+const { escapeHtml, safeFileName, getHighestRole, buildZipBuffer } = require('../utils/exportUtils');
 const { buscarCanal } = require('../utils/denunciaMensagens');
+const { fecharEspelhos } = require('../utils/espelhos');
 
 const EXPORT_CONSTANTS = {
   MAX_UPLOAD_BYTES: 100 * 1024 * 1024,
@@ -23,25 +24,6 @@ const urlRegex = /(https?:\/\/[^\s]+)/g;
 const cooldowns = new Map();
 const inProgress = new Map();
 
-function escapeHtml(str = '') {
-  return String(str)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function safeFileName(name = '') {
-  return String(name)
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9._-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80);
-}
-
 function nowMs() {
   return Date.now();
 }
@@ -56,22 +38,6 @@ function getGuildUploadLimitBytes(guild) {
   return Math.max(Math.min(limiteBase - 1 * 1024 * 1024, EXPORT_CONSTANTS.MAX_UPLOAD_BYTES), 1 * 1024 * 1024);
 }
 
-function getHighestRole(member) {
-  if (!member) return { name: '', color: '#99aab5' };
-  const highestRole = member.roles.cache
-    .filter(role => role.name !== '@everyone')
-    .sort((a, b) => b.position - a.position)
-    .first();
-
-  return {
-    name: highestRole ? highestRole.name : '',
-    color:
-      highestRole && highestRole.color !== 0
-        ? '#' + highestRole.color.toString(16).padStart(6, '0')
-        : '#99aab5',
-  };
-}
-
 function fetchWithTimeout(url, timeout = EXPORT_CONSTANTS.FETCH_TIMEOUT_MS) {
   return Promise.race([
     fetch(url),
@@ -83,9 +49,12 @@ async function fetchAllThreadMessages(thread) {
   const all = [];
   let lastId = undefined;
 
+  thread.messages.cache.clear();
+
   while (true) {
     const batch = await thread.messages.fetch({
       limit: 100,
+      cache: false,
       ...(lastId ? { before: lastId } : {}),
     });
 
@@ -103,35 +72,10 @@ async function fetchAllThreadMessages(thread) {
   return all;
 }
 
-async function buildZipBuffer(files) {
-  return new Promise((resolve, reject) => {
-    const archive = archiver('zip', { zlib: { level: 9 } });
-    const stream = new PassThrough();
-    const chunks = [];
-
-    stream.on('data', (c) => chunks.push(c));
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-    stream.on('error', reject);
-
-    archive.on('warning', (err) => {
-      console.warn('[ZIP WARNING]', err?.message || err);
-    });
-    archive.on('error', reject);
-
-    archive.pipe(stream);
-
-    for (const f of files) {
-      archive.append(f.content, { name: f.name });
-    }
-
-    archive.finalize();
-  });
-}
-
 async function splitFilesIntoZipParts(files, maxBytes) {
   if (!files.length) return [];
 
-  const buffer = await buildZipBuffer(files);
+  const buffer = await buildZipBuffer(files, { nivel: 9 });
   if (buffer.length <= maxBytes) {
     return [{ buffer, filesCount: files.length }];
   }
@@ -475,7 +419,7 @@ async function handleExportButton(interaction) {
     }
 
     const guild = interaction.guild;
-    const config = await Config.findOne({ guildId: guild.id });
+    const config = await getConfig(guild.id);
 
     if (!config) {
       return interaction.editReply({
@@ -484,9 +428,16 @@ async function handleExportButton(interaction) {
       });
     }
 
-    const cloudChannelId = config.channels?.cloud || config.channels?.backup || config.channels?.log;
-    const logsChannel = await buscarCanal(interaction.client, cloudChannelId);
-    const maxUploadBytes = getGuildUploadLimitBytes(logsChannel?.guild || guild);
+    const logChannelIds = [...new Set([
+      config.channels?.cloud,
+      config.channels?.backup,
+    ].filter(Boolean))];
+    const logsChannels = (await Promise.all(logChannelIds.map(channelId => buscarCanal(interaction.client, channelId))))
+      .filter(channel => channel?.isTextBased?.());
+    const logsChannel = logsChannels[0] || null;
+    const maxUploadBytes = logsChannels.length
+      ? Math.min(...logsChannels.map(channel => getGuildUploadLimitBytes(channel.guild || guild)))
+      : getGuildUploadLimitBytes(guild);
 
     const requiredRoleId = config.roles?.responsavel_admin;
     if (!requiredRoleId || !interaction.member.roles.cache.has(requiredRoleId)) {
@@ -684,27 +635,32 @@ async function handleExportButton(interaction) {
 
     let logMessage = null;
 
-    if (logsChannel) {
+    if (logsChannels.length > 0) {
       const initialZipBatch = zipAttachments.slice(0, EXPORT_CONSTANTS.FILES_PER_MESSAGE);
 
-      logMessage = await logsChannel.send({
-        content: `**[ARQUIVAMENTO - PROVAS PERMANENTES: PARTE 1 DE ${totalLogBatches}]**`,
-        embeds: [logEmbed],
-        files: initialZipBatch,
-      });
-
-      for (let i = EXPORT_CONSTANTS.FILES_PER_MESSAGE; i < zipAttachments.length; i += EXPORT_CONSTANTS.FILES_PER_MESSAGE) {
-        const nextBatch = zipAttachments.slice(i, i + EXPORT_CONSTANTS.FILES_PER_MESSAGE);
-        await logsChannel.send({
-          content: `**[ARQUIVAMENTO - PROVAS PERMANENTES: PARTE ${Math.floor(i / EXPORT_CONSTANTS.FILES_PER_MESSAGE) + 2} DE ${totalLogBatches}]**`,
-          files: nextBatch,
+      let previewMessage = null;
+      for (const channel of logsChannels) {
+        const channelLogMessage = await channel.send({
+          content: `**[ARQUIVAMENTO - PROVAS PERMANENTES: PARTE 1 DE ${totalLogBatches}]**`,
+          embeds: [logEmbed],
+          files: initialZipBatch,
         });
-      }
+        if (!logMessage) logMessage = channelLogMessage;
 
-      const previewMessage = await logsChannel.send({
-        content: `**[PRÉ-VISUALIZAÇÃO]** ${thread.name} - Arquivo HTML solto.`,
-        files: [htmlAttachment],
-      });
+        for (let i = EXPORT_CONSTANTS.FILES_PER_MESSAGE; i < zipAttachments.length; i += EXPORT_CONSTANTS.FILES_PER_MESSAGE) {
+          const nextBatch = zipAttachments.slice(i, i + EXPORT_CONSTANTS.FILES_PER_MESSAGE);
+          await channel.send({
+            content: `**[ARQUIVAMENTO - PROVAS PERMANENTES: PARTE ${Math.floor(i / EXPORT_CONSTANTS.FILES_PER_MESSAGE) + 2} DE ${totalLogBatches}]**`,
+            files: nextBatch,
+          });
+        }
+
+        const sentPreview = await channel.send({
+          content: `**[PRÉ-VISUALIZAÇÃO]** ${thread.name} - Arquivo HTML solto.`,
+          files: [htmlAttachment],
+        });
+        if (!previewMessage) previewMessage = sentPreview;
+      }
 
       const previewLink = previewMessage.url;
 
@@ -743,9 +699,8 @@ async function handleExportButton(interaction) {
     }
 
     const denunciante = await interaction.client.users.fetch(String(denuncia.criadoPor)).catch(() => null);
-    if (denunciante) {
-      try {
-        const dmEmbed = new EmbedBuilder()
+    if (denunciante && !dmPausada()) {
+      const dmEmbed = new EmbedBuilder()
           .setColor(statusMeta.color)
           .setTitle(`📢 Denúncia Arquivada - Status: ${statusLabel}`)
           .setDescription(`Sua denúncia sobre **${denuncia.acusado}** no servidor **${guild.name}** foi finalizada pela equipe de moderação.`)
@@ -755,15 +710,26 @@ async function handleExportButton(interaction) {
           )
           .setTimestamp();
 
+      try {
         await denunciante.send({
           embeds: [dmEmbed],
           files: [htmlAttachment],
         });
       } catch (dmError) {
-        await interaction.followUp({
-          content: `⚠️ Aviso: Não foi possível enviar a DM para o denunciante. Motivo: **${dmError.code === 50007 ? 'O usuário bloqueou o bot ou desativou as DMs.' : 'Erro de conexão/API.'}** O staff tem acesso total aos arquivos no canal de logs.`,
-          flags: MessageFlags.Ephemeral,
-        });
+        // Quando o problema é o anexo (arquivo grande demais para mensagem
+        // direta, por exemplo), o aviso vai sem ele em vez de não ir.
+        let avisado = false;
+        const limitado = registrarErroDeDM(dmError);
+        if (!limitado && !CODIGOS_ESPERADOS.includes(dmError.code)) {
+          console.error(`Erro ao enviar a DM de arquivamento (código ${dmError.code ?? 'sem código'}): ${dmError.message}`);
+          avisado = await denunciante.send({ embeds: [dmEmbed] }).then(() => true).catch(() => false);
+        }
+        if (!avisado) {
+          await interaction.followUp({
+            content: `⚠️ Aviso: Não foi possível enviar a DM para o denunciante. Motivo: **${motivoDaFalha(dmError)}** O staff tem acesso total aos arquivos no canal de logs.`,
+            flags: MessageFlags.Ephemeral,
+          });
+        }
       }
     }
 
@@ -807,6 +773,27 @@ async function handleExportButton(interaction) {
     if (thread.manageable) {
       await thread.setLocked(true, 'Denúncia finalizada e exportada.');
       await thread.setArchived(true, 'Denúncia finalizada e exportada.');
+      await Denuncia.updateOne(
+        { _id: denuncia._id },
+        {
+          $set: { status: 'finalizada' },
+          $push: {
+            historico: {
+              acao: 'FINALIZADA',
+              staffId: userId,
+              data: new Date(),
+              detalhes: { messageLink: logMessage?.url || null },
+            },
+          },
+        }
+      );
+      // Os tópicos espelho (armazém e registro) fecham junto com o da denúncia.
+      await fecharEspelhos(interaction.client, denuncia._id, 'Denúncia finalizada e exportada.');
+    } else {
+      await interaction.followUp({
+        content: '⚠️ A denúncia foi exportada, mas o bot não conseguiu trancar o tópico. Ela continuará aberta no site.',
+        flags: MessageFlags.Ephemeral,
+      });
     }
 
     cooldowns.set(userId, nowMs() + EXPORT_CONSTANTS.COOLDOWN_SECONDS * 1000);

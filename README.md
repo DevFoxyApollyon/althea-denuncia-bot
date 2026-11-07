@@ -19,7 +19,7 @@ Projeto criado para **uso real em produção**, com foco em **estabilidade, orga
 
 | Versão | Stack | Tecnologias |
 |--------|-------|-------------|
-| **v3.1.0** | **Node.js** (>= 18) | **discord.js v14**, **MongoDB**, **Mongoose**, **release** |
+| **v3.2.4** | **Node.js** (>= 18) | **discord.js v14**, **MongoDB**, **Mongoose**, **release** |
 
 ---
 
@@ -116,8 +116,7 @@ Disponíveis tanto no painel de denúncias quanto dentro do tópico:
 ### 📊 Ranking de Staff
 Baseado em ações reais registradas no banco:
 
-- `!rank` → ranking mensal
-- `!semana` → ranking semanal
+- `!rank` → ranking principal
 - Usa a collection `ModerationAction`
 - Pode rodar automaticamente via `jobs/rankJobs.js`
 
@@ -160,6 +159,60 @@ Tratamento completo de erros comuns do Discord:
 
 ---
 
+## ⌨️ Comandos
+
+Os comandos de barra são registrados automaticamente em cada servidor quando o bot inicia.
+Os comandos com `!` continuam funcionando.
+
+| Barra | Prefixo | Quem pode usar | O que faz |
+|-------|---------|----------------|-----------|
+| `/painel` | `!painel` | Administrador do servidor ou Responsável Admin | Abre o painel de configuração |
+| `/denuncia` | `!denuncia` | Responsável Admin | Publica/atualiza a mensagem de abertura de denúncias |
+| `/rank [periodo]` | `!rank [mensal\|semanal\|hoje]` | Administrador e Responsável Admin | Ranking de atendimento da staff |
+| `/status` | `!status` | Administrador do servidor | Diagnóstico do bot |
+| `/ponte gamemode criar\|listar\|revogar\|renovar` | — | Dono do bot (`OWNER_DISCORD_ID`) | Credenciais da gamemode (o segredo sai uma vez, em anexo) |
+| `/ponte gamemode pausar\|retomar\|executor\|limites` | — | Responsável Admin | Modo gamemode do servidor |
+
+---
+
+## 🎮 Ponte com a gamemode
+
+Além do PC da staff (mod Lua), a própria gamemode do servidor pode aplicar as punições
+aceitas no Discord. Ela **busca** os pedidos no Althea (`/ponte/gm/v1`, HMAC na query) e
+devolve o resultado; o Althea nunca chama o servidor do jogo.
+
+- **Especificação do protocolo:** [`doc/PONTE_GAMEMODE.md`](doc/PONTE_GAMEMODE.md).
+- **Include Pawn:** fica fora deste repositório (é dos devs do servidor). A versão 1.0.0 está na tag [`v3.12.0`](https://github.com/DevFoxyApollyon/althea-denuncia-bot/tree/v3.12.0/gamemode); os testes usam só a cópia dos vetores em `test/fixtures/vetores_protocolo_gm.json`.
+- **Guia para os devs do servidor (servidor de teste):** [`doc/GUIA_SERVIDOR_TESTE.md`](doc/GUIA_SERVIDOR_TESTE.md).
+- **No `.env`:** `PONTE_CHAVE_MESTRA` (base64 de 32 bytes) cifra os segredos. Sem ela, a API responde 503.
+- **Fluxo:** aceite da denúncia → embed "🎮 Punição para o jogo" no Relatório de punições → um
+  responsável clica em **Enviar ao jogo** → a gamemode busca, aplica e responde → o embed mostra
+  o resultado de cada alvo. Sem resposta, o pedido vira **incerto** e vai para o Log Admin, onde
+  um responsável decide ("foi aplicada" ou "reenviar"): nada é reenviado sozinho.
+- **Quem aplica** é escolhido por servidor: `pc` (padrão), `gamemode` ou `ambos`
+  (`/ponte gamemode executor`). O modo teste vem ligado: a gamemode só simula até ser desligado
+  em `/ponte gamemode limites`.
+- **Painel do dono:** aba Gamemode no `/admin` (credenciais, pedidos recentes e auditoria `gm_*`).
+
+---
+
+## 🧪 Desenvolvimento
+
+```bash
+npm run lint   # ESLint
+npm test       # testes (node:test) — não acessam o banco nem o Discord
+```
+
+### Bancos e retenção
+
+O banco principal (`MONGODB_URI`) guarda o que é do bot: denúncias, ações da
+staff e configurações. O secundário (`SECONDARY_DB_URI`) guarda o site, as
+mensagens das denúncias, a nota da staff, os strikes, o vínculo entre Discord e
+ID do jogo, as notificações, as sugestões e a ponte com o jogo. Cada coleção
+tem o seu prazo em `utils/retencaoDados.js`.
+
+---
+
 ## 🧠 Tecnologias Utilizadas
 
 - Node.js 18+
@@ -173,10 +226,10 @@ Tratamento completo de erros comuns do Discord:
 
 Este projeto utiliza discord.js v14.
 
-Algumas dependências indiretas (como undici) reportam vulnerabilidades moderadas via npm audit.
+Na versão 3.12.0, `npm audit fix` (sem `--force`) atualizou `body-parser` e `undici` e o
+`npm audit` passou a mostrar 0 vulnerabilidades.
 
-Aplicar npm audit fix --force causaria downgrade do discord.js e quebraria o projeto.
-Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto prático no uso real do bot.
+Nunca use `npm audit fix --force`: ele faria downgrade do discord.js e quebraria o projeto.
 
 ## 🗺️ Roadmap
 - [ ] Internacionalização (EN)
@@ -195,8 +248,7 @@ Por isso, as vulnerabilidades foram analisadas e monitoradas, sem impacto práti
 │   ├── painel.js
 │   ├── correcao.js
 │   ├── status.js
-│   ├── rank.js
-│   └── semana.js
+│   └── rank.js
 │
 ├── doc/
 │   ├── BUTTONS.md

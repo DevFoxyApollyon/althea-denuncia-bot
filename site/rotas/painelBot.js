@@ -1,0 +1,321 @@
+// O /painel do bot, pelo site: canais, cargos, manutenção, bloqueio de
+// pendências e usuários isentos. Só o responsável do servidor vê e altera.
+const express = require('express');
+const { ChannelType } = require('discord.js');
+const Config = require('../../models/Config');
+const { atualizarMensagemDenuncia, liberarTopicosPrivadosNoServidor } = require('../../commands/denuncia');
+const { cachePanelConfig, bloqueioPendentesAtivo, alertaMotivoCriticoAtivo } = require('../../commands/painel');
+const {
+  esperaEntreDenunciasAtiva, esperaEntreReivindicacoesAtiva, minutosEntreReivindicacoes, MINUTOS_ENTRE_REIVINDICACOES, MINUTOS_ANALISE_AUTOMATICA,
+  analiseAutomaticaAtiva, minutosAnaliseAutomatica, MINUTOS_ENTRE_DENUNCIAS, MINUTOS_AVISO_REIVINDICACAO, OPCOES_ARQUIVAR_TOPICO,
+  minutosEntreDenuncias, avisoReivindicacaoAtivo, minutosAvisoReivindicacao, minutosArquivarTopico
+} = require('../../utils/esperas');
+const { verificarPermissoes } = require('../../utils/permissoesDoBot');
+const { procurarTravadas, tirarDaFila } = require('../../utils/denunciasTravadas');
+const { registrarAlteracao, ultimasAlteracoes } = require('../../utils/historicoPainel');
+const { getUsuariosIsentos, salvarUsuariosIsentos, normalizarIds } = require('../../utils/usuariosIsentos');
+const { acessoAoServidor, limparCacheDeAcesso } = require('../acesso');
+const { resolverPessoas, ErroHttp, assincrono } = require('./comum');
+const { obterTabela } = require('../../services/ponteSamp/motivos');
+
+// Canais do próprio servidor (escolhidos numa lista) e de outros servidores (pelo ID).
+const CANAIS_LOCAIS = ['pc', 'mobile', 'logs', 'log', 'backup', 'armazem', 'analysis', 'topDaily', 'relatorioPunicoes', 'provasStaff'];
+const CANAIS_EXTERNOS = ['registro', 'cloud', 'canalDenuncia'];
+const CANAIS_OBRIGATORIOS = ['pc', 'mobile', 'logs'];
+const CARGOS = ['permitido', 'pc', 'administrador', 'suporte', 'responsavel_admin', 'fundador'];
+const CARGOS_OBRIGATORIOS = ['permitido', 'pc', 'responsavel_admin'];
+const MAX_ISENTOS = 200;
+
+const TIPOS_DE_CANAL = [ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildForum, ChannelType.GuildMedia];
+const ehId = (valor) => /^\d{15,21}$/.test(valor);
+
+// Confere o que veio do formulário. "atual" é o que está salvo: um valor que não
+// mudou é sempre aceito, para não travar quem só quer trocar outra coisa.
+// canais/cargos são os IDs do servidor; canaisVisiveis, todos os que o bot enxerga.
+function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, cargosDeQuemSalva, donoDoBot = false }) {
+  const channels = {};
+  const roles = {};
+  const texto = (valor) => String(valor ?? '').trim();
+
+  for (const chave of [...CANAIS_LOCAIS, ...CANAIS_EXTERNOS]) {
+    const valor = texto(entrada?.channels?.[chave]);
+    const salvo = texto(atual.channels?.[chave]);
+    if (!valor && CANAIS_OBRIGATORIOS.includes(chave)) throw new Error('Escolha os três canais principais: PC, Mobile e Cadeia Staff.');
+    if (valor && valor !== salvo) {
+      if (!ehId(valor)) throw new Error('ID de canal inválido. Use só os números do ID.');
+      if (CANAIS_LOCAIS.includes(chave) && !canais.has(valor)) throw new Error('Um dos canais escolhidos não existe mais neste servidor.');
+      if (CANAIS_EXTERNOS.includes(chave) && !canaisVisiveis.has(valor)) throw new Error(`O bot não enxerga o canal ${valor}. Confira o ID e se o bot está nesse servidor.`);
+    }
+    channels[chave] = valor;
+  }
+
+  for (const chave of CARGOS) {
+    const valor = texto(entrada?.roles?.[chave]);
+    const salvo = texto(atual.roles?.[chave]);
+    if (!valor && CARGOS_OBRIGATORIOS.includes(chave)) throw new Error('Escolha os cargos de denúncia PC, de denúncia Mobile e de responsável.');
+    if (valor && valor !== salvo && !cargos.has(valor)) throw new Error('Um dos cargos escolhidos não existe mais neste servidor.');
+    roles[chave] = valor;
+  }
+
+  // Quem salva precisa continuar entrando nesta tela: com fundador escolhido, precisa
+  // ter o cargo de fundador; sem ele, o de responsável.
+  // O dono do bot não perde o acesso (entra por ser o dono).
+  if (roles.fundador && !donoDoBot && !cargosDeQuemSalva.has(roles.fundador)) {
+    throw new Error('Você não tem o cargo escolhido como fundador e ficaria sem acesso a esta tela. Pegue o cargo no Discord antes de trocar.');
+  }
+  if (!roles.fundador && !donoDoBot && !cargosDeQuemSalva.has(roles.responsavel_admin)) {
+    throw new Error('Você não tem o cargo escolhido como responsável e ficaria sem acesso a esta tela. Pegue o cargo no Discord antes de trocar.');
+  }
+
+  const bruto = Array.isArray(entrada?.isentos) ? entrada.isentos.join(' ') : texto(entrada?.isentos);
+  const isentos = normalizarIds(bruto);
+  if (bruto.trim() && !isentos.length) throw new Error('Nenhum ID de usuário válido na lista de isentos.');
+  if (isentos.length > MAX_ISENTOS) throw new Error(`A lista de isentos aceita até ${MAX_ISENTOS} usuários.`);
+
+  return {
+    channels,
+    roles,
+    manutencaoDenuncia: entrada?.manutencao === true,
+    bloquearReivindicacaoComPendentes: entrada?.bloqueio !== false,
+    siteSomenteLeitura: entrada?.somenteLeitura === true,
+    alertaMotivoCritico: entrada?.alertaCritico !== false,
+    esperaEntreDenuncias: entrada?.esperaDenuncia !== false,
+    minutosEntreDenuncias: minutosNoLimite(entrada?.minutosDenuncia, MINUTOS_ENTRE_DENUNCIAS, 'O tempo entre denúncias'),
+    avisoReivindicacao: entrada?.avisoReivindicar !== false,
+    minutosAvisoReivindicacao: minutosNoLimite(entrada?.minutosAviso, MINUTOS_AVISO_REIVINDICACAO, 'O tempo do aviso de reivindicação'),
+    minutosArquivarTopico: arquivamentoValido(entrada?.arquivarTopico),
+    esperaEntreReivindicacoes: entrada?.esperaReivindicar === true,
+    minutosEntreReivindicacoes: minutosValidos(entrada?.minutosReivindicar),
+    analiseAutomatica: entrada?.analiseAutomatica !== false,
+    minutosAnaliseAutomatica: minutosDaAnalise(entrada?.minutosAnalise),
+    topicosPrivados: entrada?.topicosPrivados !== false,
+    senhaCadeiaStaff: entrada?.senhaCadeia === true,
+    provasExigirMotivo: entrada?.provasExigirMotivo !== false,
+    isentos
+  };
+}
+
+// Minutos da espera para reivindicar: vazio vale o padrão; fora do limite é erro.
+function minutosValidos(valor) {
+  if (valor === undefined || valor === null || valor === '') return MINUTOS_ENTRE_REIVINDICACOES.padrao;
+  const minutos = Number(valor);
+  const { minimo, maximo } = MINUTOS_ENTRE_REIVINDICACOES;
+  if (!Number.isInteger(minutos) || minutos < minimo || minutos > maximo) {
+    throw new Error(`O tempo para reivindicar deve ser um número inteiro de ${minimo} a ${maximo} minutos.`);
+  }
+  return minutos;
+}
+
+// Minutos dentro de um limite: vazio vale o padrão; fora do limite é erro.
+function minutosNoLimite(valor, { padrao, minimo, maximo }, nome) {
+  if (valor === undefined || valor === null || valor === '') return padrao;
+  const minutos = Number(valor);
+  if (!Number.isInteger(minutos) || minutos < minimo || minutos > maximo) {
+    throw new Error(`${nome} deve ser um número inteiro de ${minimo} a ${maximo} minutos.`);
+  }
+  return minutos;
+}
+
+// Arquivamento dos tópicos: só os tempos que o Discord aceita.
+function arquivamentoValido(valor) {
+  if (valor === undefined || valor === null || valor === '') return 1440;
+  const minutos = Number(valor);
+  if (!OPCOES_ARQUIVAR_TOPICO.includes(minutos)) throw new Error('Tempo de arquivamento inválido: escolha 1 hora, 1 dia, 3 dias ou 1 semana.');
+  return minutos;
+}
+
+// Minutos da análise automática: vazio vale o padrão; fora do limite é erro.
+function minutosDaAnalise(valor) {
+  if (valor === undefined || valor === null || valor === '') return MINUTOS_ANALISE_AUTOMATICA.padrao;
+  const minutos = Number(valor);
+  const { minimo, maximo } = MINUTOS_ANALISE_AUTOMATICA;
+  if (!Number.isInteger(minutos) || minutos < minimo || minutos > maximo) {
+    throw new Error(`O tempo da análise automática deve ser um número inteiro de ${minimo} a ${maximo} minutos.`);
+  }
+  return minutos;
+}
+
+function registrarRotasDoPainelDoBot(router, { client }) {
+  async function acessoDoResponsavel(req, guildId) {
+    const acesso = await acessoAoServidor(client, req.usuario.id, String(guildId || ''));
+    if (!acesso?.papeis.podeConfigurar) throw new ErroHttp(403, acesso?.config?.roles?.fundador ? 'O painel do bot é restrito ao fundador.' : 'O painel do bot é restrito ao responsável.');
+    return acesso;
+  }
+
+  async function montar(guild) {
+    const [config, isentos, motivos] = await Promise.all([
+      Config.findOne({ guildId: guild.id }).lean(),
+      getUsuariosIsentos(true),
+      obterTabela().catch(() => ({ tabela: [], propria: false }))
+    ]);
+    const pessoas = await resolverPessoas(client, guild, isentos);
+
+    return {
+      valores: {
+        channels: Object.fromEntries([...CANAIS_LOCAIS, ...CANAIS_EXTERNOS].map(chave => [chave, config?.channels?.[chave] || ''])),
+        roles: Object.fromEntries(CARGOS.map(chave => [chave, config?.roles?.[chave] || ''])),
+        manutencao: Boolean(config?.manutencaoDenuncia),
+        bloqueio: bloqueioPendentesAtivo(config),
+        somenteLeitura: Boolean(config?.siteSomenteLeitura),
+        alertaCritico: alertaMotivoCriticoAtivo(config),
+        esperaDenuncia: esperaEntreDenunciasAtiva(config),
+        minutosDenuncia: minutosEntreDenuncias(config),
+        avisoReivindicar: avisoReivindicacaoAtivo(config),
+        minutosAviso: minutosAvisoReivindicacao(config),
+        arquivarTopico: minutosArquivarTopico(config),
+        esperaReivindicar: esperaEntreReivindicacoesAtiva(config, guild.id),
+        minutosReivindicar: minutosEntreReivindicacoes(config),
+        analiseAutomatica: analiseAutomaticaAtiva(config),
+        minutosAnalise: minutosAnaliseAutomatica(config),
+        topicosPrivados: config?.topicosPrivados !== false,
+        senhaCadeia: config?.senhaCadeiaStaff === true,
+        provasExigirMotivo: config?.provasExigirMotivo !== false,
+        isentos: isentos.map(id => ({ id, nome: pessoas[id]?.nome || null }))
+      },
+      canais: [...guild.channels.cache.values()]
+        .filter(canal => TIPOS_DE_CANAL.includes(canal.type))
+        .sort((a, b) => (a.parent?.rawPosition ?? -1) - (b.parent?.rawPosition ?? -1) || a.rawPosition - b.rawPosition)
+        .map(canal => ({ id: canal.id, nome: canal.name, categoria: canal.parent?.name || '' })),
+      cargos: [...guild.roles.cache.values()]
+        .filter(cargo => cargo.id !== guild.id && !cargo.managed)
+        .sort((a, b) => b.rawPosition - a.rawPosition)
+        .map(cargo => ({ id: cargo.id, nome: cargo.name, cor: cargo.hexColor && cargo.hexColor !== '#000000' ? cargo.hexColor : null })),
+      // Canais de outros servidores: o nome aparece ao lado do ID, quando o bot enxerga.
+      externos: Object.fromEntries(CANAIS_EXTERNOS.map(chave => {
+        const canal = client.channels.cache.get(config?.channels?.[chave]);
+        return [chave, canal ? `#${canal.name} em ${canal.guild?.name || 'outro servidor'}` : null];
+      })),
+      atualizado: config ? { em: config.lastUpdated || null, por: config.updatedBy || null } : null,
+      // O que falta ao bot em cada canal configurado.
+      permissoes: verificarPermissoes(client, guild, config),
+      historico: (await ultimasAlteracoes(guild.id).catch(() => [])).map(item => ({ em: item.em, por: item.por, via: item.via, mudancas: item.mudancas })),
+      // Tabela de motivos da ponte com o jogo (só leitura aqui; a mesma em todos os servidores).
+      motivosPonte: {
+        propria: motivos.propria,
+        itens: motivos.tabela.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.filter(s => s !== t.nome), grupo: t.grupo }))
+      }
+    };
+  }
+
+  router.get('/painel-bot', assincrono(async (req, res) => {
+    const acesso = await acessoDoResponsavel(req, req.query.guildId);
+    res.json(await montar(acesso.guild));
+  }));
+
+  // Denúncias pendentes cujo tópico foi apagado: procurar e tirar da fila.
+  router.get('/painel-bot/travadas', assincrono(async (req, res) => {
+    const acesso = await acessoDoResponsavel(req, req.query.guildId);
+    const { travadas, conferidas } = await procurarTravadas(client, acesso.guild.id);
+    res.json({
+      conferidas,
+      travadas: travadas.map(d => ({
+        id: String(d._id), acusado: d.acusado || '', denunciante: d.denunciante || '', motivo: d.motivo || '', em: d.dataCriacao
+      }))
+    });
+  }));
+
+  // Senhas da Cadeia Staff: quem deste servidor tem senha, e apagar a de quem esqueceu
+  // (na próxima vez que clicar em Aceitar ou Recusar, a pessoa cria outra).
+  router.get('/painel-bot/senhas', assincrono(async (req, res) => {
+    const acesso = await acessoDoResponsavel(req, req.query.guildId);
+    const SenhaStaff = require('../../models/SenhaStaff');
+    const todas = await SenhaStaff.find({}, { userId: 1, criadaEm: 1, liberadoAte: 1, bloqueadoAte: 1 }).limit(100).lean();
+    // A senha é a mesma em todos os servidores: aqui aparece só quem é membro deste.
+    const membros = todas.length ? await acesso.guild.members.fetch({ user: todas.map(s => s.userId) }).catch(() => null) : null;
+    const daGuild = todas.filter(s => acesso.guild.members.cache.has(s.userId) || membros?.has?.(s.userId));
+    const pessoas = await resolverPessoas(client, acesso.guild, daGuild.map(s => s.userId));
+    const agora = Date.now();
+    res.json({
+      senhas: daGuild.map(s => ({
+        userId: s.userId,
+        nome: pessoas[s.userId]?.nome || s.userId,
+        criadaEm: s.criadaEm,
+        liberado: !!s.liberadoAte && new Date(s.liberadoAte).getTime() > agora,
+        bloqueado: !!s.bloqueadoAte && new Date(s.bloqueadoAte).getTime() > agora
+      })).sort((a, b) => a.nome.localeCompare(b.nome))
+    });
+  }));
+
+  router.post('/painel-bot/senhas/apagar', express.json({ limit: '4kb' }), assincrono(async (req, res) => {
+    const acesso = await acessoDoResponsavel(req, req.body?.guildId);
+    const userId = String(req.body?.userId || '');
+    if (!/^\d{15,21}$/.test(userId)) throw new ErroHttp(400, 'Pessoa inválida.');
+    const membro = acesso.guild.members.cache.get(userId) || await acesso.guild.members.fetch(userId).catch(() => null);
+    if (!membro) throw new ErroHttp(404, 'Essa pessoa não está neste servidor.');
+    const pessoas = await resolverPessoas(client, acesso.guild, [userId]);
+    const { deletedCount } = await require('../../utils/senhaStaff').apagarSenha(userId);
+    if (!deletedCount) throw new ErroHttp(404, 'Essa pessoa não tem senha.');
+    const quem = acesso.member.user?.tag || req.usuario.id;
+    await require('../../models/PainelHistorico').create({
+      guildId: acesso.guild.id, por: quem, via: 'site',
+      mudancas: [{ campo: 'Senha da Cadeia Staff', antes: pessoas[userId].nome || userId, depois: 'apagada (cria outra no próximo uso)' }]
+    }).catch(() => {});
+    res.json({ ok: true, mensagem: `Senha de ${pessoas[userId].nome || userId} apagada. Na próxima vez que clicar em Aceitar ou Recusar, a pessoa cria outra.` });
+  }));
+
+  router.post('/painel-bot/travadas', express.json({ limit: '16kb' }), assincrono(async (req, res) => {
+    const acesso = await acessoDoResponsavel(req, req.body?.guildId);
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(String).filter(id => /^[0-9a-f]{24}$/.test(id)).slice(0, 50);
+    if (!ids.length) throw new ErroHttp(400, 'Escolha ao menos uma denúncia.');
+    const quem = acesso.member.user?.tag || req.usuario.id;
+    const tiradas = await tirarDaFila(client, acesso.guild.id, ids, `${quem} (site)`);
+    res.json({ ok: true, tiradas, mensagem: tiradas === 1 ? '1 denúncia saiu da fila.' : `${tiradas} denúncias saíram da fila.` });
+  }));
+
+  router.post('/painel-bot', express.json({ limit: '32kb' }), assincrono(async (req, res) => {
+    const acesso = await acessoDoResponsavel(req, req.body?.guildId);
+    const { aviso } = await salvarPainel(client, acesso, req.body, req.usuario.id);
+    res.json({ ok: true, mensagem: `Painel do bot salvo.${aviso}`, ...await montar(acesso.guild) });
+  }));
+}
+
+// Confere e grava o painel. Usado pela tela e pela restauração de backup.
+// Com manterIsentos, a lista de usuários isentos (que é de todos os servidores) não é tocada.
+async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos = false } = {}) {
+  const { guild, member } = acesso;
+  const atual = await Config.findOne({ guildId: guild.id }).lean();
+  const isentosAntes = await getUsuariosIsentos(true);
+
+  let novo;
+  try {
+    novo = validarPainel(manterIsentos ? { ...entrada, isentos: isentosAntes } : entrada, {
+      atual: atual || {},
+      canais: new Set(guild.channels.cache.keys()),
+      cargos: new Set(guild.roles.cache.keys()),
+      canaisVisiveis: new Set(client.channels.cache.keys()),
+      cargosDeQuemSalva: new Set(member.roles.cache.keys()),
+      donoDoBot: require('../../services/ponteSamp/gestao').ehDono(usuarioId)
+    });
+  } catch (erro) {
+    throw new ErroHttp(400, erro.message);
+  }
+
+  const quem = member.user?.tag || usuarioId;
+  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, minutosEntreDenuncias: novo.minutosEntreDenuncias, avisoReivindicacao: novo.avisoReivindicacao, minutosAvisoReivindicacao: novo.minutosAvisoReivindicacao, minutosArquivarTopico: novo.minutosArquivarTopico, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, analiseAutomatica: novo.analiseAutomatica, minutosAnaliseAutomatica: novo.minutosAnaliseAutomatica, topicosPrivados: novo.topicosPrivados, senhaCadeiaStaff: novo.senhaCadeiaStaff, provasExigirMotivo: novo.provasExigirMotivo, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
+  for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
+  for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
+
+  const salvo = await Config.findOneAndUpdate({ guildId: guild.id }, { $set: ajustes }, { new: true, upsert: true });
+  cachePanelConfig(guild.id, salvo);
+  registrarAlteracao({ guildId: guild.id, por: quem, via: 'site', antes: atual, depois: salvo }).catch(() => {});
+  liberarTopicosPrivadosNoServidor(client, salvo).catch(() => {});
+  // Os cargos podem ter mudado: o acesso de todo mundo é conferido de novo.
+  limparCacheDeAcesso();
+
+  // A lista de isentos vale para todos os servidores: só mexe se mudou.
+  if (!manterIsentos && (isentosAntes.length !== novo.isentos.length || novo.isentos.some(id => !isentosAntes.includes(id)))) {
+    await salvarUsuariosIsentos(novo.isentos, `${quem} (site)`);
+  }
+
+  // A mensagem do /denuncia mostra a manutenção e mora no canal fixo: refaz se um dos dois mudou.
+  let aviso = '';
+  if (Boolean(atual?.manutencaoDenuncia) !== novo.manutencaoDenuncia || (atual?.channels?.canalDenuncia || '') !== novo.channels.canalDenuncia) {
+    await atualizarMensagemDenuncia(client, guild, salvo).catch((erro) => {
+      console.error('[PainelBot] Falha ao atualizar a mensagem do /denuncia:', erro?.message || erro);
+      aviso = ' A mensagem do /denuncia no Discord não pôde ser atualizada agora; use /denuncia para refazer.';
+    });
+  }
+  return { aviso, salvo };
+}
+
+module.exports = { registrarRotasDoPainelDoBot, validarPainel, salvarPainel };

@@ -1,8 +1,9 @@
-﻿// DB_MODELS.md
+// DB_MODELS.md
 
 # 📗 Modelos do Banco de Dados (MongoDB)
 
-> **📝 v3.1.0:** Estrutura principal mantida e documentada para a release 3.1 do ALTHEA, com refinamentos de estabilidade, automação e monitoramento.
+> O model `Config` usa `MONGODB_URI` (banco principal); os demais models usam
+> `SECONDARY_DB_URI`. Consulte a seção de retenção antes de publicar esta alteração.
 
 ---
  
@@ -10,10 +11,13 @@
 
 Collection responsável por **configurar o bot por servidor**.
 
+`bloquearReivindicacaoComPendentes` é ativado por padrão e pode ser ligado ou desligado individualmente no painel de cada servidor.
+
 ### Campos principais:
 ```javascript
 {
   guildId: String,           // ID do servidor Discord
+  bloquearReivindicacaoComPendentes: Boolean, // Bloqueia reivindicações enquanto houver denúncias anteriores pendentes
   roles: {
     administrador: String,   // ID do cargo admin
     responsavel_admin: String // ID do cargo responsável
@@ -79,8 +83,7 @@ Collection que registra **ações de moderação** para ranking.
 ```
 
 **Usado em:**
-- `!rank` — ranking mensal
-- `!semana` — ranking semanal
+- `!rank` — ranking principal
 - `rankService.js` — lógica de cálculo
 
 ---
@@ -123,6 +126,41 @@ Collection que registra **infrações/strikes**.
 
 ---
 
+## 📄 DenunciaMensagem
+
+Collection com as **mensagens dos tópicos de denúncia** (uma por documento).
+Substitui o array `mensagens` que ficava dentro de `Denuncia`; denúncias criadas
+antes da mudança continuam com o array embutido e são lidas dele.
+
+### Campos principais:
+```javascript
+{
+  denunciaId: ObjectId,      // referência à Denuncia
+  guildId: String,
+  threadId: String,
+  mensagemId: String,        // único por thread
+  autorId: String,
+  autorNome: String,
+  conteudo: String,
+  dataCriacao: Date,
+  editadaEm: Date,
+  apagadaEm: Date,
+  anexos: [{ id, nome, url, tipo, tamanho }],
+  embeds: Array,
+  espelhos: [{ threadId, messageId }],
+  expiraEm: Date             // prazo funcional; a retenção geral usa dataRetencaoAte
+}
+```
+
+---
+
+## 📄 moderationactions_arquivo
+
+Cópia das ações de `ModerationAction` dos meses anteriores. É preenchida pelo
+reset mensal do ranking (dia 1, 00:05), que move as ações antigas para cá.
+
+---
+
 ## 📄 FeedbackTemp
 
 Collection que armazena **feedback temporário** de denúncias.
@@ -138,6 +176,69 @@ Collection que armazena **feedback temporário** de denúncias.
   timestamp: Date
 }
 ```
+
+---
+
+## 🎮 Ponte com a gamemode (banco secundário)
+
+Protocolo em [`PONTE_GAMEMODE.md`](PONTE_GAMEMODE.md). Retenção em `utils/retencaoDados.js`.
+
+### 📄 PonteConexaoGm (`ponteconexoesgm`, permanente)
+Credencial de uma gamemode. Criada só pelo dono (`/ponte gamemode criar`).
+```javascript
+{
+  guildId: String,
+  nome: String,
+  segredoCifrado: { iv, tag, dados },  // AES-256-GCM com PONTE_CHAVE_MESTRA; o texto do segredo nunca é guardado
+  ultimos4: String,                    // final do segredo, para reconhecer no painel
+  ipsPermitidos: [String],             // vazio = qualquer IP (o painel avisa)
+  status: 'ativa' | 'revogada',
+  pausada: Boolean,                    // selo inválido pausa; /ponte gamemode retomar solta
+  criadoPor: String, criadoEm: Date,
+  ultimoContatoEm: Date, ultimoIp: String, versaoInclude: String, modoTesteInformado: Boolean,
+  revogadoEm: Date, revogadoPor: String
+}
+// Índice: { guildId: 1, status: 1 }
+```
+
+### 📄 PontePedidoGm (`pontepedidosgm`, 90 dias)
+Um pedido por alvo enviado à gamemode. "Reenviar" um incerto cria outro com `rodada + 1`.
+```javascript
+{
+  punicaoId, alvoId, rodada: Number, denunciaId, guildId, conexaoId,
+  tipo: 'ban' | 'cadeia' | 'desbanir' | 'soltar',
+  conta: Number, nick: String, tempo: Number, avisos: Number, somar: Boolean,
+  motivo: String,          // ASCII, termina com " [DC]"
+  aprovadoPor: String,     // nome de quem clicou em "Enviar ao jogo" (sem acento)
+  teste: Boolean,          // gm.modoTeste da guild no envio
+  confirmadoPor: [{ id, nome, em }],
+  status: 'aprovado' | 'entregue' | 'aplicada' | 'simulada' | 'recusada' | 'erro' | 'incerto' | 'cancelado',
+  codigo: String,          // código da gamemode (OK, JA_BANIDO, TIMEOUT_GAMEMODE...)
+  emitidoEm: Number,       // unix (s) da entrega; entra no selo
+  entregueEm: Date, leaseAte: Date, entregas: Number, devolucoes: Number,
+  resultado: { nome, organizacao, conta },
+  alertaIncertoEm: Date, mensagemIncerto: { canalId, msgId },
+  resolvidoPor: { id, nome, em },
+  criadoEm: Date
+}
+// Índices: único { punicaoId, alvoId, rodada }; { guildId, status, criadoEm }; { status, leaseAte }
+```
+
+### 📄 PonteAcessoAdmin (`ponteacessosadmin`, permanente)
+Pessoas que o dono liberou no painel da ponte (`/admin` → Acessos), pelo ID do Discord.
+```javascript
+{ userId: String /* único */, nome: String, adicionadoPor: String, adicionadoEm: Date }
+```
+Elas abrem o painel e veem o link "Painel da ponte" no menu do site. Gerenciar acessos, trocar a chave
+mestra, gerar/expirar códigos e desativar servidores continuam só com o dono (`OWNER_DISCORD_ID`).
+
+### Campos novos em models existentes
+- **PonteServidor:** `executor` (`pc` | `gamemode` | `ambos`, padrão `pc`) e
+  `gm: { pausado, maxBanDias (30), permitirPermanente (true), maxCadeiaMin (300), maxAvisos (3), modoTeste (true) }`.
+- **PontePunicao:** `executor` (`''` | `pc` | `gamemode`) e `mensagemGm: { canalId, msgId }` (embed "🎮 Punição para o jogo").
+- **PonteUso.acao:** `gm_busca`, `gm_resultado`, `gm_auth_falhou`, `gm_selo_invalido`, `gm_enviar`, `gm_cancelar`,
+  `gm_incerto_ok`, `gm_incerto_reenviar`, `gm_credencial`, `gm_config`.
+- **Config:** `alertaMotivoCritico` (padrão `true`): marca o responsável no tópico em zaralho, dark RP, hack e mods proibidos.
 
 ---
 
@@ -162,6 +263,11 @@ Denuncia (1) ──→ (1) FeedbackTemp
 ## 🧹 Limpeza de Dados
 
 As collections são criadas automaticamente na primeira execução.
+
+Cada documento tem `dataRetencaoAte` e expira no prazo da sua coleção (ver
+`utils/retencaoDados.js`); as coleções permanentes não expiram. Os anexos GridFS
+do chat são eliminados pelo bucket para remover também seus chunks. O MongoDB
+pode demorar até cerca de um minuto para remover documentos vencidos.
 
 Para resetar:
 ```bash

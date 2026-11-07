@@ -4,4 +4,9 @@ node_modules/
 .env.*
 config.json
 squarecloud.app
- 
+
+# Pacote da hospedagem: contém o .env
+*.zip
+
+# Cópia antiga do projeto (não faz parte do repositório)
+tttt/

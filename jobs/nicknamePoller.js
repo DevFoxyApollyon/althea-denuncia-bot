@@ -1,4 +1,5 @@
-﻿const chalk = require('chalk');
+const chalk = require('chalk');
+const { createLog } = require('../utils/logger');
 const Usuarios = require('../models/Usuario');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
 
@@ -6,12 +7,7 @@ const INTERVALO_MS       = 5 * 60 * 1000;
 const DELAY_ENTRE_ITENS_MS  = 300;
 const DELAY_ENTRE_GUILDS_MS = 500;
 
-const log = {
-    info:    (msg) => console.log(`${chalk.blue('ℹ')} ${chalk.gray('[POLLER]')} ${msg}`),
-    success: (msg) => console.log(`${chalk.green('✔')} ${chalk.gray('[POLLER]')} ${msg}`),
-    warn:    (msg) => console.log(`${chalk.yellow('⚠')} ${chalk.gray('[POLLER]')} ${msg}`),
-    error:   (msg) => console.log(`${chalk.red('✖')} ${chalk.gray('[POLLER]')} ${msg}`),
-};
+const log = createLog('POLLER');
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -179,6 +175,10 @@ async function verificarNicknames(client) {
                     const membro    = membrosBuscados.get(userId);
                     const username  = membro?.user?.username ?? 'Desconhecido';
                     const contaExtraida = nickNovo ? extrairContaDoNickname(nickNovo) : null;
+                    // Nick sem ID do jogo: antes a conta virava o próprio userId, e o
+                    // reparo do próximo início tinha de desfazer. Sem conta, não cria
+                    // registro novo e mantém a conta que já existia.
+                    if (!contaExtraida && !existente?.conta) continue;
 
                     bulkOpsAudit.push({
                         updateOne: {
@@ -186,7 +186,7 @@ async function verificarNicknames(client) {
                             update:  { $set: {
                                 username,
                                 nickname: nickNovo ?? username,
-                                conta:    contaExtraida || existente?.conta || userId,
+                                conta:    contaExtraida || existente.conta,
                                 updatedAt: new Date(),
                             }},
                             upsert: true,
@@ -220,9 +220,11 @@ async function verificarNicknames(client) {
                     const nickAtual   = member.nickname || member.user.username;
                     const contaNoNick = extrairContaDoNickname(nickAtual);
 
-                    if (!contaNoNick && registro.conta && registro.conta !== member.id) continue;
+                    // Nick sem ID do jogo: não mexe (gravar o userId como conta só
+                    // gerava trabalho para o reparo do próximo início).
+                    if (!contaNoNick) continue;
 
-                    const contaEsperada = contaNoNick || registro.conta || member.id;
+                    const contaEsperada = contaNoNick;
 
                     if (
                         registro.conta    === contaEsperada &&

@@ -1,0 +1,229 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { builtinModules } = require('node:module');
+const { fecharConexoes } = require('./helpers/env');
+
+const RAIZ = path.join(__dirname, '..');
+const PASTAS = ['utils', 'models', 'services', 'Handlers', 'commands', 'jobs'];
+
+function listarJs(pasta) {
+  return fs.readdirSync(path.join(RAIZ, pasta), { withFileTypes: true }).flatMap(item => {
+    const caminho = path.join(pasta, item.name);
+    if (item.isDirectory()) return listarJs(caminho);
+    return item.name.endsWith('.js') ? [caminho] : [];
+  });
+}
+
+const arquivos = PASTAS.flatMap(listarJs);
+
+const ler = (arquivo) => fs.readFileSync(path.join(RAIZ, arquivo), 'utf8');
+
+test.after(fecharConexoes);
+
+test('todos os módulos carregam sem erro', () => {
+  for (const arquivo of arquivos) {
+    assert.doesNotThrow(() => require(path.join(RAIZ, arquivo)), `falha ao carregar ${arquivo}`);
+  }
+});
+
+test('todo require relativo aponta para um arquivo que existe', () => {
+  for (const arquivo of ['index.js', ...arquivos]) {
+    for (const [, alvo] of ler(arquivo).matchAll(/require\(['"](\.{1,2}\/[^'"]+)['"]\)/g)) {
+      assert.doesNotThrow(
+        () => require.resolve(path.join(RAIZ, path.dirname(arquivo), alvo)),
+        `${arquivo} importa ${alvo}, que não existe`
+      );
+    }
+  }
+});
+
+test('todo pacote importado está declarado no package.json', () => {
+  const declarados = new Set(Object.keys(require('../package.json').dependencies));
+  const nativos = new Set(builtinModules);
+
+  for (const arquivo of ['index.js', ...arquivos]) {
+    for (const [, alvo] of ler(arquivo).matchAll(/require\(['"]([^.'"][^'"]*)['"]\)/g)) {
+      const pacote = alvo.startsWith('@') ? alvo.split('/').slice(0, 2).join('/') : alvo.split('/')[0];
+      if (nativos.has(pacote) || pacote.startsWith('node:')) continue;
+      assert.ok(declarados.has(pacote), `${arquivo} usa "${pacote}", que não está em dependencies`);
+    }
+  }
+});
+
+test('roteador resolve customIds exatos e por prefixo', () => {
+  const { resolverRota } = require('../Handlers/interactionHandler');
+  assert.equal(typeof resolverRota('botao', 'reivindicar'), 'function');
+  assert.equal(typeof resolverRota('botao', 'log_aceitar_123456'), 'function');
+  assert.equal(typeof resolverRota('modal', 'corrigir_modal_aceite_123456'), 'function');
+  assert.equal(typeof resolverRota('modal', 'feedback:modal:abc:9'), 'function');
+  assert.equal(typeof resolverRota('menu', 'feedback:select:abc'), 'function');
+  assert.equal(resolverRota('botao', 'nao_existe'), null);
+  assert.equal(resolverRota('botao', 'toString'), null, 'não pode casar com propriedades herdadas');
+  assert.equal(resolverRota('modal', 'reivindicar'), null, 'rota de botão não vale para modal');
+  assert.equal(resolverRota(null, 'reivindicar'), null);
+});
+
+test('toda rota aponta para uma função', () => {
+  const { ROTAS } = require('../Handlers/interactionHandler');
+  for (const [tipo, { exatos, prefixos }] of Object.entries(ROTAS)) {
+    for (const [id, handler] of Object.entries(exatos)) assert.equal(typeof handler, 'function', `${tipo}:${id}`);
+    for (const [prefixo, handler] of prefixos) assert.equal(typeof handler, 'function', `${tipo}:${prefixo}*`);
+  }
+});
+
+test('todo botão, menu e modal criado no código tem rota', () => {
+  const { resolverRota } = require('../Handlers/interactionHandler');
+  // Tratados por coletores na própria mensagem, não pelo roteador.
+  const porColetor = new Set(['rank_export', 'rank_next', 'rank_prev', 'rank_period', 'download_rank', 'copy_rank']);
+  const construtores = { ButtonBuilder: 'botao', ModalBuilder: 'modal', StringSelectMenuBuilder: 'menu' };
+  const padrao = /new (ButtonBuilder|ModalBuilder|StringSelectMenuBuilder)\(\)\s*\.setCustomId\(\s*['"]([^'"]+)['"]/g;
+
+  let conferidos = 0;
+  for (const arquivo of arquivos) {
+    for (const [, construtor, id] of ler(arquivo).matchAll(padrao)) {
+      if (porColetor.has(id)) continue;
+      assert.equal(typeof resolverRota(construtores[construtor], id), 'function', `${arquivo}: "${id}" não tem rota`);
+      conferidos++;
+    }
+  }
+  assert.ok(conferidos > 15, `poucos componentes encontrados (${conferidos}); o padrão de busca quebrou?`);
+});
+
+test('comandos de barra têm definição válida e nomes únicos', () => {
+  const { comandos } = require('../commands/slash');
+  const nomes = comandos.map(comando => comando.data.toJSON().name);
+  assert.deepEqual([...nomes].sort(), ['ativar', 'denuncia', 'desbanir', 'instalacao', 'link', 'painel', 'ponte', 'ponte-codigo', 'provastaff', 'rank', 'status', 'tempban']);
+  for (const comando of comandos) {
+    assert.equal(typeof comando.executar, 'function', comando.data.name);
+    assert.ok(comando.data.toJSON().description.length <= 100);
+  }
+});
+
+test('normalizarIds aceita vários separadores e descarta lixo', () => {
+  const { normalizarIds } = require('../utils/usuariosIsentos');
+  assert.deepEqual(
+    normalizarIds('123456789012345678, 987654321098765432;abc 12 123456789012345678'),
+    ['123456789012345678', '987654321098765432']
+  );
+});
+
+test('filtro de links libera YouTube e bloqueia convites', () => {
+  const { contemLinkProibido } = require('../utils/strikeWords');
+  assert.equal(contemLinkProibido('ola tudo bem'), false);
+  assert.equal(contemLinkProibido('veja https://youtube.com/watch?v=1'), false);
+  assert.equal(contemLinkProibido('https://discord.gg/abc'), true);
+});
+
+test('acesso à fila exige cargo de administrador ou responsável do servidor', () => {
+  const { papeisDoMembro } = require('../site/acesso');
+  const config = { roles: { administrador: 'admin', responsavel_admin: 'responsavel' } };
+
+  const papeis = (cargos) => papeisDoMembro({ roles: { cache: new Set(cargos) } }, config);
+  assert.equal(papeis([]).staff, false);
+  assert.equal(papeis(['admin']).staff, true);
+  assert.equal(papeis(['responsavel']).staff, true);
+});
+
+test('cache de config: lê do cache e invalida', async () => {
+  const { globalCache } = require('../utils/smartCache');
+  const { getConfig, setConfig, peekConfig, invalidateConfig } = require('../utils/configCache');
+
+  const config = { guildId: '1', roles: { administrador: '2' } };
+  setConfig('1', config);
+  assert.equal(await getConfig('1'), config, 'não deve consultar o banco quando está em cache');
+  assert.equal(peekConfig('1'), config);
+
+  invalidateConfig('1');
+  assert.equal(peekConfig('1'), null);
+  assert.equal(await getConfig(''), null);
+  assert.doesNotThrow(() => globalCache.getStats());
+});
+
+test('salvar a Config invalida o cache', async () => {
+  const Config = require('../models/Config');
+  const { setConfig, peekConfig } = require('../utils/configCache');
+  const doc = new Config({ guildId: '42' });
+
+  setConfig('42', { guildId: '42' });
+  // Dispara os hooks pós-gravação sem precisar de banco.
+  await new Promise((resolve, reject) =>
+    Config.schema.s.hooks.execPost('save', doc, [doc], (erro) => (erro ? reject(erro) : resolve()))
+  );
+  assert.equal(peekConfig('42'), null);
+});
+
+test('site: extrai menções de usuários, cargos e canais', () => {
+  const { extrairMencoes } = require('../site/rotas');
+  assert.deepEqual(
+    extrairMencoes('oi <@875808985813512242> e <@!111111111111111111>, cargo <@&222222222222222222> em <#333333333333333333>'),
+    { usuarios: ['875808985813512242', '111111111111111111'], cargos: ['222222222222222222'], canais: ['333333333333333333'] }
+  );
+  assert.deepEqual(extrairMencoes('sem menção, só <@123> curto'), { usuarios: [], cargos: [], canais: [] });
+});
+
+test('site: mensagem publicada pelo site volta a ser de quem enviou', () => {
+  const { atribuirAutoriaDoSite } = require('../site/rotas');
+  const doBot = { doBot: true, viaSite: false, autorId: '999999999999999999' };
+
+  const nova = atribuirAutoriaDoSite({ ...doBot, conteudo: 'Enviado por <@657014871228940336>\nteste' });
+  assert.deepEqual([nova.autorId, nova.doBot, nova.viaSite, nova.conteudo], ['657014871228940336', false, true, 'teste']);
+
+  const antiga = atribuirAutoriaDoSite({ ...doBot, conteudo: '📎 **Enviado pelo site** por <@657014871228940336>' });
+  assert.deepEqual([antiga.autorId, antiga.conteudo], ['657014871228940336', '']);
+
+  const registro = { ...doBot, conteudo: '📌 O administrador <@657014871228940336> reivindicou esta denúncia.' };
+  assert.equal(atribuirAutoriaDoSite(registro), registro, 'registros do bot não mudam');
+});
+
+test('comando já registrado igual ao do código não é editado de novo a cada inicialização', async () => {
+  const { ApplicationCommand, Client } = require('discord.js');
+  const { comandos, registrarComandosNoServidor } = require('../commands/slash');
+  const client = new Client({ intents: [] });
+  // Como a API devolve os comandos já salvos.
+  const salvos = comandos.map(({ data }, i) => {
+    const def = JSON.parse(JSON.stringify(data.toJSON()));
+    const cmd = new ApplicationCommand(client, { ...def, id: String(i + 1), application_id: '9', version: '1', nsfw: false, default_member_permissions: def.default_member_permissions ?? null });
+    cmd.edit = async () => { editados++; };
+    return cmd;
+  });
+  let editados = 0;
+  let criados = 0;
+  const guild = { commands: { fetch: async () => salvos, create: async () => { criados++; } } };
+  await registrarComandosNoServidor(guild);
+  assert.equal(editados, 0);
+  assert.equal(criados, 0);
+  client.destroy();
+});
+
+test('/link: lê o link do tópico, de uma mensagem dele ou de outro domínio do Discord', () => {
+  const { lerLinkDoDiscord } = require('../commands/link');
+  assert.deepEqual(lerLinkDoDiscord('https://discord.com/channels/817924556358156360/1567751196804911145'),
+    { guildId: '817924556358156360', canalId: '1567751196804911145', mensagemId: null });
+  assert.deepEqual(lerLinkDoDiscord('olha https://ptb.discord.com/channels/817924556358156360/1547188378037002280/1567751210776404015 aqui'),
+    { guildId: '817924556358156360', canalId: '1547188378037002280', mensagemId: '1567751210776404015' });
+  assert.equal(lerLinkDoDiscord('https://exemplo.com/channels/1/2'), null);
+  assert.equal(lerLinkDoDiscord(''), null);
+});
+
+test('fundador: com o cargo escolhido, só ele configura; sem ele, vale o responsável', () => {
+  const { papeisDoMembro } = require('../site/acesso');
+  const membro = (cargos) => ({ roles: { cache: new Set(cargos) } });
+  const semFundador = { roles: { responsavel_admin: 'R' } };
+  const comFundador = { roles: { responsavel_admin: 'R', fundador: 'F' } };
+  assert.equal(papeisDoMembro(membro(['R']), semFundador).podeConfigurar, true);
+  assert.equal(papeisDoMembro(membro(['R']), comFundador).podeConfigurar, false, 'responsável sem o cargo de fundador não entra');
+  assert.equal(papeisDoMembro(membro(['F']), comFundador).podeConfigurar, true);
+  assert.equal(papeisDoMembro(membro(['R']), comFundador).responsavel, true, 'continua responsável no resto');
+});
+
+test('corrigir denúncia: mantém o link para compartilhar e o que vem depois da primeira linha', () => {
+  const { linhasDeBaixo, depoisDoLink } = require('../Handlers/corrigirHandler');
+  const topico = '✅ Denúncia aceita por <@1> Acusado: (10) Tomará punição por (DM) Data 01/01/2026 Link: https://a\n🔗 **Link para compartilhar:** https://b';
+  assert.equal(linhasDeBaixo(topico), '\n🔗 **Link para compartilhar:** https://b');
+  assert.equal(linhasDeBaixo('só uma linha'), '');
+  const cadeia = '➱ Denúncia aceita Acusado (10) tomará punição por (DM) Data 01/01/2026 Link:|| https://a || ||01/01/2026 10:00|| por <@2>\n🎮 Enviada';
+  assert.equal(depoisDoLink(cadeia), ' ||01/01/2026 10:00|| por <@2>');
+  assert.equal(depoisDoLink('➱ Denúncia aceita Acusado (10) tomará punição por (DM) Data 01/01/2026 Link: ||https://a||'), '');
+});

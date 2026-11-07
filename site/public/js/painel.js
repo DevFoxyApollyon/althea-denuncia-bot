@@ -1,0 +1,255 @@
+// Painel inicial: saudação, números, tabela de casos e coluna de apoio.
+import { finalizarDenuncia } from './acoes.js';
+import { buscandoNoServidor, carregarLista, casosDaVista, casosVisiveis, filtrarLista } from './dados.js';
+import { desenhar } from './desenho.js';
+import { EM_ANDAMENTO, FILTROS, VISTAS, estado } from './estado.js';
+import { blocoAviso } from './navegacao.js';
+import { lerVistos, temNovidade } from './novidades.js';
+import { ir } from './rotas.js';
+import {
+  areaDaEquipe,
+  el,
+  formatarData,
+  icone,
+  numeroDoCaso,
+  papeisAtuais,
+  podeAbrir,
+  selo,
+  servidorAtual
+} from './util.js';
+
+export function cartaoNumero({ rotulo, valor, nomeIcone, tom, filtro }) {
+  const conteudo = [
+    el('span', { class: `numero-icone ${tom}` }, icone(nomeIcone)),
+    el('span', { class: 'numero-texto' }, el('strong', null, String(valor)), el('span', null, rotulo))
+  ];
+  if (!filtro) return el('div', { class: 'numero' }, conteudo);
+  return el('button', {
+    class: 'numero',
+    type: 'button',
+    'aria-pressed': String(filtro !== 'todos' && estado.filtro === filtro),
+    onclick: () => {
+      estado.filtro = estado.filtro === filtro ? 'todos' : filtro;
+      desenhar();
+    }
+  }, conteudo);
+}
+
+export function numerosDoPainel() {
+  if (areaDaEquipe()) {
+    const fila = estado.listas.fila;
+    const meus = casosDaVista('atendimentos').filter(denuncia => denuncia.aberta);
+    return [
+      cartaoNumero({ rotulo: 'Na fila', valor: fila.length, nomeIcone: 'caixa', tom: 'analise' }),
+      cartaoNumero({ rotulo: 'Alta prioridade', valor: fila.filter(denuncia => denuncia.prioridade === 'alta').length, nomeIcone: 'alerta', tom: 'recusada' }),
+      cartaoNumero({ rotulo: 'Meus atendimentos abertos', valor: meus.length, nomeIcone: 'escudo', tom: 'reivindicacao' }),
+      estado.visaoAdmin && cartaoNumero({ rotulo: 'Casos no total', valor: estado.totalAdmin, nomeIcone: 'grade', tom: 'aceita' })
+    ];
+  }
+
+  const casos = casosDaVista('minhas');
+  const contar = (lista) => casos.filter(denuncia => lista.includes(denuncia.status)).length;
+  return [
+    cartaoNumero({ rotulo: 'Total de denúncias', valor: casos.length, nomeIcone: 'documento', tom: 'reivindicacao', filtro: 'todos' }),
+    cartaoNumero({ rotulo: 'Em aberto', valor: contar(EM_ANDAMENTO), nomeIcone: 'relogio', tom: 'analise', filtro: 'andamento' }),
+    cartaoNumero({ rotulo: 'Aceitas', valor: contar(['aceita']), nomeIcone: 'visto', tom: 'aceita', filtro: 'aceita' }),
+    cartaoNumero({ rotulo: 'Recusadas', valor: contar(['recusada']), nomeIcone: 'fechar', tom: 'recusada', filtro: 'recusada' })
+  ];
+}
+
+export function tabelaDeCasos() {
+  const vista = VISTAS[estado.vista];
+  const carregando = estado.carregando[buscandoNoServidor() ? 'busca' : vista.escopo];
+  const casos = casosDaVista();
+  const visiveis = casosVisiveis();
+  const responsavel = papeisAtuais().responsavel;
+  const vistos = lerVistos();
+  const staff = areaDaEquipe();
+  const opcao = (valor, rotulo, atual) => el('option', { value: valor, selected: valor === atual }, rotulo);
+  const porCategoria = new Map();
+  for (const denuncia of casos) porCategoria.set(denuncia.categoria, (porCategoria.get(denuncia.categoria) || 0) + 1);
+  const noServidor = estado.vista === 'admin';
+  const filtrando = noServidor && Boolean(estado.busca.trim() || estado.filtro !== 'todos' || estado.plataforma !== 'todas' || estado.categoria !== 'todas');
+  const categoriasPresentes = (noServidor
+    ? [...new Set([...(estado.servidores.find(servidor => servidor.id === estado.guildId)?.categorias || []).map(item => item.nome), 'Outros'])]
+    : [...porCategoria.keys()].filter(Boolean)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const filtrosPresentes = Object.keys(FILTROS).filter(chave => !FILTROS[chave].semAba
+    && (chave === 'todos' || noServidor || casos.some(denuncia => FILTROS[chave].status.includes(denuncia.status))));
+  const naBusca = buscandoNoServidor();
+
+  let corpo;
+  if (carregando && !casos.length) {
+    corpo = el('div', { class: 'tabela', 'aria-busy': 'true', 'aria-label': 'Carregando denúncias' },
+      [0, 1, 2, 3].map(() => el('div', { class: 'linha esqueleto' }, el('span'), el('span'), el('span'))));
+  } else if (!casos.length && naBusca) {
+    corpo = el('div', { class: 'vazio' },
+      el('h3', null, 'Nada encontrado no servidor'),
+      el('p', null, 'Nenhuma denúncia deste servidor bate com a busca. Tente outra palavra, o ID do jogador ou o número do caso.'));
+  } else if (!casos.length && !filtrando) {
+    corpo = el('div', { class: 'vazio' },
+      el('h3', null, estado.vista === 'fila' ? 'Fila em dia'
+        : estado.vista === 'atendimentos' ? 'Nenhum caso com você'
+          : estado.vista === 'admin' ? 'Nenhum caso encontrado' : 'Nenhuma denúncia ainda'),
+      el('p', null, estado.vista === 'fila' ? 'Não há denúncias pendentes neste servidor.'
+        : estado.vista === 'atendimentos' ? 'Reivindique um caso na fila para ele aparecer aqui.'
+          : estado.vista === 'admin' ? 'Não há denúncias nos servidores em que você tem o cargo responsável.'
+            : 'As denúncias que você abrir, ou em que for citado, aparecem aqui.'),
+      estado.vista === 'minhas' && podeAbrir() && el('button', { class: 'primario', type: 'button', onclick: () => ir('#/nova') },
+        icone('mais'), 'Fazer denúncia'));
+  } else if (!visiveis.length) {
+    corpo = el('div', { class: 'vazio' },
+      el('h3', null, 'Nada com esse filtro'),
+      el('p', null, filtrando ? 'Nenhuma denúncia deste servidor bate com a busca e os filtros.' : 'Mude a busca ou o status para ver outros casos.'));
+  } else {
+    corpo = el('div', { class: 'tabela', role: 'list' },
+      el('div', { class: 'tabela-colunas', 'aria-hidden': 'true' },
+        el('span', null, 'Caso'), el('span', null, 'Motivo'), el('span', null, 'Envolvidos'), el('span', null, 'Situação'), el('span')),
+      visiveis.map(denuncia =>
+      el('div', { class: `linha${denuncia.prioridade === 'alta' && denuncia.aberta ? ' alta' : ''}`, role: 'listitem' },
+        el('button', { class: 'linha-abrir', type: 'button', onclick: () => ir(`#/d/${denuncia.id}`) },
+          el('span', { class: 'celula caso-ref' },
+            el('strong', null, numeroDoCaso(denuncia.id),
+              !staff && temNovidade(denuncia, vistos) && el('span', { class: 'novidade', title: 'Tem novidade' }, 'novo')),
+            el('span', null, formatarData(denuncia.dataCriacao))),
+          el('span', { class: 'celula caso-motivo' },
+            el('span', { class: 'plataforma' }, icone(denuncia.platform === 'Mobile' ? 'celular' : 'monitor')),
+            el('span', { class: 'celula-texto' },
+              el('strong', null, denuncia.motivo,
+                denuncia.prioridade === 'alta' && el('span', { class: 'prioridade' }, 'Alta prioridade')),
+              el('span', { class: 'linha-detalhes' }, el('span', { class: `categoria-chip${denuncia.categoria === 'Outros' ? ' outros' : ''}` }, denuncia.categoria),
+              denuncia.platform))),
+          el('span', { class: 'celula caso-acusado' },
+            icone('usuario'),
+            el('span', { class: 'celula-texto' },
+              el('strong', null, `Acusado ${denuncia.acusado}`),
+              el('span', null, denuncia.relacao === 'acusado' ? 'Você é o acusado' : `Denunciante ${denuncia.denunciante}`))),
+          el('span', { class: 'celula caso-status' }, selo(denuncia.status)),
+          icone('avancar')),
+        estado.vista === 'fila' && !naBusca && responsavel && denuncia.aberta && el('button', {
+          class: 'linha-finalizar perigo',
+          type: 'button',
+          onclick: (evento) => finalizarDenuncia(evento.currentTarget, denuncia)
+        }, 'Finalizar'))));
+  }
+
+  return el('section', { class: 'cartao cartao-tabela' },
+    el('header', { class: 'cartao-cabecalho' },
+      el('div', null,
+        el('h1', null, naBusca ? 'Busca no servidor' : vista.titulo),
+        naBusca && el('p', { class: 'sub' }, 'Resultados em todas as denúncias deste servidor, não só na sua lista. Apague a busca para voltar.')),
+      estado.vista === 'minhas' && podeAbrir() && el('button', { class: 'primario', type: 'button', onclick: () => ir('#/nova') },
+        icone('mais'), 'Nova denúncia')),
+    (casos.length > 1 || filtrando) && el('div', { class: 'tabela-ferramentas' },
+      el('label', null, el('span', null, 'Plataforma'),
+        el('select', {
+          id: 'filtro-plataforma',
+          onchange: (evento) => {
+            estado.plataforma = evento.target.value;
+            filtrarLista();
+          }
+        }, opcao('todas', 'Todas', estado.plataforma), opcao('PC', 'PC', estado.plataforma), opcao('Mobile', 'Mobile', estado.plataforma))),
+      categoriasPresentes.length > 1 && el('label', null, el('span', null, 'Categoria'),
+        el('select', {
+          id: 'filtro-categoria',
+          onchange: (evento) => {
+            estado.categoria = evento.target.value;
+            filtrarLista();
+          }
+        }, opcao('todas', 'Todas', estado.categoria), categoriasPresentes.map(nome => opcao(nome, noServidor ? nome : `${nome} (${porCategoria.get(nome)})`, estado.categoria)))),
+      el('label', null, el('span', null, 'Ordem'),
+        el('select', {
+          id: 'filtro-ordem',
+          onchange: (evento) => {
+            estado.ordem = evento.target.value;
+            filtrarLista();
+          }
+        }, opcao('padrao', estado.vista === 'fila' ? 'Prioridade, depois mais antigas' : 'Mais novas primeiro', estado.ordem),
+        opcao(estado.vista === 'fila' ? 'novas' : 'antigas', estado.vista === 'fila' ? 'Mais novas primeiro' : 'Mais antigas primeiro', estado.ordem))),
+      estado.soNovidades && el('button', {
+        class: 'filtro',
+        type: 'button',
+        'aria-pressed': 'true',
+        onclick: () => {
+          estado.soNovidades = false;
+          desenhar();
+        }
+      }, 'Só com novidade', icone('fechar'))),
+    filtrosPresentes.length > 2 && el('div', { class: 'filtros', role: 'group', 'aria-label': 'Filtrar por status' },
+      filtrosPresentes.map(chave => el('button', {
+        class: 'filtro',
+        type: 'button',
+        'aria-pressed': String(estado.filtro === chave),
+        onclick: () => {
+          estado.filtro = chave;
+          filtrarLista();
+        }
+      }, FILTROS[chave].rotulo))),
+    corpo,
+    visiveis.length > 0 && el('p', { class: 'tabela-rodape' },
+      naBusca
+        ? (estado.totalDaBusca > casos.length ? `Mostrando as ${casos.length} mais recentes de ${estado.totalDaBusca} encontradas` : `${visiveis.length} de ${casos.length} encontrada(s) no servidor`)
+        : noServidor && filtrando
+        ? (estado.totalAdmin === 1 ? '1 denúncia encontrada no servidor' : `${estado.totalAdmin} denúncias encontradas no servidor, ${visiveis.length} nesta página`)
+        : `Mostrando ${visiveis.length} de ${noServidor ? estado.totalAdmin : casos.length}`),
+    estado.vista === 'admin' && estado.totalPaginasAdmin > 1 && el('nav', { class: 'paginacao', 'aria-label': 'Páginas' },
+      el('button', {
+        type: 'button',
+        disabled: estado.paginaAdmin <= 1,
+        onclick: () => {
+          estado.paginaAdmin -= 1;
+          carregarLista('admin');
+        }
+      }, 'Anterior'),
+      el('span', null, `${estado.paginaAdmin} de ${estado.totalPaginasAdmin}`),
+      el('button', {
+        type: 'button',
+        disabled: estado.paginaAdmin >= estado.totalPaginasAdmin,
+        onclick: () => {
+          estado.paginaAdmin += 1;
+          carregarLista('admin');
+        }
+      }, 'Próxima'))
+  );
+}
+
+
+const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Denúncias em aberto em que a pessoa é o acusado: destaque no topo, com o
+// tempo que resta para mandar a contraprova. Sete dias depois de aberta, a
+// denúncia é finalizada sozinha e o tópico é trancado.
+function avisoDeDenunciaContraVoce() {
+  if (estado.vista !== 'minhas') return null;
+  const contra = estado.listas.minhas.filter(denuncia => denuncia.relacao === 'acusado' && denuncia.aberta && !['aceita', 'recusada'].includes(denuncia.status));
+  if (!contra.length) return null;
+
+  const prazo = (denuncia) => {
+    const resta = new Date(denuncia.dataCriacao).getTime() + SETE_DIAS_MS - Date.now();
+    if (resta <= 0) return 'pode ser fechada a qualquer momento';
+    const horas = Math.ceil(resta / 3600000);
+    return horas <= 48 ? `fecha em ${horas} h` : `fecha em ${Math.ceil(horas / 24)} dias`;
+  };
+
+  return el('section', { class: 'contra-voce', role: 'status' },
+    el('header', null,
+      icone('alerta'),
+      el('div', null,
+        el('h2', null, contra.length === 1 ? 'Há uma denúncia contra você em aberto' : `Há ${contra.length} denúncias contra você em aberto`),
+        el('p', null, 'Mande a sua contraprova pela conversa do caso. A staff pode decidir antes do prazo, e depois de 7 dias a denúncia é fechada e não aceita mais mensagens.'))),
+    el('ul', null, contra.map(denuncia => el('li', null,
+      el('button', { type: 'button', onclick: () => ir(`#/d/${denuncia.id}`) },
+        el('span', null, el('strong', null, denuncia.motivo), el('small', null, `${numeroDoCaso(denuncia.id)}, aberta em ${formatarData(denuncia.dataCriacao)}`)),
+        el('span', { class: 'contra-voce-prazo' }, prazo(denuncia)),
+        el('span', { class: 'contra-voce-acao' }, 'Enviar contraprova'))))));
+}
+
+export function telaPainel() {
+  return el('main', { class: 'principal' },
+    el('div', { class: 'painel' },
+      blocoAviso(),
+      servidorAtual()?.manutencao && el('div', { class: 'aviso manutencao', role: 'status' },
+        el('span', null, 'O sistema de denúncias está em manutenção. Novas denúncias estão pausadas; as abertas continuam preservadas.')),
+      avisoDeDenunciaContraVoce(),
+      el('div', { class: 'numeros resumo' }, numerosDoPainel()),
+      tabelaDeCasos()));
+}
