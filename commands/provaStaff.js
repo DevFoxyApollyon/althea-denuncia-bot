@@ -87,7 +87,7 @@ async function handleProvaStaffSlash(interaction) {
   return interaction.editReply(`✅ Painel de provas publicado em ${canal}.`);
 }
 
-function modalDoRegistro({ customId = MODAL_REGISTRO, titulo = '📋 Registrar punição' } = {}) {
+function modalDoRegistro({ customId = MODAL_REGISTRO, titulo = '📋 Registrar punição', comLink = false } = {}) {
   const campo = (id, rotulo, estilo, { min = 1, max = 100, obrigatorio = true, exemplo = '' } = {}) => new ActionRowBuilder().addComponents(
     new TextInputBuilder().setCustomId(id).setLabel(rotulo).setStyle(estilo).setRequired(obrigatorio)
       .setMinLength(obrigatorio ? min : 0).setMaxLength(max).setPlaceholder(exemplo)
@@ -97,6 +97,10 @@ function modalDoRegistro({ customId = MODAL_REGISTRO, titulo = '📋 Registrar p
     campo('motivo', 'Motivo da punição', TextInputStyle.Paragraph, { min: 2, max: 500, exemplo: 'Descreva o motivo de forma clara' }),
     campo('provas', 'Provas (opcional: links ou texto)', TextInputStyle.Paragraph, { max: 1000, obrigatorio: false, exemplo: 'Links das provas, ou deixe em branco e use o tópico' })
   );
+  // /tempban: com o link de uma denúncia já aceita, corrige a punição dela e manda ao jogo.
+  if (comLink) {
+    modal.addComponents(campo('link', 'Link da denúncia (opcional)', TextInputStyle.Short, { max: 200, obrigatorio: false, exemplo: 'Cole o link do tópico: a punição dela vai direto para o jogo' }));
+  }
   // Upload no modal exige discord.js >= 14.23; em versão antiga o formulário abre sem esse campo.
   if (LabelBuilder && FileUploadBuilder) {
     modal.addLabelComponents(new LabelBuilder()
@@ -220,7 +224,7 @@ async function handleTempbanSlash(interaction) {
   if (!canal?.isTextBased?.()) {
     return interaction.reply(efemero('❌ Configure o canal das provas da staff no `/painel` (Canais principais) ou no site (Painel do bot) antes.'));
   }
-  return interaction.showModal(modalDoRegistro({ customId: MODAL_TEMPBAN, titulo: '🔨 Tempban direto no jogo' }));
+  return interaction.showModal(modalDoRegistro({ customId: MODAL_TEMPBAN, titulo: '🔨 Tempban direto no jogo', comLink: true }));
 }
 
 // Texto do resultado no jogo conforme o que a ponte respondeu.
@@ -248,6 +252,34 @@ async function mandarParaOJogo(interaction, doc, mensagem, quem) {
   return resultadoNoJogo(ponte, envio);
 }
 
+// /tempban com o link de uma denúncia já aceita: não cria registro nem passa pela
+// Cadeia Staff. A punição dela é refeita com o ID e o motivo do formulário (serve para
+// a que ficou sem jogador ou com dados errados) e, no modo gamemode, já vai para o jogo.
+async function tempbanPeloLink(interaction, digitado, { contas, motivo, quem }) {
+  const link = require('./link').lerLinkDoDiscord(digitado);
+  if (!link) return interaction.editReply('❌ Link inválido: cole o link do tópico ou da mensagem da denúncia.');
+  if (link.guildId !== interaction.guild.id) return interaction.editReply('❌ Esse link é de outro servidor.');
+  const achada = await require('../services/ponteSamp/desbanirGm').denunciaPeloLink(interaction.guild.id, link);
+  if (!achada) return interaction.editReply('❌ Não achei a denúncia desse link.');
+  const Denuncia = require('../models/Denuncia');
+  const original = await Denuncia.findById(achada._id).select('status').lean() || await DenunciaStaff.findById(achada._id).select('status').lean();
+  if (original?.status !== 'aceita') return interaction.editReply('❌ Essa denúncia ainda não foi aceita. Aceite ela antes de mandar a punição ao jogo.');
+
+  const acusadoId = contas.join('+');
+  await Denuncia.updateOne({ _id: achada._id }, { $set: { acusadoId, motivoAceite: motivo } }).catch(() => {});
+  const denuncia = { ...achada, guildId: interaction.guild.id, acusadoId, motivoAceite: motivo };
+  const ponte = await require('../services/ponteSamp/aceite').registrarAceite({
+    client: interaction.client, denuncia, origem: 'canal_staff', staff: quem
+  }).catch(() => null);
+  if (ponte?.jaExistia && ponte.status && ponte.status !== 'aceita') {
+    const situacao = { executando: 'já foi enviada ao jogo e está esperando a resposta', aplicada: 'já foi aplicada no jogo' }[ponte.status] || `está ${ponte.status}`;
+    return interaction.editReply(`ℹ️ A punição dessa denúncia ${situacao}: nada foi mudado.`);
+  }
+  const envio = ponte ? await require('../Handlers/statusDenuncia/acoesStatus').enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;
+  if (envio?.erro) log.warn(`[PonteGm] /tempban pelo link da denúncia ${achada._id} não foi para a gamemode: ${envio.erro}`);
+  return interaction.editReply(`✅ Punição da denúncia atualizada: ${acusadoId} por (${motivo.slice(0, 200)}).\n${resultadoNoJogo(ponte, envio)}`);
+}
+
 // Registro já aceito, sem botões, no canal das provas; a punição vai direto para o jogo.
 async function handleModalTempban(interaction) {
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
@@ -267,6 +299,10 @@ async function handleModalTempban(interaction) {
   }
   const punicao = punicaoDoMotivo(regra);
   const quem = { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username, em: new Date() };
+
+  let digitado = '';
+  try { digitado = String(interaction.fields.getTextInputValue('link') || '').trim(); } catch { digitado = ''; }
+  if (digitado) return tempbanPeloLink(interaction, digitado, { contas, motivo, quem });
 
   const doc = await DenunciaStaff.create({
     guildId: interaction.guild.id,

@@ -63,7 +63,7 @@ const comandos = [
     {
         data: new SlashCommandBuilder()
             .setName('tempban')
-            .setDescription('Registra a punição com as provas, já aceita, e manda direto para o jogo (só o responsável).'),
+            .setDescription('Manda a punição direto ao jogo; com link, corrige a de uma denúncia aceita (só o responsável).'),
         executar: handleTempbanSlash
     },
     {

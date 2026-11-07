@@ -1005,3 +1005,40 @@ test('aceite de novo com outro ID ou motivo refaz os jogadores da punição aind
   assert.equal(enviada.jaExistia, true);
   assert.equal((await m.PontePunicao.findById(segundo.punicao._id).lean()).alvos.length, 2);
 });
+
+test('/tempban com o link da denúncia: corrige a punição dela (sem registro nem Cadeia Staff)', async () => {
+  const Config = require('../models/Config');
+  const Denuncia = require('../models/Denuncia');
+  const provaStaff = require('../commands/provaStaff');
+  await guildAtiva('100000000000000818');
+  await Config.create({ guildId: '100000000000000818', channels: { provasStaff: '600000000000000818' }, roles: { responsavel_admin: '777000000000000818' } });
+  const denunciaId = new mongoose.Types.ObjectId();
+  await Denuncia.collection.insertOne({ _id: denunciaId, guildId: '100000000000000818', status: 'aceita', acusado: '1270101', motivo: 'CL', acusadoId: '1270101 CL + 360429 saav', motivoAceite: 'x', channelId: '600000000000000001', messageId: '600000000000000002', threadId: '600000000000000003' });
+  // Punição que ficou sem jogador no primeiro aceite.
+  await m.aceite.registrarAceite({ client: null, denuncia: { _id: denunciaId, guildId: '100000000000000818', acusadoId: '1270101 CL + 360429 saav', motivoAceite: 'x' }, origem: 'canal_staff', staff: { id: '1', nome: 'R' } });
+
+  const enviadas = [];
+  let resposta = '';
+  const campos = { id: '1270101+360429', motivo: '1270101 CL +360429 saav', provas: '', link: 'https://discord.com/channels/100000000000000818/600000000000000003' };
+  const interacao = {
+    customId: provaStaff.MODAL_TEMPBAN,
+    guild: { id: '100000000000000818', name: 'BRP', channels: { fetch: async () => ({ id: '600000000000000818', isTextBased: () => true, send: async (msg) => { enviadas.push(msg); return {}; } }) } },
+    member: { displayName: 'Resp', roles: { cache: new Map([['777000000000000818', {}]]) } },
+    user: { id: '1', username: 'resp', toString: () => '<@1>' },
+    client: { channels: { fetch: async () => null }, users: { fetch: async () => null } },
+    fields: { getTextInputValue: (id) => campos[id] },
+    deferReply: async () => {},
+    editReply: async (r) => { resposta = typeof r === 'string' ? r : r.content; }
+  };
+  await provaStaff.handleModalTempban(interacao);
+  assert.match(resposta, /Punição da denúncia atualizada: 1270101\+360429/);
+  assert.equal(enviadas.length, 0, 'nada no canal das provas');
+  const punicao = await m.PontePunicao.findOne({ denunciaId }).lean();
+  assert.deepEqual(punicao.alvos.map(a => [a.contaId, a.motivo]), [['1270101', 'CL'], ['360429', 'saav']]);
+  assert.equal((await Denuncia.findById(denunciaId).lean()).acusadoId, '1270101+360429');
+
+  // Link de denúncia que não foi aceita: recusa.
+  await Denuncia.collection.updateOne({ _id: denunciaId }, { $set: { status: 'pendente' } });
+  await provaStaff.handleModalTempban(interacao);
+  assert.match(resposta, /ainda não foi aceita/);
+});

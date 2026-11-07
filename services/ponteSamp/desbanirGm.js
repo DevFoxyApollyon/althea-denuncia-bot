@@ -218,4 +218,4 @@ async function desfazerPorConta({ guildId, conta, acao, avisos = 0, staff }) {
   return { ok: true, pedido, teste: pedido.teste };
 }
 
-module.exports = { consultarConta, desfazerPorConta, TIPOS_DESFAZER, prepararDesbanimento, desbanir, avisarDesbanimento, situacaoDoDesbanimento };
+module.exports = { denunciaPeloLink, consultarConta, desfazerPorConta, TIPOS_DESFAZER, prepararDesbanimento, desbanir, avisarDesbanimento, situacaoDoDesbanimento };

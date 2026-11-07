@@ -1947,3 +1947,25 @@ test('punição sem jogador: o Editar cria o jogador e o Corrigir refaz os jogad
   await m.PontePunicao.updateOne({ _id: outra._id }, { $set: { status: 'executando' } });
   assert.equal(await atualizarPunicaoDoJogo(null, { ...denuncia, acusadoId: '999' }), false);
 });
+
+test('Editar numa punição sem jogador abre o formulário "Adicionar o jogador" (com o ID da conta)', async () => {
+  await guildGm('100000000000000880');
+  const Config = require('../models/Config');
+  await Config.create({ guildId: '100000000000000880', roles: { responsavel_admin: '200000000000000880' } });
+  const vazia = await punicaoAceita('100000000000000880', []);
+  const { handleEditarGm } = require('../Handlers/ponteGamemode');
+  let modal = null;
+  let resposta = null;
+  await handleEditarGm({
+    customId: `${discordGm().BOTAO_EDITAR}${vazia._id}`,
+    guild: { id: '100000000000000880', members: { fetch: async () => null } },
+    user: { id: '1' },
+    member: { roles: { cache: new Map([['200000000000000880', {}]]) } },
+    showModal: async (m2) => { modal = m2.toJSON(); },
+    reply: async (r) => { resposta = r; }
+  });
+  assert.equal(resposta, null, `respondeu em vez de abrir o formulário: ${JSON.stringify(resposta)}`);
+  assert.equal(modal.title, 'Adicionar o jogador');
+  assert.deepEqual(modal.components.map(l => l.components[0].custom_id), ['conta', 'tipo', 'tempo', 'avisos', 'motivo']);
+  assert.ok(modal.custom_id.endsWith(`:novo:${vazia.versao}`));
+});
