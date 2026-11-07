@@ -97,8 +97,18 @@ async function handleEntrarNoTopico(interaction) {
     const denuncia = await Denuncia.findOne(threadIdDoBotao
         ? { guildId: interaction.guild.id, threadId: threadIdDoBotao }
         : { guildId: interaction.guild.id, messageId: interaction.message.id }).select('threadId').lean();
-    const topico = denuncia?.threadId ? await interaction.client.channels.fetch(denuncia.threadId).catch(() => null) : null;
-    if (!topico?.isThread?.()) return interaction.editReply('❌ Não encontrei o tópico desta denúncia.');
+    if (!denuncia?.threadId) return interaction.editReply('❌ Esta denúncia não tem tópico salvo no bot.');
+    // O motivo de não achar muda o que fazer: apagado não volta; sem acesso, é permissão do bot.
+    let erroDoDiscord = null;
+    const topico = await interaction.client.channels.fetch(denuncia.threadId).catch((erro) => { erroDoDiscord = erro; return null; });
+    if (!topico?.isThread?.()) {
+        if (erroDoDiscord?.code === 10003) return interaction.editReply('❌ O tópico desta denúncia foi apagado no Discord.');
+        if (erroDoDiscord?.code === 50001 || erroDoDiscord?.code === 50013) {
+            return interaction.editReply('❌ O bot não tem acesso ao tópico desta denúncia. Dê a ele "Ver canal", "Gerenciar tópicos" e "Enviar mensagens em tópicos" no canal das denúncias.');
+        }
+        console.warn(`Tópico ${denuncia.threadId} não encontrado: ${erroDoDiscord?.message || 'não é um tópico'}`);
+        return interaction.editReply('❌ Não encontrei o tópico desta denúncia.');
+    }
 
     // Tópico arquivado não aceita membros novos: reabre antes.
     if (topico.archived) await topico.setArchived(false).catch(() => {});

@@ -1098,3 +1098,27 @@ test('/provastaff: recusar vale com motivo fora da tabela e apaga o registro do 
   assert.equal((await DenunciaStaff.findById(doc._id).lean()).status, 'recusada');
   assert.equal(noTopico[0], '❌ Provas recusadas por <@1>');
 });
+
+test('Entrar no tópico: diz se o tópico foi apagado ou se o bot está sem acesso', async () => {
+  const Config = require('../models/Config');
+  const Denuncia = require('../models/Denuncia');
+  const { handleEntrarNoTopico } = require('../commands/denuncia');
+  await Config.create({ guildId: '821', roles: { administrador: '777000000000000821' } });
+  await Denuncia.collection.insertOne({ guildId: '821', messageId: '600000000000000930', threadId: '600000000000000931' });
+  const tentar = async (erro) => {
+    let resposta = '';
+    await handleEntrarNoTopico({
+      customId: 'entrar_topico',
+      guild: { id: '821' },
+      member: { roles: { cache: new Map([['777000000000000821', {}]]) } },
+      user: { id: '1' },
+      message: { id: '600000000000000930' },
+      client: { channels: { fetch: async () => { throw Object.assign(new Error('x'), { code: erro }); } } },
+      deferReply: async () => {},
+      editReply: async (r) => { resposta = typeof r === 'string' ? r : r.content; }
+    });
+    return resposta;
+  };
+  assert.match(await tentar(10003), /foi apagado/);
+  assert.match(await tentar(50001), /não tem acesso/);
+});
