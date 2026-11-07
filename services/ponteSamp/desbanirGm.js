@@ -1,7 +1,7 @@
 // /desbanir: o responsável cola o link de uma denúncia que o bot já aplicou e a
 // gamemode desfaz o que foi aplicado em cada jogador: ban vira pedido "desbanir"
-// (/desbanir <conta>), cadeia vira "soltar" (a mesma cadeia com tempo 0). Os avisos
-// que o bot deu vão no mesmo pedido, para a gamemode tirar (/limpaaviso, um por aviso).
+// (/desbanir <conta>), cadeia vira "soltar" (/tirarprisao <conta>). Os avisos
+// que o bot deu vão no mesmo pedido, para a gamemode tirar (/limparavisooff <conta> <motivo>, um por aviso).
 // O resultado aparece no Relatório de punições.
 const { EmbedBuilder } = require('discord.js');
 const Denuncia = require('../../models/Denuncia');

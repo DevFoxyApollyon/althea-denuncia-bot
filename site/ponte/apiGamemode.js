@@ -221,7 +221,11 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
       const segundos = r.pedido.entregueEm ? Math.round((agora() - new Date(r.pedido.entregueEm).getTime()) / 1000) : null;
       const tempo = segundos === null ? '' : ` em ${segundos} s`;
       const org = dados.organizacao ? `, organização "${dados.organizacao}"` : '';
-      const linha = `[PonteGm] Pedido ${r.pedido._id} (${descreverComando(r.pedido)}, ${quem}${org}): ${dados.status} (${dados.codigo})${tempo} - ${explicarCodigo(dados.codigo)}`;
+      // Consulta recusada como DADOS_INVALIDOS: a include não conhece o tipo "consultar" (só a 1.0.1 em diante).
+      const porque = r.pedido.tipo === 'consultar' && dados.codigo === 'DADOS_INVALIDOS'
+        ? `a gamemode não conhece a consulta do /desbanir pelo ID${conexao.versaoInclude ? ` (está com a include ${conexao.versaoInclude})` : ''}: precisa da include ${VERSAO_INCLUDE_GM} e da public Althea_Consultar.`
+        : explicarCodigo(dados.codigo);
+      const linha = `[PonteGm] Pedido ${r.pedido._id} (${descreverComando(r.pedido)}, ${quem}${org}): ${dados.status} (${dados.codigo})${tempo} - ${porque}`;
       // Só o que deu errado aparece no console; aplicada e simulada ficam na auditoria.
       if (!['aplicada', 'simulada'].includes(dados.status)) log?.warn?.(linha);
       if (r.reenvio) {

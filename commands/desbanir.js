@@ -1,6 +1,7 @@
 // /desbanir: formulário com o link da denúncia; se o bot já aplicou a punição dela,
 // mostra a denúncia (só para quem usou) com o botão "Desbanir", que manda a
-// gamemode rodar /desbanir <conta> em cada jogador banido nela. Só o responsável usa.
+// gamemode desbanir cada jogador banido nela (preso sai com /tirarprisao; avisos com
+// /limparavisooff). Só o responsável usa.
 const {
   MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder
 } = require('discord.js');
@@ -34,7 +35,7 @@ async function handleDesbanirSlash(interaction) {
 }
 
 const ROTULO_ESTADO = { pode: 'punido', andamento: '⏳ em andamento', desbanido: '✅ já desfeito' };
-const ACAO_DO_TIPO = { desbanir: 'desbanir', soltar: 'soltar (cadeia com tempo 0)' };
+const ACAO_DO_TIPO = { desbanir: 'desbanir', soltar: 'soltar (/tirarprisao)' };
 
 function telaDoDesbanimento({ denuncia, punicao, alvos }, servidor) {
   const podem = alvos.filter(a => a.estado === 'pode' && a.conta > 0);

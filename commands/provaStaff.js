@@ -273,11 +273,11 @@ async function handleModalTempban(interaction) {
     cadeia: { status: 'aceita' }
   });
   const { registro, topico, dms } = await publicarRegistro(interaction, canal, doc, {
-    contas, motivo, punicao, provas, arquivos, status: `\`Aceita\` por ${interaction.user} (/tempban)`, components: []
+    contas, motivo, punicao, provas, arquivos, status: `\`Aceita\` por ${interaction.user}`, components: []
   });
 
+  // O resultado no jogo só aparece para quem usou o comando (a mensagem do canal fica limpa).
   const jogo = await mandarParaOJogo(interaction, { ...doc.toObject(), threadId: topico?.id || '' }, registro, quem);
-  await registro.edit({ content: `${registro.content}\n➥ Jogo: ${jogo}`.slice(0, 2000), allowedMentions: { parse: [] } }).catch(() => {});
 
   await publicarPainel(canal).catch(() => {});
   return interaction.editReply(`✅ Tempban registrado${topico ? ` com o tópico ${topico}` : ''}.\n${jogo}${dms ? `\n📨 ${dms} DM(s) enviada(s).` : ''}`);

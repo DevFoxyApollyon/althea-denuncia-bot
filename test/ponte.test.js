@@ -930,8 +930,9 @@ test('/tempban: registro já aceito, sem botões, no canal das provas e puniçã
   assert.match(resposta, /Tempban registrado/);
   assert.deepEqual(enviadas[0].components, [], 'sem Aceitar e Recusar');
   assert.match(enviadas[0].content, /➥ ID\(s\):\n {2}• 111\n {2}• 222/);
-  assert.match(enviadas[0].content, /➥ Status: `Aceita` por <@1> \(\/tempban\)/);
-  assert.match(edicao.content, /➥ Jogo: 🎮 Enviada para o painel do jogo\./);
+  assert.match(enviadas[0].content, /➥ Status: `Aceita` por <@1>$/);
+  assert.equal(edicao, null, 'a mensagem do canal não ganha a linha do jogo');
+  assert.match(resposta, /🎮 Enviada para o painel do jogo\./);
 
   const doc = await DenunciaStaff.findOne({ guildId: '816' }).lean();
   assert.deepEqual([doc.status, doc.acusadoAceite, doc.motivoAceite, doc.cadeia.status, doc.messageId], ['aceita', '111+222', 'SAAV', 'aceita', '600000000000000900']);
