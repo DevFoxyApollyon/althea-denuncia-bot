@@ -489,6 +489,7 @@ const ROTAS = {
       [MODAL_LINK]: handleLinkModal,
       [MODAL_DESBANIR]: handleDesbanirModal,
       [provaStaff.MODAL_REGISTRO]: provaStaff.handleModalRegistro,
+      [provaStaff.MODAL_TEMPBAN]: provaStaff.handleModalTempban,
       global_exempt_users_modal: handleGlobalExemptUsersSubmit,
       [MODAL_TEMPLATES]: handlePonteTemplatesModal,
       [MODAL_MOTIVOS]: handlePonteMotivosModal,

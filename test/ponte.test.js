@@ -882,6 +882,63 @@ test('/provastaff: aceitar pede ID e motivo, manda para a Cadeia Staff com Aceit
   assert.match(resposta, /já foi decidido/);
 });
 
+test('/tempban: registro já aceito, sem botões, no canal das provas e punição direto na fila do jogo', async () => {
+  const Config = require('../models/Config');
+  const DenunciaStaff = require('../models/DenunciaStaff');
+  const provaStaff = require('../commands/provaStaff');
+  await Config.create({ guildId: '816', channels: { provasStaff: '600000000000000816' }, roles: { responsavel_admin: '777000000000000816' } });
+  await m.PonteServidor.create({ guildId: '816', ativo: true });
+
+  const enviadas = [];
+  let edicao = null;
+  const registro = { id: '600000000000000900', channelId: '600000000000000816', content: '', startThread: async () => null, edit: async (msg) => { edicao = msg; } };
+  const canal = {
+    id: '600000000000000816',
+    guild: { id: '816' },
+    isTextBased: () => true,
+    send: async (msg) => { enviadas.push(msg); if (msg.content) registro.content = msg.content; return msg.embeds ? { id: 'painel' } : registro; },
+    messages: { fetch: async () => null }
+  };
+  let resposta = '';
+  const interacao = {
+    customId: provaStaff.MODAL_TEMPBAN,
+    guild: { id: '816', name: 'BRP', channels: { fetch: async () => canal } },
+    member: { displayName: 'Resp', roles: { cache: new Map([['777000000000000816', {}]]) } },
+    user: { id: '1', username: 'resp', toString: () => '<@1>' },
+    client: { channels: { fetch: async () => null }, users: { fetch: async () => null } },
+    fields: { getTextInputValue: (id) => ({ id: '111 + 222', motivo: 'SAAV', provas: '' })[id] },
+    deferReply: async () => {},
+    editReply: async (r) => { resposta = typeof r === 'string' ? r : r.content; }
+  };
+
+  // Sem o cargo de responsável: não registra.
+  const membro = interacao.member;
+  interacao.member = { displayName: 'Staff', roles: { cache: new Map() } };
+  await provaStaff.handleModalTempban(interacao);
+  assert.match(resposta, /Só o responsável/);
+  interacao.member = membro;
+
+  // Motivo fora da tabela: não registra (vai direto para o jogo, precisa do tempo).
+  const campos = interacao.fields;
+  interacao.fields = { getTextInputValue: (id) => ({ id: '111', motivo: 'rrrr' })[id] };
+  await provaStaff.handleModalTempban(interacao);
+  assert.match(resposta, /não está na tabela de motivos/);
+  assert.equal(await DenunciaStaff.countDocuments({ guildId: '816' }), 0);
+  interacao.fields = campos;
+
+  await provaStaff.handleModalTempban(interacao);
+  assert.match(resposta, /Tempban registrado/);
+  assert.deepEqual(enviadas[0].components, [], 'sem Aceitar e Recusar');
+  assert.match(enviadas[0].content, /➥ ID\(s\):\n {2}• 111\n {2}• 222/);
+  assert.match(enviadas[0].content, /➥ Status: `Aceita` por <@1> \(\/tempban\)/);
+  assert.match(edicao.content, /➥ Jogo: 🎮 Enviada para o painel do jogo\./);
+
+  const doc = await DenunciaStaff.findOne({ guildId: '816' }).lean();
+  assert.deepEqual([doc.status, doc.acusadoAceite, doc.motivoAceite, doc.cadeia.status, doc.messageId], ['aceita', '111+222', 'SAAV', 'aceita', '600000000000000900']);
+  const punicao = await m.PontePunicao.findOne({ denunciaId: doc._id }).lean();
+  assert.deepEqual([punicao.status, punicao.alvos.map(a => a.contaId)], ['aceita', ['111', '222']]);
+});
+
 test('/provastaff: motivo cadastrado depois atualiza a punição dos registros pendentes fora da tabela', async () => {
   const DenunciaStaff = require('../models/DenunciaStaff');
   const { atualizarProvasForaDaTabela } = require('../commands/provaStaff');

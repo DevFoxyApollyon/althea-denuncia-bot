@@ -6,7 +6,7 @@ const { handleDenunciaSlash } = require('./denuncia');
 const ponte = require('./ponte');
 const { handleLinkSlash } = require('./link');
 const { handleDesbanirSlash } = require('./desbanir');
-const { handleProvaStaffSlash } = require('./provaStaff');
+const { handleProvaStaffSlash, handleTempbanSlash } = require('./provaStaff');
 
 const comandos = [
     {
@@ -59,6 +59,12 @@ const comandos = [
             .setName('provastaff')
             .setDescription('Publica o painel de provas da staff no canal fixo (configurado no /painel ou no site).'),
         executar: handleProvaStaffSlash
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('tempban')
+            .setDescription('Registra a punição com as provas, já aceita, e manda direto para o jogo (só o responsável).'),
+        executar: handleTempbanSlash
     },
     {
         data: new SlashCommandBuilder()

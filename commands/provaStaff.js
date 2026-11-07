@@ -3,6 +3,8 @@
 // e os botões Aceitar e Recusar (só o responsável). Aceitar pede o ID e o motivo e
 // manda para a Cadeia Staff, com Aceitar e Recusar como uma denúncia comum; o aceite
 // lá segue para o jogo pela ponte. Fica no banco principal como DenunciaStaff.
+// /tempban: o responsável registra no mesmo canal já aceito, sem botões, e a punição
+// vai direto para o jogo (sem passar pela Cadeia Staff).
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, FileUploadBuilder, LabelBuilder,
   MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle
@@ -25,6 +27,7 @@ const MODAL_REGISTRO = 'provastaff_modal';
 const BOTAO_ACEITAR = 'provastaff_aceitar:';
 const BOTAO_RECUSAR = 'provastaff_recusar:';
 const MODAL_ACEITE = 'provastaff_aceite:';
+const MODAL_TEMPBAN = 'provastaff_tempban';
 const MAX_IDS = 10;
 
 const efemero = (content) => ({ content, flags: [MessageFlags.Ephemeral] });
@@ -84,12 +87,12 @@ async function handleProvaStaffSlash(interaction) {
   return interaction.editReply(`✅ Painel de provas publicado em ${canal}.`);
 }
 
-function modalDoRegistro() {
+function modalDoRegistro({ customId = MODAL_REGISTRO, titulo = '📋 Registrar punição' } = {}) {
   const campo = (id, rotulo, estilo, { min = 1, max = 100, obrigatorio = true, exemplo = '' } = {}) => new ActionRowBuilder().addComponents(
     new TextInputBuilder().setCustomId(id).setLabel(rotulo).setStyle(estilo).setRequired(obrigatorio)
       .setMinLength(obrigatorio ? min : 0).setMaxLength(max).setPlaceholder(exemplo)
   );
-  const modal = new ModalBuilder().setCustomId(MODAL_REGISTRO).setTitle('📋 Registrar punição').addComponents(
+  const modal = new ModalBuilder().setCustomId(customId).setTitle(titulo).addComponents(
     campo('id', 'ID(s) do(s) acusado(s), separe com +', TextInputStyle.Short, { max: 200, exemplo: 'Ex.: 123456 ou 123+456+789' }),
     campo('motivo', 'Motivo da punição', TextInputStyle.Paragraph, { min: 2, max: 500, exemplo: 'Descreva o motivo de forma clara' }),
     campo('provas', 'Provas (opcional: links ou texto)', TextInputStyle.Paragraph, { max: 1000, obrigatorio: false, exemplo: 'Links das provas, ou deixe em branco e use o tópico' })
@@ -115,12 +118,8 @@ const linhaDeDecisao = (id) => new ActionRowBuilder().addComponents(
   new ButtonBuilder().setCustomId(`${BOTAO_RECUSAR}${id}`).setLabel('Recusar').setEmoji('❌').setStyle(ButtonStyle.Danger)
 );
 
-async function handleModalRegistro(interaction) {
-  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-  const { config, staff } = await papeis(interaction);
-  if (!staff) return interaction.editReply('🚫 Só a staff (administrador, responsável ou suporte) registra provas.');
-  const canal = await canalFixo(interaction, config) || interaction.channel;
-
+// Lê o formulário (do "Upar provas" ou do /tempban). Devolve { erro } ou os dados.
+function lerFormulario(interaction) {
   const ler = (id) => { try { return String(interaction.fields.getTextInputValue(id) || '').trim(); } catch { return ''; } };
   const contas = [...new Set(ler('id').split('+').map(s => s.trim()).filter(Boolean))];
   const motivo = ler('motivo');
@@ -128,26 +127,20 @@ async function handleModalRegistro(interaction) {
   let arquivos = [];
   try { arquivos = [...(interaction.fields.getUploadedFiles('arquivos')?.values() ?? [])]; } catch { arquivos = []; }
 
-  if (!contas.length) return interaction.editReply('❌ Nenhum ID informado.');
+  if (!contas.length) return { erro: '❌ Nenhum ID informado.' };
   const invalido = contas.find(c => !/^\d{1,9}$/.test(c));
-  if (invalido) return interaction.editReply(`❌ ID inválido: \`${invalido.slice(0, 30)}\`. Use só os números da conta; vários com \`+\` (ex.: \`123+456\`).`);
-  if (contas.length > MAX_IDS) return interaction.editReply(`❌ No máximo ${MAX_IDS} IDs por registro.`);
-  if (motivo.length < 2) return interaction.editReply('❌ Preencha o motivo.');
+  if (invalido) return { erro: `❌ ID inválido: \`${invalido.slice(0, 30)}\`. Use só os números da conta; vários com \`+\` (ex.: \`123+456\`).` };
+  if (contas.length > MAX_IDS) return { erro: `❌ No máximo ${MAX_IDS} IDs por registro.` };
+  if (motivo.length < 2) return { erro: '❌ Preencha o motivo.' };
+  return { contas, motivo, provas, arquivos };
+}
 
-  // A punição sai da tabela de motivos (a mesma do aceite da denúncia).
-  const regra = classificarMotivo(motivo, (await obterTabela()).tabela);
-  const punicao = punicaoDoMotivo(regra);
-
+// Mensagem do registro no canal, tópico com as provas e DM para quem tem a conta.
+async function publicarRegistro(interaction, canal, doc, { contas, motivo, punicao, provas, arquivos, status, components }) {
   // Discord de cada conta (quem tem a conta no nick).
   const vinculos = await Usuario.find({ guildId: interaction.guild.id, conta: { $in: contas } }, { conta: 1, userId: 1 }).sort({ updatedAt: -1 }).lean().catch(() => []);
   const discordDe = new Map();
   for (const u of vinculos) if (!discordDe.has(String(u.conta))) discordDe.set(String(u.conta), u.userId);
-
-  const doc = await DenunciaStaff.create({
-    guildId: interaction.guild.id,
-    autor: { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username },
-    contas, motivo, punicao, provas, arquivos: arquivos.length
-  });
 
   const linhasIds = contas.map(c => (discordDe.get(c) ? `  • ${c} — (<@${discordDe.get(c)}>)` : `  • ${c}`)).join('\n');
   const provasTexto = provas || (arquivos.length ? `${arquivos.length} arquivo(s) no tópico` : 'Tópico');
@@ -158,9 +151,9 @@ async function handleModalRegistro(interaction) {
       `➥ Motivo: ${motivo}`,
       `➥ Punição: ${punicao}`,
       `➥ Provas: ${provasTexto}`,
-      '➥ Status: `Pendente`'
+      `➥ Status: ${status}`
     ].join('\n').slice(0, 2000),
-    components: [linhaDeDecisao(doc._id)],
+    components,
     allowedMentions: { parse: [] }
   });
 
@@ -189,9 +182,100 @@ async function handleModalRegistro(interaction) {
       if (enviada) dms += 1;
     }
   }
+  return { registro, topico, dms };
+}
+
+async function handleModalRegistro(interaction) {
+  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+  const { config, staff } = await papeis(interaction);
+  if (!staff) return interaction.editReply('🚫 Só a staff (administrador, responsável ou suporte) registra provas.');
+  const canal = await canalFixo(interaction, config) || interaction.channel;
+
+  const form = lerFormulario(interaction);
+  if (form.erro) return interaction.editReply(form.erro);
+  const { contas, motivo, provas, arquivos } = form;
+
+  // A punição sai da tabela de motivos (a mesma do aceite da denúncia).
+  const regra = classificarMotivo(motivo, (await obterTabela()).tabela);
+  const punicao = punicaoDoMotivo(regra);
+
+  const doc = await DenunciaStaff.create({
+    guildId: interaction.guild.id,
+    autor: { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username },
+    contas, motivo, punicao, provas, arquivos: arquivos.length
+  });
+  const { topico, dms } = await publicarRegistro(interaction, canal, doc, {
+    contas, motivo, punicao, provas, arquivos, status: '`Pendente`', components: [linhaDeDecisao(doc._id)]
+  });
 
   if (canal.id === config?.channels?.provasStaff) await publicarPainel(canal).catch(() => {});
   return interaction.editReply(`✅ Registro criado${topico ? ` com o tópico ${topico}` : ''}. ${dms ? `📨 ${dms} DM(s) enviada(s).` : ''} O responsável vai aceitar ou recusar.`);
+}
+
+// /tempban: só o responsável (o mesmo que aceita e envia ao jogo). Abre o formulário.
+async function handleTempbanSlash(interaction) {
+  const { config, responsavel } = await papeis(interaction);
+  if (!responsavel) return interaction.reply(efemero('🚫 Só o responsável usa o /tempban.'));
+  const canal = await canalFixo(interaction, config);
+  if (!canal?.isTextBased?.()) {
+    return interaction.reply(efemero('❌ Configure o canal das provas da staff no `/painel` (Canais principais) ou no site (Painel do bot) antes.'));
+  }
+  return interaction.showModal(modalDoRegistro({ customId: MODAL_TEMPBAN, titulo: '🔨 Tempban direto no jogo' }));
+}
+
+// Texto da linha "Jogo" conforme o que a ponte respondeu.
+function resultadoNoJogo(ponte, envio) {
+  if (ponte?.soRegistro) return '📝 Motivo neutro: só visual, não vai para o jogo.';
+  if (envio?.ok) return `📤 Enviada à gamemode (${envio.pedidos} pedido(s)).${envio.teste ? ' 🧪 Modo teste: só simula.' : ''}`;
+  if (envio?.erro) return `⚠️ Não foi para a gamemode: ${envio.erro} Use "Enviar ao jogo" no Relatório de punições.`;
+  if (ponte?.criado) return '🎮 Enviada para o painel do jogo.';
+  if (ponte?.jaExistia) return 'ℹ️ Já estava no painel do jogo.';
+  return '⚠️ A ponte com o jogo não está ativa neste servidor: nada foi enviado.';
+}
+
+// Registro já aceito, sem botões, no canal das provas; a punição vai direto para o jogo.
+async function handleModalTempban(interaction) {
+  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+  const { config, responsavel } = await papeis(interaction);
+  if (!responsavel) return interaction.editReply('🚫 Só o responsável usa o /tempban.');
+  const canal = await canalFixo(interaction, config);
+  if (!canal?.isTextBased?.()) return interaction.editReply('❌ Canal das provas da staff não configurado.');
+
+  const form = lerFormulario(interaction);
+  if (form.erro) return interaction.editReply(form.erro);
+  const { contas, motivo, provas, arquivos } = form;
+
+  // Vai direto para o jogo: o motivo precisa estar na tabela (escolhe tempo e avisos).
+  const regra = classificarMotivo(motivo, (await obterTabela()).tabela);
+  if (!regra.regra) {
+    return interaction.editReply(`❌ O motivo **${motivo.slice(0, 100)}** não está na tabela de motivos. Cadastre o motivo e o tempo em **Motivos de punição** no site e tente de novo.`);
+  }
+  const punicao = punicaoDoMotivo(regra);
+  const quem = { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username, em: new Date() };
+
+  const doc = await DenunciaStaff.create({
+    guildId: interaction.guild.id,
+    autor: { id: quem.id, nome: quem.nome },
+    contas, motivo, punicao, provas, arquivos: arquivos.length,
+    status: 'aceita', decididoPor: quem, acusadoAceite: contas.join('+'), motivoAceite: motivo,
+    cadeia: { status: 'aceita' }
+  });
+  const { registro, topico, dms } = await publicarRegistro(interaction, canal, doc, {
+    contas, motivo, punicao, provas, arquivos, status: `\`Aceita\` por ${interaction.user} (/tempban)`, components: []
+  });
+
+  // Ponte com o jogo: entra na fila e, no modo gamemode, já é enviada.
+  const denuncia = comoDenuncia({ ...doc.toObject(), channelId: registro.channelId, messageId: registro.id, threadId: topico?.id || '' });
+  const ponte = await require('../services/ponteSamp/aceite').registrarAceite({
+    client: interaction.client, denuncia, origem: 'canal_staff', staff: quem, canalMensagem: registro
+  }).catch(() => null);
+  const envio = ponte ? await require('../Handlers/statusDenuncia/acoesStatus').enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;
+  const jogo = resultadoNoJogo(ponte, envio);
+  if (envio?.erro) log.warn(`[PonteGm] /tempban ${doc._id} não foi para a gamemode: ${envio.erro}`);
+  await registro.edit({ content: `${registro.content}\n➥ Jogo: ${jogo}`.slice(0, 2000), allowedMentions: { parse: [] } }).catch(() => {});
+
+  await publicarPainel(canal).catch(() => {});
+  return interaction.editReply(`✅ Tempban registrado${topico ? ` com o tópico ${topico}` : ''}.\n${jogo}${dms ? `\n📨 ${dms} DM(s) enviada(s).` : ''}`);
 }
 
 const FORA_DA_TABELA = 'Motivo fora da tabela: o responsável confere no aceite';
@@ -360,7 +444,7 @@ async function recusarNaCadeia(interaction, doc) {
 }
 
 module.exports = {
-  BOTAO_UPAR, MODAL_REGISTRO, BOTAO_ACEITAR, BOTAO_RECUSAR, MODAL_ACEITE,
-  handleProvaStaffSlash, handleBotaoUpar, handleModalRegistro, handleBotaoAceitar, handleModalAceite, handleBotaoRecusar,
+  BOTAO_UPAR, MODAL_REGISTRO, BOTAO_ACEITAR, BOTAO_RECUSAR, MODAL_ACEITE, MODAL_TEMPBAN,
+  handleProvaStaffSlash, handleTempbanSlash, handleModalTempban, handleBotaoUpar, handleModalRegistro, handleBotaoAceitar, handleModalAceite, handleBotaoRecusar,
   comoDenuncia, recusarNaCadeia, publicarPainel, atualizarProvasForaDaTabela, avisarNoTopico
 };
