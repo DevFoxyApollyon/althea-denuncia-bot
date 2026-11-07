@@ -1042,3 +1042,36 @@ test('/tempban com o link da denúncia: corrige a punição dela (sem registro n
   await provaStaff.handleModalTempban(interacao);
   assert.match(resposta, /ainda não foi aceita/);
 });
+
+test('/tempban com o link: punição da denúncia já aplicada não bloqueia, vira uma punição nova', async () => {
+  const Config = require('../models/Config');
+  const Denuncia = require('../models/Denuncia');
+  const provaStaff = require('../commands/provaStaff');
+  const g = '100000000000000819';
+  await guildAtiva(g);
+  await Config.create({ guildId: g, channels: { provasStaff: '600000000000000819' }, roles: { responsavel_admin: '777000000000000819' } });
+  const denunciaId = new mongoose.Types.ObjectId();
+  await Denuncia.collection.insertOne({ _id: denunciaId, guildId: g, status: 'aceita', acusado: '1270101', motivo: 'CL', acusadoId: '1270101', motivoAceite: 'CL', channelId: '600000000000000011', messageId: '600000000000000012', threadId: '600000000000000013' });
+  const primeira = await m.aceite.registrarAceite({ client: null, denuncia: { _id: denunciaId, guildId: g, acusadoId: '1270101', motivoAceite: 'CL' }, origem: 'canal_staff', staff: { id: '1', nome: 'R' } });
+  await m.PontePunicao.updateOne({ _id: primeira.punicao._id }, { $set: { status: 'aplicada' } });
+
+  let resposta = '';
+  const campos = { id: '360429', motivo: 'saav', provas: '', link: `https://discord.com/channels/${g}/600000000000000013` };
+  await provaStaff.handleModalTempban({
+    customId: provaStaff.MODAL_TEMPBAN,
+    guild: { id: g, name: 'BRP', channels: { fetch: async () => ({ id: '600000000000000819', isTextBased: () => true, send: async () => ({}) }) } },
+    member: { displayName: 'Resp', roles: { cache: new Map([['777000000000000819', {}]]) } },
+    user: { id: '1', username: 'resp', toString: () => '<@1>' },
+    client: { channels: { fetch: async () => null }, users: { fetch: async () => null } },
+    fields: { getTextInputValue: (id) => campos[id] },
+    deferReply: async () => {},
+    editReply: async (r) => { resposta = typeof r === 'string' ? r : r.content; }
+  });
+  assert.match(resposta, /Punição nova da denúncia/);
+  const DenunciaStaff = require('../models/DenunciaStaff');
+  const doc = await DenunciaStaff.findOne({ guildId: g }).lean();
+  assert.equal(doc.threadId, '600000000000000013', 'ligada ao tópico da denúncia');
+  const nova = await m.PontePunicao.findOne({ denunciaId: doc._id }).lean();
+  assert.deepEqual([nova.status, nova.alvos.map(a => a.contaId)], ['aceita', ['360429']]);
+  assert.equal((await m.PontePunicao.findById(primeira.punicao._id).lean()).status, 'aplicada', 'a aplicada não muda');
+});

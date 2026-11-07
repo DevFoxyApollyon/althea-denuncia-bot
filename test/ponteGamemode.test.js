@@ -1969,3 +1969,14 @@ test('Editar numa punição sem jogador abre o formulário "Adicionar o jogador"
   assert.deepEqual(modal.components.map(l => l.components[0].custom_id), ['conta', 'tipo', 'tempo', 'avisos', 'motivo']);
   assert.ok(modal.custom_id.endsWith(`:novo:${vazia.versao}`));
 });
+
+test('Adicionar o jogador: vários IDs com + viram um jogador cada, com o motivo de cada um', async () => {
+  await guildGm('100000000000000881');
+  const vazia = await punicaoAceita('100000000000000881', []);
+  const r = await discordGm().editarAlvoGm({
+    punicaoId: vazia._id, guildId: '100000000000000881', alvoId: 'novo', versao: 0,
+    campos: { conta: '1270101 + 360429', tipo: 'ban', tempo: '3', avisos: '1', motivo: '1270101 CL + 360429 saav' }, staff: { id: '1', nome: 'R' }
+  });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.punicao.alvos.map(a => [a.contaId, a.motivo, a.tempo]), [['1270101', 'CL', 3], ['360429', 'saav', 3]]);
+});

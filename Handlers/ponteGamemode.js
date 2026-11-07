@@ -75,7 +75,7 @@ function modalDoAlvo(punicao, alvo) {
     .setCustomId(`${gm.MODAL_ALVO}${punicao._id}:${alvo._id}:${punicao.versao}`)
     .setTitle(novo ? 'Adicionar o jogador' : `Punição de ${String(alvo.contaId || alvo.nick || 'alvo').slice(0, 30)}`)
     .addComponents(
-      ...(novo ? [campo('conta', 'ID da conta do jogador', '', TextInputStyle.Short, 9, 'Ex.: 1270101')] : []),
+      ...(novo ? [campo('conta', 'ID da conta (vários com +)', '', TextInputStyle.Short, 100, 'Ex.: 1270101 ou 1270101+360429')] : []),
       campo('tipo', 'Tipo (ban ou cadeia)', alvo.cmd, TextInputStyle.Short, 6),
       campo('tempo', 'Tempo', alvo.tempo, TextInputStyle.Short, 5, 'Ban: dias (0 = permanente). Cadeia: minutos.'),
       campo('avisos', 'Avisos', alvo.avisos ?? 0, TextInputStyle.Short, 2),

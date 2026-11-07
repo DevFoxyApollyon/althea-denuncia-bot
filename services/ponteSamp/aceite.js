@@ -281,4 +281,4 @@ async function reclassificarFila({ client = null, lista = null, tabela = null } 
   return fila;
 }
 
-module.exports = { registrarAceite, atualizarMensagensDiscord, marcarAplicadaNoDiscord, limparAguardando, montarAlvos, reclassificarFila };
+module.exports = { registrarAceite, atualizarMensagensDiscord, marcarAplicadaNoDiscord, limparAguardando, montarAlvos, motivosPorAcusado, reclassificarFila };

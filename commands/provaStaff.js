@@ -266,18 +266,33 @@ async function tempbanPeloLink(interaction, digitado, { contas, motivo, quem }) 
   if (original?.status !== 'aceita') return interaction.editReply('❌ Essa denúncia ainda não foi aceita. Aceite ela antes de mandar a punição ao jogo.');
 
   const acusadoId = contas.join('+');
-  await Denuncia.updateOne({ _id: achada._id }, { $set: { acusadoId, motivoAceite: motivo } }).catch(() => {});
-  const denuncia = { ...achada, guildId: interaction.guild.id, acusadoId, motivoAceite: motivo };
-  const ponte = await require('../services/ponteSamp/aceite').registrarAceite({
-    client: interaction.client, denuncia, origem: 'canal_staff', staff: quem
-  }).catch(() => null);
-  if (ponte?.jaExistia && ponte.status && ponte.status !== 'aceita') {
-    const situacao = { executando: 'já foi enviada ao jogo e está esperando a resposta', aplicada: 'já foi aplicada no jogo' }[ponte.status] || `está ${ponte.status}`;
-    return interaction.editReply(`ℹ️ A punição dessa denúncia ${situacao}: nada foi mudado.`);
+  const aceite = require('../services/ponteSamp/aceite');
+  const { enviarAoJogoNoAceite } = require('../Handlers/statusDenuncia/acoesStatus');
+  let denuncia = { ...achada, guildId: interaction.guild.id, acusadoId, motivoAceite: motivo };
+  let ponte = await aceite.registrarAceite({ client: interaction.client, denuncia, origem: 'canal_staff', staff: quem }).catch(() => null);
+  if (ponte?.jaExistia && ponte.status === 'executando') {
+    return interaction.editReply('ℹ️ A punição dessa denúncia já foi enviada ao jogo e está esperando a resposta. Espere o resultado no Relatório de punições antes de mandar de novo.');
   }
-  const envio = ponte ? await require('../Handlers/statusDenuncia/acoesStatus').enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;
+  let titulo = 'Punição da denúncia atualizada';
+  if (ponte?.jaExistia && ponte.status !== 'aceita') {
+    // Já aplicada (ou cancelada sem dar para refazer): não bloqueia. Vira uma punição
+    // nova, ligada à mesma denúncia (link e tópico), só com o que o formulário mandou.
+    const doc = await DenunciaStaff.create({
+      guildId: interaction.guild.id,
+      autor: { id: quem.id, nome: quem.nome },
+      contas, motivo, punicao: punicaoDoMotivo(classificarMotivo(motivo, (await obterTabela()).tabela)),
+      status: 'aceita', decididoPor: quem, acusadoAceite: acusadoId, motivoAceite: motivo, cadeia: { status: 'aceita' },
+      channelId: achada.channelId || '', messageId: achada.messageId || '', threadId: achada.threadId || ''
+    });
+    denuncia = comoDenuncia(doc.toObject());
+    ponte = await aceite.registrarAceite({ client: interaction.client, denuncia, origem: 'canal_staff', staff: quem }).catch(() => null);
+    titulo = 'Punição nova da denúncia (a anterior já tinha sido aplicada)';
+  } else {
+    await Denuncia.updateOne({ _id: achada._id }, { $set: { acusadoId, motivoAceite: motivo } }).catch(() => {});
+  }
+  const envio = ponte ? await enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;
   if (envio?.erro) log.warn(`[PonteGm] /tempban pelo link da denúncia ${achada._id} não foi para a gamemode: ${envio.erro}`);
-  return interaction.editReply(`✅ Punição da denúncia atualizada: ${acusadoId} por (${motivo.slice(0, 200)}).\n${resultadoNoJogo(ponte, envio)}`);
+  return interaction.editReply(`✅ ${titulo}: ${acusadoId} por (${motivo.slice(0, 200)}).\n${resultadoNoJogo(ponte, envio)}`);
 }
 
 // Registro já aceito, sem botões, no canal das provas; a punição vai direto para o jogo.

@@ -409,10 +409,14 @@ async function editarAlvoGm({ client = null, punicaoId, guildId, alvoId, versao,
   const tempo = Number(String(campos.tempo ?? '').trim());
   const avisos = Number(String(campos.avisos ?? '').trim() || 0);
   const regra = `editado por ${String(staff.nome || '').slice(0, 40)}`;
+  // Vários IDs com "+": um jogador por conta; o motivo é separado por conta quando cita cada uma
+  // ("1270101 CL + 360429 saav"), como no aceite.
+  const contas = [...new Set(String(campos.conta || '').split('+').map(c => c.trim()).filter(Boolean))];
+  const porConta = novo ? require('./aceite').motivosPorAcusado(campos.motivo, contas) : new Map();
   const lista = novo
-    ? [...(punicao.alvos || []), { contaId: String(campos.conta || '').trim(), nick: '', cmd, tempo, avisos, motivo: campos.motivo, regra }]
+    ? [...(punicao.alvos || []), ...contas.map(c => ({ contaId: c, nick: '', cmd, tempo, avisos, motivo: porConta.get(c.toLowerCase()) || campos.motivo, regra }))]
     : punicao.alvos.map(a => (String(a._id) === String(alvoId) ? { ...a, cmd, tempo, avisos, motivo: campos.motivo, regra } : a));
-  if (novo && !String(campos.conta || '').trim()) return { erro: 'Informe o ID da conta do jogador.' };
+  if (novo && !contas.length) return { erro: 'Informe o ID da conta do jogador.' };
   const validado = validarAlvos(lista, servidor.templates);
   if (validado.erro) return { erro: validado.erro };
   const editado = novo ? validado.alvos[validado.alvos.length - 1] : validado.alvos.find(a => String(a._id) === String(alvoId));
