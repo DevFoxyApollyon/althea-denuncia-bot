@@ -131,7 +131,14 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
   const teste = pedidosDaVez.length ? pedidosDaVez.some(p => p.teste) : limitesDe(servidor).modoTeste;
 
   const peloPc = Boolean(servidor?.executor) && !EXECUTORES_GM.includes(servidor.executor);
-  const situacao = punicao.status === 'aceita' && peloPc
+  // Ban permanente recusado com JA_BANIDO em todos os jogadores: a conta já está banida,
+  // não há o que reenviar (some Enviar, Editar e Cancelar).
+  const jaBanidoPermanente = punicao.status === 'aceita' && alvos.length > 0 && alvos.every(a => {
+    const ultimo = ultimos.get(String(a._id));
+    return a.cmd === 'ban' && (Number(a.tempo) || 0) === 0 && ultimo?.status === 'recusada' && ultimo.codigo === 'JA_BANIDO';
+  });
+  const situacao = jaBanidoPermanente ? '🔨 A conta já está banida: o ban permanente não precisa ser reenviado.'
+    : punicao.status === 'aceita' && peloPc
     ? '🖥️ Este servidor aplica pelo PC da staff: esta punição está na fila do PC.'
     : {
     aceita: pedidosDaVez.length
@@ -176,7 +183,7 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
 
   const id = String(punicao._id);
   const botoes = [];
-  if (punicao.status === 'aceita' && !peloPc) {
+  if (punicao.status === 'aceita' && !peloPc && !jaBanidoPermanente) {
     botoes.push(
       new ButtonBuilder().setCustomId(BOTAO_ENVIAR + id).setLabel('Enviar ao jogo').setEmoji('🎮').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(BOTAO_EDITAR + id).setLabel('Editar').setEmoji('✏️').setStyle(ButtonStyle.Secondary),

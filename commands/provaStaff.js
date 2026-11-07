@@ -286,34 +286,38 @@ async function handleModalTempban(interaction) {
   return interaction.editReply(`✅ Tempban registrado${topico ? ` com o tópico ${topico}` : ''}.\n${jogo}${dms ? `\n📨 ${dms} DM(s) enviada(s).` : ''}`);
 }
 
-const FORA_DA_TABELA = 'Motivo fora da tabela: o responsável confere no aceite';
+const FORA_DA_TABELA = 'Fora da tabela';
+// Registros antigos ainda pendentes podem ter o texto anterior.
+const TEXTOS_FORA = [FORA_DA_TABELA, 'Motivo fora da tabela: o responsável confere no aceite'];
 const punicaoDoMotivo = (regra) => (!regra.regra ? FORA_DA_TABELA
   : regra.cmd === 'registro' ? (regra.texto || 'Neutro')
     : punicaoLegivel({ cmd: regra.cmd, tempo: regra.tempo, avisos: regra.avisos }));
+// Troca "fora da tabela" pela punição só na linha da punição ("➥ Punição:" ou "**Punição:**").
+const trocarFora = (texto, punicao) => TEXTOS_FORA.reduce((t, fora) => t.replace(`Punição: ${fora}`, `Punição: ${punicao}`).replace(`Punição:** ${fora}`, `Punição:** ${punicao}`), String(texto || ''));
 
 // Motivo novo cadastrado (site, /ponte motivos ou painel do jogo): os registros
 // pendentes que estavam fora da tabela ganham a punição na mensagem e no tópico.
 async function atualizarProvasForaDaTabela({ client, tabela }) {
-  const pendentes = await DenunciaStaff.find({ status: 'pendente', punicao: FORA_DA_TABELA }).limit(200).lean();
+  const pendentes = await DenunciaStaff.find({ status: 'pendente', punicao: { $in: TEXTOS_FORA } }).limit(200).lean();
   let atualizadas = 0;
   for (const doc of pendentes) {
     const regra = classificarMotivo(doc.motivo, tabela);
     if (!regra.regra) continue;
     const punicao = punicaoDoMotivo(regra);
-    const r = await DenunciaStaff.updateOne({ _id: doc._id, status: 'pendente', punicao: FORA_DA_TABELA }, { $set: { punicao } });
+    const r = await DenunciaStaff.updateOne({ _id: doc._id, status: 'pendente', punicao: { $in: TEXTOS_FORA } }, { $set: { punicao } });
     if (!r.modifiedCount) continue;
     atualizadas += 1;
     if (!client) continue;
-    const trocar = async (canalId, msgId) => {
-      const canal = canalId ? await client.channels.fetch(canalId).catch(() => null) : null;
-      const msg = canal?.messages && msgId ? await canal.messages.fetch(msgId).catch(() => null) : null;
-      if (msg?.content?.includes(FORA_DA_TABELA)) await msg.edit({ content: msg.content.replace(FORA_DA_TABELA, punicao), allowedMentions: { parse: [] } }).catch(() => {});
+    const editar = async (msg) => {
+      const novoTexto = msg ? trocarFora(msg.content, punicao) : null;
+      if (msg && novoTexto !== msg.content) await msg.edit({ content: novoTexto, allowedMentions: { parse: [] } }).catch(() => {});
     };
-    await trocar(doc.channelId, doc.messageId);
+    const canal = doc.channelId ? await client.channels.fetch(doc.channelId).catch(() => null) : null;
+    await editar(canal?.messages && doc.messageId ? await canal.messages.fetch(doc.messageId).catch(() => null) : null);
     // Primeira mensagem do tópico (o resumo com a punição).
     const topico = doc.threadId ? await client.channels.fetch(doc.threadId).catch(() => null) : null;
-    const resumo = topico?.messages ? (await topico.messages.fetch({ limit: 5, after: '0' }).catch(() => null))?.find(m => m.author?.id === client.user?.id && m.content.includes(FORA_DA_TABELA)) : null;
-    if (resumo) await resumo.edit({ content: resumo.content.replace(FORA_DA_TABELA, punicao), allowedMentions: { parse: [] } }).catch(() => {});
+    const resumo = topico?.messages ? (await topico.messages.fetch({ limit: 5, after: '0' }).catch(() => null))?.find(m => m.author?.id === client.user?.id && trocarFora(m.content, punicao) !== m.content) : null;
+    await editar(resumo || null);
   }
   return atualizadas;
 }

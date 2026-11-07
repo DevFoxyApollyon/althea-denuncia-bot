@@ -217,3 +217,13 @@ test('fundador: com o cargo escolhido, só ele configura; sem ele, vale o respon
   assert.equal(papeisDoMembro(membro(['F']), comFundador).podeConfigurar, true);
   assert.equal(papeisDoMembro(membro(['R']), comFundador).responsavel, true, 'continua responsável no resto');
 });
+
+test('corrigir denúncia: mantém o link para compartilhar e o que vem depois da primeira linha', () => {
+  const { linhasDeBaixo, depoisDoLink } = require('../Handlers/corrigirHandler');
+  const topico = '✅ Denúncia aceita por <@1> Acusado: (10) Tomará punição por (DM) Data 01/01/2026 Link: https://a\n🔗 **Link para compartilhar:** https://b';
+  assert.equal(linhasDeBaixo(topico), '\n🔗 **Link para compartilhar:** https://b');
+  assert.equal(linhasDeBaixo('só uma linha'), '');
+  const cadeia = '➱ Denúncia aceita Acusado (10) tomará punição por (DM) Data 01/01/2026 Link:|| https://a || ||01/01/2026 10:00|| por <@2>\n🎮 Enviada';
+  assert.equal(depoisDoLink(cadeia), ' ||01/01/2026 10:00|| por <@2>');
+  assert.equal(depoisDoLink('➱ Denúncia aceita Acusado (10) tomará punição por (DM) Data 01/01/2026 Link: ||https://a||'), '');
+});

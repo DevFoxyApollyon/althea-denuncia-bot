@@ -109,6 +109,15 @@ async function handleCorrigirDenunciaButton(interaction) {
   await interaction.showModal(createCorrectionModal(denuncia));
 }
 
+// A correção troca só a primeira linha; o que vem depois (link para compartilhar,
+// linhas da ponte com o jogo) continua na mensagem.
+const linhasDeBaixo = (texto) => {
+  const i = String(texto || '').indexOf('\n');
+  return i === -1 ? '' : String(texto).slice(i);
+};
+// Na Cadeia Staff a primeira linha ganha, depois do link, quem confirmou ("||data|| por @x").
+const depoisDoLink = (texto) => (String(texto || '').split('\n')[0].match(/Link: ?\|\| ?\S+ ?\|\|(.*)$/) || [])[1] || '';
+
 async function handleSalvarCorrigirDenuncia(interaction) {
   const messageId = getMessageId(interaction.customId);
   const config = await getCachedConfig(interaction.guild.id);
@@ -173,7 +182,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
         const newContent = `➱ Denúncia aceita Acusado (${acusadoId}) tomará punição por (${motivoAceite}) Data ${dataPunicao} Link: ||${denunciaURL}||`;
 
         if (logMsg) {
-          await logMsg.edit(newContent);
+          await logMsg.edit(`${newContent}${depoisDoLink(logMsg.content)}${linhasDeBaixo(logMsg.content)}`.slice(0, 2000));
           logEdited = true;
           logMsgURL = `https://discord.com/channels/${interaction.guild.id}/${logChannel.id}/${denuncia.logMessageId}`;
         } else {
@@ -197,7 +206,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
       const newContent = `✅ Denúncia aceita por <@${staffId}> (${acusadoId}) tomará punição por (${motivoAceite}) Data ${dataPunicao} Link: ${logMsgURL || denunciaURL}`;
 
       if (acceptedMessage) {
-        await acceptedMessage.edit({ content: newContent, components: [createCorrectionButtonRow()] });
+        await acceptedMessage.edit({ content: `${newContent}${linhasDeBaixo(acceptedMessage.content)}`.slice(0, 2000), components: [createCorrectionButtonRow()] });
         topicEdited = true;
       } else {
         errors.push('mensagem de aceite não encontrada no tópico');
@@ -228,5 +237,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
 module.exports = {
   handleCorrigirDenunciaButton,
   handleSalvarCorrigirDenuncia,
-  createCorrectionButtonRow
+  createCorrectionButtonRow,
+  linhasDeBaixo,
+  depoisDoLink
 };

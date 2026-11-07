@@ -945,7 +945,7 @@ test('/provastaff: motivo cadastrado depois atualiza a punição dos registros p
   const DenunciaStaff = require('../models/DenunciaStaff');
   const { atualizarProvasForaDaTabela } = require('../commands/provaStaff');
   const { tabela: padrao } = await require('../services/ponteSamp/motivos').obterTabela();
-  const fora = 'Motivo fora da tabela: o responsável confere no aceite';
+  const fora = 'Motivo fora da tabela: o responsável confere no aceite'; // texto antigo: registros pendentes ainda o têm
   const doc = await DenunciaStaff.create({ guildId: '814', contas: ['1'], motivo: 'Mau uso /n', punicao: fora, channelId: 'c', messageId: 'm' });
   const editadas = [];
   const client = { user: { id: 'bot' }, channels: { fetch: async () => ({ messages: { fetch: async () => ({ content: `➥ Punição: ${fora}`, edit: async (msg) => editadas.push(msg.content) }) } }) } };
@@ -953,6 +953,14 @@ test('/provastaff: motivo cadastrado depois atualiza a punição dos registros p
   const tabela = [...padrao, { nome: 'MAU USO /N', sinonimos: ['MAU USO /N'], cmd: 'cadeia', tempo: 120, avisos: 0 }];
   assert.equal(await atualizarProvasForaDaTabela({ client, tabela }), 1);
   assert.equal((await DenunciaStaff.findById(doc._id).lean()).punicao, 'Cadeia de 120 min');
+  assert.equal(editadas[0], '➥ Punição: Cadeia de 120 min');
+
+  // Texto novo, curto.
+  const novo = await DenunciaStaff.create({ guildId: '814', contas: ['2'], motivo: 'Mau uso /n', punicao: 'Fora da tabela', channelId: 'c', messageId: 'm2' });
+  editadas.length = 0;
+  const clienteNovo = { user: { id: 'bot' }, channels: { fetch: async () => ({ messages: { fetch: async () => ({ content: '➥ Punição: Fora da tabela', edit: async (msg) => editadas.push(msg.content) }) } }) } };
+  assert.equal(await atualizarProvasForaDaTabela({ client: clienteNovo, tabela }), 1);
+  assert.equal((await DenunciaStaff.findById(novo._id).lean()).punicao, 'Cadeia de 120 min');
   assert.equal(editadas[0], '➥ Punição: Cadeia de 120 min');
 });
 

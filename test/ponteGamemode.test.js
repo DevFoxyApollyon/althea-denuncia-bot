@@ -1396,6 +1396,16 @@ test('resultado da gamemode: console e Relatório de punições explicam o códi
   const pedidos = [{ alvoId, rodada: 1, status: 'recusada', codigo: 'RECUSADO' }];
   const texto = textoDoEmbed(montarMensagemGm(punicao, pedidos, {}));
   assert.match(texto, /Por que não foi aplicada\n\*\*RECUSADO\*\*: a gamemode recusou/);
+  assert.equal(montarMensagemGm(punicao, pedidos, {}).components.length, 1, 'recusa comum: os botões continuam');
+
+  // Ban permanente e a conta já banida: some Enviar, Editar e Cancelar.
+  const permanente = { ...punicao, alvos: [{ ...punicao.alvos[0], tempo: 0, avisos: 0 }] };
+  const jaBanido = [{ alvoId, rodada: 1, status: 'recusada', codigo: 'JA_BANIDO' }];
+  const msg = montarMensagemGm(permanente, jaBanido, {});
+  assert.deepEqual(msg.components, []);
+  assert.match(textoDoEmbed(msg), /já está banida/);
+  // Ban com tempo e JA_BANIDO: continua dando para reenviar (ex.: somar dias).
+  assert.equal(montarMensagemGm(punicao, jaBanido, {}).components.length, 1);
 });
 
 test('enviar ao jogo: pedido pela conta leva o nick conhecido (confirmado pela gamemode ou do Discord)', async () => {
