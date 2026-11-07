@@ -204,6 +204,8 @@ test('tópico privado: canais da staff recebem o link da mensagem principal e o 
   assert.deepEqual(botaoDe(logs.enviados[0].payload.components), ['entrar_topico:700000000000000003']);
   assert.ok(analise.enviados[0].payload.includes(principal));
   assert.deepEqual(botaoDe(analise.enviados[0].editado.components), ['entrar_topico:700000000000000003']);
+  // Em análise: a mensagem do tópico também leva o link para compartilhar.
+  assert.match(topico.enviados.at(-1).payload, /em análise por[\s\S]*Link para compartilhar:\*\* https:\/\/discord\.com\/channels\/700000000000000009\/700000000000000004\/700000000000000005/);
 
   // Aceita: "Entrar no tópico" ao lado de Aceitar e Recusar no Log Admin.
   await manageStatusMessages(topico, 'aceita', '<@1>', { messageUrl: 'x', logsChannel: logs, denuncia, acusadoId: '1039', motivo: 'RDM', dataPunicao: '01/11' });

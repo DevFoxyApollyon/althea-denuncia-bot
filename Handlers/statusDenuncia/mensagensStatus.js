@@ -331,7 +331,9 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         `🔎 Esta denúncia está em análise por ${user} ` +
         `Acusado: (${data.denuncia?.acusado || 'Não informado'}) ` +
         `Motivo: (${data.denuncia?.motivo || 'Não informado'}) ` +
-        `Link: ${data.messageUrl}`;
+        `Link: ${data.messageUrl}` +
+        // Sem canal de análise, esta mensagem fica no próprio tópico: leva o link para compartilhar.
+        (statusChannel.id === channel.id ? linhaCompartilhar : '');
       discordAnalysisMessage = await sendOnce(statusChannel, analysisMessageContent);
       if (discordAnalysisMessage && linhaEntrar.length && statusChannel.id !== channel.id) {
         await discordAnalysisMessage.edit({ components: linhaEntrar }).catch(() => {});
@@ -343,7 +345,7 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
         guildId: channel.guild.id,
         logChannelId: logsChannel ? logsChannel.id : null,
         denuncia: data.denuncia,
-      });
+      }) + linhaCompartilhar;
       if (channel.id !== statusChannel.id) {
         await sendOnce(channel, statusMsgContent);
       }

@@ -1075,3 +1075,26 @@ test('/tempban com o link: punição da denúncia já aplicada não bloqueia, vi
   assert.deepEqual([nova.status, nova.alvos.map(a => a.contaId)], ['aceita', ['360429']]);
   assert.equal((await m.PontePunicao.findById(primeira.punicao._id).lean()).status, 'aplicada', 'a aplicada não muda');
 });
+
+test('/provastaff: recusar vale com motivo fora da tabela e apaga o registro do canal', async () => {
+  const Config = require('../models/Config');
+  const DenunciaStaff = require('../models/DenunciaStaff');
+  const provaStaff = require('../commands/provaStaff');
+  await Config.create({ guildId: '820', roles: { responsavel_admin: '777000000000000820' } });
+  const doc = await DenunciaStaff.create({ guildId: '820', contas: ['1269187'], motivo: '63 + falando que não era para mim tar ali', punicao: 'Fora da tabela', channelId: 'c', messageId: '600000000000000920', threadId: 't' });
+  let apagada = false;
+  const noTopico = [];
+  await provaStaff.handleBotaoRecusar({
+    customId: `${provaStaff.BOTAO_RECUSAR}${doc._id}`,
+    guild: { id: '820' },
+    member: { displayName: 'Resp', roles: { cache: new Map([['777000000000000820', {}]]) } },
+    user: { id: '1', username: 'resp', toString: () => '<@1>' },
+    message: { id: '600000000000000920', delete: async () => { apagada = true; } },
+    client: { channels: { fetch: async (id) => (id === 't' ? { send: async (msg) => noTopico.push(msg.content) } : null) } },
+    reply: async (r) => { throw new Error(`não devia responder: ${r.content}`); },
+    deferUpdate: async () => {}
+  });
+  assert.equal(apagada, true);
+  assert.equal((await DenunciaStaff.findById(doc._id).lean()).status, 'recusada');
+  assert.equal(noTopico[0], '❌ Provas recusadas por <@1>');
+});

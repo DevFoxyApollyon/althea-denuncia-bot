@@ -373,8 +373,8 @@ async function atualizarProvasForaDaTabela({ client, tabela }) {
   return atualizadas;
 }
 
-// Trava (liga e desliga no Painel do bot): para aceitar ou recusar, o motivo precisa
-// estar na tabela de motivos. O registro em si entra com qualquer motivo.
+// Trava (liga e desliga no Painel do bot): para aceitar, o motivo precisa estar na
+// tabela de motivos. O registro em si entra com qualquer motivo, e recusar também.
 async function motivoForaDaTabela(config, motivo) {
   if (config?.provasExigirMotivo === false) return null;
   const regra = classificarMotivo(motivo, (await obterTabela()).tabela);
@@ -459,14 +459,15 @@ async function handleBotaoRecusar(interaction) {
   if (!responsavel) return interaction.reply(efemero('🚫 Só o responsável aceita ou recusa as provas.'));
   const id = interaction.customId.slice(BOTAO_RECUSAR.length);
   if (!/^[0-9a-f]{24}$/.test(id)) return interaction.reply(efemero('❌ Botão inválido.'));
-  const pendente = await DenunciaStaff.findOne({ _id: id, guildId: interaction.guild.id }).lean();
-  const fora = pendente ? await motivoForaDaTabela(await getCachedConfig(interaction.guild.id), pendente.motivo) : null;
-  if (fora) return interaction.reply(efemero(fora));
+  // Recusar não pune: vale com qualquer motivo, até fora da tabela.
   const quem = { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username, em: new Date() };
   const doc = await DenunciaStaff.findOneAndUpdate({ _id: id, guildId: interaction.guild.id, status: 'pendente' }, { $set: { status: 'recusada', decididoPor: quem } }, { new: true }).lean();
   if (!doc) return interaction.reply(efemero('ℹ️ Este registro já foi decidido.'));
   await interaction.deferUpdate();
-  await editarRegistro(interaction.client, doc, 'Recusada', interaction.user);
+  // O registro recusado sai do canal; o tópico com as provas fica, com o aviso.
+  const registro = interaction.message?.id === doc.messageId ? interaction.message : await buscarRegistro(interaction.client, doc);
+  const apagado = registro ? await registro.delete().then(() => true).catch(() => false) : false;
+  if (!apagado) await editarRegistro(interaction.client, doc, 'Recusada', interaction.user, registro);
   await avisarNoTopico(interaction.client, doc, `❌ Provas recusadas por ${interaction.user}`);
 }
 
