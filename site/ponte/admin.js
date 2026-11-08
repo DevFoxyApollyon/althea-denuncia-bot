@@ -49,9 +49,10 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   // Rota do painel que demora (banco ou Discord lentos) fica no log, com o tempo, para saber qual é.
   router.use('/api', (req, res, next) => {
     const inicio = Date.now();
+    const caminho = `/admin/api${req.path}`; // no "finish" o req.path já voltou a ter o /api
     res.on('finish', () => {
       const ms = Date.now() - inicio;
-      if (ms >= 2000) log?.warn?.(`[Painel] ${req.method} /admin/api${req.path} levou ${(ms / 1000).toFixed(1)} s (status ${res.statusCode}).`);
+      if (ms >= 2000) log?.warn?.(`[Painel] ${req.method} ${caminho} levou ${(ms / 1000).toFixed(1)} s (status ${res.statusCode}).`);
     });
     next();
   });
@@ -560,15 +561,18 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
 
   // Guia de instalação: em que passo cada servidor está (chave, credencial, contato, modo teste).
   router.get('/api/gamemode/guia', rota(async (req, res) => {
-    const [servidores, conexoes, pedidos] = await Promise.all([
-      PonteServidor.find({ ativo: true }, { guildId: 1, gm: 1 }).lean(),
+    const servidores = await PonteServidor.find({ ativo: true }, { guildId: 1, gm: 1 }).lean();
+    const guilds = servidores.map(s => s.guildId);
+    // Tudo ao mesmo tempo; os logs saem por servidor (10 de cada), pelo índice guildId + data.
+    const ACOES_GM = ACOES_USO.filter(a => a.startsWith('gm_'));
+    const [conexoes, pedidos, ...eventosPorGuild] = await Promise.all([
       PonteConexaoGm.find({ status: 'ativa' }, { guildId: 1, nome: 1, ultimoContatoEm: 1, ultimoIp: 1, versaoInclude: 1, modoTesteInformado: 1, ipsPermitidos: 1, pausada: 1 }).lean(),
-      PontePedidoGm.aggregate([{ $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }])
+      PontePedidoGm.aggregate([{ $match: { guildId: { $in: guilds } } }, { $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }]),
+      ...guilds.map(guildId => PonteUso.find({ guildId, acao: { $in: ACOES_GM } }, { em: 1, guildId: 1, acao: 1, contaId: 1, nick: 1, detalhes: 1 })
+        .sort({ em: -1 }).limit(10).lean())
     ]);
-    // Logs da gamemode: os últimos eventos gm_* de cada servidor (busca, resultado, recusa da conexão...).
-    const eventos = await PonteUso.find({ guildId: { $in: servidores.map(s => s.guildId) }, acao: /^gm_/ }, { em: 1, guildId: 1, acao: 1, contaId: 1, nick: 1, detalhes: 1 })
-      .sort({ em: -1 }).limit(300).lean();
-    const eventosDe = (guildId) => eventos.filter(e => e.guildId === guildId).slice(0, 10)
+    const eventos = new Map(guilds.map((guildId, i) => [guildId, eventosPorGuild[i]]));
+    const eventosDe = (guildId) => (eventos.get(guildId) || [])
       .map(e => ({ em: e.em, acao: e.acao, contaId: e.contaId || '', nick: e.nick || '', detalhes: e.detalhes || {} }));
     const agora = Date.now();
     const porStatus = (guildId, status) => pedidos.find(p => p._id.guildId === guildId && p._id.status === status)?.total || 0;

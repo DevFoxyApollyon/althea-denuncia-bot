@@ -77,5 +77,8 @@ const pontePedidoGmSchema = new mongoose.Schema({
 pontePedidoGmSchema.index({ punicaoId: 1, alvoId: 1, rodada: 1 }, { unique: true });
 pontePedidoGmSchema.index({ guildId: 1, status: 1, criadoEm: 1 });
 pontePedidoGmSchema.index({ status: 1, leaseAte: 1 });
+// Painel da ponte: pedidos recentes (todos ou de um servidor), mais novos primeiro.
+pontePedidoGmSchema.index({ criadoEm: -1 });
+pontePedidoGmSchema.index({ guildId: 1, criadoEm: -1 });
 
 module.exports = modelSecundario('PontePedidoGm', pontePedidoGmSchema, 'pontepedidosgm');
