@@ -181,7 +181,7 @@ Nenhum campo pode conter `|`, porque a validação do bot e a da gamemode impede
 | regra | bot (antes de criar o pedido) | gamemode (antes de aplicar) |
 |---|---|---|
 | tipos permitidos | `ban`, `cadeia`, `desbanir`, `soltar` | igual (`ALTHEA_TIPO`) |
-| ban máximo | `maxBanDias` da guild (padrão 30) | `ALTHEA_MAX_BAN_DIAS` |
+| ban máximo | `maxBanDias` da guild (padrão 90) | `ALTHEA_MAX_BAN_DIAS` |
 | ban permanente | só com `permitirPermanente` (padrão: liberado) | só com `ALTHEA_PERMITIR_BAN_PERMANENTE` |
 | cadeia máxima | `maxCadeiaMin` (padrão 300) | `ALTHEA_MAX_CADEIA_MIN` |
 | avisos | `maxAvisos` (padrão 3) | `ALTHEA_MAX_AVISOS` |

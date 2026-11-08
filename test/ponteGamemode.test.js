@@ -209,7 +209,7 @@ test('guild nova usa os limites padrão da gamemode', () => {
   const PonteServidor = require('../models/PonteServidor');
   const doc = new PonteServidor({ guildId: '1' });
   assert.deepEqual(doc.toObject().gm, {
-    pausado: false, maxBanDias: 30, permitirPermanente: true, maxCadeiaMin: 300,
+    pausado: false, maxBanDias: 90, permitirPermanente: true, maxCadeiaMin: 300,
     maxAvisos: 3, modoTeste: true
   });
 });

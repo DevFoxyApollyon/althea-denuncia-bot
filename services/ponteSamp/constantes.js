@@ -50,7 +50,7 @@ const STATUS_CONEXAO_GM = ['ativa', 'revogada'];
 const STATUS_PEDIDO_GM = ['aprovado', 'entregue', 'aplicada', 'simulada', 'recusada', 'erro', 'incerto', 'cancelado'];
 const LIMITES_GM_PADRAO = Object.freeze({
   pausado: false,
-  maxBanDias: 30,
+  maxBanDias: 90,
   // Decisão do JV: ban permanente pelo bot liberado, com um responsável só (sem dupla confirmação).
   permitirPermanente: true,
   maxCadeiaMin: 300,

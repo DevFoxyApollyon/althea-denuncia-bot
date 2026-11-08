@@ -52,7 +52,7 @@ No topo da gamemode, **nesta ordem**:
 #include <requests>
 
 #define ALTHEA_MODO_TESTE (true)              // começa SEMPRE em teste
-#define ALTHEA_MAX_BAN_DIAS (30)
+#define ALTHEA_MAX_BAN_DIAS (90)
 #define ALTHEA_PERMITIR_BAN_PERMANENTE (true) // o bot libera ban permanente; sem isto, ele é recusado
 #define ALTHEA_MAX_CADEIA_MIN (300)
 #define ALTHEA_MAX_POR_HORA (30)
@@ -145,7 +145,7 @@ Cada pedido tem um ID próprio, e a tabela `althea_pedidos` impede que o **mesmo
 | `Falha na comunicacao (HTTP 401, RELOGIO)` | relógio do servidor errado | ligar o NTP |
 | `Falha na comunicacao (HTTP 401, ASSINATURA)` | credencial antiga ou errada | pedir ao JV para conferir (pode ter sido renovada) |
 | `Falha na comunicacao (HTTP 403, IP)` | IP do servidor fora da lista da credencial | passar o IP certo ao JV |
-| `Falha na comunicacao (HTTP 403, GUILD_INATIVA)` | o servidor do Discord ainda aplica pelo PC | o JV roda `/ponte gamemode executor tipo: Gamemode` |
+| `Falha na comunicacao (HTTP 403, GUILD_INATIVA)` | a ponte está desativada nesse servidor do Discord | o JV ativa de novo com `/ativar` (código do dono) |
 | `Falha na comunicacao (HTTP 503)` | falta a chave no Althea | avisar o JV |
 | ban permanente recusado com `DADOS_INVALIDOS` | falta o `#define ALTHEA_PERMITIR_BAN_PERMANENTE (true)` | colocar o define e recompilar |
 | `ALERTA: ... selo invalido. Integracao PAUSADA` | pedido adulterado ou bug | **não retomar sozinho**: avisar o JV na hora |
