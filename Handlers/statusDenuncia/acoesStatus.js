@@ -627,7 +627,7 @@ async function handleLogAceitarButton(interaction, denuncia) {
         ? [botaoEntrarNoTopico(denuncia.threadId)]
         : []
     });
-    // Ponte com o jogo: entra na fila do painel. Nunca quebra o aceite (erros ficam no serviço).
+    // Ponte com o jogo: entra na fila de envio. Nunca quebra o aceite (erros ficam no serviço).
     const ponte = await registrarAceite({
       client: interaction.client,
       denuncia,
@@ -643,9 +643,9 @@ async function handleLogAceitarButton(interaction, denuncia) {
     let linhaPonte = ponte?.soRegistro ? '\n📝 Motivo neutro: só visual, não vai para o jogo.'
       : ponte?.reaberta ? '\n🔁 Punição reaberta: estava cancelada.'
       : ponte?.atualizada ? '\n🔁 Punição para o jogo refeita com o ID e o motivo deste aceite.'
-      : ponte?.jaExistia ? (JA_EXISTIA[ponte.status] || `\nℹ️ Já está no painel do jogo (aceita por ${ponte.aceitoPor || 'outra pessoa'}).`)
-        : ponte?.criado ? '\n🎮 Enviada para o painel do jogo.' : '';
-    // Modo gamemode: aceitar na Cadeia Staff já manda para o jogo, sem precisar do
+      : ponte?.jaExistia ? (JA_EXISTIA[ponte.status] || `\nℹ️ Já está na fila do jogo (aceita por ${ponte.aceitoPor || 'outra pessoa'}).`)
+        : ponte?.criado ? '\n⏳ Esperando envio ao jogo no Relatório de punições.' : '';
+    // Aceitar na Cadeia Staff já manda para o jogo, sem precisar do
     // "Enviar ao jogo" do Relatório de punições (que continua lá se o envio falhar).
     const envio = ponte ? await enviarAoJogoNoAceite(interaction, denuncia).catch(() => null) : null;
     if (envio?.ok) {
@@ -674,14 +674,13 @@ async function handleLogAceitarButton(interaction, denuncia) {
   }
 }
 
-// Ponte em modo gamemode: o aceite na Cadeia Staff (feito pelo responsável, o mesmo
-// que pode usar o "Enviar ao jogo") manda a punição direto para o jogo. Com "Os dois",
-// não envia sozinho, para o PC da staff continuar podendo pegar. null: nada a enviar.
+// O aceite na Cadeia Staff (feito pelo responsável, o mesmo que pode usar o "Enviar ao
+// jogo") manda a punição direto para a gamemode. null: nada a enviar.
 async function enviarAoJogoNoAceite(interaction, denuncia) {
   const PonteServidor = require('../../models/PonteServidor');
   const PontePunicao = require('../../models/PontePunicao');
-  const servidor = await PonteServidor.findOne({ guildId: interaction.guild.id, ativo: true }).select('executor').lean();
-  if (servidor?.executor !== 'gamemode') return null;
+  const servidor = await PonteServidor.findOne({ guildId: interaction.guild.id, ativo: true }).select('_id').lean();
+  if (!servidor) return null;
   const punicao = await PontePunicao.findOne({ denunciaId: denuncia._id }).select('status').lean();
   if (punicao?.status !== 'aceita') return null;
   return require('../../services/ponteSamp/discordGm').enviarAoJogo({

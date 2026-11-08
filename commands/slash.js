@@ -76,24 +76,10 @@ const comandos = [
     },
     {
         data: new SlashCommandBuilder()
-            .setName('instalacao')
-            .setDescription('Gerencia os PCs autorizados na ponte com o jogo.')
-            .addSubcommand(sub => sub.setName('nova').setDescription('Cadastra um PC e mostra o token uma vez.')
-                .addStringOption(option => option.setName('nome').setDescription('Nome do PC').setRequired(true).setMaxLength(40)))
-            .addSubcommand(sub => sub.setName('listar').setDescription('Lista os PCs cadastrados.'))
-            .addSubcommand(sub => sub.setName('revogar').setDescription('Revoga o token de um PC.')
-                .addStringOption(option => option.setName('id').setDescription('ID da instalação').setRequired(true)))
-            .addSubcommand(sub => sub.setName('renovar').setDescription('Gera token novo (troca de PC).')
-                .addStringOption(option => option.setName('id').setDescription('ID da instalação').setRequired(true))),
-        executar: ponte.handleInstalacaoSlash
-    },
-    {
-        data: new SlashCommandBuilder()
             .setName('ponte')
             .setDescription('Ponte com o jogo.')
-            .addSubcommand(sub => sub.setName('templates').setDescription('Mostra e edita os comandos de punição do jogo.'))
             .addSubcommand(sub => sub.setName('motivos').setDescription('Edita a tabela de motivos (vale para todos os servidores).'))
-            .addSubcommandGroup(grupo => grupo.setName('gamemode').setDescription('Ponte direta com a gamemode (sem PC).')
+            .addSubcommandGroup(grupo => grupo.setName('gamemode').setDescription('Ponte com a gamemode.')
                 .addSubcommand(sub => sub.setName('criar').setDescription('Cria a credencial da gamemode (só o dono do bot).')
                     .addStringOption(option => option.setName('nome').setDescription('Nome do servidor do jogo').setRequired(true).setMaxLength(40))
                     .addStringOption(option => option.setName('ips').setDescription('IPs de saída do servidor do jogo, separados por vírgula (vazio = qualquer)').setMaxLength(400)))
@@ -104,12 +90,6 @@ const comandos = [
                     .addStringOption(option => option.setName('id').setDescription('ID da credencial').setRequired(true).setMaxLength(24)))
                 .addSubcommand(sub => sub.setName('pausar').setDescription('Para de entregar punições à gamemode.'))
                 .addSubcommand(sub => sub.setName('retomar').setDescription('Volta a entregar punições à gamemode.'))
-                .addSubcommand(sub => sub.setName('executor').setDescription('Quem aplica as punições neste servidor.')
-                    .addStringOption(option => option.setName('tipo').setDescription('Quem aplica').setRequired(true).addChoices(
-                        { name: 'PC da staff (mod Lua)', value: 'pc' },
-                        { name: 'Gamemode', value: 'gamemode' },
-                        { name: 'Os dois (quem pegar primeiro)', value: 'ambos' }
-                    )))
                 .addSubcommand(sub => sub.setName('limites').setDescription('Ban máximo, cadeia, avisos, permanente e modo teste.'))),
         executar: ponte.handlePonteSlash
     },
@@ -119,8 +99,7 @@ const comandos = [
             .setDescription('Gera código de ativação da ponte (só o dono do bot).')
             .setDefaultMemberPermissions(0)
             .addSubcommand(sub => sub.setName('gerar').setDescription('Gera um código novo.')
-                .addIntegerOption(option => option.setName('validade_dias').setDescription('Dias até expirar').setMinValue(1).setMaxValue(365))
-                .addIntegerOption(option => option.setName('limite_pcs').setDescription('PCs ativos ao mesmo tempo').setMinValue(1).setMaxValue(50))),
+                .addIntegerOption(option => option.setName('validade_dias').setDescription('Dias até expirar').setMinValue(1).setMaxValue(365))),
         executar: ponte.handlePonteCodigoSlash
     }
 ];

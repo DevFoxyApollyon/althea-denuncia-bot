@@ -2,11 +2,9 @@ const mongoose = require('mongoose');
 const { modelSecundario } = require('../utils/persistencia');
 const { ACOES_USO } = require('../services/ponteSamp/constantes');
 
-// Auditoria da ponte: ações dos PCs e falhas de autenticação. O ping comum
-// não entra (só atualiza a instalação), senão a coleção enche. Dura 90 dias.
+// Auditoria da ponte: ações da staff e da gamemode e falhas de autenticação. Dura 90 dias.
 const ponteUsoSchema = new mongoose.Schema({
   guildId: { type: String, default: '' },
-  instalacaoId: { type: mongoose.Schema.Types.ObjectId, ref: 'PonteInstalacao', default: null },
   em: { type: Date, default: Date.now },
   acao: { type: String, enum: ACOES_USO, required: true },
   punicaoId: { type: mongoose.Schema.Types.ObjectId, ref: 'PontePunicao', default: null },

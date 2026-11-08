@@ -8,7 +8,6 @@ const { limparCacheDeAcesso, acompanharMudancasDeAcesso } = require('./acesso');
 const { iniciarPush } = require('./push');
 const { criarProtecao, ajustarServidor, ipDoCliente } = require('./protecao');
 const sessoes = require('./sessoes');
-const { criarApiJogo } = require('./ponte/apiJogo');
 const { criarApiGamemode } = require('./ponte/apiGamemode');
 const { criarAdmin } = require('./ponte/admin');
 const {
@@ -130,10 +129,8 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
   // recusar cedo quem pede demais (ver site/protecao.js).
   app.use(criarProtecao({}, { log }).middleware);
 
-  // API do script do jogo: o Lua não manda Origin nem usa a sessão do site,
-  // então fica antes da checagem de Origin. Autentica só por token (ver site/ponte/apiJogo.js).
-  app.use('/ponte/api', criarApiJogo({ client, log }));
-  // API da gamemode (protocolo gm/v1): também sem Origin; autentica por HMAC na query
+  // API da gamemode (protocolo gm/v1): não manda Origin nem usa a sessão do site, então fica
+  // antes da checagem de Origin; autentica por HMAC na query
   // sobre o corpo cru (ver site/ponte/apiGamemode.js).
   app.use('/ponte/gm/v1', criarApiGamemode({ client, log }));
 

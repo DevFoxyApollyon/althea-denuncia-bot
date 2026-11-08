@@ -1,7 +1,9 @@
 # Ponte Discord ⇄ SA-MP: plano v2 (executor pela gamemode)
 
 > Briefing para o Claude Code. **Leia inteiro antes de mexer no código.**
-> O plano v1 (PC da staff + mod Lua) já foi implementado e continua valendo. Ele está guardado em `doc/PONTE_SAMP_PLANO_v1.md`.
+> **Atualização:** o PC da staff (mod Lua) foi removido do bot. Só a gamemode aplica as punições;
+> o que este plano diz sobre o executor `pc`/`ambos` não vale mais.
+> O plano v1 (PC da staff + mod Lua) ficou só como histórico. Ele foi apagado do repositório (está no histórico do git).
 > A especificação do protocolo está em `doc/PONTE_GAMEMODE.md`. Ela é a fonte da verdade do formato: não invente campo, nome nem regra que não esteja lá.
 
 ---

@@ -28,8 +28,6 @@ const MODAL_ALVO = 'ponte_gm_modal:';
 const BOTAO_GM_APLICADA = 'ponte_gm_aplicada:';
 const BOTAO_GM_REAPLICAR = 'ponte_gm_reaplicar:';
 
-const EXECUTORES_GM = ['gamemode', 'ambos'];
-
 // A mesma regra do Alt_MotivoValido do include (althea_ponte/althea_util.inc, fora do bot):
 // 1 a 60 caracteres deste conjunto, sem "/" nem espaço no começo.
 const RE_MOTIVO_GM = /^(?![/ ])[A-Za-z0-9 .,:;!?()[\]\-_+#*@&/]{1,60}$/;
@@ -132,7 +130,6 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
   const enviadoPor = pedidosDaVez.find(p => p.confirmadoPor?.length)?.confirmadoPor[0]?.nome || pedidosDaVez[0]?.aprovadoPor || '';
   const teste = pedidosDaVez.length ? pedidosDaVez.some(p => p.teste) : limitesDe(servidor).modoTeste;
 
-  const peloPc = Boolean(servidor?.executor) && !EXECUTORES_GM.includes(servidor.executor);
   // Ban permanente recusado com JA_BANIDO em todos os jogadores: a conta já está banida,
   // não há o que reenviar (some Enviar, Editar e Cancelar).
   const jaBanidoPermanente = punicao.status === 'aceita' && alvos.length > 0 && alvos.every(a => {
@@ -140,8 +137,6 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
     return a.cmd === 'ban' && (Number(a.tempo) || 0) === 0 && ultimo?.status === 'recusada' && ultimo.codigo === 'JA_BANIDO';
   });
   const situacao = jaBanidoPermanente ? '🔨 A conta já está sendo banida no jogo.'
-    : punicao.status === 'aceita' && peloPc
-    ? '🖥️ Este servidor aplica pelo PC da staff: esta punição está na fila do PC.'
     : {
     aceita: pedidosDaVez.length
       ? '🔁 Nenhum alvo foi aplicado na última tentativa. Confira e envie de novo, se for o caso.'
@@ -167,7 +162,6 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
   ].filter(linha => linha !== false && linha !== null && linha !== undefined);
 
   const titulo = jaBanidoPermanente ? '🔨 Ban permanente já setado'
-    : punicao.status === 'aceita' && peloPc ? '🖥️ Punição na fila do PC da staff'
     : falhou ? '🔁 Punição não aplicada'
       : { aceita: '🎮 Punição esperando envio ao jogo', executando: '📤 Punição enviada ao jogo', aplicada: '✅ Punição aplicada no jogo', cancelada: '🚫 Punição cancelada' }[punicao.status]
         || '🎮 Punição para o jogo';
@@ -186,7 +180,7 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
 
   const id = String(punicao._id);
   const botoes = [];
-  if (punicao.status === 'aceita' && !peloPc && !jaBanidoPermanente) {
+  if (punicao.status === 'aceita' && !jaBanidoPermanente) {
     botoes.push(
       new ButtonBuilder().setCustomId(BOTAO_ENVIAR + id).setLabel('Enviar ao jogo').setEmoji('🎮').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(BOTAO_EDITAR + id).setLabel('Editar').setEmoji('✏️').setStyle(ButtonStyle.Secondary),
@@ -197,7 +191,7 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
     if (pedidosDaVez.some(p => p.status === 'incerto')) {
       botoes.push(
         new ButtonBuilder().setCustomId(BOTAO_GM_APLICADA + id).setLabel('Foi aplicada').setEmoji('✅').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(BOTAO_GM_REAPLICAR + id).setLabel(peloPc ? 'Tentar novamente (PC)' : 'Tentar novamente').setEmoji('🔁').setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId(BOTAO_GM_REAPLICAR + id).setLabel('Tentar novamente').setEmoji('🔁').setStyle(ButtonStyle.Primary)
       );
     }
     botoes.push(new ButtonBuilder().setCustomId(BOTAO_CANCELAR + id).setLabel('Cancelar envio').setEmoji('✖️').setStyle(ButtonStyle.Danger));
@@ -213,9 +207,9 @@ async function canalDoRelatorio(client, guildId) {
   return canal?.send ? canal : null;
 }
 
-// Depois do aceite (guild em gamemode ou ambos): posta o embed no Relatório de punições.
+// Depois do aceite: posta o embed no Relatório de punições.
 async function postarPunicaoGm(client, punicao, servidor) {
-  if (!EXECUTORES_GM.includes(servidor?.executor)) return null;
+  if (!servidor) return null;
   const canal = await canalDoRelatorio(client, punicao.guildId);
   if (!canal) {
     log.warn(`Guild ${punicao.guildId}: sem canal de Relatório de punições (nem Log Admin) para o embed da gamemode.`);
@@ -257,38 +251,7 @@ const auditar = (acao, punicao, staff, detalhes = null) => PonteUso.create({
 async function servidorGm(guildId) {
   const servidor = await PonteServidor.findOne({ guildId: String(guildId), ativo: true }).lean();
   if (!servidor) return { erro: 'A ponte com o jogo não está ativa neste servidor.' };
-  if (!EXECUTORES_GM.includes(servidor.executor)) return { erro: 'Este servidor agora aplica pelo PC da staff: a punição já está na fila do PC.' };
   return { servidor };
-}
-
-// Trocou quem aplica: as punições que ainda não saíram seguem o executor novo.
-//  - Para o PC: as enviadas à gamemode que ela ainda não buscou voltam para a fila (o PC pega
-//    da fila); as que ela já buscou ficam com ela, porque podem estar sendo aplicadas.
-//  - Para a gamemode (ou os dois): cada punição esperando envio ganha o embed com "Enviar ao jogo".
-// Em todos os casos os embeds são refeitos (os botões somem ou voltam).
-async function aoTrocarExecutor({ client = null, guildId, para }) {
-  guildId = String(guildId);
-  let devolvidas = 0;
-  if (!EXECUTORES_GM.includes(para)) {
-    const enviadas = await PontePunicao.find({ guildId, status: 'executando', executor: 'gamemode' }, { _id: 1 }).lean();
-    for (const { _id } of enviadas) {
-      if (await PontePedidoGm.exists({ punicaoId: _id, status: { $in: ['entregue', 'incerto'] } })) continue;
-      await PontePedidoGm.updateMany({ punicaoId: _id, status: 'aprovado' }, { $set: { status: 'cancelado' } });
-      const r = await PontePunicao.updateOne({ _id, status: 'executando', executor: 'gamemode' }, { $set: { status: 'aceita', executor: '' }, $inc: { versao: 1 } });
-      devolvidas += r.modifiedCount;
-    }
-  }
-
-  let embedsNovos = 0;
-  const servidor = await PonteServidor.findOne({ guildId, ativo: true }).lean();
-  const pendentes = await PontePunicao.find({ guildId, status: { $in: ['aceita', 'executando'] } }).sort({ criadoEm: 1 }).limit(100).lean();
-  for (const punicao of pendentes) {
-    if (punicao.mensagemGm?.msgId) await atualizarMensagemGm(client, punicao._id).catch(() => {});
-    else if (punicao.status === 'aceita' && EXECUTORES_GM.includes(para) && client) {
-      if (await postarPunicaoGm(client, punicao, servidor).catch(() => null)) embedsNovos++;
-    }
-  }
-  return { devolvidas, embedsNovos };
 }
 
 // Nome no jogo de cada conta: o último que a gamemode confirmou ao aplicar ou, sem isso, o do
@@ -312,7 +275,7 @@ async function nicksConhecidos(guildId, contas) {
   return mapa;
 }
 
-// Botão "Enviar ao jogo": cria um pedido por alvo e tira a punição da fila do PC.
+// Botão "Enviar ao jogo": cria um pedido por alvo e tira a punição da fila de envio.
 async function enviarAoJogo({ client = null, punicaoId, guildId, staff }) {
   const { servidor, erro } = await servidorGm(guildId);
   if (erro) {
@@ -330,11 +293,10 @@ async function enviarAoJogo({ client = null, punicaoId, guildId, staff }) {
   const falha = montados.find(m => m.erro);
   if (falha) return { erro: falha.erro };
 
-  // Só sai de "aceita" uma vez: o PC (modo ambos) e um segundo clique perdem a corrida.
+  // Só sai de "aceita" uma vez: um segundo clique perde a corrida.
   const tomada = await PontePunicao.findOneAndUpdate(
     { _id: punicao._id, status: 'aceita', versao: punicao.versao },
-    // executandoDesde fica nulo: a liberação de execução presa do PC não mexe nos pedidos da gamemode.
-    { $set: { status: 'executando', executor: 'gamemode', executandoPor: null, executandoDesde: null }, $inc: { versao: 1 } },
+    { $set: { status: 'executando', executor: 'gamemode', executandoDesde: null }, $inc: { versao: 1 } },
     { new: true }
   ).lean();
   if (!tomada) return { erro: 'A punição mudou ou já foi enviada. Confira o embed.' };
@@ -396,7 +358,7 @@ async function cancelarGm({ client = null, punicaoId, guildId, staff }) {
   return { ok: true, cancelados: modifiedCount, emAndamento };
 }
 
-// Modal de edição de um alvo: tipo, tempo, avisos e motivo. Passa pela mesma validação do painel do jogo.
+// Modal de edição de um alvo: tipo, tempo, avisos e motivo. Passa pela mesma validação do aceite.
 async function editarAlvoGm({ client = null, punicaoId, guildId, alvoId, versao, campos, staff }) {
   const { servidor, erro } = await servidorGm(guildId);
   if (erro) return { erro };
@@ -420,7 +382,7 @@ async function editarAlvoGm({ client = null, punicaoId, guildId, alvoId, versao,
     ? [...(punicao.alvos || []), ...contas.map(c => ({ contaId: c, nick: '', cmd, tempo, avisos, motivo: porConta.get(c.toLowerCase()) || campos.motivo, regra }))]
     : punicao.alvos.map(a => (String(a._id) === String(alvoId) ? { ...a, cmd, tempo, avisos, motivo: campos.motivo, regra } : a));
   if (novo && !contas.length) return { erro: 'Informe o ID da conta do jogador.' };
-  const validado = validarAlvos(lista, servidor.templates);
+  const validado = validarAlvos(lista);
   if (validado.erro) return { erro: validado.erro };
   const editado = novo ? validado.alvos[validado.alvos.length - 1] : validado.alvos.find(a => String(a._id) === String(alvoId));
   const previa = pedidoDoAlvo(editado, servidor);
@@ -442,13 +404,11 @@ module.exports = {
   BOTAO_GM_REAPLICAR,
   MENU_ALVO,
   MODAL_ALVO,
-  EXECUTORES_GM,
   RE_MOTIVO_GM,
   motivoGmValido,
   descreverPunicao,
   pedidoDoAlvo,
   nicksConhecidos,
-  aoTrocarExecutor,
   montarMensagemGm,
   postarPunicaoGm,
   atualizarMensagemGm,

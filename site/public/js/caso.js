@@ -575,6 +575,7 @@ export function telaDetalhe() {
       blocoAviso(),
 
       el('div', { class: 'caso-corpo' },
+        el('div', { class: 'caso-esquerda' },
         el('section', { class: 'caso-conversa', 'aria-label': 'Conversa do tópico' },
           el('div', { class: 'conversa', tabindex: '0', 'aria-label': `Conversa com ${mensagens.length} mensagens` },
             mensagens.length
@@ -585,6 +586,8 @@ export function telaDetalhe() {
           denuncia.aberta
             ? compositor(limiteUploadMb)
             : el('p', { class: 'encerrado' }, icone('cadeado'), 'Caso encerrado. O envio de mensagens e arquivos está fechado.')),
+        // Blocos da staff embaixo da conversa: ficam à vista, sem esperar a coluna da direita acabar.
+        areaDaEquipe() && el('div', { class: 'ficha caso-staff', 'aria-label': 'Histórico e registro do caso' }, blocosDaStaff())),
 
         el('aside', { class: 'ficha', 'aria-label': 'Resumo do caso' },
           areaDaEquipe() && estado.presenca.length > 0 && el('section', { class: 'cartao presenca', role: 'status' },
@@ -621,8 +624,7 @@ export function telaDetalhe() {
               dado('Punição', denuncia.motivoAceite),
               dado('Data', denuncia.dataPunicao))),
           cartaoDeAvaliacao(),
-          mostrarStaff && painelStaff(denuncia, papeis.responsavel),
-          areaDaEquipe() && blocosDaStaff())
+          mostrarStaff && painelStaff(denuncia, papeis.responsavel))
       )
     )
   );

@@ -94,7 +94,7 @@ test('todo botão, menu e modal criado no código tem rota', () => {
 test('comandos de barra têm definição válida e nomes únicos', () => {
   const { comandos } = require('../commands/slash');
   const nomes = comandos.map(comando => comando.data.toJSON().name);
-  assert.deepEqual([...nomes].sort(), ['ativar', 'denuncia', 'desbanir', 'instalacao', 'link', 'painel', 'ponte', 'ponte-codigo', 'provastaff', 'rank', 'status', 'tempban']);
+  assert.deepEqual([...nomes].sort(), ['ativar', 'denuncia', 'desbanir', 'link', 'painel', 'ponte', 'ponte-codigo', 'provastaff', 'rank', 'status', 'tempban']);
   for (const comando of comandos) {
     assert.equal(typeof comando.executar, 'function', comando.data.name);
     assert.ok(comando.data.toJSON().description.length <= 100);

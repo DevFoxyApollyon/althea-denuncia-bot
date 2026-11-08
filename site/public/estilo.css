@@ -554,6 +554,9 @@ button.numero[aria-pressed="true"] { border-color: var(--marca); box-shadow: 0 0
 /* ficha lateral */
 
 .ficha { display: grid; gap: 14px; position: sticky; top: 0; }
+/* Coluna da conversa: embaixo dela, os blocos da staff lado a lado (histórico, outra denúncia aberta, registro). */
+.caso-esquerda { display: grid; gap: 14px; min-width: 0; }
+.ficha.caso-staff { position: static; order: 0; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; }
 .ficha .cartao { padding: 16px; }
 .ficha .cartao > h2 { margin-bottom: 12px; font-size: 13px; font-weight: 650; color: var(--texto-2); letter-spacing: 0; }
 
@@ -730,6 +733,9 @@ button.numero[aria-pressed="true"] { border-color: var(--marca); box-shadow: 0 0
   .conversa { max-height: none; }
   /* No celular a conversa vem primeiro: é onde a pessoa envia as provas. */
   .ficha { order: 0; }
+  /* Depois da conversa, o resumo e as ações; os blocos da staff ficam por último. */
+  .caso-esquerda { display: contents; }
+  .ficha.caso-staff { order: 1; }
   .nova { grid-template-columns: minmax(0, 1fr); }
 
   .entrada { grid-template-columns: minmax(0, 1fr); }

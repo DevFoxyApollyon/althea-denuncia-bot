@@ -22,7 +22,7 @@ const {
 } = require('../Handlers/handlerStatusButton');
 
 const { handleExportButton } = require('../Handlers/exportDenuncia');
-const { MODAL_TEMPLATES, handlePonteTemplatesModal, MODAL_MOTIVOS, handlePonteMotivosModal } = require('../commands/ponte');
+const { MODAL_MOTIVOS, handlePonteMotivosModal } = require('../commands/ponte');
 const { handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, handleIncertoDaPunicaoGm } = require('./ponteGamemode');
 const { BOTAO_INCERTO_OK, BOTAO_INCERTO_REENVIAR } = require('../services/ponteSamp/incertosGm');
 const { MODAL_LIMITES, handleLimitesGmModal } = require('../commands/ponteGamemode');
@@ -491,7 +491,6 @@ const ROTAS = {
       [provaStaff.MODAL_REGISTRO]: provaStaff.handleModalRegistro,
       [provaStaff.MODAL_TEMPBAN]: provaStaff.handleModalTempban,
       global_exempt_users_modal: handleGlobalExemptUsersSubmit,
-      [MODAL_TEMPLATES]: handlePonteTemplatesModal,
       [MODAL_MOTIVOS]: handlePonteMotivosModal,
       [MODAL_LIMITES]: handleLimitesGmModal
     },

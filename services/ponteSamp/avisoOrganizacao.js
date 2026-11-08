@@ -1,10 +1,10 @@
-// Toda punição aplicada pelo painel do jogo vira um registro no canal Relatório de punições
+// Toda punição aplicada pela gamemode vira um registro no canal Relatório de punições
 // (ou no Log Admin, se ele não estiver configurado), com
 // organização (com o cargo), nick, ID da conta, comando e link da denúncia. Cargo 6 a 12
 // de organização marca o responsável admin e quem aceitou na Cadeia Staff.
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { getConfig } = require('../../utils/configCache');
-const { botaoEntrarNoTopico, botaoSoltoEntrarNoTopico } = require('../../utils/restricaoTopicos');
+const { botaoSoltoEntrarNoTopico } = require('../../utils/restricaoTopicos');
 const { Logger } = require('../../utils/logger');
 const Usuario = require('../../models/Usuario');
 
@@ -17,8 +17,6 @@ const normalizar = (texto) => String(texto || '').normalize('NFD').replace(/[̀-
 // "Tropa da Holanda ( Membro - 4)" → "Tropa da Holanda": o cargo entre parênteses não entra.
 const semParenteses = (texto) => String(texto || '').replace(/\s*\([^)]*\)/g, '').trim();
 const temOrganizacao = (organizacao) => !SEM_ORGANIZACAO.includes(normalizar(semParenteses(organizacao)));
-// Denúncia de tópico privado: o aviso leva o botão "Entrar no tópico".
-const botoesDoTopico = (punicao) => (punicao.mensagens?.topicoPrivado && punicao.mensagens.topicoId ? [botaoEntrarNoTopico(punicao.mensagens.topicoId)] : []);
 
 // Embed de punição aplicada: "Entrar no tópico" (tópico privado) e "Ver no site"
 // (página da denúncia; só com o endereço público do site, em https).
@@ -95,7 +93,7 @@ async function discordDaConta(guildId, contaId, informado) {
   return nome ? `<@${usuario.userId}> (${nome})` : `<@${usuario.userId}>`;
 }
 
-// Quem aplicou: a gamemode ("gamemode:brp teste") ou um PC da staff.
+// Quem aplicou: a gamemode ("gamemode:brp teste"). Punições antigas podem ter sido do PC da staff.
 const quemAplicou = (nomePc) => (String(nomePc || '').startsWith('gamemode:')
   ? `Gamemode · ${String(nomePc).slice('gamemode:'.length) || 'servidor do jogo'}`
   : `PC da staff · ${nomePc || '?'}`);
@@ -111,7 +109,7 @@ const VISUAL_DO_TIPO = {
 };
 const visualDoTipo = (cmd) => VISUAL_DO_TIPO[cmd] || { cor: '#1C7ED6', icone: '✅', titulo: 'Punição aplicada' };
 
-// resultado: itens que o PC mandou em /aplicada (só os aplicados agora contam).
+// resultado: itens aplicados pela gamemode (só os aplicados agora contam).
 async function avisarAplicadas(client, punicao, resultado, nomePc) {
   // Pulados por já terem levado ban há menos de 1h vêm com ok e erro preenchido.
   const alvos = resultado.filter(r => r.ok && !r.erro);
@@ -181,37 +179,6 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
   }
 }
 
-// Acusado informado só pelo nick e o /vercontanick não achou a conta: a punição fica
-// pausada na fila do jogo. Avisa no Log Admin marcando o responsável admin.
-async function avisarNicksNaoEncontrados(client, punicao, resultado, nomePc) {
-  if (!client || resultado.length === 0) return 0;
-  try {
-    const config = await getConfig(punicao.guildId);
-    const canal = config?.channels?.log ? await client.channels.fetch(config.channels.log).catch(() => null) : null;
-    if (!canal?.send) return 0;
-    const cargo = config?.roles?.responsavel_admin;
-    const nicks = resultado.map(r => {
-      const alvo = (punicao.alvos || []).find(a => String(a._id) === String(r.alvoId)) || {};
-      return `\`${alvo.nick || r.nome || '?'}\``;
-    });
-    const link = punicao.msgDiscord?.link || '';
-    const embed = new EmbedBuilder()
-      .setColor('#E67E22')
-      .setTitle('⏸️ Punição pausada: nick não encontrado')
-      .setDescription(`O /vercontanick não encontrou a conta de ${nicks.join(', ')}. A punição ficou pausada na fila do jogo até alguém corrigir o nick ou informar o ID da conta no painel.`)
-      .addFields({ name: '🔗 Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link' })
-      .setFooter({ text: `Painel do jogo (PC: ${nomePc})` })
-      .setTimestamp();
-    await canal.send({ content: cargo ? `<@&${cargo}>` : undefined, embeds: [embed], allowedMentions: { roles: cargo ? [cargo] : [] } });
-    return resultado.length;
-  } catch (error) {
-    log.warn(`Falha ao avisar nick não encontrado no Log Admin: ${error.message}`);
-    return 0;
-  }
-}
-
-// O servidor respondeu que a conta já estava banida (ex.: chegou a 3/3 avisos e tomou ban
-// automático). Nada foi aplicado; fica o registro no Relatório de punições.
 // A gamemode recusou porque a conta é de staff ou admin (CONTA_PROTEGIDA): aviso no
 // Relatório de punições, marcando o responsável, no mesmo formato da punição aplicada.
 async function avisarContaProtegida(client, pedido, dados, nomeConexao = '') {
@@ -255,75 +222,4 @@ async function avisarContaProtegida(client, pedido, dados, nomeConexao = '') {
   }
 }
 
-async function avisarJaBanidos(client, punicao, resultado, nomePc) {
-  if (!client || resultado.length === 0) return 0;
-  try {
-    const config = await getConfig(punicao.guildId);
-    const canalId = config?.channels?.relatorioPunicoes || config?.channels?.log;
-    const canal = canalId ? await client.channels.fetch(canalId).catch(() => null) : null;
-    if (!canal?.send) return 0;
-    const link = punicao.msgDiscord?.link || '';
-    for (const r of resultado) {
-      const alvo = (punicao.alvos || []).find(a => String(a._id) === String(r.alvoId)) || {};
-      const TEXTOS = {
-        'ja tem ban permanente': ['🔒 Já tem ban permanente: punição não aplicada',
-          'Esta conta já tem um banimento permanente. Ele foi mantido e a nova punição saiu da fila sem ser aplicada.'],
-        'desbanir falhou': ['⚠️ Não foi possível desbanir para somar a punição',
-          'O painel tentou desbanir a conta para aplicar o ban somado, mas o servidor continuou dizendo que ela está banida. A punição ficou na fila para aplicar à mão.'],
-        'ja estava banido': ['⚠️ Já estava banido: punição não aplicada',
-          'Esta conta já está banida (por exemplo, chegou a 3/3 avisos). A punição saiu da fila sem ser aplicada.']
-      };
-      const [titulo, descricao] = TEXTOS[r.erro] || TEXTOS['ja estava banido'];
-      const embed = new EmbedBuilder()
-        .setColor('#E67E22')
-        .setTitle(titulo)
-        .setDescription(descricao)
-        .addFields(
-          { name: '🏢 Organização', value: temOrganizacao(r.organizacao) ? organizacaoComCargo(r.organizacao) : 'Nenhuma', inline: true },
-          { name: '👤 Nick no jogo', value: String(r.nome || alvo.nick || 'Não identificado').slice(0, 100), inline: true },
-          { name: '🆔 ID da conta', value: `\`${r.contaId || alvo.contaId || '?'}\``, inline: true },
-          { name: '⚖️ Punição que seria aplicada', value: `\`${String(r.comando || '').slice(0, 120) || '?'}\`` },
-          ...(r.resposta ? [{ name: '💬 Resposta do servidor', value: String(r.resposta).slice(0, 200) }] : []),
-          { name: '🔗 Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link' }
-        )
-        .setFooter({ text: `Painel do jogo (PC: ${nomePc})` })
-        .setTimestamp();
-      await canal.send({ embeds: [embed], components: botoesDoTopico(punicao) });
-    }
-    return resultado.length;
-  } catch (error) {
-    log.warn(`Falha ao registrar "já estava banido" no relatório de punições: ${error.message}`);
-    return 0;
-  }
-}
-
-// O servidor do jogo não respondeu (tela do /vercontaid ou do comando não chegou) várias vezes
-// seguidas: o automático parou de tentar. Avisa no Log Admin marcando o responsável admin.
-async function avisarSemResposta(client, punicao, resultado, nomePc, tentativas) {
-  if (!client || resultado.length === 0) return 0;
-  try {
-    const config = await getConfig(punicao.guildId);
-    const canal = config?.channels?.log ? await client.channels.fetch(config.channels.log).catch(() => null) : null;
-    if (!canal?.send) return 0;
-    const cargo = config?.roles?.responsavel_admin;
-    const contas = resultado.map(r => {
-      const alvo = (punicao.alvos || []).find(a => String(a._id) === String(r.alvoId)) || {};
-      return `\`${r.contaId || alvo.contaId || alvo.nick || '?'}\``;
-    });
-    const link = punicao.msgDiscord?.link || '';
-    const embed = new EmbedBuilder()
-      .setColor('#E67E22')
-      .setTitle('⏸️ Punição parada: servidor do jogo não respondeu')
-      .setDescription(`O servidor não respondeu ${tentativas} vezes ao aplicar a punição de ${contas.join(', ')}. O automático parou de tentar: a punição continua na fila do jogo para aplicar pelo painel.`)
-      .addFields({ name: '🔗 Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link' })
-      .setFooter({ text: `Painel do jogo (PC: ${nomePc})` })
-      .setTimestamp();
-    await canal.send({ content: cargo ? `<@&${cargo}>` : undefined, embeds: [embed], allowedMentions: { roles: cargo ? [cargo] : [] } });
-    return resultado.length;
-  } catch (error) {
-    log.warn(`Falha ao avisar servidor sem resposta no Log Admin: ${error.message}`);
-    return 0;
-  }
-}
-
-module.exports = { avisarAplicadas, avisarContaProtegida, punicaoLegivel, discordDaConta, quemAplicou, avisarNicksNaoEncontrados, avisarJaBanidos, avisarSemResposta, temOrganizacao, cargoDaOrganizacao, nomeDoCargo, nomeDaOrganizacao, cargoLegivel, organizacaoComCargo, SEM_ORGANIZACAO };
+module.exports = { avisarAplicadas, avisarContaProtegida, punicaoLegivel, discordDaConta, quemAplicou, temOrganizacao, cargoDaOrganizacao, nomeDoCargo, nomeDaOrganizacao, cargoLegivel, organizacaoComCargo, SEM_ORGANIZACAO };

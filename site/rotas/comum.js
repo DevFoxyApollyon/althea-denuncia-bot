@@ -103,7 +103,7 @@ async function historicoDoAcusado(denuncia) {
   };
 }
 
-// Punições que o jogo já aplicou nas mesmas contas (pela ponte: PC da staff ou gamemode),
+// Punições que o jogo já aplicou nas mesmas contas (pela ponte; as antigas podem ser do PC da staff),
 // com o nome, a organização e o cargo que o jogo informou na hora.
 async function historicoNoJogo(denuncia) {
   const ids = String(denuncia.acusado || '').split('+').map(id => id.trim()).filter(id => /^\d{1,9}$/.test(id)).slice(0, 6);

@@ -9,8 +9,6 @@ const ponteCodigoSchema = new mongoose.Schema({
   criadoPor: { type: String, required: true },
   criadoEm: { type: Date, default: Date.now },
   expiraEm: { type: Date, default: null },
-  // Vazio usa o limite padrão.
-  limitePcs: { type: Number, default: null, min: 1 },
   usadoEm: { type: Date, default: null },
   usadoPorGuild: { type: String, default: null },
   usadoPorUser: { type: String, default: null },

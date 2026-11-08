@@ -1,18 +1,10 @@
-// Validação dos alvos e montagem dos comandos. O Lua repete as mesmas regras:
-// o servidor nunca confia no que o PC manda, e o PC nunca confia no servidor.
+// Validação dos alvos, do motivo e da tabela de punições.
 const mongoose = require('mongoose');
-const { REGRAS_PUNICAO, SUFIXO_MOTIVO, TEMPLATES_PADRAO, TEMPLATES_ANTIGOS, CMDS_PUNICAO, CMD_PADRAO, TEMPO_PADRAO } = require('./constantes');
+const { REGRAS_PUNICAO, SUFIXO_MOTIVO, CMDS_PUNICAO, CMD_PADRAO, TEMPO_PADRAO } = require('./constantes');
 
 const RE_CONTA = /^\d{1,9}$/;
 const RE_NICK = /^[A-Za-z0-9_[\].$@=()]{3,24}$/;
-const RE_CMD = /^[a-z0-9_]{1,20}$/;
-const MARCADORES = ['{cmd}', '{id}', '{nick}', '{tempo}', '{motivo}'];
 const MAX_ALVOS = 30;
-const MAX_COMANDO = 128; // limite do chat do SA-MP
-
-// Converte o Map do mongoose (ou objeto comum) em objeto.
-const templatesComoObjeto = (templates) =>
-  templates instanceof Map ? Object.fromEntries(templates) : { ...(templates || {}) };
 
 // Tira o que pode quebrar o chat ou virar outro comando: quebras de linha,
 // chaves de cor do SA-MP, barra no início e caracteres de controle.
@@ -25,14 +17,6 @@ function limparMotivo(texto) {
     .replace(/^\/+\s*/, '')
     .slice(0, 60)
     .trim();
-}
-
-// Template só pode ter os marcadores conhecidos e precisa começar com "/".
-function templateValido(template) {
-  const t = String(template || '');
-  if (!t.startsWith('/') || t.length > MAX_COMANDO || /[\r\n]/.test(t)) return false;
-  const marcadores = t.match(/\{[^}]*\}/g) || [];
-  return marcadores.every(m => MARCADORES.includes(m)) && (t.includes('{id}') || t.includes('{nick}'));
 }
 
 // Motivo no jogo sempre termina com [DC]; o corte deixa espaço para a marca.
@@ -100,7 +84,7 @@ function tabelaDa(servidor) {
   });
 }
 
-// Valida a tabela enviada pelo painel do jogo. Devolve { regras } ou { erro }.
+// Valida a tabela de motivos (site ou Discord). Devolve { regras } ou { erro }.
 function validarTabela(lista) {
   if (!Array.isArray(lista) || lista.length > 150) return { erro: 'Tabela inválida (até 150 motivos).' };
   const limpar = (t) => normalizar(t).replace(/[^A-Z0-9 /+-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 30);
@@ -141,37 +125,8 @@ function classificarMotivo(texto, tabela = ITENS_TABELA) {
   return combinarMotivos(achados);
 }
 
-// Guild ativada com os templates provisórios passa a usar os comandos reais;
-// templates auxiliares que faltarem (aviso, blackban) vêm do padrão.
-function templatesEfetivos(templates) {
-  const atuais = templatesComoObjeto(templates);
-  const antigos = Object.keys(atuais).length === Object.keys(TEMPLATES_ANTIGOS).length
-    && Object.entries(TEMPLATES_ANTIGOS).every(([k, v]) => atuais[k] === v);
-  if (antigos) return { ...TEMPLATES_PADRAO };
-  const efetivos = { ...TEMPLATES_PADRAO, ...atuais };
-  // O comando certo é /agendacadeia; guilds ativadas com o nome errado passam ao certo.
-  if (/^\/agendarcadeia/i.test(efetivos.cadeia || '')) efetivos.cadeia = efetivos.cadeia.replace(/^\/agendarcadeia/i, '/agendacadeia');
-  return efetivos;
-}
-
-function montarComando(template, alvo, cmd) {
-  if (!templateValido(template)) return null;
-  if (template.includes('{nick}') && !alvo.nick) return null;
-  const comando = template
-    .replace(/\{cmd\}/g, cmd)
-    .replace(/\{id\}/g, alvo.contaId)
-    .replace(/\{nick\}/g, alvo.nick || '')
-    .replace(/\{tempo\}/g, String(alvo.tempo ?? 0))
-    .replace(/\{motivo\}/g, motivoComSufixo(alvo.motivo))
-    .replace(/\s+/g, ' ')
-    .trim();
-  return comando.startsWith('/') && comando.length <= MAX_COMANDO ? comando : null;
-}
-
-
-// Valida a lista enviada pelo painel. Devolve { alvos } ou { erro }.
-function validarAlvos(lista, templates) {
-  const tpl = templatesEfetivos(templates);
+// Valida a lista de alvos (aceite ou Editar). Devolve { alvos } ou { erro }.
+function validarAlvos(lista) {
   if (!Array.isArray(lista) || lista.length === 0 || lista.length > MAX_ALVOS) {
     return { erro: `Lista de alvos inválida (1 a ${MAX_ALVOS}).` };
   }
@@ -187,7 +142,7 @@ function validarAlvos(lista, templates) {
     if (!contaId && !nick) return { erro: `Alvo ${n}: informe o ID da conta ou o nick.` };
     if (nick && !RE_NICK.test(nick)) return { erro: `Alvo ${n}: nick inválido.` };
     const avisos = Number(bruto.avisos ?? 0);
-    if (!CMDS_PUNICAO.includes(cmd) || !tpl[cmd]) return { erro: `Alvo ${n}: tipo "${cmd}" inválido (use ban ou cadeia).` };
+    if (!CMDS_PUNICAO.includes(cmd)) return { erro: `Alvo ${n}: tipo "${cmd}" inválido (use ban ou cadeia).` };
     if (!Number.isInteger(tempo) || tempo < 0 || tempo > 99999) return { erro: `Alvo ${n}: tempo inválido.` };
     if (!Number.isInteger(avisos) || avisos < 0 || avisos > 10) return { erro: `Alvo ${n}: avisos inválidos (0 a 10).` };
 
@@ -205,23 +160,6 @@ function validarAlvos(lista, templates) {
   return { alvos };
 }
 
-// Prévia dos comandos para o painel conferir (a montagem que vale é a do Lua).
-function previaComandos(alvos, templates) {
-  const tpl = templatesEfetivos(templates);
-  return alvos.map(a => ({ alvoId: a._id, comando: montarComando(tpl[a.cmd], a, a.cmd) }));
-}
-
-// Templates editados pela staff: chave curta e template válido.
-function validarTemplates(objeto) {
-  const entradas = Object.entries(objeto || {});
-  if (entradas.length === 0 || entradas.length > 15) return { erro: 'Informe de 1 a 15 comandos.' };
-  for (const [cmd, template] of entradas) {
-    if (!RE_CMD.test(cmd)) return { erro: `Nome de comando inválido: "${cmd}".` };
-    if (!templateValido(template)) return { erro: `Template de "${cmd}" inválido: precisa começar com "/", ter {id} e só usar {cmd}, {id}, {tempo} e {motivo}.` };
-  }
-  return { templates: Object.fromEntries(entradas) };
-}
-
 module.exports = {
   RE_CONTA,
   RE_NICK,
@@ -233,11 +171,5 @@ module.exports = {
   tabelaDa,
   validarTabela,
   grupoDe,
-  templatesEfetivos,
-  templateValido,
-  montarComando,
-  templatesComoObjeto,
-  validarAlvos,
-  previaComandos,
-  validarTemplates
+  validarAlvos
 };

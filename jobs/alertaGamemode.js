@@ -17,7 +17,6 @@ const log = new Logger({ tag: 'AlertaGamemode' });
 
 const OFFLINE_MS = 5 * 60 * 1000;
 const INTERVALO_MS = 60 * 1000;
-const EXECUTORES_GM = ['gamemode', 'ambos'];
 
 let rodando = false;
 
@@ -31,7 +30,7 @@ async function ultimaRecusa(conexaoId, desde) {
   const codigo = uso.detalhes?.codigo || '?';
   const explicacao = {
     IP: `o IP ${uso.ip || '?'} não está na trava por IP da credencial. Libere o IP na aba Controle do painel da ponte.`,
-    GUILD_INATIVA: 'o executor deste servidor está no PC da staff, ou a ponte foi desativada.',
+    GUILD_INATIVA: 'a ponte foi desativada neste servidor.',
     REVOGADA: 'a credencial foi revogada.',
     ASSINATURA: 'a assinatura não confere: o arquivo de credenciais da gamemode pode estar errado.',
     RELOGIO: 'o relógio do servidor do jogo está errado.',
@@ -58,7 +57,7 @@ async function conferirGamemodes(client, agora = Date.now()) {
   rodando = true;
   const resumo = { offline: 0, voltaram: 0 };
   try {
-    const servidores = await PonteServidor.find({ ativo: true, executor: { $in: EXECUTORES_GM }, 'gm.pausado': { $ne: true } }, { guildId: 1 }).lean();
+    const servidores = await PonteServidor.find({ ativo: true, 'gm.pausado': { $ne: true } }, { guildId: 1 }).lean();
     if (!servidores.length) return resumo;
     const conexoes = await PonteConexaoGm.find({
       guildId: { $in: servidores.map(s => s.guildId) },

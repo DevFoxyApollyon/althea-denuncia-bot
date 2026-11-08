@@ -1,4 +1,4 @@
-// Liga o aceite da denúncia no Discord à fila do painel do jogo. Nada aqui
+// Liga o aceite da denúncia no Discord à fila de envio à gamemode. Nada aqui
 // pode quebrar o aceite normal: todo erro é engolido e só vai para o log.
 const PontePunicao = require('../../models/PontePunicao');
 const { servidorAtivo } = require('./gestao');
@@ -8,8 +8,11 @@ const { CMD_PADRAO, TEMPO_PADRAO } = require('./constantes');
 const { Logger } = require('../../utils/logger');
 
 const log = new Logger({ tag: 'PonteAceite' });
-const AGUARDANDO = '➱ Motivo fora da tabela: aguardando no painel';
-const LIBERADO = '➱ Motivo cadastrado na tabela: liberado no painel do jogo';
+const AGUARDANDO = '➱ Motivo fora da tabela: aguardando correção';
+const LIBERADO = '➱ Motivo cadastrado na tabela: liberado para enviar ao jogo';
+// Mensagens antigas (do tempo do PC da staff) ainda têm este texto.
+const AGUARDANDO_ANTIGO = '➱ Motivo fora da tabela: aguardando no painel';
+const linhaAguardando = (texto) => [AGUARDANDO, AGUARDANDO_ANTIGO].find(l => texto.includes(l)) || null;
 
 // Motivo por acusado quando o aceite diz quem fez o quê. Cada parênteses e cada
 // separador (/ | ;) fecha uma parte; a parte que cita acusados vira o motivo só deles:
@@ -77,7 +80,7 @@ function montarAlvos(denuncia, tabela) {
       const proprio = porAcusado.get(a.toLowerCase());
       // Motivo separado por conta, mas esta conta não foi citada: não leva o texto inteiro
       // (somaria a punição de todos). Fica sem motivo e sem regra: o automático não aplica,
-      // a Cadeia Staff é avisada e a staff escolhe a punição no painel.
+      // a Cadeia Staff é avisada e o responsável escolhe a punição no Editar.
       if (!proprio && porAcusado.size > 0) {
         return { contaId: RE_CONTA.test(a) ? a : '', nick: RE_CONTA.test(a) ? '' : a, cmd: CMD_PADRAO, tempo: TEMPO_PADRAO, avisos: 1, regra: '', motivo: '' };
       }
@@ -194,7 +197,7 @@ async function registrarAceite({ client, denuncia, origem, staff, canalMensagem 
       return { jaExistia: true, aceitoPor: punicao?.aceitoPor?.nome || '', status: punicao?.status || '' };
     }
 
-    // Motivo fora da tabela: o automático não aplica; a staff confere no painel.
+    // Motivo fora da tabela: não dá para enviar até o responsável corrigir no Editar.
     if (alvos.some(a => !a.regra)) {
       await atualizarMensagensDiscord(client, punicao, AGUARDANDO).catch(() => {});
     }
@@ -225,12 +228,12 @@ async function atualizarMensagensDiscord(client, punicao, texto) {
   const { topicoId, topicoMsgId, canalId, canalMsgId } = punicao.mensagens || {};
   await Promise.all([
     editarMensagem(client, topicoId, topicoMsgId, () => texto),
-    editarMensagem(client, canalId, canalMsgId, (atual) => (atual.includes(AGUARDANDO) ? atual.replace(AGUARDANDO, texto) : `${atual}\n${texto}`))
+    editarMensagem(client, canalId, canalMsgId, (atual) => (linhaAguardando(atual) ? atual.replace(linhaAguardando(atual), texto) : `${atual}\n${texto}`))
   ]);
 }
 
-// Aplicada: o tópico ganha a linha "Aplicado"; na Cadeia Staff só some o "aguardando no
-// painel" (o Relatório de punições já registra a aplicação).
+// Aplicada: o tópico ganha a linha "Aplicado"; na Cadeia Staff só some o "aguardando
+// correção" (o Relatório de punições já registra a aplicação).
 async function marcarAplicadaNoDiscord(client, punicao, texto) {
   const { topicoId, topicoMsgId } = punicao.mensagens || {};
   await Promise.all([
@@ -239,20 +242,21 @@ async function marcarAplicadaNoDiscord(client, punicao, texto) {
   ]);
 }
 
-// Tirada da fila sem aplicar: só some a linha "aguardando no painel" da Cadeia Staff,
+// Tirada da fila sem aplicar: só some a linha "aguardando correção" da Cadeia Staff,
 // sem escrever nada no lugar.
 async function limparAguardando(client, punicao) {
   const { canalId, canalMsgId } = punicao.mensagens || {};
   await editarMensagem(client, canalId, canalMsgId, (atual) => {
-    if (!atual.includes(AGUARDANDO)) return null;
-    return atual.split('\n').filter(l => l.trim() !== AGUARDANDO).join('\n').trim() || '​';
+    const linha = linhaAguardando(atual);
+    if (!linha) return null;
+    return atual.split('\n').filter(l => l.trim() !== linha).join('\n').trim() || '​';
   });
 }
 
 // Motivo que estava fora da tabela e passou a existir (cadastrado no site ou no Discord),
 // ou motivo da tabela que mudou de punição: o jogador ganha tipo, tempo e avisos da tabela
 // atual. Não mexe em quem foi editado à mão (regra "editado por ...") nem em quem está sem motivo. Quando a denúncia inteira fica com regra, a
-// mensagem do Discord troca "aguardando no painel" por "liberado". Sem lista, confere a
+// mensagem do Discord troca "aguardando correção" por "liberado". Sem lista, confere a
 // fila toda (a tabela vale para todos os servidores). Devolve a lista atualizada.
 async function reclassificarFila({ client = null, lista = null, tabela = null } = {}) {
   const fila = lista || await PontePunicao.find({ status: 'aceita' }).lean();

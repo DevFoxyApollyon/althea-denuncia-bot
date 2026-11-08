@@ -38,7 +38,7 @@ const resultadoSchema = new mongoose.Schema({
   retiradaPor: { type: String, default: '' }
 }, { _id: false });
 
-// Punição de uma denúncia aceita, esperando o clique da staff no painel do jogo.
+// Punição de uma denúncia aceita, esperando um responsável enviar à gamemode.
 // Uma por denúncia: o primeiro aceite cria, o segundo só informa.
 const pontePunicaoSchema = new mongoose.Schema({
   denunciaId: { type: mongoose.Schema.Types.ObjectId, ref: 'Denuncia', required: true, unique: true },
@@ -67,9 +67,8 @@ const pontePunicaoSchema = new mongoose.Schema({
   alvos: { type: [alvoSchema], default: [] },
   // Trava otimista: toda edição exige a versão que o painel leu.
   versao: { type: Number, default: 0 },
-  executandoPor: { type: mongoose.Schema.Types.ObjectId, ref: 'PonteInstalacao', default: null },
-  // Quem está aplicando: vazio/pc = painel do jogo; gamemode = pedidos em pontepedidosgm.
-  executor: { type: String, enum: ['', 'pc', 'gamemode'], default: '' },
+  // Quem está aplicando: vazio = ninguém ainda; gamemode = pedidos em pontepedidosgm.
+  executor: { type: String, enum: ['', 'gamemode'], default: '' },
   // Embed "🎮 Punição para o jogo" (modo gamemode), no Relatório de punições.
   mensagemGm: {
     canalId: { type: String, default: '' },

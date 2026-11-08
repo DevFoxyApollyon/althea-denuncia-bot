@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { modelSecundarioPermanente } = require('../utils/persistencia');
-const { TEMPLATES_PADRAO, LIMITE_PCS_PADRAO, EXECUTORES, LIMITES_GM_PADRAO } = require('../services/ponteSamp/constantes');
+const { LIMITES_GM_PADRAO } = require('../services/ponteSamp/constantes');
 
 // Guild com a ponte do jogo ligada. Só existe depois do /ativar com um código válido.
 const ponteServidorSchema = new mongoose.Schema({
@@ -9,9 +9,6 @@ const ponteServidorSchema = new mongoose.Schema({
   ativadoEm: { type: Date, default: null },
   ativadoPor: { type: String, default: null },
   codigoId: { type: mongoose.Schema.Types.ObjectId, ref: 'PonteCodigo', default: null },
-  limitePcs: { type: Number, default: LIMITE_PCS_PADRAO, min: 1 },
-  // cmd → template do comando no chat do jogo.
-  templates: { type: Map, of: String, default: () => ({ ...TEMPLATES_PADRAO }) },
   // Tabela de motivos editada no painel do jogo. Vazia: usa a padrão (constantes.js).
   regras: {
     type: [{
@@ -24,10 +21,8 @@ const ponteServidorSchema = new mongoose.Schema({
     }],
     default: []
   },
-  // Alertas de segurança (HWID diferente). Vazio usa o log admin da Config.
+  // Alertas da gamemode. Vazio usa o log admin da Config.
   canalAlertasId: { type: String, default: '' },
-  // Quem aplica as punições: o PC da staff (mod Lua), a gamemode ou os dois.
-  executor: { type: String, enum: EXECUTORES, default: 'pc' },
   // Limites do modo gamemode (o bot confere antes de criar o pedido; a gamemode confere de novo).
   gm: {
     pausado: { type: Boolean, default: LIMITES_GM_PADRAO.pausado },

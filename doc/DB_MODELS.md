@@ -233,9 +233,8 @@ Elas abrem o painel e veem o link "Painel da ponte" no menu do site. Gerenciar a
 mestra, gerar/expirar códigos e desativar servidores continuam só com o dono (`OWNER_DISCORD_ID`).
 
 ### Campos novos em models existentes
-- **PonteServidor:** `executor` (`pc` | `gamemode` | `ambos`, padrão `pc`) e
-  `gm: { pausado, maxBanDias (30), permitirPermanente (true), maxCadeiaMin (300), maxAvisos (3), modoTeste (true) }`.
-- **PontePunicao:** `executor` (`''` | `pc` | `gamemode`) e `mensagemGm: { canalId, msgId }` (embed "🎮 Punição para o jogo").
+- **PonteServidor:** `gm: { pausado, maxBanDias (30), permitirPermanente (true), maxCadeiaMin (300), maxAvisos (3), modoTeste (true) }`.
+- **PontePunicao:** `executor` (`''` | `gamemode`) e `mensagemGm: { canalId, msgId }` (embed "🎮 Punição para o jogo").
 - **PonteUso.acao:** `gm_busca`, `gm_resultado`, `gm_auth_falhou`, `gm_selo_invalido`, `gm_enviar`, `gm_cancelar`,
   `gm_incerto_ok`, `gm_incerto_reenviar`, `gm_credencial`, `gm_config`.
 - **Config:** `alertaMotivoCritico` (padrão `true`): marca o responsável no tópico em zaralho, dark RP, hack e mods proibidos.

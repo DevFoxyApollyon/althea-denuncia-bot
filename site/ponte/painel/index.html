@@ -53,12 +53,6 @@
         <span>Instalar</span>
       </button>
 
-      <p class="menu-titulo">PC da staff</p>
-      <button type="button" class="menu-item" data-aba="instalacoes">
-        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
-        <span>PCs</span>
-      </button>
-
       <p class="menu-titulo">Registro</p>
       <button type="button" class="menu-item" data-aba="uso">
         <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v4l3 2"/><path d="M3.1 11a9 9 0 1 1 .5 4.5"/><path d="M3 4v5h5"/></svg>
@@ -82,7 +76,7 @@
     <section id="aba-geral">
       <header class="pagina-topo">
         <h1>Visão geral</h1>
-        <p class="sub">Servidores com a ponte ativa, os PCs e a gamemode de cada um, e o que aconteceu por último.</p>
+        <p class="sub">Servidores com a ponte ativa, a gamemode de cada um e o que aconteceu por último.</p>
       </header>
       <div id="numeros" class="numeros" aria-label="Resumo"></div>
 
@@ -145,7 +139,7 @@
         <p class="dica">Online: a gamemode buscou pedidos nos últimos 30 segundos. Criar e renovar credenciais é pelo Discord (<code>/ponte gamemode criar</code>), porque o segredo só aparece uma vez.</p>
         <p id="gm-sem-ip" class="alerta" hidden></p>
         <div class="tabela-rolagem">
-          <table id="gm-conexoes"><thead><tr><th>Servidor</th><th>Nome</th><th>Status</th><th>Online</th><th>Último contato</th><th>IP</th><th>Include</th><th>Teste no jogo</th><th>IPs permitidos</th><th>Credencial</th><th>Executor</th><th></th></tr></thead><tbody></tbody></table>
+          <table id="gm-conexoes"><thead><tr><th>Servidor</th><th>Nome</th><th>Status</th><th>Online</th><th>Último contato</th><th>IP</th><th>Include</th><th>Teste no jogo</th><th>IPs permitidos</th><th>Credencial</th><th>Servidor</th><th></th></tr></thead><tbody></tbody></table>
         </div>
       </div>
 
@@ -202,7 +196,7 @@
         </div>
         <p id="guia-chave" class="alerta" hidden></p>
         <div class="tabela-rolagem">
-          <table id="guia-servidores"><thead><tr><th>Servidor</th><th>Executor</th><th>Credencial</th><th>Gamemode</th><th>Teste no bot</th><th>Teste no jogo</th><th>Pedidos</th><th>Próximo passo</th></tr></thead><tbody></tbody></table>
+          <table id="guia-servidores"><thead><tr><th>Servidor</th><th>Credencial</th><th>Gamemode</th><th>Teste no bot</th><th>Teste no jogo</th><th>Pedidos</th><th>Próximo passo</th></tr></thead><tbody></tbody></table>
         </div>
       </div>
 
@@ -214,7 +208,6 @@
           <li>Chave mestra: use o botão <strong>Gerar chave</strong> acima (ou o comando abaixo) e deixe a mesma linha <code>PONTE_CHAVE_MESTRA=…</code> no <code>.env</code> do seu PC. A impressão mostrada aqui ajuda a conferir se os dois são iguais.
             <pre><code>node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"</code></pre></li>
           <li>Rode <code>npm run pacote</code> e suba o zip novo na SquareCloud.</li>
-          <li>No Discord do servidor: <code>/ponte gamemode executor tipo: Gamemode</code> (ou "Os dois" para manter o PC durante a troca). Também dá para trocar na aba Controle.</li>
           <li><code>/ponte gamemode criar nome: &lt;nome do servidor&gt;</code> (com <code>ips:</code> quando souber os IPs de saída do servidor do jogo). O bot manda o arquivo <code>althea_credenciais.txt</code> <strong>uma vez só</strong>. A trava por IP também se edita na aba Controle.</li>
         </ol>
       </div>
@@ -254,24 +247,11 @@ public OnRconCommand(cmd[]) { if (Althea_ComandoRcon(cmd)) return 1; /* ... */ }
         </div>
         <ol class="passos">
           <li>Confira acima: a coluna Gamemode fica <span class="online">● online</span> quando a gamemode busca pedidos. No jogo, <code>rcon althea status</code>.</li>
-          <li>Aceite uma denúncia na Cadeia Staff (com o executor Gamemode ela já vai para o jogo) e veja o 🧪 simulado no Relatório de punições. Confira por alguns dias.</li>
+          <li>Aceite uma denúncia na Cadeia Staff (ela já vai para o jogo) e veja o 🧪 simulado no Relatório de punições. Confira por alguns dias.</li>
           <li>Só aplica de verdade com o modo teste desligado <strong>nos dois lados</strong>: na aba Controle (ou <code>/ponte gamemode limites</code>) e <code>rcon althea teste 0</code>. Solte aos poucos: cadeia, depois ban curto, por último permanente.</li>
           <li>Quando souber os IPs do servidor do jogo: trave a credencial no IP pela aba Controle.</li>
         </ol>
         <p class="dica">RCON: <code>althea status</code>, <code>althea pausar</code>, <code>althea retomar</code>, <code>althea teste 1</code>, <code>althea teste 0</code>, <code>althea recarregar</code>.</p>
-      </div>
-    </section>
-
-    <!-- ===================================================== PCs -->
-    <section id="aba-instalacoes" hidden>
-      <header class="pagina-topo">
-        <h1>PCs da staff</h1>
-        <p class="sub">Os PCs com o mod Lua que aplicam as punições pelo painel do jogo.</p>
-      </header>
-      <div class="cartao">
-        <div class="tabela-rolagem">
-          <table><thead><tr><th>PC</th><th>Servidor</th><th>Status</th><th>Criado por</th><th>Último uso</th><th>IP</th><th>HWID</th><th>Token</th><th>Online</th><th></th></tr></thead><tbody></tbody></table>
-        </div>
       </div>
     </section>
 
@@ -298,17 +278,16 @@ public OnRconCommand(cmd[]) { if (Althea_ComandoRcon(cmd)) return 1; /* ... */ }
     <section id="aba-codigos" hidden>
       <header class="pagina-topo">
         <h1>Códigos de ativação</h1>
-        <p class="sub">Cada código ativa a ponte em um servidor do Discord, com o limite de PCs dele.</p>
+        <p class="sub">Cada código ativa a ponte em um servidor do Discord.</p>
       </header>
       <div class="cartao">
         <form id="gerar-codigo" class="so-dono" hidden>
           <label>Validade (dias) <input name="validadeDias" type="number" min="1" max="365"></label>
-          <label>Limite de PCs <input name="limitePcs" type="number" min="1" max="50"></label>
           <button type="submit">Gerar código</button>
         </form>
         <p id="codigo-novo"></p>
         <div class="tabela-rolagem">
-          <table><thead><tr><th>Final</th><th>Criado em</th><th>Expira</th><th>Limite</th><th>Usado em</th><th>Servidor</th><th>Situação</th><th></th></tr></thead><tbody></tbody></table>
+          <table><thead><tr><th>Final</th><th>Criado em</th><th>Expira</th><th>Usado em</th><th>Servidor</th><th>Situação</th><th></th></tr></thead><tbody></tbody></table>
         </div>
       </div>
     </section>

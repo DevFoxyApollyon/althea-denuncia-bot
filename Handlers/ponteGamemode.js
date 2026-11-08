@@ -195,7 +195,6 @@ async function handleIncertoDaPunicaoGm(interaction) {
   let texto;
   if (r.erro) texto = `❌ ${r.erro}`;
   else if (aplicada) texto = '✅ Registrado como aplicado.';
-  else if (r.destino === 'pc') texto = '🔁 A punição voltou para a fila do PC da staff.';
   else texto = '🔁 Enviada de novo para a gamemode.';
   await interaction.editReply({ content: texto }).catch(() => {});
 }

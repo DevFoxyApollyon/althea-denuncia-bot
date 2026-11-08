@@ -49,8 +49,8 @@ test.after(async () => {
 
 // ---------- ajudantes ----------
 
-async function guildGm(guildId, { executor = 'gamemode', segredo = cifra.gerarSegredo(), ips = [] } = {}) {
-  await m.PonteServidor.updateOne({ guildId }, { $set: { ativo: true, executor } }, { upsert: true });
+async function guildGm(guildId, { segredo = cifra.gerarSegredo(), ips = [] } = {}) {
+  await m.PonteServidor.updateOne({ guildId }, { $set: { ativo: true } }, { upsert: true });
   const conexao = await m.PonteConexaoGm.create({
     guildId, nome: `GM ${guildId}`, segredoCifrado: cifra.cifrar(segredo), ultimos4: segredo.slice(-4), ipsPermitidos: ips
   });
@@ -205,15 +205,13 @@ test('pedido da gamemode valida tipo e status, e nasce em modo teste', () => {
   assert.equal(doc.teste, true);
 });
 
-test('guild nova usa o PC como executor e os limites padrão da gamemode', () => {
+test('guild nova usa os limites padrão da gamemode', () => {
   const PonteServidor = require('../models/PonteServidor');
   const doc = new PonteServidor({ guildId: '1' });
-  assert.equal(doc.executor, 'pc');
   assert.deepEqual(doc.toObject().gm, {
     pausado: false, maxBanDias: 30, permitirPermanente: true, maxCadeiaMin: 300,
     maxAvisos: 3, modoTeste: true
   });
-  assert.ok(new PonteServidor({ guildId: '1', executor: 'outro' }).validateSync().errors.executor);
 });
 
 test('auditoria aceita as ações da gamemode', () => {
@@ -322,7 +320,7 @@ test('autenticação: sig ausente, relógio, nonce repetido e corpo alterado', a
   assert.ok(await m.PonteUso.exists({ acao: 'gm_auth_falhou', guildId: '810' }));
 });
 
-test('autenticação: IP fora da lista, conexão revogada e executor pc dão 403', async () => {
+test('autenticação: IP fora da lista e conexão revogada dão 403', async () => {
   const fora = await guildGm('811', { ips: ['203.0.113.9'] });
   const ip = await chamar(fora.conexao, fora.segredo, '/pedidos');
   assert.deepEqual([ip.status, ip.corpo.codigo], [403, 'IP']);
@@ -335,11 +333,10 @@ test('autenticação: IP fora da lista, conexão revogada e executor pc dão 403
   const r = await chamar(revogada.conexao, revogada.segredo, '/pedidos');
   assert.deepEqual([r.status, r.corpo.codigo], [403, 'REVOGADA']);
 
-  const pc = await guildGm('814', { executor: 'pc' });
-  assert.equal((await chamar(pc.conexao, pc.segredo, '/pedidos')).status, 403);
-
-  const ambos = await guildGm('815', { executor: 'ambos' });
-  assert.equal((await chamar(ambos.conexao, ambos.segredo, '/pedidos')).status, 200);
+  // Servidor com o campo antigo "executor: pc" no banco: vale como gamemode.
+  const antigo = await guildGm('814');
+  await m.PonteServidor.collection.updateOne({ guildId: '814' }, { $set: { executor: 'pc' } });
+  assert.equal((await chamar(antigo.conexao, antigo.segredo, '/pedidos')).status, 200);
 
   const inexistente = await chamar({ _id: new mongoose.Types.ObjectId() }, cifra.gerarSegredo(), '/pedidos');
   assert.deepEqual([inexistente.status, inexistente.corpo.codigo], [401, 'CREDENCIAL']);
@@ -551,7 +548,7 @@ test('Editar do Relatório de punições: o modal monta sem erro do Discord (ró
   }
 });
 
-test('aceite na Cadeia Staff: com executor Gamemode já envia ao jogo; com PC ou Os dois, não', async () => {
+test('aceite na Cadeia Staff já envia ao jogo; sem ponte ativa, não', async () => {
   const { enviarAoJogoNoAceite } = require('../Handlers/statusDenuncia/acoesStatus');
   const interacao = (guildId) => ({ client: null, guild: { id: guildId }, user: { id: staffA.id, username: 'joao' }, member: { displayName: staffA.nome } });
 
@@ -565,13 +562,11 @@ test('aceite na Cadeia Staff: com executor Gamemode já envia ao jogo; com PC ou
   // Segundo aceite (já enviada): não manda de novo.
   assert.equal(await enviarAoJogoNoAceite(interacao('100000000000000870'), { _id: punicao.denunciaId }), null);
 
-  for (const executor of ['pc', 'ambos']) {
-    const guildId = executor === 'pc' ? '100000000000000871' : '100000000000000872';
-    await guildGm(guildId, { executor });
-    const outra = await punicaoAceita(guildId);
-    assert.equal(await enviarAoJogoNoAceite(interacao(guildId), { _id: outra.denunciaId }), null, executor);
-    assert.equal((await m.PontePunicao.findById(outra._id).lean()).status, 'aceita', executor);
-  }
+  await guildGm('100000000000000871');
+  const outra = await punicaoAceita('100000000000000871');
+  await m.PonteServidor.updateOne({ guildId: '100000000000000871' }, { $set: { ativo: false } });
+  assert.equal(await enviarAoJogoNoAceite(interacao('100000000000000871'), { _id: outra.denunciaId }), null);
+  assert.equal((await m.PontePunicao.findById(outra._id).lean()).status, 'aceita');
 });
 
 test('9. motivoParaGamemode(motivoComSufixo(...)) sempre passa na regra do Alt_MotivoValido', () => {
@@ -624,13 +619,12 @@ test('aceite em guild gamemode posta o embed com os botões no Relatório de pun
   assert.deepEqual(ids, [`ponte_gm_enviar:${punicao._id}`, `ponte_gm_editar:${punicao._id}`, `ponte_gm_cancelar:${punicao._id}`]);
   assert.deepEqual((await m.PontePunicao.findById(punicao._id).lean()).mensagemGm, { canalId: '400000000000000001', msgId: '500000000000000001' });
 
-  // Guild que aplica pelo PC não recebe o embed.
-  const pc = await guildGm('861', { executor: 'pc' });
-  assert.equal(await discordGm().postarPunicaoGm(client, (await punicaoAceita('861')).toObject(), { ...pc, executor: 'pc' }), null);
+  // Sem servidor da ponte: não posta.
+  assert.equal(await discordGm().postarPunicaoGm(client, (await punicaoAceita('861')).toObject(), null), null);
   assert.equal(enviadas.length, 1);
 });
 
-test('enviar ao jogo cria um pedido por alvo, tira da fila do PC e só funciona uma vez', async () => {
+test('enviar ao jogo cria um pedido por alvo e só funciona uma vez', async () => {
   await guildGm('862');
   const punicao = await punicaoAceita('862', [
     { contaId: '472860', cmd: 'ban', tempo: 5, avisos: 1, motivo: 'DM', regra: 'DM' },
@@ -652,11 +646,11 @@ test('enviar ao jogo cria um pedido por alvo, tira da fila do PC e só funciona 
   ]);
   assert.equal(pedidos[0].confirmadoPor[0].id, staffA.id);
   const atual = await m.PontePunicao.findById(punicao._id).lean();
-  assert.deepEqual([atual.status, atual.executor, atual.executandoPor, atual.executandoDesde], ['executando', 'gamemode', null, null]);
+  assert.deepEqual([atual.status, atual.executor, atual.executandoDesde], ['executando', 'gamemode', null]);
   assert.ok(await m.PonteUso.exists({ acao: 'gm_enviar', punicaoId: punicao._id }));
 });
 
-test('enviar: motivo fora da tabela bloqueia até editar; guild do PC recusa', async () => {
+test('enviar: motivo fora da tabela bloqueia até editar', async () => {
   await guildGm('863');
   const semRegra = await punicaoAceita('863', [{ contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'coisa estranha', regra: '' }]);
   assert.match((await discordGm().enviarAoJogo({ punicaoId: semRegra._id, guildId: '863', staff: staffA })).erro, /fora da tabela/);
@@ -678,9 +672,6 @@ test('enviar: motivo fora da tabela bloqueia até editar; guild do PC recusa', a
   })).erro, /tipo/);
   assert.equal((await discordGm().enviarAoJogo({ punicaoId: semRegra._id, guildId: '863', staff: staffA })).ok, true);
 
-  await guildGm('864', { executor: 'pc' });
-  const doPc = await punicaoAceita('864');
-  assert.match((await discordGm().enviarAoJogo({ punicaoId: doPc._id, guildId: '864', staff: staffA })).erro, /PC/);
 });
 
 test('cancelar: antes do envio cancela a punição; depois, cancela o que a gamemode não buscou', async () => {
@@ -731,35 +722,6 @@ test('reenvio depois de simulada cria a rodada 2; embed mostra o estado de cada 
   assert.match(texto, /✅ aplicada/);
   assert.match(texto, /Aplicada pela gamemode/);
   assert.deepEqual(msg.components, [], 'aplicada: sem botões');
-});
-
-test('8. em executor gamemode, o PC recebe 409 ao executar; a liberação de presas não mexe na gamemode', async () => {
-  const gestao = require('../services/ponteSamp/gestao');
-  const { liberarExecucoesPresas, criarApiJogo } = require('../site/ponte/apiJogo');
-  await guildGm('867');
-  const { token } = await gestao.criarInstalacao({ guildId: '867', nome: 'PC 1', criadoPor: '1' });
-  const punicao = await punicaoAceita('867');
-
-  const app = express();
-  app.use('/ponte/api', criarApiJogo({ limites: { ip: 10000, token: 10000, falhas: 10000 } }));
-  const servidor = app.listen(0);
-  try {
-    const r = await fetch(`http://127.0.0.1:${servidor.address().port}/ponte/api/fila/${punicao._id}/executar`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'X-HWID': 'c'.repeat(64), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ versao: 0 })
-    });
-    assert.equal(r.status, 409);
-    assert.match((await r.json()).erro, /gamemode/);
-  } finally {
-    servidor.close();
-  }
-
-  await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '867', staff: staffA });
-  // Mesmo com executandoDesde antigo, a da gamemode não volta para a fila do PC.
-  await m.PontePunicao.updateOne({ _id: punicao._id }, { $set: { executandoDesde: new Date(Date.now() - 3600e3) } });
-  await liberarExecucoesPresas('867');
-  assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'executando');
 });
 
 test('resultado da gamemode edita o embed da punição', async () => {
@@ -1030,7 +992,7 @@ test('/ponte gamemode criar: só o dono; a credencial vem num anexo efêmero', a
   assert.match(textoDe(listar.respostas[0]), /GM.*⚠️ qualquer IP/);
 });
 
-test('/ponte gamemode pausar, retomar e executor: só o responsável', async () => {
+test('/ponte gamemode pausar e retomar: só o responsável', async () => {
   const { handlePonteGamemode } = require('../commands/ponteGamemode');
   const { conexao } = await guildGm('883');
   await m.PonteConexaoGm.updateOne({ _id: conexao._id }, { $set: { pausada: true } });
@@ -1046,10 +1008,6 @@ test('/ponte gamemode pausar, retomar e executor: só o responsável', async () 
   assert.equal((await m.PonteServidor.findOne({ guildId: '883' }).lean()).gm.pausado, false);
   assert.equal((await m.PonteConexaoGm.findById(conexao._id).lean()).pausada, false, 'retomar solta a credencial pausada por selo');
   assert.match(textoDe(retomar.respostas[0]), /1 credencial/);
-
-  await handlePonteGamemode(interacaoGm('executor', { usuario: '123', guildId: '883', gerencia: true, opcoes: { tipo: 'ambos' } }));
-  assert.equal((await m.PonteServidor.findOne({ guildId: '883' }).lean()).executor, 'ambos');
-  assert.ok(await m.PonteUso.exists({ guildId: '883', acao: 'gm_config', 'detalhes.sub': 'executor' }));
 
   const limites = interacaoGm('limites', { usuario: '123', guildId: '883', gerencia: true });
   await handlePonteGamemode(limites);
@@ -1106,7 +1064,7 @@ test('/admin gamemode: só o dono vê; conexões sem segredo, online e sem IP', 
     const { status, corpo } = await pedir('/gamemode/conexoes');
     assert.equal(status, 200);
     const item = corpo.find(c => c.id === String(conexao._id));
-    assert.deepEqual([item.online, item.versaoInclude, item.modoTesteInformado, item.ipsPermitidos, item.executor], [true, '1.0.0', true, [], 'gamemode']);
+    assert.deepEqual([item.online, item.versaoInclude, item.modoTesteInformado, item.ipsPermitidos, item.executor], [true, '1.0.0', true, [], undefined]);
     assert.equal(JSON.stringify(corpo).includes('segredoCifrado'), false);
     assert.equal(JSON.stringify(corpo).includes('"dados"'), false);
   });
@@ -1136,7 +1094,7 @@ test('/admin gamemode: pedidos recentes com filtro por status e auditoria gm_*',
   const { pedidos } = await punicaoComPedidos('100000000000000892', 2);
   await m.PontePedidoGm.updateOne({ _id: pedidos[0]._id }, { $set: { status: 'incerto', codigo: 'TIMEOUT_GAMEMODE' } });
   await m.PonteUso.create({ guildId: '100000000000000892', acao: 'gm_enviar' });
-  await m.PonteUso.create({ guildId: '100000000000000892', acao: 'fila' });
+  await m.PonteUso.create({ guildId: '100000000000000892', acao: 'editar' });
   await comAdmin(async (pedir) => {
     const incertos = (await pedir('/gamemode/pedidos?status=incerto&guildId=100000000000000892')).corpo;
     assert.deepEqual(incertos.map(p => [p.id, p.codigo]), [[String(pedidos[0]._id), 'TIMEOUT_GAMEMODE']]);
@@ -1153,7 +1111,7 @@ test('/admin guia da gamemode: só o dono; situação de cada servidor sem segre
   const { conexao } = await guildGm('100000000000000893');
   await m.PonteConexaoGm.updateOne({ _id: conexao._id }, { $set: { ultimoContatoEm: new Date(), versaoInclude: '1.0.0', modoTesteInformado: true } });
   await punicaoComPedidos('100000000000000893', 2, { status: 'simulada' });
-  await m.PonteServidor.updateOne({ guildId: '100000000000000894' }, { $set: { ativo: true, executor: 'pc' } }, { upsert: true });
+  await m.PonteServidor.updateOne({ guildId: '100000000000000894' }, { $set: { ativo: true } }, { upsert: true });
   await comAdmin(async (pedir) => {
     assert.equal((await pedir('/gamemode/guia', { usuario: '123' })).status, 404);
     const { status, corpo } = await pedir('/gamemode/guia');
@@ -1162,33 +1120,32 @@ test('/admin guia da gamemode: só o dono; situação de cada servidor sem segre
     assert.equal(corpo.versaoInclude, require('../services/ponteSamp/constantes').VERSAO_INCLUDE_GM);
     const pronto = corpo.servidores.find(s => s.guildId === '100000000000000893');
     assert.deepEqual(
-      [pronto.executor, pronto.credenciais, pronto.semIp, pronto.online, pronto.modoTesteBot, pronto.modoTesteJogo, pronto.simuladas, pronto.versaoInclude],
-      ['gamemode', 1, true, true, true, true, 2, '1.0.0']
+      [pronto.credenciais, pronto.semIp, pronto.online, pronto.modoTesteBot, pronto.modoTesteJogo, pronto.simuladas, pronto.versaoInclude],
+      [1, true, true, true, true, 2, '1.0.0']
     );
-    const doPc = corpo.servidores.find(s => s.guildId === '100000000000000894');
-    assert.deepEqual([doPc.executor, doPc.credenciais, doPc.online, doPc.modoTesteJogo], ['pc', 0, false, null]);
+    const semGm = corpo.servidores.find(s => s.guildId === '100000000000000894');
+    assert.deepEqual([semGm.executor, semGm.credenciais, semGm.online, semGm.modoTesteJogo], [undefined, 0, false, null]);
     assert.equal(JSON.stringify(corpo).includes('segredo'), false);
   });
 });
 
-test('/admin controle da gamemode: executor, modo teste e pausa pelo painel, auditados', async () => {
+test('/admin controle da gamemode: modo teste e pausa pelo painel, auditados', async () => {
   const { conexao } = await guildGm('100000000000000897');
   await m.PonteConexaoGm.updateOne({ _id: conexao._id }, { $set: { pausada: true } });
   const caminho = '/servidores/100000000000000897/gamemode';
   await comAdmin(async (pedir) => {
-    assert.equal((await pedir(caminho, { usuario: '123', metodo: 'POST', corpo: { executor: 'pc' } })).status, 404, 'outra pessoa não descobre a rota');
-    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { executor: 'pc' } })).status, 403, 'sem CSRF');
+    assert.equal((await pedir(caminho, { usuario: '123', metodo: 'POST', corpo: { pausado: true } })).status, 404, 'outra pessoa não descobre a rota');
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { pausado: true } })).status, 403, 'sem CSRF');
     const { csrf } = (await pedir('/csrf')).corpo;
 
-    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { executor: 'qualquer' }, csrf })).status, 400);
+    assert.equal((await pedir(caminho, { metodo: 'POST', corpo: { executor: 'pc' }, csrf })).status, 400, 'executor não existe mais');
     assert.equal((await pedir(caminho, { metodo: 'POST', corpo: {}, csrf })).status, 400, 'nada para mudar');
-    assert.equal((await pedir('/servidores/100000000000000899/gamemode', { metodo: 'POST', corpo: { executor: 'pc' }, csrf })).status, 404, 'ponte inativa');
+    assert.equal((await pedir('/servidores/100000000000000899/gamemode', { metodo: 'POST', corpo: { pausado: true }, csrf })).status, 404, 'ponte inativa');
 
-    await pedir(caminho, { metodo: 'POST', corpo: { executor: 'ambos' }, csrf });
     await pedir(caminho, { metodo: 'POST', corpo: { modoTeste: false }, csrf });
     await pedir(caminho, { metodo: 'POST', corpo: { pausado: true }, csrf });
     let s = await m.PonteServidor.findOne({ guildId: '100000000000000897' }).lean();
-    assert.deepEqual([s.executor, s.gm.modoTeste, s.gm.pausado], ['ambos', false, true]);
+    assert.deepEqual([s.executor, s.gm.modoTeste, s.gm.pausado], [undefined, false, true]);
 
     // Retomar também solta a credencial pausada por selo inválido.
     const { corpo } = await pedir(caminho, { metodo: 'POST', corpo: { pausado: false }, csrf });
@@ -1196,7 +1153,7 @@ test('/admin controle da gamemode: executor, modo teste e pausa pelo painel, aud
     s = await m.PonteServidor.findOne({ guildId: '100000000000000897' }).lean();
     assert.equal(s.gm.pausado, false);
     assert.equal((await m.PonteConexaoGm.findById(conexao._id).lean()).pausada, false);
-    assert.ok(await m.PonteUso.exists({ guildId: '100000000000000897', acao: 'gm_config', 'detalhes.via': 'admin', 'detalhes.sub': 'executor', 'detalhes.para': 'ambos' }));
+    assert.ok(await m.PonteUso.exists({ guildId: '100000000000000897', acao: 'gm_config', 'detalhes.via': 'admin', 'detalhes.sub': 'pausar' }));
   });
 });
 
@@ -1346,7 +1303,7 @@ test('/admin servidores: mostra quem ativou e o último uso (sem contar a rotina
     assert.equal(servidor.ativadoPor.id, DONO);
     assert.equal(servidor.ultimoUso.acao, 'gm_resultado');
     assert.deepEqual(servidor.ultimoUso.quem, { tipo: 'gamemode', nome: `GM ${GUILD}` });
-    assert.equal(servidor.executor, 'gamemode');
+    assert.equal(servidor.executor, undefined);
 
     const atividade = (await pedir('/atividade')).corpo.filter(a => a.guildId === GUILD);
     assert.deepEqual(atividade.map(a => a.acao), ['gm_resultado', 'gm_enviar', 'ativar']);
@@ -1355,32 +1312,28 @@ test('/admin servidores: mostra quem ativou e o último uso (sem contar a rotina
   });
 });
 
-// ---------- /admin: apagar PC e código ----------
+// ---------- /admin: apagar código ----------
 
-test('/admin apaga PC e código de vez (só o dono) e registra na auditoria', async () => {
+test('/admin apaga código de vez (só o dono) e registra na auditoria; rota de PC não existe', async () => {
   const gestao = require('../services/ponteSamp/gestao');
-  const PonteInstalacao = require('../models/PonteInstalacao');
   const PonteCodigo = require('../models/PonteCodigo');
   const AMIGO = '300000000000000779';
   await guildGm('897');
-  const { instalacao } = await gestao.criarInstalacao({ guildId: '897', nome: 'PC velho', criadoPor: DONO });
   const { doc: codigo } = await gestao.criarCodigo({ criadoPor: DONO });
   await comAdmin(async (pedir) => {
     const { csrf } = (await pedir('/csrf')).corpo;
     await pedir('/acessos', { metodo: 'POST', corpo: { userId: AMIGO }, csrf });
     const doAmigo = (await pedir('/csrf', { usuario: AMIGO })).corpo.csrf;
-    assert.equal((await pedir(`/instalacoes/${instalacao._id}/apagar`, { usuario: AMIGO, metodo: 'POST', csrf: doAmigo })).status, 403, 'liberado não apaga');
-    assert.equal((await pedir(`/codigos/${codigo._id}/apagar`, { usuario: AMIGO, metodo: 'POST', csrf: doAmigo })).status, 403);
+    assert.equal((await pedir(`/codigos/${codigo._id}/apagar`, { usuario: AMIGO, metodo: 'POST', csrf: doAmigo })).status, 403, 'liberado não apaga');
+    assert.equal((await pedir('/instalacoes')).status, 404, 'PCs saíram do painel');
 
-    assert.equal((await pedir(`/instalacoes/${instalacao._id}/apagar`, { metodo: 'POST', csrf })).corpo.ok, true);
-    assert.equal((await pedir(`/instalacoes/${instalacao._id}/apagar`, { metodo: 'POST', csrf })).corpo.ok, false, 'já apagado');
-    assert.equal(await PonteInstalacao.exists({ _id: instalacao._id }), null);
     assert.equal((await pedir(`/codigos/${codigo._id}/apagar`, { metodo: 'POST', csrf })).corpo.ok, true);
+    assert.equal((await pedir(`/codigos/${codigo._id}/apagar`, { metodo: 'POST', csrf })).corpo.ok, false, 'já apagado');
     assert.equal(await PonteCodigo.exists({ _id: codigo._id }), null);
     assert.equal((await pedir('/codigos/xyz/apagar', { metodo: 'POST', csrf })).status, 400);
 
-    const registro = await m.PonteUso.findOne({ acao: 'apagar', 'detalhes.sub': 'apagar_pc', 'detalhes.id': String(instalacao._id) }).lean();
-    assert.deepEqual([registro.guildId, registro.detalhes.item, registro.detalhes.por], ['897', 'PC velho', DONO]);
+    const registro = await m.PonteUso.findOne({ acao: 'apagar', 'detalhes.sub': 'apagar_codigo', 'detalhes.id': String(codigo._id) }).lean();
+    assert.equal(registro.detalhes.por, DONO);
     await pedir(`/acessos/${AMIGO}/remover`, { metodo: 'POST', csrf });
   });
 });
@@ -1429,37 +1382,41 @@ test('enviar ao jogo: pedido pela conta leva o nick conhecido (confirmado pela g
   assert.deepEqual(pedidos.map(p => [p.conta, p.nick]), [[472860, 'Couto'], [1039, 'foxy_apollyon'], [2471, '']]);
 });
 
-test('trocar o executor: punições que ainda não saíram seguem o executor novo e o embed se refaz', async () => {
+test('limpeza do PC da staff: apaga os dados do PC e passa o que ficou para a gamemode', async () => {
+  const { limparDadosDoPc } = require('../services/ponteSamp/limpezaPc');
+  const { secondaryConnection } = require('../utils/persistencia');
   const guildId = '100000000000000874';
   await guildGm(guildId);
   await comLogAdmin(guildId);
-  // A: enviada, mas a gamemode ainda não buscou. B: a gamemode já buscou.
-  const a = await punicaoAceita(guildId);
-  const b = await punicaoAceita(guildId);
-  await discordGm().enviarAoJogo({ punicaoId: a._id, guildId, staff: staffA });
-  await discordGm().enviarAoJogo({ punicaoId: b._id, guildId, staff: staffA });
-  await m.PontePedidoGm.updateMany({ punicaoId: b._id }, { $set: { status: 'entregue' } });
+  // Como o banco ficou do tempo do PC: campos no servidor, a coleção dos PCs, auditoria e
+  // uma punição presa no "PC executando", sem o embed da gamemode.
+  await m.PonteServidor.collection.updateOne({ guildId }, { $set: { executor: 'pc', limitePcs: 3, templates: { ban: '/tempban {id}' } } });
+  await secondaryConnection.db.collection('ponteinstalacoes').insertOne({ guildId, nome: 'PC velho', tokenHash: 'x' });
+  await m.PonteUso.collection.insertMany([
+    { guildId, acao: 'ping', em: new Date() },
+    { guildId, acao: 'aplicar', em: new Date(), instalacaoId: new mongoose.Types.ObjectId() },
+    { guildId, acao: 'gm_enviar', em: new Date() }
+  ]);
+  const presa = await punicaoAceita(guildId);
+  await m.PontePunicao.collection.updateOne({ _id: presa._id }, { $set: { status: 'executando', executor: 'pc', executandoPor: new mongoose.Types.ObjectId(), executandoDesde: new Date() } });
 
-  await m.PonteServidor.updateOne({ guildId }, { $set: { executor: 'pc' } });
-  const paraPc = await discordGm().aoTrocarExecutor({ guildId, para: 'pc' });
-  assert.equal(paraPc.devolvidas, 1);
-  assert.deepEqual([(await m.PontePunicao.findById(a._id).lean()).status, (await m.PontePunicao.findById(b._id).lean()).status], ['aceita', 'executando']);
-  assert.equal(await m.PontePedidoGm.countDocuments({ punicaoId: a._id, status: 'aprovado' }), 0);
-
-  // No PC: o embed da punição pendente perde os botões e diz que está na fila do PC.
-  const msgPc = discordGm().montarMensagemGm(await m.PontePunicao.findById(a._id).lean(), [], { executor: 'pc' });
-  assert.equal(msgPc.components.length, 0);
-  assert.match(msgPc.embeds[0].toJSON().description, /fila do PC/);
-  // O botão antigo responde que foi para o PC.
-  assert.match((await discordGm().enviarAoJogo({ punicaoId: a._id, guildId, staff: staffA })).erro, /fila do PC/);
-
-  // De volta para a gamemode: a pendente sem embed ganha o "Enviar ao jogo".
-  await m.PonteServidor.updateOne({ guildId }, { $set: { executor: 'gamemode' } });
   const enviadas = [];
   const client = { channels: { fetch: async () => ({ id: '400000000000000009', send: async (msg) => { enviadas.push(msg); return { id: '500000000000000009' }; } }) } };
-  const paraGm = await discordGm().aoTrocarExecutor({ client, guildId, para: 'gamemode' });
-  assert.equal(paraGm.embedsNovos, 1);
-  assert.ok(JSON.stringify(enviadas[0].components).includes('Enviar ao jogo'));
+  const feito = await limparDadosDoPc(client);
+  assert.equal(feito.instalacoes, true);
+  assert.ok(feito.devolvidas >= 1);
+  assert.equal((await secondaryConnection.db.listCollections({ name: 'ponteinstalacoes' }).toArray()).length, 0);
+  assert.deepEqual((await m.PonteUso.find({ guildId }).lean()).map(u => u.acao), ['gm_enviar']);
+  const servidor = await m.PonteServidor.collection.findOne({ guildId });
+  assert.deepEqual([servidor.executor, servidor.limitePcs, servidor.templates], [undefined, undefined, undefined]);
+  const punicao = await m.PontePunicao.collection.findOne({ _id: presa._id });
+  assert.deepEqual([punicao.status, punicao.executor, punicao.executandoPor], ['aceita', '', undefined]);
+  // A punição que era do PC ganha o embed "Enviar ao jogo".
+  assert.ok(enviadas.some(msg => JSON.stringify(msg.components).includes('Enviar ao jogo')));
+  assert.ok((await m.PontePunicao.findById(presa._id).lean()).mensagemGm.msgId);
+
+  // Rodar de novo não muda nada.
+  assert.deepEqual(await limparDadosDoPc(null), {});
 });
 
 test('/admin renomear credencial: só o dono, nome limpo e auditado', async () => {
@@ -1565,7 +1522,7 @@ test('embed travado com incerto: "Foi aplicada" e "Tentar novamente" (gamemode o
   assert.equal((await m.PontePunicao.findById(p1._id).lean()).status, 'aplicada');
   assert.match((await incertosGm().resolverIncertosDaPunicao({ client, punicaoId: p1._id, guildId: '872', staff: staffA, aplicada: true })).erro, /não tem pedido/);
 
-  // Servidor passou para o PC: "Tentar novamente" devolve a punição à fila do PC.
+  // "Tentar novamente": manda de novo para a gamemode (pedido novo).
   const g2 = await guildGm('873');
   const p2 = await punicaoAceita('873', [{ contaId: '1', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'MG', regra: 'MG' }]);
   await discordGm().enviarAoJogo({ punicaoId: p2._id, guildId: '873', staff: staffA });
@@ -1573,14 +1530,11 @@ test('embed travado com incerto: "Foi aplicada" e "Tentar novamente" (gamemode o
   await m.PontePedidoGm.updateMany({ guildId: '873' }, { $set: { reenvioAutomatico: true } });
   const [pedido] = (await chamar(g2.conexao, g2.segredo, '/pedidos')).corpo.pedidos;
   await chamar(g2.conexao, g2.segredo, `/resultados/${pedido.id}`, { metodo: 'POST', corpo: resultado('erro', 'TIMEOUT_GAMEMODE') });
-  await m.PonteServidor.updateOne({ guildId: '873' }, { $set: { executor: 'pc' } });
 
-  const pc = await incertosGm().resolverIncertosDaPunicao({ client, punicaoId: p2._id, guildId: '873', staff: staffA, aplicada: false });
-  assert.equal(pc.destino, 'pc');
-  const voltou = await m.PontePunicao.findById(p2._id).lean();
-  assert.equal(voltou.status, 'aceita');
-  assert.equal(voltou.executor, '');
-  assert.equal((await m.PontePedidoGm.findById(pedido.id).lean()).status, 'cancelado');
+  const denovo = await incertosGm().resolverIncertosDaPunicao({ client, punicaoId: p2._id, guildId: '873', staff: staffA, aplicada: false });
+  assert.equal(denovo.destino, 'gamemode');
+  assert.equal((await m.PontePunicao.findById(p2._id).lean()).status, 'executando');
+  assert.equal(await m.PontePedidoGm.countDocuments({ punicaoId: p2._id, status: 'aprovado' }), 1, 'pedido novo para a gamemode');
 });
 
 test('/admin status ao vivo: gamemode online, fila, incertos e última aplicada por servidor', async () => {
@@ -1599,7 +1553,7 @@ test('/admin status ao vivo: gamemode online, fila, incertos e última aplicada 
     const { status, corpo } = await pedir('/status');
     assert.equal(status, 200);
     const s = corpo.servidores.find(x => x.guildId === '893');
-    assert.equal(s.executor, 'gamemode');
+    assert.equal(s.executor, undefined);
     assert.equal(s.gamemode.online, true, 'acabou de falar com o bot');
     assert.equal(s.fila.executando, 1);
     assert.equal(s.fila.incertos, 1);

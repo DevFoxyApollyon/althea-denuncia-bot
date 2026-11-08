@@ -119,7 +119,6 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
 
       const servidor = await PonteServidor.findOne({ guildId: conexao.guildId, ativo: true }).lean();
       if (!servidor) await falhar(403, 'GUILD_INATIVA', 'Ponte não ativa neste servidor.', extra);
-      if (!['gamemode', 'ambos'].includes(servidor.executor)) await falhar(403, 'GUILD_INATIVA', 'Este servidor aplica as punições pelo PC.', extra);
 
       const permitidos = (conexao.ipsPermitidos || []).map(normalizarIp);
       if (permitidos.length && !permitidos.includes(normalizarIp(ip))) await falhar(403, 'IP', 'IP não permitido para esta credencial.', extra);

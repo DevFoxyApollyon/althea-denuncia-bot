@@ -37,6 +37,8 @@ const { iniciarAvisoReivindicacao } = require('./jobs/avisoReivindicacao');
 const { iniciarBackupDoBanco } = require('./jobs/backupBanco');
 const { iniciarAlertaGamemode } = require('./jobs/alertaGamemode');
 const { iniciarJobGamemode } = require('./services/ponteSamp/incertosGm');
+const { limparDadosDoPc } = require('./services/ponteSamp/limpezaPc');
+const { ponteLigada } = require('./services/ponteSamp/gestao');
 const { iniciarLimpezaDeEspelhos } = require('./utils/espelhos');
 const { registerMemberEvents } = require('./Handlers/memberEvents');
 const { registerMessageEvents } = require('./Handlers/messageEvents');
@@ -152,6 +154,8 @@ client.once('clientReady', async (readyClient) => {
     iniciarBackupDoBanco(); // cópia diária do banco principal no secundário
     iniciarAlertaGamemode(client); // avisa quando a gamemode para de buscar pedidos
     iniciarJobGamemode(client); // ponte com a gamemode: pedido sem resposta vira incerto e vai para o Log Admin
+    // O PC da staff saiu da ponte: apaga os dados dele e passa o que ficou para a gamemode.
+    if (ponteLigada()) limparDadosDoPc(client).catch(err => log.warn('Falha ao limpar os dados do PC da staff: ' + err.message));
     servidorDoSite = iniciarSite(client, log);
 
     readyClient.user.setPresence({

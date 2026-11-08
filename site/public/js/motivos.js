@@ -112,7 +112,7 @@ export function telaMotivosPonte() {
       el('header', { class: 'config-topo' },
         el('div', null,
           el('h1', null, 'Motivos de punição'),
-          el('p', { class: 'sub' }, 'O motivo escrito no aceite da denúncia escolhe a punição aplicada pelo painel do jogo. A tabela é a mesma em todos os servidores: o que você salvar aqui vale para todos.'),
+          el('p', { class: 'sub' }, 'O motivo escrito no aceite da denúncia escolhe a punição enviada ao jogo. A tabela é a mesma em todos os servidores: o que você salvar aqui vale para todos.'),
           el('p', { class: 'sub' }, dados.propria ? 'Tabela personalizada.' : 'Usando a tabela padrão do bot.'),
           !dados.podeEditar && el('p', { class: 'sub' }, 'Só o responsável adiciona e muda os motivos. Você pode ver a tabela.'),
           dados.podeEditar && !dados.podeApagar && el('p', { class: 'sub' }, 'Você pode mudar e adicionar motivos. Apagar ou renomear um motivo é só com o dono do bot.'))),

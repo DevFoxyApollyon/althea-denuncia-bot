@@ -27,7 +27,7 @@ const GRUPOS_DE_CANAIS = [
       { chave: 'analysis', nome: 'Em análise', explica: 'Lista das denúncias que estão em análise. A mensagem sai daqui quando a denúncia é decidida.' },
       { chave: 'topDaily', nome: 'Top diário', explica: 'O ranking diário da staff é enviado neste canal.' },
       { chave: 'provasStaff', nome: 'Provas da staff', explica: 'Canal fixo do /provastaff: a staff registra a punição com as provas, e o responsável aceita (vai para a Cadeia Staff) ou recusa.' },
-      { chave: 'relatorioPunicoes', nome: 'Relatório de punições', explica: 'Histórico das punições aplicadas pelo painel do jogo (organização, nick, ID e link da denúncia). Sem este canal, vai para o Log administrativo.' },
+      { chave: 'relatorioPunicoes', nome: 'Relatório de punições', explica: 'Punições esperando envio ao jogo e o histórico das aplicadas pela gamemode (organização, nick, ID e link da denúncia). Sem este canal, vai para o Log administrativo.' },
       { chave: 'backup', nome: 'Backup', explica: 'Recebe o arquivo com a conversa e as provas quando a denúncia é finalizada. Usado quando não há canal Cloud.' },
       { chave: 'armazem', nome: 'Armazém', explica: 'Cada denúncia nova ganha uma cópia (tópico espelho) neste canal.' }
     ]
@@ -348,7 +348,7 @@ function cartaoDeMotivos(motivos) {
   }
   return el('section', { class: 'cartao', id: 'bot-motivos' },
     cabecalho('arquivo', 'Motivos de punição (jogo)',
-      'Tabela usada pelo painel do jogo para escolher a punição pelo motivo do aceite. É a mesma em todos os servidores; administradores e responsáveis alteram em Motivos de punição.',
+      'Tabela que escolhe a punição enviada ao jogo pelo motivo do aceite. É a mesma em todos os servidores; o responsável altera em Motivos de punição.',
       { texto: `${motivos.itens.length} motivos${motivos.propria ? ' · personalizada' : ''}` }),
     el('p', { class: 'bot-ajuda' }, 'Vários motivos na mesma denúncia: banimentos somam dias e avisos; permanente vence tudo (vira /blackban); banimento vence cadeia. Todo motivo vai com [DC] no fim.'),
     [...grupos.entries()].map(([grupo, itens]) => el('div', { class: 'campo' },

@@ -14,7 +14,7 @@ const { motivoComSufixo } = require('./validacao');
 const { motivoParaGamemode, nomeParaGamemode } = require('./protocoloGm');
 const { LIMITES_GM_PADRAO } = require('./constantes');
 const { explicarCodigo } = require('./pedidosGm');
-const { canalDoRelatorio, EXECUTORES_GM, alvosAtivos } = require('./discordGm');
+const { canalDoRelatorio, alvosAtivos } = require('./discordGm');
 const { punicaoLegivel, discordDaConta, quemAplicou, temOrganizacao, nomeDaOrganizacao } = require('./avisoOrganizacao');
 
 const MOTIVO_DESBAN = motivoParaGamemode(motivoComSufixo('DESBANIMENTO'));
@@ -63,7 +63,6 @@ async function prepararDesbanimento(guildId, link) {
 async function desbanir({ client = null, punicaoId, guildId, staff, agora = Date.now() }) {
   const servidor = await PonteServidor.findOne({ guildId: String(guildId), ativo: true }).lean();
   if (!servidor) return { erro: 'A ponte com o jogo não está ativa neste servidor.' };
-  if (!EXECUTORES_GM.includes(servidor.executor)) return { erro: 'Este servidor aplica pelo PC da staff: o desbanimento pelo bot só funciona com a gamemode.' };
   const punicao = await PontePunicao.findOne({ _id: punicaoId, guildId: String(guildId), status: 'aplicada' }).lean();
   if (!punicao) return { erro: 'Punição não encontrada ou ainda não aplicada.' };
 
@@ -155,7 +154,6 @@ async function avisarDesbanimento(client, pedido, dados, nomeConexao = '') {
 async function servidorComGamemode(guildId) {
   const servidor = await PonteServidor.findOne({ guildId: String(guildId), ativo: true }).lean();
   if (!servidor) return { erro: 'A ponte com o jogo não está ativa neste servidor.' };
-  if (!EXECUTORES_GM.includes(servidor.executor)) return { erro: 'Este servidor aplica pelo PC da staff: o /desbanir pelo ID só funciona com a gamemode.' };
   return { servidor };
 }
 

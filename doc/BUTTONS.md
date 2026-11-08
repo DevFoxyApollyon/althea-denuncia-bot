@@ -116,7 +116,7 @@ e `services/ponteSamp/incertosGm.js`; handlers em `Handlers/ponteGamemode.js` (r
 ### Embed "🎮 Punição para o jogo" (Relatório de punições)
 | customId | Tipo | O que faz |
 |---|---|---|
-| `ponte_gm_enviar:<punicaoId>` | botão | Confere os limites `gm.*`, cria um pedido por alvo e tira a punição da fila do PC |
+| `ponte_gm_enviar:<punicaoId>` | botão | Confere os limites `gm.*`, cria um pedido por alvo e tira a punição da fila de envio |
 | `ponte_gm_editar:<punicaoId>` | botão | Um alvo: abre o modal. Vários: abre o menu de alvos |
 | `ponte_gm_alvo:<punicaoId>` | menu | Escolhe o alvo e abre o modal |
 | `ponte_gm_modal:<punicaoId>:<alvoId>:<versao>` | modal | Tipo, tempo, avisos e motivo (trava por `versao`) |

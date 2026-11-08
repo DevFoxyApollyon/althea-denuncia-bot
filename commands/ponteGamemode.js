@@ -1,15 +1,14 @@
 // /ponte gamemode …: credenciais da gamemode (só o dono do bot) e o funcionamento
-// do modo gamemode na guild (responsável: pausar, retomar, executor e limites).
+// do modo gamemode na guild (responsável: pausar, retomar e limites).
 const {
   MessageFlags, PermissionFlagsBits, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder
 } = require('discord.js');
 const PonteServidor = require('../models/PonteServidor');
 const PonteConexaoGm = require('../models/PonteConexaoGm');
-const PontePedidoGm = require('../models/PontePedidoGm');
 const PonteUso = require('../models/PonteUso');
 const gestao = require('../services/ponteSamp/gestao');
 const conexoes = require('../services/ponteSamp/conexoesGm');
-const { EXECUTORES, LIMITES_GM_PADRAO } = require('../services/ponteSamp/constantes');
+const { LIMITES_GM_PADRAO } = require('../services/ponteSamp/constantes');
 const { getConfig } = require('../utils/configCache');
 const { Logger } = require('../utils/logger');
 
@@ -46,7 +45,6 @@ function respostaComArquivo(conexao, segredo, titulo, servidor) {
     '⚠️ O arquivo abaixo aparece **só agora**. Ele não vai para o código nem para o git.',
     'No servidor do jogo: salve como `scriptfiles/althea_credenciais.txt` e rode `rcon althea recarregar` (sem reiniciar).',
     !conexao.ipsPermitidos?.length && '⚠️ Sem IPs na lista: qualquer IP com a credencial é aceito. Quando souber os IPs do servidor, crie uma credencial nova com `ips:` e revogue esta.',
-    servidor?.executor === 'pc' && 'ℹ️ Este servidor ainda aplica pelo PC: use `/ponte gamemode executor tipo:` para ligar a gamemode.',
     servidor?.gm?.modoTeste !== false && '🧪 Modo teste ligado: a gamemode só simula. Desligue em `/ponte gamemode limites` quando os testes terminarem.'
   ].filter(Boolean);
   return {
@@ -148,28 +146,6 @@ async function configuracao(interaction, sub) {
     const { modifiedCount } = await PonteConexaoGm.updateMany({ guildId, status: 'ativa', pausada: true }, { $set: { pausada: false } });
     await auditar(interaction, 'gm_config', { sub, conexoesRetomadas: modifiedCount });
     return interaction.editReply(`▶️ Gamemode retomada.${modifiedCount ? ` ${modifiedCount} credencial(is) pausada(s) por selo inválido voltaram a funcionar.` : ''}`);
-  }
-  if (sub === 'executor') {
-    const tipo = interaction.options.getString('tipo', true);
-    if (!EXECUTORES.includes(tipo)) return interaction.editReply('❌ Tipo inválido.');
-    await PonteServidor.updateOne({ guildId }, { $set: { executor: tipo } });
-    await auditar(interaction, 'gm_config', { sub, de: servidor.executor, para: tipo });
-    // As punições que ainda não saíram seguem o executor novo (e os embeds se refazem).
-    const troca = servidor.executor !== tipo
-      ? await require('../services/ponteSamp/discordGm').aoTrocarExecutor({ client: interaction.client, guildId, para: tipo }).catch(() => null)
-      : null;
-    const pendentes = tipo === 'pc' ? await PontePedidoGm.countDocuments({ guildId, status: { $in: ['entregue', 'incerto'] } }) : 0;
-    const texto = {
-      pc: '🖥️ Agora só o PC da staff aplica. A API da gamemode passa a responder 403.',
-      gamemode: '🎮 Agora só a gamemode aplica. Punições novas ganham o embed "Enviar ao jogo" no Relatório de punições, e o PC não executa mais.',
-      ambos: '🔀 PC e gamemode aplicam: quem pegar primeiro leva (a punição só sai da fila uma vez).'
-    }[tipo];
-    return interaction.editReply([
-      texto,
-      troca?.devolvidas && `↩️ ${troca.devolvidas} punição(ões) enviada(s) à gamemode e ainda não buscada(s) voltaram para a fila do PC.`,
-      troca?.embedsNovos && `🎮 ${troca.embedsNovos} punição(ões) esperando envio ganharam o embed "Enviar ao jogo" no Relatório de punições.`,
-      pendentes && `⚠️ ${pendentes} pedido(s) já estavam com a gamemode: o resultado deles ainda vai chegar.`
-    ].filter(Boolean).join('\n'));
   }
   return interaction.editReply('❌ Subcomando desconhecido.');
 }

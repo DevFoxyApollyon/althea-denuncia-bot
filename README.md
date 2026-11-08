@@ -171,14 +171,14 @@ Os comandos com `!` continuam funcionando.
 | `/rank [periodo]` | `!rank [mensal\|semanal\|hoje]` | Administrador e Responsável Admin | Ranking de atendimento da staff |
 | `/status` | `!status` | Administrador do servidor | Diagnóstico do bot |
 | `/ponte gamemode criar\|listar\|revogar\|renovar` | — | Dono do bot (`OWNER_DISCORD_ID`) | Credenciais da gamemode (o segredo sai uma vez, em anexo) |
-| `/ponte gamemode pausar\|retomar\|executor\|limites` | — | Responsável Admin | Modo gamemode do servidor |
+| `/ponte gamemode pausar\|retomar\|limites` | — | Responsável Admin | Modo gamemode do servidor |
 
 ---
 
 ## 🎮 Ponte com a gamemode
 
-Além do PC da staff (mod Lua), a própria gamemode do servidor pode aplicar as punições
-aceitas no Discord. Ela **busca** os pedidos no Althea (`/ponte/gm/v1`, HMAC na query) e
+A gamemode do servidor aplica as punições aceitas no Discord (o PC da staff com o mod Lua
+saiu da ponte). Ela **busca** os pedidos no Althea (`/ponte/gm/v1`, HMAC na query) e
 devolve o resultado; o Althea nunca chama o servidor do jogo.
 
 - **Especificação do protocolo:** [`doc/PONTE_GAMEMODE.md`](doc/PONTE_GAMEMODE.md).
@@ -189,9 +189,9 @@ devolve o resultado; o Althea nunca chama o servidor do jogo.
   responsável clica em **Enviar ao jogo** → a gamemode busca, aplica e responde → o embed mostra
   o resultado de cada alvo. Sem resposta, o pedido vira **incerto** e vai para o Log Admin, onde
   um responsável decide ("foi aplicada" ou "reenviar"): nada é reenviado sozinho.
-- **Quem aplica** é escolhido por servidor: `pc` (padrão), `gamemode` ou `ambos`
-  (`/ponte gamemode executor`). O modo teste vem ligado: a gamemode só simula até ser desligado
-  em `/ponte gamemode limites`.
+- O modo teste vem ligado: a gamemode só simula até ser desligado em `/ponte gamemode limites`.
+- Ao iniciar, o bot apaga o que sobrou do PC da staff no banco (PCs, tokens e auditoria do PC)
+  e passa as punições que estavam na fila do PC para a gamemode (`services/ponteSamp/limpezaPc.js`).
 - **Painel do dono:** aba Gamemode no `/admin` (credenciais, pedidos recentes e auditoria `gm_*`).
 
 ---

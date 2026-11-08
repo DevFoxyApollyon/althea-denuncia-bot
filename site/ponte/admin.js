@@ -1,19 +1,18 @@
-// Painel web do dono do bot (/admin): servidores, PCs, gamemode, auditoria e códigos da ponte.
+// Painel web do dono do bot (/admin): servidores, gamemode, auditoria e códigos da ponte.
 // Abre para OWNER_DISCORD_ID e para as pessoas que ele liberou (aba Acessos); para qualquer
-// outro responde 404, para não revelar que a rota existe. O token de um PC nunca abre este painel.
+// outro responde 404, para não revelar que a rota existe.
 // Só o dono: gerenciar acessos, trocar a chave mestra, gerar/expirar códigos e desativar servidores.
 const express = require('express');
 const path = require('path');
 const mongoose = require('mongoose');
 const PonteServidor = require('../../models/PonteServidor');
-const PonteInstalacao = require('../../models/PonteInstalacao');
 const PonteCodigo = require('../../models/PonteCodigo');
 const PonteUso = require('../../models/PonteUso');
 const PonteConexaoGm = require('../../models/PonteConexaoGm');
 const PontePedidoGm = require('../../models/PontePedidoGm');
 const PontePunicao = require('../../models/PontePunicao');
 const gestao = require('../../services/ponteSamp/gestao');
-const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE, EXECUTORES, LIMITES_GM_PADRAO } = require('../../services/ponteSamp/constantes');
+const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE, LIMITES_GM_PADRAO } = require('../../services/ponteSamp/constantes');
 const { chaveMestraConfigurada, impressaoDaChave } = require('../../services/ponteSamp/cifra');
 const { trocarChaveMestra } = require('../../services/ponteSamp/chaveMestra');
 const acessos = require('../../services/ponteSamp/acessoAdmin');
@@ -23,7 +22,6 @@ const { criarLimitador } = require('../rotas/comum');
 
 const PASTA = path.join(__dirname, 'painel');
 const DURACAO_CSRF_MS = 2 * 60 * 60 * 1000;
-const ONLINE_MS = 90 * 1000;
 // A gamemode busca a cada 10 s com a fila vazia.
 const ONLINE_GM_MS = 30 * 1000;
 
@@ -75,19 +73,15 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     return new Map(pares);
   }
 
-  // Quem fez cada registro da auditoria: o PC, a gamemode ou a pessoa do Discord.
+  // Quem fez cada registro da auditoria: a gamemode ou a pessoa do Discord.
   async function autoresDe(registros) {
-    const instalacoes = [...new Set(registros.map(u => u.instalacaoId && String(u.instalacaoId)).filter(Boolean))];
     const conexoes = [...new Set(registros.map(u => u.detalhes?.conexaoId).filter(id => idValido(id)))];
-    const [pcs, gms, nomes] = await Promise.all([
-      instalacoes.length ? PonteInstalacao.find({ _id: { $in: instalacoes } }, { nome: 1 }).lean() : [],
+    const [gms, nomes] = await Promise.all([
       conexoes.length ? PonteConexaoGm.find({ _id: { $in: conexoes } }, { nome: 1 }).lean() : [],
       nomesDe(registros.map(u => u.detalhes?.por || u.detalhes?.userId))
     ]);
-    const nomePc = new Map(pcs.map(p => [String(p._id), p.nome]));
     const nomeGm = new Map(gms.map(c => [String(c._id), c.nome]));
     return (u) => {
-      if (u.instalacaoId && nomePc.has(String(u.instalacaoId))) return { tipo: 'pc', nome: nomePc.get(String(u.instalacaoId)) };
       const por = u.detalhes?.por;
       if (u.detalhes?.nome || por) return { tipo: 'pessoa', nome: u.detalhes?.nome || nomes.get(por) || por, id: por || '' };
       if (nomeGm.has(String(u.detalhes?.conexaoId))) return { tipo: 'gamemode', nome: nomeGm.get(String(u.detalhes.conexaoId)) };
@@ -96,19 +90,17 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   }
 
   // Ações que acontecem sozinhas o tempo todo: não contam como "último uso" nem entram na atividade.
-  const ACOES_ROTINA = ['ping', 'fila', 'gm_busca', 'relatorio'];
+  const ACOES_ROTINA = ['gm_busca'];
 
   router.get('/api/servidores', rota(async (req, res) => {
-    const [servidores, contagem, ultimos] = await Promise.all([
+    const [servidores, ultimos] = await Promise.all([
       PonteServidor.find().sort({ ativadoEm: -1 }).limit(500).lean(),
-      PonteInstalacao.aggregate([{ $match: { status: 'ativa' } }, { $group: { _id: '$guildId', total: { $sum: 1 } } }]),
       PonteUso.aggregate([
         { $match: { guildId: { $ne: '' }, acao: { $nin: ACOES_ROTINA } } },
         { $sort: { em: -1 } },
         { $group: { _id: '$guildId', registro: { $first: '$$ROOT' } } }
       ])
     ]);
-    const pcs = new Map(contagem.map(c => [c._id, c.total]));
     const ultimoPorGuild = new Map(ultimos.map(u => [u._id, u.registro]));
     const [autor, ativadores] = await Promise.all([
       autoresDe([...ultimoPorGuild.values()]),
@@ -119,22 +111,19 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
       return {
         guildId: s.guildId, nome: nomeGuild(s.guildId), ativo: s.ativo, ativadoEm: s.ativadoEm,
         ativadoPor: s.ativadoPor ? { id: s.ativadoPor, nome: ativadores.get(s.ativadoPor) || '' } : null,
-        limitePcs: s.limitePcs, pcs: pcs.get(s.guildId) || 0, executor: s.executor || 'pc',
         ultimoUso: ultimo ? { em: ultimo.em, acao: ultimo.acao, quem: autor(ultimo) } : null
       };
     }));
   }));
 
-  // Status ao vivo de cada servidor ativo: quem aplica, se a gamemode e os PCs
-  // estão online, o que está na fila e a última punição aplicada. A tela pede de
+  // Status ao vivo de cada servidor ativo: se a gamemode está online, o que está na fila e a última punição aplicada. A tela pede de
   // novo a cada 15 segundos enquanto a Visão geral está aberta.
   router.get('/api/status', rota(async (req, res) => {
-    const servidores = await PonteServidor.find({ ativo: true }, { guildId: 1, executor: 1, gm: 1 }).lean();
+    const servidores = await PonteServidor.find({ ativo: true }, { guildId: 1, gm: 1 }).lean();
     const guilds = servidores.map(s => s.guildId);
     const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [conexoes, instalacoes, punicoes, pedidos, aplicadas, respostas] = await Promise.all([
+    const [conexoes, punicoes, pedidos, aplicadas, respostas] = await Promise.all([
       PonteConexaoGm.find({ guildId: { $in: guilds }, status: 'ativa' }, { guildId: 1, ultimoContatoEm: 1, pausada: 1 }).lean(),
-      PonteInstalacao.find({ guildId: { $in: guilds }, status: 'ativa' }, { guildId: 1, ultimoPingEm: 1 }).lean(),
       PontePunicao.aggregate([
         { $match: { guildId: { $in: guilds }, status: { $in: ['aceita', 'executando'] } } },
         { $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }
@@ -144,7 +133,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
         { $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }
       ]),
       PonteUso.aggregate([
-        { $match: { guildId: { $in: guilds }, acao: { $in: ['aplicar', 'gm_resultado'] } } },
+        { $match: { guildId: { $in: guilds }, acao: 'gm_resultado' } },
         { $sort: { em: -1 } },
         { $group: { _id: '$guildId', em: { $first: '$em' }, acao: { $first: '$acao' }, nick: { $first: '$nick' }, contaId: { $first: '$contaId' } } }
       ]),
@@ -167,13 +156,11 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
       servidores: servidores.map(s => {
         const gms = conexoes.filter(c => c.guildId === s.guildId);
         const contato = gms.map(c => c.ultimoContatoEm).filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
-        const pcs = instalacoes.filter(i => i.guildId === s.guildId);
         const ultima = aplicadas.find(a => a._id === s.guildId);
         const resposta = respostas.find(r => r._id === s.guildId);
         return {
           guildId: s.guildId,
           nome: nomeGuild(s.guildId),
-          executor: s.executor || 'pc',
           pausado: s.gm?.pausado === true,
           modoTeste: s.gm?.modoTeste !== false,
           gamemode: {
@@ -182,7 +169,6 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
             online: !!contato && agora - new Date(contato).getTime() < ONLINE_GM_MS,
             ultimoContatoEm: contato
           },
-          pcs: { total: pcs.length, online: pcs.filter(i => i.ultimoPingEm && agora - new Date(i.ultimoPingEm).getTime() < ONLINE_MS).length },
           fila: {
             esperando: conta(punicoes, s.guildId, 'aceita'),
             executando: conta(punicoes, s.guildId, 'executando'),
@@ -190,7 +176,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
             comGamemode: conta(pedidos, s.guildId, 'entregue'),
             incertos: conta(pedidos, s.guildId, 'incerto')
           },
-          ultimaAplicada: ultima ? { em: ultima.em, por: ultima.acao === 'gm_resultado' ? 'gamemode' : 'pc', alvo: ultima.nick || ultima.contaId || '' } : null,
+          ultimaAplicada: ultima ? { em: ultima.em, por: 'gamemode', alvo: ultima.nick || ultima.contaId || '' } : null,
           resposta: resposta ? {
             media: resposta.media === null ? null : Math.round(resposta.media),
             maximo: resposta.maximo ?? null,
@@ -235,7 +221,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     const staff = { id: req.usuario.id, nome: `${req.usuario.nome || req.usuario.id} (painel)` };
     const r = await require('../../services/ponteSamp/incertosGm').resolverIncertosDaPunicao({ client, punicaoId: punicao._id, guildId: punicao.guildId, staff, aplicada });
     if (r.erro) return res.status(409).json({ erro: r.erro });
-    res.json({ ok: true, ...r, mensagem: aplicada ? 'Registrado como aplicado.' : r.destino === 'pc' ? 'A punição voltou para a fila do PC.' : 'Enviada de novo para a gamemode.' });
+    res.json({ ok: true, ...r, mensagem: aplicada ? 'Registrado como aplicado.' : 'Enviada de novo para a gamemode.' });
   }));
 
   // O que aconteceu por último na ponte, em todos os servidores (sem as ações de rotina).
@@ -255,15 +241,15 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     res.json({ ok: !!s });
   }));
 
-  // Controles da gamemode de um servidor (os mesmos de /ponte gamemode executor,
-  // pausar/retomar e o modo teste dos limites). Só o dono.
+  // Controles da gamemode de um servidor (os mesmos de /ponte gamemode pausar/retomar
+  // e dos limites, com o modo teste). Só o dono.
   router.post('/api/servidores/:guildId/gamemode', soDono, rota(async (req, res) => {
     const { guildId } = req.params;
     if (!/^\d{5,25}$/.test(guildId)) return res.status(400).json({ erro: 'ID inválido.' });
     const servidor = await PonteServidor.findOne({ guildId, ativo: true }).lean();
     if (!servidor) return res.status(404).json({ erro: 'A ponte não está ativa neste servidor.' });
 
-    const { executor, pausado, modoTeste, limites } = req.body || {};
+    const { pausado, modoTeste, limites } = req.body || {};
     const $set = {};
     // Limites dos envios à gamemode (os mesmos do /ponte gamemode limites).
     if (limites !== undefined) {
@@ -281,10 +267,6 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
       }
       $set['gm.permitirPermanente'] = limites?.permitirPermanente === true;
     }
-    if (executor !== undefined) {
-      if (!EXECUTORES.includes(executor)) return res.status(400).json({ erro: 'Executor inválido.' });
-      $set.executor = executor;
-    }
     if (pausado !== undefined) $set['gm.pausado'] = pausado === true;
     if (modoTeste !== undefined) $set['gm.modoTeste'] = modoTeste === true;
     if (!Object.keys($set).length) return res.status(400).json({ erro: 'Nada para mudar.' });
@@ -295,41 +277,16 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     if (pausado === false) {
       ({ modifiedCount: conexoesRetomadas } = await PonteConexaoGm.updateMany({ guildId, status: 'ativa', pausada: true }, { $set: { pausada: false } }));
     }
-    // As punições que ainda não saíram seguem o executor novo (e os embeds se refazem).
-    const troca = executor !== undefined && executor !== (servidor.executor || 'pc')
-      ? await require('../../services/ponteSamp/discordGm').aoTrocarExecutor({ client, guildId, para: executor }).catch(() => null)
-      : null;
-    const sub = executor !== undefined ? 'executor' : pausado !== undefined ? (pausado ? 'pausar' : 'retomar') : 'limites';
+    const sub = pausado !== undefined ? (pausado ? 'pausar' : 'retomar') : 'limites';
     const novosLimites = limites !== undefined
       ? { maxBanDias: $set['gm.maxBanDias'], maxCadeiaMin: $set['gm.maxCadeiaMin'], maxAvisos: $set['gm.maxAvisos'], permitirPermanente: $set['gm.permitirPermanente'] }
       : null;
     await PonteUso.create({
       guildId, acao: 'gm_config',
-      detalhes: { sub, via: 'admin', por: req.usuario.id, ...(executor !== undefined ? { de: servidor.executor || 'pc', para: executor } : {}),
+      detalhes: { sub, via: 'admin', por: req.usuario.id,
         ...(modoTeste !== undefined ? { modoTeste: modoTeste === true } : {}), ...(novosLimites || {}), ...(conexoesRetomadas ? { conexoesRetomadas } : {}) }
     }).catch(() => {});
-    res.json({ ok: true, conexoesRetomadas, devolvidas: troca?.devolvidas || 0, embedsNovos: troca?.embedsNovos || 0 });
-  }));
-
-  router.get('/api/instalacoes', rota(async (req, res) => {
-    const lista = await PonteInstalacao.find().sort({ criadoEm: -1 }).limit(500).lean();
-    const nomes = await nomesDe(lista.map(i => i.criadoPor));
-    const agora = Date.now();
-    res.json(lista.map(i => ({
-      id: String(i._id), nome: i.nome, guildId: i.guildId, guild: nomeGuild(i.guildId), status: i.status,
-      criadoPor: nomes.get(i.criadoPor) || i.criadoPor, criadoEm: i.criadoEm, ultimoUsoEm: i.ultimoUsoEm, ultimoIp: i.ultimoIp,
-      hwid: i.hwidHash ? i.hwidHash.slice(0, 8) : '', ultimos4: i.ultimos4, versaoScript: i.versaoScript,
-      online: !!i.ultimoPingEm && agora - new Date(i.ultimoPingEm).getTime() < ONLINE_MS
-    })));
-  }));
-
-  router.post('/api/instalacoes/:id/revogar', rota(async (req, res) => {
-    if (!idValido(req.params.id)) return res.status(400).json({ erro: 'ID inválido.' });
-    const r = await PonteInstalacao.updateOne(
-      { _id: req.params.id },
-      { $set: { status: 'revogada', revogadoEm: new Date(), revogadoPor: req.usuario.id } }
-    );
-    res.json({ ok: r.matchedCount === 1 });
+    res.json({ ok: true, conexoesRetomadas });
   }));
 
   // Paginação por data: "antes" é o "em" do último item da página anterior.
@@ -343,7 +300,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     if (!Number.isNaN(antes.getTime())) filtro.em = { $lt: antes };
     const lista = await PonteUso.find(filtro).sort({ em: -1 }).limit(50).lean();
     res.json(lista.map(u => ({
-      em: u.em, guildId: u.guildId, guild: nomeGuild(u.guildId), acao: u.acao, instalacaoId: u.instalacaoId ? String(u.instalacaoId) : '',
+      em: u.em, guildId: u.guildId, guild: nomeGuild(u.guildId), acao: u.acao,
       contaId: u.contaId, nick: u.nick, comando: u.comando, ip: u.ip, detalhes: u.detalhes
     })));
   }));
@@ -351,23 +308,19 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   router.get('/api/codigos', rota(async (req, res) => {
     const lista = await PonteCodigo.find().sort({ criadoEm: -1 }).limit(200).lean();
     res.json(lista.map(c => ({
-      id: String(c._id), ultimos4: c.ultimos4, criadoEm: c.criadoEm, expiraEm: c.expiraEm, limitePcs: c.limitePcs,
+      id: String(c._id), ultimos4: c.ultimos4, criadoEm: c.criadoEm, expiraEm: c.expiraEm,
       usadoEm: c.usadoEm, usadoPorGuild: c.usadoPorGuild, guild: nomeGuild(c.usadoPorGuild), expirado: c.expirado
     })));
   }));
 
   router.post('/api/codigos', soDono, rota(async (req, res) => {
     const validadeDias = Number(req.body?.validadeDias) || null;
-    const limitePcs = Number(req.body?.limitePcs) || null;
-    if ((validadeDias && (validadeDias < 1 || validadeDias > 365)) || (limitePcs && (limitePcs < 1 || limitePcs > 50))) {
-      return res.status(400).json({ erro: 'Validade (1–365) ou limite de PCs (1–50) inválido.' });
-    }
-    const { codigo } = await gestao.criarCodigo({ criadoPor: req.usuario.id, validadeDias, limitePcs });
+    if (validadeDias && (validadeDias < 1 || validadeDias > 365)) return res.status(400).json({ erro: 'Validade (1–365) inválida.' });
+    const { codigo } = await gestao.criarCodigo({ criadoPor: req.usuario.id, validadeDias });
     res.json({ ok: true, codigo });
   }));
 
-  // Apagar de vez um PC ou um código (some da lista). O PC apagado perde o token na hora,
-  // como se fosse revogado. Fica registrado na auditoria quem apagou o quê.
+  // Apagar de vez um código (some da lista). Fica registrado na auditoria quem apagou o quê.
   const apagar = (Modelo, tipo, campos) => rota(async (req, res) => {
     if (!idValido(req.params.id)) return res.status(400).json({ erro: 'ID inválido.' });
     const doc = await Modelo.findOneAndDelete({ _id: req.params.id }, { projection: campos }).lean();
@@ -379,7 +332,6 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     }
     res.json({ ok: !!doc });
   });
-  router.post('/api/instalacoes/:id/apagar', soDono, apagar(PonteInstalacao, 'pc', { nome: 1, guildId: 1, ultimos4: 1 }));
   router.post('/api/codigos/:id/apagar', soDono, apagar(PonteCodigo, 'codigo', { ultimos4: 1, usadoPorGuild: 1 }));
 
   router.post('/api/codigos/:id/expirar', soDono, rota(async (req, res) => {
@@ -392,7 +344,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   router.get('/api/gamemode/conexoes', rota(async (req, res) => {
     const [lista, servidores] = await Promise.all([
       PonteConexaoGm.find({}, { segredoCifrado: 0 }).sort({ criadoEm: -1 }).limit(200).lean(),
-      PonteServidor.find({}, { guildId: 1, executor: 1, gm: 1 }).lean()
+      PonteServidor.find({}, { guildId: 1, gm: 1 }).lean()
     ]);
     const porGuild = new Map(servidores.map(s => [s.guildId, s]));
     const agora = Date.now();
@@ -403,7 +355,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
         online: c.status === 'ativa' && !!c.ultimoContatoEm && agora - new Date(c.ultimoContatoEm).getTime() < ONLINE_GM_MS,
         ultimoContatoEm: c.ultimoContatoEm, ultimoIp: c.ultimoIp, versaoInclude: c.versaoInclude, modoTesteInformado: c.modoTesteInformado,
         ipsPermitidos: c.ipsPermitidos || [], ultimos4: c.ultimos4, criadoEm: c.criadoEm,
-        executor: servidor?.executor || 'pc', guildPausada: servidor?.gm?.pausado === true, modoTesteGuild: servidor?.gm?.modoTeste !== false
+        guildPausada: servidor?.gm?.pausado === true, modoTesteGuild: servidor?.gm?.modoTeste !== false
       };
     }));
   }));
@@ -519,10 +471,10 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     res.json({ ok: true, ...r });
   }));
 
-  // Guia de instalação: em que passo cada servidor está (chave, executor, credencial, contato, modo teste).
+  // Guia de instalação: em que passo cada servidor está (chave, credencial, contato, modo teste).
   router.get('/api/gamemode/guia', rota(async (req, res) => {
     const [servidores, conexoes, pedidos] = await Promise.all([
-      PonteServidor.find({ ativo: true }, { guildId: 1, executor: 1, gm: 1 }).lean(),
+      PonteServidor.find({ ativo: true }, { guildId: 1, gm: 1 }).lean(),
       PonteConexaoGm.find({ status: 'ativa' }, { guildId: 1, nome: 1, ultimoContatoEm: 1, ultimoIp: 1, versaoInclude: 1, modoTesteInformado: 1, ipsPermitidos: 1, pausada: 1 }).lean(),
       PontePedidoGm.aggregate([{ $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }])
     ]);
@@ -542,7 +494,6 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
         return {
           guildId: s.guildId,
           nome: nomeGuild(s.guildId),
-          executor: s.executor || 'pc',
           pausado: s.gm?.pausado === true,
           modoTesteBot: s.gm?.modoTeste !== false,
           permitirPermanente: s.gm?.permitirPermanente !== false,

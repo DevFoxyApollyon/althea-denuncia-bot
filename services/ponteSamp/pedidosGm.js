@@ -189,7 +189,7 @@ async function marcarIncertos(agora = Date.now()) {
   return marcados;
 }
 
-// Grava o item no formato do PC: histórico, relatório e Log Admin funcionam sem mudança.
+// Grava o item no resultado da punição: histórico, relatório e Log Admin leem dele.
 async function registrarAplicada(pedido, conexao, dados, agora) {
   const item = {
     alvoId: pedido.alvoId,
@@ -229,8 +229,8 @@ async function fecharPunicaoSePronta({ client, punicaoId, conexao, agora = Date.
   }
   const nomePc = `gamemode:${conexao.nome}`;
   const $set = algumAplicado
-    ? { status: 'aplicada', aplicadaEm: new Date(agora), aplicadaPor: { instalacaoId: null, nomePc }, executandoPor: null, executandoDesde: null }
-    : { status: 'aceita', executor: '', executandoPor: null, executandoDesde: null };
+    ? { status: 'aplicada', aplicadaEm: new Date(agora), aplicadaPor: { instalacaoId: null, nomePc }, executandoDesde: null }
+    : { status: 'aceita', executor: '', executandoDesde: null };
   const punicao = await PontePunicao.findOneAndUpdate(
     { _id: punicaoId, status: 'executando' }, { $set, $inc: { versao: 1 } }, { new: true }
   ).lean();

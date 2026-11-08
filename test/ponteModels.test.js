@@ -10,11 +10,10 @@ test('models da ponte registram sem conflito com a retenção', () => {
   // registrar() lança erro se a coleção não estiver coerente com retencaoDados.js.
   const PonteServidor = require('../models/PonteServidor');
   const PonteCodigo = require('../models/PonteCodigo');
-  const PonteInstalacao = require('../models/PonteInstalacao');
   const PontePunicao = require('../models/PontePunicao');
   const PonteUso = require('../models/PonteUso');
 
-  for (const permanente of [PonteServidor, PonteCodigo, PonteInstalacao]) {
+  for (const permanente of [PonteServidor, PonteCodigo]) {
     assert.equal(permanente.schema.path(CAMPO_RETENCAO), undefined);
   }
   assert.ok(PontePunicao.schema.path(CAMPO_RETENCAO));
@@ -23,11 +22,11 @@ test('models da ponte registram sem conflito com a retenção', () => {
   assert.equal(PRAZOS_EM_DIAS.ponteusos, 90);
 });
 
-test('guild nova da ponte começa desligada e com os templates padrão', () => {
+test('guild nova da ponte começa desligada e sem nada do PC da staff', () => {
   const PonteServidor = require('../models/PonteServidor');
   const doc = new PonteServidor({ guildId: '1' });
   assert.equal(doc.ativo, false);
-  assert.match(doc.templates.get('ban'), /^\/.*\{id\}/);
+  for (const campo of ['templates', 'limitePcs', 'executor']) assert.equal(PonteServidor.schema.path(campo), undefined, campo);
 });
 
 test('punição exige denúncia e guild, e valida status', () => {

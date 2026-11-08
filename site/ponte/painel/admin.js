@@ -1,5 +1,5 @@
 // Painel do dono. Tudo é montado com textContent (nada de HTML vindo da API).
-const ACOES = ['fila', 'editar', 'executar', 'aplicar', 'cancelar', 'auth_falhou', 'hwid_diferente', 'guild_inativa', 'ping', 'codigo_negado', 'retirar', 'remover', 'limpar', 'regras', 'nota', 'relatorio', 'ativar', 'apagar',
+const ACOES = ['editar', 'codigo_negado', 'regras', 'ativar', 'apagar',
   'gm', 'gm_busca', 'gm_resultado', 'gm_auth_falhou', 'gm_selo_invalido', 'gm_enviar', 'gm_cancelar', 'gm_incerto_ok', 'gm_incerto_reenviar', 'gm_credencial', 'gm_config'];
 const STATUS_PEDIDO = ['aprovado', 'entregue', 'aplicada', 'simulada', 'recusada', 'erro', 'incerto', 'cancelado'];
 // "ban 5d + 1 aviso(s)", "ban permanente", "cadeia 120 min".
@@ -44,11 +44,8 @@ function el(tag, atributos = {}, ...filhos) {
 
 // O que cada ação da auditoria quer dizer, em português corrido.
 const ROTULOS = {
-  fila: 'abriu a fila', editar: 'editou uma punição', executar: 'começou a aplicar', aplicar: 'aplicou uma punição',
-  cancelar: 'cancelou uma aplicação', auth_falhou: 'errou a autenticação', hwid_diferente: 'usou o token em outro PC',
-  guild_inativa: 'tentou usar com a ponte desativada', ping: 'deu sinal de vida', codigo_negado: 'tentou gerar código sem permissão',
-  retirar: 'retirou uma punição', remover: 'tirou uma punição da fila', limpar: 'limpou a fila', regras: 'mudou a tabela de motivos',
-  nota: 'anotou numa punição', relatorio: 'abriu o relatório', ativar: 'ativou a ponte', apagar: 'apagou um registro',
+  editar: 'editou uma punição', codigo_negado: 'tentou gerar código sem permissão',
+  regras: 'mudou a tabela de motivos', ativar: 'ativou a ponte', apagar: 'apagou um registro',
   gm_busca: 'buscou pedidos', gm_resultado: 'respondeu um pedido', gm_auth_falhou: 'errou a autenticação da gamemode',
   gm_selo_invalido: 'recusou um selo (alerta)', gm_enviar: 'enviou uma punição ao jogo', gm_cancelar: 'cancelou um envio ao jogo',
   gm_incerto_ok: 'confirmou um incerto como aplicado', gm_incerto_reenviar: 'reenviou um incerto', gm_credencial: 'mexeu numa credencial',
@@ -56,12 +53,12 @@ const ROTULOS = {
 };
 const SUBROTULOS = {
   criar: 'criou uma credencial da gamemode', revogar: 'revogou uma credencial da gamemode', renovar: 'renovou uma credencial da gamemode',
-  chave_mestra: 'trocou a chave mestra', pausar: 'pausou a gamemode', retomar: 'retomou a gamemode', executor: 'trocou quem aplica as punições',
+  chave_mestra: 'trocou a chave mestra', pausar: 'pausou a gamemode', retomar: 'retomou a gamemode',
   limites: 'mudou os limites da gamemode', acesso_admin_adicionar: 'liberou alguém no painel', acesso_admin_remover: 'tirou o acesso de alguém ao painel',
-  apagar_pc: 'apagou um PC', apagar_codigo: 'apagou um código de ativação'
+  apagar_codigo: 'apagou um código de ativação'
 };
 const rotulo = (acao, subacao) => SUBROTULOS[subacao] || ROTULOS[acao] || acao;
-const ICONE_AUTOR = { pc: '🖥️', gamemode: '🎮', pessoa: '👤' };
+const ICONE_AUTOR = { gamemode: '🎮', pessoa: '👤' };
 
 // Celular: cada linha de tabela vira um cartão e cada célula mostra o nome da coluna.
 function rotularTabelas(raizBusca = document) {
@@ -115,12 +112,6 @@ function linha(celulas, acao) {
 }
 
 // ---------------------------------------------------------------- controle da gamemode (só o dono)
-const PERGUNTAS_EXECUTOR = {
-  pc: 'Só o PC da staff aplica. A gamemode passa a receber 403. Continuar?',
-  gamemode: 'Só a gamemode aplica. O PC da staff para de receber punições deste servidor. Continuar?',
-  ambos: 'PC e gamemode aplicam: quem pegar primeiro leva. Continuar?'
-};
-
 async function mudarGamemode(s, mudanca, pergunta) {
   if (pergunta && !confirm(pergunta)) return;
   let texto;
@@ -128,8 +119,7 @@ async function mudarGamemode(s, mudanca, pergunta) {
     const r = await post(`/servidores/${s.guildId}/gamemode`, mudanca);
     texto = ['Feito.',
       r.conexoesRetomadas && `${r.conexoesRetomadas} credencial(is) pausada(s) voltaram a funcionar.`,
-      r.devolvidas && `${r.devolvidas} punição(ões) ainda não buscada(s) pela gamemode voltaram para a fila do PC.`,
-      r.embedsNovos && `${r.embedsNovos} punição(ões) esperando envio ganharam o embed "Enviar ao jogo".`].filter(Boolean).join(' ');
+    ].filter(Boolean).join(' ');
   } catch (e) { texto = e.message; }
   // Recarregar limpa o aviso: ele vem depois.
   await carregar('controle');
@@ -259,13 +249,9 @@ function travaPorIp(conexoes = []) {
 }
 
 function cartaoDeControle(s) {
-  // Só aplica de verdade com executor da gamemode, sem pausa e sem teste nos dois lados.
-  const real = s.executor !== 'pc' && !s.pausado && !s.modoTesteBot && s.modoTesteJogo === false;
-  const situacao = real ? 'Aplica de verdade' : s.pausado ? 'Pausada' : s.executor === 'pc' ? 'Só o PC aplica' : 'Só simula';
-  const segmento = (valor, texto) => el('button', {
-    type: 'button', classe: s.executor === valor ? 'ativo' : '', 'aria-pressed': String(s.executor === valor),
-    onclick: () => { if (s.executor !== valor) mudarGamemode(s, { executor: valor }, PERGUNTAS_EXECUTOR[valor]); }
-  }, texto);
+  // Só aplica de verdade sem pausa e sem teste nos dois lados.
+  const real = !s.pausado && !s.modoTesteBot && s.modoTesteJogo === false;
+  const situacao = real ? 'Aplica de verdade' : s.pausado ? 'Pausada' : 'Só simula';
   const jogo = s.modoTesteJogo === null ? 'sem contato ainda' : s.modoTesteJogo ? 'ligado' : 'desligado';
 
   return el('article', { classe: `cartao-servidor controle${real ? ' real' : ''}` },
@@ -273,10 +259,6 @@ function cartaoDeControle(s) {
       el('h3', {}, s.nome || s.guildId),
       el('span', { classe: `selo ${s.online ? 'ok' : 'off'}` }, s.online ? '● gamemode online' : '○ gamemode offline'),
       el('span', { classe: `selo ${real ? 'perigo' : 'neutro'}` }, situacao)),
-    el('div', { classe: 'controle-linha' },
-      el('span', { classe: 'controle-rotulo' }, 'Quem aplica', el('small', {}, 'Com "PC da staff", a gamemode não recebe nada.')),
-      el('div', { classe: 'segmentos', role: 'group', 'aria-label': 'Quem aplica' },
-        segmento('pc', 'PC da staff'), segmento('gamemode', 'Gamemode'), segmento('ambos', 'Os dois'))),
     el('div', { classe: 'controle-linha' },
       el('span', { classe: 'controle-rotulo' }, 'Modo teste no bot', el('small', {}, `No jogo: ${jogo}`)),
       interruptor(s.modoTesteBot, 'Modo teste no bot', () => mudarGamemode(s, { modoTeste: !s.modoTesteBot },
@@ -301,7 +283,6 @@ function preencher(secao, linhas) {
 // O que falta para o servidor aplicar pela gamemode, na ordem do guia.
 function proximoPasso(s, chaveMestra) {
   if (!chaveMestra) return 'Passo 1: colocar PONTE_CHAVE_MESTRA no .env e reiniciar o bot.';
-  if (s.executor === 'pc') return 'Passo 1: /ponte gamemode executor tipo: Gamemode.';
   if (!s.credenciais) return 'Passo 1: /ponte gamemode criar nome:';
   if (!s.ultimoContatoEm) return 'Passo 2: instalar o include e o althea_credenciais.txt na gamemode.';
   if (!s.online) return 'A gamemode parou de buscar: conferir o servidor (rcon althea status).';
@@ -336,14 +317,12 @@ function cartaoDoServidor(s) {
   return el('article', { classe: `cartao-servidor ${s.ativo ? '' : 'apagado'}` },
     el('header', {},
       el('h3', {}, s.nome || 'Servidor sem nome'),
-      el('span', { classe: `selo ${s.ativo ? 'ok' : 'off'}` }, s.ativo ? 'Ativo' : 'Desativado'),
-      el('span', { classe: 'selo' }, { pc: 'PC', gamemode: 'Gamemode', ambos: 'PC + gamemode' }[s.executor] || s.executor)),
+      el('span', { classe: `selo ${s.ativo ? 'ok' : 'off'}` }, s.ativo ? 'Ativo' : 'Desativado')),
     el('dl', {},
       el('div', {}, el('dt', {}, 'Ativado por'), el('dd', {}, ativador ? `${ativador} · ${relativo(s.ativadoEm)}` : relativo(s.ativadoEm))),
       el('div', {}, el('dt', {}, 'Último uso'), el('dd', {}, s.ultimoUso
         ? [quem?.nome && el('strong', {}, `${ICONE_AUTOR[quem.tipo] || ''} ${quem.nome} `), rotulo(s.ultimoUso.acao), el('small', {}, ` · ${relativo(s.ultimoUso.em)}`)]
-        : 'ninguém usou ainda')),
-      el('div', {}, el('dt', {}, 'PCs ativos'), el('dd', {}, `${s.pcs} de ${s.limitePcs}`))),
+        : 'ninguém usou ainda'))),
     el('footer', {}, el('code', { title: 'ID do servidor' }, s.guildId), desativar));
 }
 
@@ -358,18 +337,12 @@ function itemDeAtividade(a) {
 }
 
 // ---------- Status ao vivo (Visão geral) ----------
-const NOME_EXECUTOR = { pc: 'PC da staff', gamemode: 'Gamemode', ambos: 'PC + gamemode' };
 let relogioStatus = null;
 
 function estadoDoServidor(s) {
-  const usaGm = s.executor !== 'pc';
-  const usaPc = s.executor !== 'gamemode';
-  if (usaGm && s.pausado) return { tom: 'aviso', texto: 'Pausado' };
+  if (s.pausado) return { tom: 'aviso', texto: 'Pausado' };
   if (s.fila.incertos) return { tom: 'aviso', texto: 'Precisa de atenção' };
-  const gmOk = !usaGm || s.gamemode.online;
-  const pcOk = !usaPc || s.pcs.online > 0;
-  if (gmOk && pcOk) return { tom: 'ok', texto: 'Funcionando' };
-  if (gmOk || pcOk) return { tom: 'aviso', texto: 'Parcial' };
+  if (s.gamemode.online) return { tom: 'ok', texto: 'Funcionando' };
   return { tom: 'perigo', texto: 'Offline' };
 }
 
@@ -379,10 +352,8 @@ function linhaStatus(rotuloLinha, valor, tom = '') {
 
 function cartaoDeStatus(s) {
   const estado = estadoDoServidor(s);
-  const usaGm = s.executor !== 'pc';
-  const usaPc = s.executor !== 'gamemode';
   const naFila = s.fila.esperando + s.fila.paraGamemode + s.fila.comGamemode;
-  const pausar = dono && usaGm && el('button', {
+  const pausar = dono && el('button', {
     type: 'button', classe: `pequeno ${s.pausado ? '' : 'perigo'}`,
     onclick: async (evento) => {
       const pausado = !s.pausado;
@@ -402,24 +373,22 @@ function cartaoDeStatus(s) {
       el('h3', {}, s.nome || 'Servidor sem nome'),
       el('span', { classe: `selo ${estado.tom === 'ok' ? 'ok' : estado.tom === 'perigo' ? 'perigo' : 'neutro'}` }, estado.texto)),
     el('dl', {},
-      linhaStatus('Quem aplica', NOME_EXECUTOR[s.executor] || s.executor),
-      usaGm && linhaStatus('Gamemode', !s.gamemode.credenciais ? 'sem credencial'
+      linhaStatus('Gamemode', !s.gamemode.credenciais ? 'sem credencial'
         : s.pausado ? `pausada · ${s.gamemode.online ? 'online' : 'offline'}`
           : s.gamemode.online ? `● online · ${relativo(s.gamemode.ultimoContatoEm)}`
             : `○ offline${s.gamemode.ultimoContatoEm ? ` · visto ${relativo(s.gamemode.ultimoContatoEm)}` : ''}`,
       s.gamemode.online && !s.pausado ? 'ok' : 'atencao'),
-      usaPc && linhaStatus('PCs', `${s.pcs.online} online de ${s.pcs.total}`, s.pcs.online ? 'ok' : 'atencao'),
       linhaStatus('Na fila', naFila
         ? [s.fila.esperando && `${s.fila.esperando} esperando envio`, s.fila.paraGamemode && `${s.fila.paraGamemode} para a gamemode buscar`, s.fila.comGamemode && `${s.fila.comGamemode} com a gamemode`].filter(Boolean).join(' · ')
         : 'vazia'),
       s.fila.incertos > 0 && linhaStatus('Incertos', `${s.fila.incertos} sem resposta: resolver no Relatório de punições`, 'atencao'),
-      s.modoTeste && usaGm && linhaStatus('Modo teste', 'ligado: a gamemode só simula', 'atencao'),
-      usaGm && linhaStatus('Resposta (24 h)', !s.resposta ? 'sem pedidos respondidos'
+      s.modoTeste && linhaStatus('Modo teste', 'ligado: a gamemode só simula', 'atencao'),
+      linhaStatus('Resposta (24 h)', !s.resposta ? 'sem pedidos respondidos'
         : [s.resposta.media === null ? 'sem resposta a tempo' : `média ${s.resposta.media} s · máx ${s.resposta.maximo} s`,
           `${s.resposta.respondidos} respondido(s)`, s.resposta.timeouts && `${s.resposta.timeouts} timeout(s)`].filter(Boolean).join(' · '),
       !s.resposta ? '' : s.resposta.timeouts || (s.resposta.media ?? 0) > 60 ? 'atencao' : 'ok'),
       linhaStatus('Última aplicada', s.ultimaAplicada
-        ? `${s.ultimaAplicada.alvo ? `${s.ultimaAplicada.alvo} · ` : ''}${s.ultimaAplicada.por === 'gamemode' ? 'pela gamemode' : 'pelo PC'} · ${relativo(s.ultimaAplicada.em)}`
+        ? `${s.ultimaAplicada.alvo ? `${s.ultimaAplicada.alvo} · ` : ''}pela gamemode · ${relativo(s.ultimaAplicada.em)}`
         : 'nenhuma ainda')),
     pausar && el('footer', {}, pausar));
 }
@@ -481,16 +450,14 @@ function cartaoDeIncerto(g) {
 const carregadores = {
   async geral() {
     ligarStatusAoVivo();
-    const [servidores, atividade, instalacoes, guia] = await Promise.all([
-      api('/servidores'), api('/atividade'), api('/instalacoes'), api('/gamemode/guia').catch(() => null)
+    const [servidores, atividade, guia] = await Promise.all([
+      api('/servidores'), api('/atividade'), api('/gamemode/guia').catch(() => null)
     ]);
     const ativos = servidores.filter(s => s.ativo);
-    const pcsAtivos = instalacoes.filter(i => i.status === 'ativa');
     const gm = guia?.servidores || [];
     const incertos = gm.reduce((soma, s) => soma + s.incertos, 0);
     $('#numeros').replaceChildren(
       numero('Servidores ativos', String(ativos.length), `de ${servidores.length} cadastrado(s)`),
-      numero('PCs online', String(pcsAtivos.filter(i => i.online).length), `de ${pcsAtivos.length} ativo(s)`),
       numero('Gamemodes online', String(gm.filter(s => s.online).length), `de ${gm.filter(s => s.credenciais).length} com credencial`),
       numero('Pedidos incertos', String(incertos), incertos ? 'resolver em Pedidos e credenciais' : 'tudo certo', incertos ? 'tom-alerta' : '')
     );
@@ -501,17 +468,6 @@ const carregadores = {
     $('#atividade').replaceChildren(...(atividade.length
       ? atividade.map(itemDeAtividade)
       : [el('li', { classe: 'vazio' }, 'Nada aconteceu ainda.')]));
-  },
-  async instalacoes() {
-    const lista = await api('/instalacoes');
-    preencher('instalacoes', lista.map(i => linha(
-      [i.nome, i.guild || i.guildId, i.status, i.criadoPor, data(i.ultimoUsoEm), i.ultimoIp, i.hwid, `…${i.ultimos4}`,
-        { texto: i.online ? '● online' : '○ offline', classe: i.online ? 'online' : '' }],
-      [
-        i.status === 'ativa' && { texto: 'Revogar', confirmar: `Revogar o PC ${i.nome}?`, executar: () => post(`/instalacoes/${i.id}/revogar`), recarregar: 'instalacoes' },
-        dono && { texto: 'Apagar', confirmar: `Apagar o PC ${i.nome} de vez? Ele some da lista${i.status === 'ativa' ? ' e o token para de funcionar na hora' : ''}. Não dá para desfazer.`, executar: () => post(`/instalacoes/${i.id}/apagar`), recarregar: 'instalacoes' }
-      ]
-    )));
   },
   async gamemode() {
     const filtro = new URLSearchParams();
@@ -535,7 +491,7 @@ const carregadores = {
         data(c.ultimoContatoEm), c.ultimoIp, c.versaoInclude, c.modoTesteInformado === null ? '—' : c.modoTesteInformado ? 'sim' : 'não',
         { texto: c.ipsPermitidos.length ? c.ipsPermitidos.join(', ') : 'qualquer IP', classe: c.ipsPermitidos.length ? '' : 'atencao' },
         `…${c.ultimos4}`,
-        `${c.executor}${c.guildPausada ? ' (pausado)' : ''}${c.modoTesteGuild ? ' · teste' : ''}`],
+        `${c.guildPausada ? 'pausado' : 'ativo'}${c.modoTesteGuild ? ' · teste' : ''}`],
       c.status === 'ativa' && [
         { texto: c.pausada ? 'Retomar' : 'Pausar', perigo: false, confirmar: `${c.pausada ? 'Retomar' : 'Pausar'} a credencial ${c.nome}?`, executar: () => post(`/gamemode/conexoes/${c.id}/pausar`, { pausada: !c.pausada }), recarregar: 'gamemode' },
         { texto: 'Revogar', confirmar: `Revogar a credencial ${c.nome}? A gamemode para de buscar na hora.`, executar: () => post(`/gamemode/conexoes/${c.id}/revogar`), recarregar: 'gamemode' }
@@ -553,7 +509,7 @@ const carregadores = {
       data(u.em), u.guild || u.guildId, u.acao, u.ip, { texto: u.detalhes ? JSON.stringify(u.detalhes) : '', classe: 'detalhes' }
     ])));
   },
-  // Aba só do dono: executor, modo teste do bot e pausa de cada servidor.
+  // Aba só do dono: modo teste do bot, pausa e limites de cada servidor.
   async controle() {
     const { servidores } = await api('/gamemode/guia');
     $('#controle-gm-lista').replaceChildren(...(servidores.length
@@ -573,7 +529,6 @@ const carregadores = {
 
     $('#guia-servidores tbody').replaceChildren(...servidores.map(s => linhaSimples([
       s.nome || s.guildId,
-      { texto: s.executor, classe: s.executor === 'pc' ? 'atencao' : '' },
       { texto: s.credenciais ? `${s.credenciais} ativa(s)${s.semIp ? ' · qualquer IP' : ''}` : 'nenhuma', classe: s.credenciais ? '' : 'atencao' },
       { texto: s.online ? '● online' : s.ultimoContatoEm ? `○ offline desde ${data(s.ultimoContatoEm)}` : 'nunca conectou', classe: s.online ? 'online' : 'atencao' },
       s.modoTesteBot ? 'ligado' : 'desligado',
@@ -607,7 +562,7 @@ const carregadores = {
     preencher('codigos', lista.map(c => {
       const situacao = c.usadoEm ? 'usado' : c.expirado || (c.expiraEm && new Date(c.expiraEm) < new Date()) ? 'expirado' : 'disponível';
       return linha(
-        [`…${c.ultimos4}`, data(c.criadoEm), data(c.expiraEm), c.limitePcs || 'padrão', data(c.usadoEm), c.guild || c.usadoPorGuild || '—', situacao],
+        [`…${c.ultimos4}`, data(c.criadoEm), data(c.expiraEm), data(c.usadoEm), c.guild || c.usadoPorGuild || '—', situacao],
         [
           dono && situacao === 'disponível' && { texto: 'Expirar', confirmar: 'Expirar este código?', executar: () => post(`/codigos/${c.id}/expirar`), recarregar: 'codigos' },
           dono && { texto: 'Apagar', confirmar: `Apagar o código …${c.ultimos4} da lista? Não dá para desfazer${situacao === 'usado' ? ' (o servidor que usou continua ativo)' : ''}.`, executar: () => post(`/codigos/${c.id}/apagar`), recarregar: 'codigos' }
