@@ -54,7 +54,7 @@ const ROTULOS = {
 const SUBROTULOS = {
   criar: 'criou uma credencial da gamemode', revogar: 'revogou uma credencial da gamemode', renovar: 'renovou uma credencial da gamemode',
   chave_mestra: 'trocou a chave mestra', pausar: 'pausou a gamemode', retomar: 'retomou a gamemode',
-  limites: 'mudou os limites da gamemode', acesso_admin_adicionar: 'liberou alguém no painel', acesso_admin_remover: 'tirou o acesso de alguém ao painel',
+  limites: 'mudou os limites da gamemode', modo_teste: 'mudou o modo teste da gamemode', acesso_admin_adicionar: 'liberou alguém no painel', acesso_admin_remover: 'tirou o acesso de alguém ao painel',
   bloqueio_adicionar: 'bloqueou alguém no bot', bloqueio_remover: 'desbloqueou alguém no bot',
   apagar_codigo: 'apagou um código de ativação'
 };

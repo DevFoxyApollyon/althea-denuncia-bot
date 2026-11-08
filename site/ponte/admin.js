@@ -278,7 +278,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     if (pausado === false) {
       ({ modifiedCount: conexoesRetomadas } = await PonteConexaoGm.updateMany({ guildId, status: 'ativa', pausada: true }, { $set: { pausada: false } }));
     }
-    const sub = pausado !== undefined ? (pausado ? 'pausar' : 'retomar') : 'limites';
+    const sub = pausado !== undefined ? (pausado ? 'pausar' : 'retomar') : limites !== undefined ? 'limites' : 'modo_teste';
     const novosLimites = limites !== undefined
       ? { maxBanDias: $set['gm.maxBanDias'], maxCadeiaMin: $set['gm.maxCadeiaMin'], maxAvisos: $set['gm.maxAvisos'], permitirPermanente: $set['gm.permitirPermanente'] }
       : null;
