@@ -2091,3 +2091,21 @@ test('ban permanente com a conta já banida (JA_BANIDO) vira "Banimento aplicado
   assert.ok(enviadas.some(e => e.embeds?.[0]?.toJSON?.().title?.includes('Banimento aplicado')));
   assert.equal(await fecharBansJaSetados(client), 0, 'rodar de novo não muda nada');
 });
+
+test('/admin esperando envio: lista o que está parado e por quê; o dono cancela', async () => {
+  process.env.OWNER_DISCORD_ID = DONO;
+  const guildId = '100000000000000996';
+  await guildGm(guildId);
+  const nunca = await punicaoAceita(guildId);
+  await punicaoAceita(guildId, [{ contaId: '7', cmd: 'ban', tempo: 1, avisos: 1, motivo: 'inventado', regra: '' }]);
+  await comAdmin(async (pedir) => {
+    assert.equal((await pedir(`/esperando?guildId=${guildId}`, { usuario: '123' })).status, 404, 'outra pessoa não descobre a rota');
+    const lista = (await pedir(`/esperando?guildId=${guildId}`)).corpo;
+    assert.deepEqual(lista.map(p => p.motivo), ['nunca foi enviada', 'motivo fora da tabela. Edite o alvo antes de enviar.']);
+    assert.equal(lista[0].semEmbed, true);
+    const { csrf } = (await pedir('/csrf')).corpo;
+    assert.equal((await pedir(`/esperando/${nunca._id}/cancelar`, { metodo: 'POST', csrf })).corpo.ok, true);
+    assert.equal((await m.PontePunicao.findById(nunca._id).lean()).status, 'cancelada');
+    assert.equal((await pedir(`/esperando?guildId=${guildId}`)).corpo.length, 1);
+  });
+});

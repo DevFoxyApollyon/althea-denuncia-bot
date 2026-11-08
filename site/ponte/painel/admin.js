@@ -380,7 +380,9 @@ function cartaoDeStatus(s) {
             : `○ offline${s.gamemode.ultimoContatoEm ? ` · visto ${relativo(s.gamemode.ultimoContatoEm)}` : ''}`,
       s.gamemode.online && !s.pausado ? 'ok' : 'atencao'),
       linhaStatus('Na fila', naFila
-        ? [s.fila.esperando && `${s.fila.esperando} esperando envio`, s.fila.paraGamemode && `${s.fila.paraGamemode} para a gamemode buscar`, s.fila.comGamemode && `${s.fila.comGamemode} com a gamemode`].filter(Boolean).join(' · ')
+        ? [s.fila.esperando && el('button', { type: 'button', classe: 'link-botao', title: 'Ver quais são', onclick: () => abrirEsperando(s) }, `${s.fila.esperando} esperando envio`),
+          s.fila.paraGamemode && `${s.fila.paraGamemode} para a gamemode buscar`, s.fila.comGamemode && `${s.fila.comGamemode} com a gamemode`]
+          .filter(Boolean).flatMap((item, i) => (i ? [' · ', item] : [item]))
         : 'vazia'),
       s.fila.incertos > 0 && linhaStatus('Incertos', `${s.fila.incertos} sem resposta: resolver no Relatório de punições`, 'atencao'),
       s.modoTeste && linhaStatus('Modo teste', 'ligado: a gamemode só simula', 'atencao'),
@@ -392,6 +394,33 @@ function cartaoDeStatus(s) {
         ? `${s.ultimaAplicada.alvo ? `${s.ultimaAplicada.alvo} · ` : ''}pela gamemode · ${relativo(s.ultimaAplicada.em)}`
         : 'nenhuma ainda')),
     pausar && el('footer', {}, pausar));
+}
+
+// Lista das punições esperando envio de um servidor (abre pelo "N esperando envio").
+async function abrirEsperando(s) {
+  const painel = $('#esperando-painel');
+  painel.hidden = false;
+  painel.dataset.guild = s.guildId;
+  painel.dataset.nome = s.nome || '';
+  $('#esperando-titulo').textContent = `Esperando envio · ${s.nome || s.guildId}`;
+  const tbody = painel.querySelector('tbody');
+  tbody.replaceChildren(el('tr', {}, el('td', { colspan: '7' }, 'Carregando…')));
+  painel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  try {
+    const lista = await api(`/esperando?guildId=${encodeURIComponent(s.guildId)}`);
+    tbody.replaceChildren(...(lista.length ? lista.map(p => {
+      const tr = linha(
+        [p.acusado || '—', p.punicao || '—', { texto: `${p.motivo}${p.semEmbed ? ' · sem embed no Relatório' : ''}`, classe: 'detalhes' }, p.aceitoPor || '—', data(p.desde), ''],
+        dono && { texto: 'Cancelar', confirmar: `Cancelar a punição de ${p.acusado}? Ela não vai para o jogo (volta para a Cadeia Staff quando tem mensagem lá).`, executar: () => post(`/esperando/${p.id}/cancelar`), recarregar: 'geral' }
+      );
+      const celulaLink = tr.children[5];
+      celulaLink.replaceChildren(p.link ? el('a', { href: p.link, target: '_blank', rel: 'noopener' }, 'Abrir') : '—');
+      return tr;
+    }) : [el('tr', {}, el('td', { colspan: '7' }, 'Nenhuma punição esperando envio.'))]));
+    rotularTabelas(painel);
+  } catch (e) {
+    tbody.replaceChildren(el('tr', {}, el('td', { colspan: '7' }, e.message)));
+  }
 }
 
 async function atualizarStatus() {
@@ -451,6 +480,9 @@ function cartaoDeIncerto(g) {
 const carregadores = {
   async geral() {
     ligarStatusAoVivo();
+    // Lista de "esperando envio" aberta: atualiza junto (ex.: depois de cancelar uma).
+    const esperando = $('#esperando-painel');
+    if (esperando && !esperando.hidden) abrirEsperando({ guildId: esperando.dataset.guild, nome: esperando.dataset.nome });
     const [servidores, atividade, guia] = await Promise.all([
       api('/servidores'), api('/atividade'), api('/gamemode/guia').catch(() => null)
     ]);
@@ -663,6 +695,7 @@ async function iniciar() {
       carregar('acessos');
     } catch (erro) { aviso(erro.message); }
   });
+  $('#esperando-fechar').addEventListener('click', () => { $('#esperando-painel').hidden = true; });
   $('#novo-bloqueio').addEventListener('submit', async (e) => {
     e.preventDefault();
     const { userId, motivo } = Object.fromEntries(new FormData(e.target));

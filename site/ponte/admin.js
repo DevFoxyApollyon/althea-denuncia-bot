@@ -64,12 +64,29 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   });
   const idValido = (id) => mongoose.isValidObjectId(id);
 
-  // Nome de quem fez algo, pelo ID do Discord (cache do bot; se não tiver, pergunta ao Discord).
+  // Pergunta ao Discord quem é a conta, mas sem segurar a tela: com o bot limitado pelo
+  // Discord (quarentena, limite de requisições), a resposta pode demorar muito. Passou de
+  // 1,5 s, segue sem o nome (a busca continua e o nome entra na memória para a próxima vez).
+  const PRAZO_DISCORD_MS = 1500;
+  const nomesConhecidos = new Map(); // id → { nome, em }
+  const MEMORIA_NOMES_MS = 10 * 60 * 1000;
+  const comPrazo = (promessa, ms) => Promise.race([promessa, new Promise(resolve => setTimeout(() => resolve(null), ms).unref?.())]);
+  async function usuarioDoDiscord(id) {
+    const emCache = client?.users?.cache?.get(id);
+    if (emCache || !client?.users?.fetch) return emCache || null;
+    const busca = client.users.fetch(id).catch(() => null);
+    busca.then(u => nomesConhecidos.set(id, { nome: u?.globalName || u?.username || '', em: Date.now() }));
+    return comPrazo(busca, PRAZO_DISCORD_MS);
+  }
+
+  // Nome de quem fez algo, pelo ID do Discord: cache do bot, memória ou o Discord (com prazo).
   async function nomesDe(ids) {
     const unicos = [...new Set(ids.filter(id => /^\d{15,21}$/.test(String(id || ''))))];
     const pares = await Promise.all(unicos.map(async (id) => {
-      const usuario = client?.users?.cache?.get(id) || await client?.users?.fetch?.(id).catch(() => null);
-      return [id, usuario?.globalName || usuario?.username || ''];
+      const lembrado = nomesConhecidos.get(id);
+      if (lembrado && Date.now() - lembrado.em < MEMORIA_NOMES_MS) return [id, lembrado.nome];
+      const usuario = await usuarioDoDiscord(id);
+      return [id, usuario?.globalName || usuario?.username || lembrado?.nome || ''];
     }));
     return new Map(pares);
   }
@@ -187,6 +204,42 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
         };
       })
     });
+  }));
+
+  // Punições de um servidor esperando envio ao jogo, com o motivo de estarem paradas.
+  router.get('/api/esperando', rota(async (req, res) => {
+    const guildId = String(req.query.guildId || '');
+    if (!/^\d{5,25}$/.test(guildId)) return res.status(400).json({ erro: 'ID inválido.' });
+    const lista = await PontePunicao.find({ guildId, status: 'aceita' }).sort({ criadoEm: 1 }).limit(50).lean();
+    const pedidos = await PontePedidoGm.find({ punicaoId: { $in: lista.map(p => p._id) } }, { punicaoId: 1, alvoId: 1, rodada: 1, status: 1, codigo: 1 }).sort({ rodada: -1 }).lean();
+    const { pedidoDoAlvo, descreverPunicao } = require('../../services/ponteSamp/discordGm');
+    const servidor = await PonteServidor.findOne({ guildId }).lean();
+    res.json(lista.map(p => {
+      const ativos = (p.alvos || []).filter(a => !a.removido);
+      const ultimo = pedidos.find(x => String(x.punicaoId) === String(p._id));
+      const erro = ativos.map(a => pedidoDoAlvo(a, servidor).erro).find(Boolean);
+      const motivo = !ativos.length ? 'sem jogador: adicione no Editar'
+        : erro ? erro.replace(/^[^:]+: /, '')
+          : ultimo ? `última tentativa: ${ultimo.status}${ultimo.codigo ? ` (${ultimo.codigo})` : ''}`
+            : 'nunca foi enviada';
+      return {
+        id: String(p._id), acusado: p.msgDiscord?.acusado || ativos.map(a => a.contaId || a.nick).join('+'), link: p.msgDiscord?.link || '',
+        aceitoPor: p.aceitoPor?.nome || '', desde: p.aceitoEm || p.criadoEm, motivo,
+        punicao: ativos.map(a => descreverPunicao({ tipo: a.cmd, tempo: Number(a.tempo) || 0, avisos: Number(a.avisos) || 0 })).join(' · '),
+        semEmbed: !p.mensagemGm?.msgId
+      };
+    }));
+  }));
+
+  // Cancelar pelo painel uma punição esperando envio (o mesmo botão "Cancelar" do embed).
+  router.post('/api/esperando/:punicaoId/cancelar', soDono, rota(async (req, res) => {
+    if (!idValido(req.params.punicaoId)) return res.status(400).json({ erro: 'ID inválido.' });
+    const punicao = await PontePunicao.findById(req.params.punicaoId, { guildId: 1 }).lean();
+    if (!punicao) return res.status(404).json({ erro: 'Punição não encontrada.' });
+    const staff = { id: req.usuario.id, nome: `${req.usuario.nome || req.usuario.id} (painel)` };
+    const r = await require('../../services/ponteSamp/discordGm').cancelarGm({ client, punicaoId: punicao._id, guildId: punicao.guildId, staff });
+    if (r.erro) return res.status(409).json({ erro: r.erro });
+    res.json({ ok: true, voltouParaCadeia: !!r.voltouParaCadeia });
   }));
 
   // Pedidos incertos (a gamemode não respondeu), agrupados por punição, para resolver
@@ -440,7 +493,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
 
   router.post('/api/acessos', soDono, rota(async (req, res) => {
     const userId = String(req.body?.userId || '').trim();
-    const usuario = /^\d{15,21}$/.test(userId) && client?.users ? await client.users.fetch(userId).catch(() => null) : null;
+    const usuario = /^\d{15,21}$/.test(userId) ? await usuarioDoDiscord(userId) : null;
     const r = await acessos.adicionarAcesso({ userId, nome: usuario?.globalName || usuario?.username || '', por: req.usuario.id });
     if (r.erro) return res.status(400).json({ erro: r.erro });
     await PonteUso.create({ acao: 'gm_config', detalhes: { sub: 'acesso_admin_adicionar', userId, por: req.usuario.id } }).catch(() => {});
@@ -462,7 +515,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
 
   router.post('/api/bloqueios', soDono, rota(async (req, res) => {
     const userId = String(req.body?.userId || '').trim();
-    const usuario = /^\d{15,21}$/.test(userId) && client?.users ? await client.users.fetch(userId).catch(() => null) : null;
+    const usuario = /^\d{15,21}$/.test(userId) ? await usuarioDoDiscord(userId) : null;
     const r = await bloqueioBot.bloquear({ userId, nome: usuario?.globalName || usuario?.username || '', motivo: req.body?.motivo, por: req.usuario.id });
     if (r.erro) return res.status(400).json({ erro: r.erro });
     await PonteUso.create({ acao: 'gm_config', detalhes: { sub: 'bloqueio_adicionar', userId, motivo: r.bloqueio.motivo, por: req.usuario.id } }).catch(() => {});

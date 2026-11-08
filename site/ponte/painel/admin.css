@@ -360,3 +360,7 @@ ol.passos .dica { margin: 6px 0 0; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* "N esperando envio" no Status ao vivo: abre a lista. */
+.link-botao { display: inline; min-height: 0; padding: 0; border: 0; background: none; color: var(--destaque); font: inherit; text-transform: none; letter-spacing: normal; text-decoration: underline; cursor: pointer; }
+#esperando-painel { margin-top: 16px; }
