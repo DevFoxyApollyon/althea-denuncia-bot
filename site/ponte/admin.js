@@ -52,7 +52,12 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     const caminho = `/admin/api${req.path}`; // no "finish" o req.path já voltou a ter o /api
     res.on('finish', () => {
       const ms = Date.now() - inicio;
-      if (ms >= 2000) log?.warn?.(`[Painel] ${req.method} ${caminho} levou ${(ms / 1000).toFixed(1)} s (status ${res.statusCode}).`);
+      if (ms < 2000) return;
+      // Ping do banco da ponte na hora: rápido = consulta pesada; lento = banco ou fila de conexões.
+      const antes = Date.now();
+      Promise.resolve().then(() => PonteUso.db.db.admin().ping())
+        .then(() => `${Date.now() - antes} ms`).catch(() => 'sem resposta')
+        .then(ping => log?.warn?.(`[Painel] ${req.method} ${caminho} levou ${(ms / 1000).toFixed(1)} s (status ${res.statusCode}; ping do banco ${ping}).`));
     });
     next();
   });

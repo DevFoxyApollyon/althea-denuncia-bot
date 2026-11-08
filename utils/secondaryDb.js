@@ -13,7 +13,9 @@ const secondaryConnection = mongoose.createConnection(secondaryDbUri, {
     serverSelectionTimeoutMS: 10000,
     socketTimeoutMS:          60000,
     connectTimeoutMS:         15000,
-    maxPoolSize:              10,
+    // Site, chat, mensagens das denúncias, ponte e as buscas da gamemode dividem este banco:
+    // com 10 conexões, uma busca simples esperava na fila (vários segundos no painel).
+    maxPoolSize:              30,
     minPoolSize:              2,
     heartbeatFrequencyMS:     30000,
     retryWrites:              true,
