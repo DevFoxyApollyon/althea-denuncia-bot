@@ -314,11 +314,12 @@ const travadasPrevia = [{ id: '650000000000000000000001', acusado: '1270428', de
 app.get('/api/painel-bot/travadas', (req, res) => res.json({ conferidas: 12, travadas: travadasPrevia }));
 app.post('/api/painel-bot/travadas', express.json(), (req, res) => res.json({ ok: true, tiradas: req.body.ids.length, mensagem: `${req.body.ids.length} denúncia(s) saíram da fila (prévia).` }));
 const motivosPrevia = { propria: false, tabela: require('../services/ponteSamp/validacao').ITENS_TABELA.map(t => ({ nome: t.nome, sinonimos: t.sinonimos.slice(1), cmd: t.cmd, tempo: t.tempo, avisos: t.avisos, grupo: t.grupo })) };
-app.get('/api/motivos-ponte', (req, res) => res.json(motivosPrevia));
+// ?leitura na página mostra a tela do administrador (só vê a tabela).
+app.get('/api/motivos-ponte', (req, res) => res.json({ ...motivosPrevia, podeEditar: !req.get('Referer')?.includes('leitura') }));
 app.post('/api/motivos-ponte', express.json(), (req, res) => {
   motivosPrevia.propria = req.body.tabela.length > 0;
   if (req.body.tabela.length) motivosPrevia.tabela = req.body.tabela.map(m => ({ ...m, grupo: '' }));
-  res.json({ ok: true, mensagem: 'Motivos salvos (prévia).', ...motivosPrevia });
+  res.json({ ok: true, mensagem: 'Motivos salvos (prévia).', ...motivosPrevia, podeEditar: true });
 });
 
 // Sessões da conta, erros recentes e rascunho na conta (dados de exemplo).

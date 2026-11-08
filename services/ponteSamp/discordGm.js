@@ -98,7 +98,7 @@ const maiuscula = (texto) => (texto ? texto[0].toUpperCase() + texto.slice(1) : 
 
 // Um bloco (campo do embed) por alvo: quem é, a punição, o motivo, o que o servidor do jogo
 // informou (nome, organização, cargo) e o estado. Esperando envio, mostra como vai sair.
-function blocoDoAlvo(alvo, indice, pedido, servidor, esperandoEnvio, nicks) {
+function blocoDoAlvo(alvo, indice, pedido, servidor, esperandoEnvio, nicks, jaBanido = false) {
   const previa = pedidoDoAlvo(alvo, servidor);
   const dados = esperandoEnvio ? previa.pedido : pedido || previa.pedido;
   const resultado = pedido?.resultado || {};
@@ -116,7 +116,9 @@ function blocoDoAlvo(alvo, indice, pedido, servidor, esperandoEnvio, nicks) {
     linhas.push('🏢 Sem organização');
   }
   if (esperandoEnvio && previa.erro) linhas.push(`⚠️ ${previa.erro.replace(/^[^:]+: /, '')}`);
-  if (pedido) linhas.push(`${esperandoEnvio ? 'Última tentativa: ' : ''}${estadoDoPedido(pedido)}`);
+  // Ban permanente que a gamemode recusou por já estar banida: só informa, sem a tentativa.
+  if (jaBanido) linhas.push('🔨 Já está sendo banida');
+  else if (pedido) linhas.push(`${esperandoEnvio ? 'Última tentativa: ' : ''}${estadoDoPedido(pedido)}`);
   else if (esperandoEnvio && !previa.erro) linhas.push('⏳ Ainda não enviado');
   return { name: titulo.slice(0, 256), value: linhas.join('\n').slice(0, 1024) };
 }
@@ -137,7 +139,7 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
     const ultimo = ultimos.get(String(a._id));
     return a.cmd === 'ban' && (Number(a.tempo) || 0) === 0 && ultimo?.status === 'recusada' && ultimo.codigo === 'JA_BANIDO';
   });
-  const situacao = jaBanidoPermanente ? '🔨 A conta já está banida: o ban permanente não precisa ser reenviado.'
+  const situacao = jaBanidoPermanente ? '🔨 A conta já está sendo banida no jogo.'
     : punicao.status === 'aceita' && peloPc
     ? '🖥️ Este servidor aplica pelo PC da staff: esta punição está na fila do PC.'
     : {
@@ -150,10 +152,10 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
   }[punicao.status] || punicao.status;
 
   const esperandoEnvio = punicao.status === 'aceita';
-  const blocos = alvos.map((a, i) => blocoDoAlvo(a, i, ultimos.get(String(a._id)), servidor, esperandoEnvio, nicks));
+  const blocos = alvos.map((a, i) => blocoDoAlvo(a, i, ultimos.get(String(a._id)), servidor, esperandoEnvio, nicks, jaBanidoPermanente));
   // Por que não foi aplicada: um texto por código de recusa ou erro da última tentativa.
   const codigosRuins = [...new Set(pedidosDaVez.filter(p => ['recusada', 'incerto', 'erro'].includes(p.status) && p.codigo).map(p => p.codigo))];
-  const falhou = esperandoEnvio && codigosRuins.length > 0;
+  const falhou = esperandoEnvio && codigosRuins.length > 0 && !jaBanidoPermanente;
 
   const topo = [
     [punicao.msgDiscord?.acusado && `👤 **Acusado:** ${String(punicao.msgDiscord.acusado).slice(0, 200)}`,
@@ -164,12 +166,13 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
     punicao.msgDiscord?.link && `🔗 [Abrir denúncia](${punicao.msgDiscord.link})`
   ].filter(linha => linha !== false && linha !== null && linha !== undefined);
 
-  const titulo = punicao.status === 'aceita' && peloPc ? '🖥️ Punição na fila do PC da staff'
+  const titulo = jaBanidoPermanente ? '🔨 Ban permanente já setado'
+    : punicao.status === 'aceita' && peloPc ? '🖥️ Punição na fila do PC da staff'
     : falhou ? '🔁 Punição não aplicada'
       : { aceita: '🎮 Punição esperando envio ao jogo', executando: '📤 Punição enviada ao jogo', aplicada: '✅ Punição aplicada no jogo', cancelada: '🚫 Punição cancelada' }[punicao.status]
         || '🎮 Punição para o jogo';
   const embed = new EmbedBuilder()
-    .setColor(falhou ? '#E67E22' : { aceita: '#F1C40F', executando: '#3498DB', aplicada: '#2ECC71', cancelada: '#7F8C8D' }[punicao.status] || '#2B2D31')
+    .setColor(jaBanidoPermanente ? '#C0392B' : falhou ? '#E67E22' : { aceita: '#F1C40F', executando: '#3498DB', aplicada: '#2ECC71', cancelada: '#7F8C8D' }[punicao.status] || '#2B2D31')
     .setTitle(titulo)
     .setDescription(topo.join('\n').replace(/^\n+/, '').slice(0, 4000))
     // Até 20 alvos em campos (o Discord aceita 25); o resto fica numa linha só.
@@ -177,7 +180,7 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
     .setFooter({ text: `Punição ${punicao._id}${enviadoPor && punicao.status !== 'aceita' ? ` · enviada por ${enviadoPor}` : ''}` })
     .setTimestamp();
   if (blocos.length > 20) embed.addFields({ name: `e mais ${blocos.length - 20} jogador(es)`, value: 'Veja todos pelo Editar.' });
-  if (codigosRuins.length) {
+  if (codigosRuins.length && !jaBanidoPermanente) {
     embed.addFields({ name: 'ℹ️ Por que não foi aplicada', value: codigosRuins.map(c => `**${c}**: ${explicarCodigo(c)}`).join('\n').slice(0, 1024) });
   }
 

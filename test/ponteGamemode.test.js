@@ -1403,7 +1403,10 @@ test('resultado da gamemode: console e Relatório de punições explicam o códi
   const jaBanido = [{ alvoId, rodada: 1, status: 'recusada', codigo: 'JA_BANIDO' }];
   const msg = montarMensagemGm(permanente, jaBanido, {});
   assert.deepEqual(msg.components, []);
-  assert.match(textoDoEmbed(msg), /já está banida/);
+  // Só informa que já está banindo: sem "Última tentativa" nem "Por que não foi aplicada".
+  assert.equal(msg.embeds[0].data.title, '🔨 Ban permanente já setado');
+  assert.match(textoDoEmbed(msg), /já está sendo banida/);
+  assert.doesNotMatch(textoDoEmbed(msg), /Última tentativa|Por que não foi aplicada|recusada/);
   // Ban com tempo e JA_BANIDO: continua dando para reenviar (ex.: somar dias).
   assert.equal(montarMensagemGm(punicao, jaBanido, {}).components.length, 1);
 });

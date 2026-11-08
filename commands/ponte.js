@@ -98,15 +98,16 @@ async function handleInstalacaoSlash(interaction) {
 // Quem edita a tabela de motivos (a mesma para todos os servidores): o dono do bot,
 // quem gerencia o servidor e os cargos de administrador e responsável.
 async function podeEditarMotivos(interaction) {
-  if (gestao.ehDono(interaction.user.id) || interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return true;
+  // Só o responsável (e o dono do bot) muda a tabela de motivos.
+  if (gestao.ehDono(interaction.user.id)) return true;
   const config = await getConfig(interaction.guild.id).catch(() => null);
-  const cargos = [config?.roles?.administrador, config?.roles?.responsavel_admin].filter(Boolean);
-  return cargos.some(cargo => interaction.member?.roles?.cache?.has(cargo));
+  const cargo = config?.roles?.responsavel_admin;
+  return Boolean(cargo && interaction.member?.roles?.cache?.has(cargo));
 }
 
 // /ponte motivos: abre a tabela inteira para editar.
 async function abrirMotivos(interaction) {
-  if (!(await podeEditarMotivos(interaction))) return interaction.reply(efemero('❌ Só administradores e responsáveis editam a tabela de motivos.'));
+  if (!(await podeEditarMotivos(interaction))) return interaction.reply(efemero('❌ Só o responsável edita a tabela de motivos.'));
   const { tabela } = await motivos.obterTabela();
   const texto = motivos.tabelaParaTexto(tabela);
   if (texto.length > 4000) return interaction.reply(efemero('❌ A tabela ficou grande demais para o Discord. Edite pelo site (/admin → Motivos) ou pelo painel do jogo.'));

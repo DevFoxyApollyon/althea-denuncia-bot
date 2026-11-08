@@ -1,6 +1,6 @@
 // Motivos de punição da ponte com o jogo: a mesma tabela em todos os servidores.
 // O motivo escrito no aceite da denúncia escolhe o comando (tempban ou cadeia), o tempo e os avisos.
-// Administradores e responsáveis veem e alteram.
+// Administradores e responsáveis veem; só o responsável (e o dono do bot) altera.
 import { executar } from './acoes.js';
 import { confirmar } from './confirmacao.js';
 import { desenhar } from './desenho.js';
@@ -24,7 +24,7 @@ export async function carregarMotivosPonte() {
 // "edicao" é o que está na tela; "salvo" é o que veio do servidor, para saber o que mudou.
 function aplicar(dados) {
   const edicao = dados.tabela.map(m => ({ nome: m.nome, sinonimos: m.sinonimos.join(', '), cmd: m.cmd, tempo: m.tempo, avisos: m.avisos, texto: m.texto || '', salvo: true }));
-  estado.motivosPonte = { propria: dados.propria, podeApagar: dados.podeApagar === true, edicao, salvo: JSON.stringify(edicao) };
+  estado.motivosPonte = { propria: dados.propria, podeApagar: dados.podeApagar === true, podeEditar: dados.podeEditar === true, edicao, salvo: JSON.stringify(edicao) };
 }
 
 function descrever(m) {
@@ -73,18 +73,19 @@ function grupoDoMotivo(m) {
 
 // Um cartão por motivo: nome e resumo no topo; tipo, tempo, avisos e sinônimos com rótulo embaixo.
 // Motivo já salvo só é apagado ou renomeado pelo dono do bot; o novo (ainda não salvo) pode sair.
-function linhaDoMotivo(m, indice, edicao, podeApagar) {
-  const travado = m.salvo && !podeApagar;
-  const campo = (props) => el('input', { ...props, oninput: (e) => { m[props['data-campo']] = e.target.value; }, onchange: () => desenhar() });
+// Sem poder editar (administrador), tudo fica só para leitura.
+function linhaDoMotivo(m, indice, edicao, podeApagar, podeEditar) {
+  const travado = !podeEditar || (m.salvo && !podeApagar);
+  const campo = (props) => el('input', { ...props, readonly: props.readonly || !podeEditar, oninput: (e) => { m[props['data-campo']] = e.target.value; }, onchange: () => desenhar() });
   const rotulado = (rotulo, controle, classe = '') => el('label', { class: `motivo-campo ${classe}`.trim() }, el('span', null, rotulo), controle);
   const grupo = grupoDoMotivo(m);
   return el('article', { class: `motivo-item${grupo === 'ban' ? '' : ` ${grupo}`}`, 'data-indice': String(indice) },
     el('header', { class: 'motivo-topo' },
-      campo({ 'data-campo': 'nome', class: 'motivo-nome', value: m.nome, maxlength: '30', 'aria-label': 'Motivo', placeholder: 'Nome do motivo (ex.: DM)', readonly: travado, title: travado ? 'Só o dono do bot renomeia motivos.' : null }),
+      campo({ 'data-campo': 'nome', class: 'motivo-nome', value: m.nome, maxlength: '30', 'aria-label': 'Motivo', placeholder: 'Nome do motivo (ex.: DM)', readonly: travado, title: travado && podeEditar ? 'Só o dono do bot renomeia motivos.' : null }),
       el('span', { class: 'motivo-resumo' }, descrever(m)),
       !travado && el('button', { type: 'button', class: 'so-icone perigo', title: 'Apagar motivo', 'aria-label': `Apagar ${m.nome || 'motivo'}`, onclick: () => { edicao.splice(indice, 1); desenhar(); } }, icone('lixeira'))),
     el('div', { class: 'motivo-campos' },
-      rotulado('Tipo', el('select', { onchange: (e) => { m.cmd = e.target.value; desenhar(); } },
+      rotulado('Tipo', el('select', { disabled: !podeEditar, onchange: (e) => { m.cmd = e.target.value; desenhar(); } },
         el('option', { value: 'ban', selected: m.cmd === 'ban' }, 'Tempban'),
         el('option', { value: 'cadeia', selected: m.cmd === 'cadeia' }, 'Cadeia'),
         el('option', { value: 'registro', selected: m.cmd === 'registro' }, 'Neutro'))),
@@ -113,7 +114,8 @@ export function telaMotivosPonte() {
           el('h1', null, 'Motivos de punição'),
           el('p', { class: 'sub' }, 'O motivo escrito no aceite da denúncia escolhe a punição aplicada pelo painel do jogo. A tabela é a mesma em todos os servidores: o que você salvar aqui vale para todos.'),
           el('p', { class: 'sub' }, dados.propria ? 'Tabela personalizada.' : 'Usando a tabela padrão do bot.'),
-          !dados.podeApagar && el('p', { class: 'sub' }, 'Você pode mudar e adicionar motivos. Apagar ou renomear um motivo é só com o dono do bot.'))),
+          !dados.podeEditar && el('p', { class: 'sub' }, 'Só o responsável adiciona e muda os motivos. Você pode ver a tabela.'),
+          dados.podeEditar && !dados.podeApagar && el('p', { class: 'sub' }, 'Você pode mudar e adicionar motivos. Apagar ou renomear um motivo é só com o dono do bot.'))),
       el('section', { class: 'cartao' },
         el('p', { class: 'bot-ajuda' }, 'Neutro: só visual, para punições que não são ban nem cadeia (ex.: mute já dado no jogo). A denúncia é aceita normalmente, mas nada vai para o jogo; o texto aparece como a punição.'),
         el('p', { class: 'bot-ajuda' }, 'Vários motivos na mesma denúncia: banimentos somam dias e avisos; permanente (tempo 0) vence tudo e vira /blackban; banimento vence cadeia. Todo motivo vai com [DC] no fim. Os sinônimos também são reconhecidos (ex.: MONEY FARM e MF).'),
@@ -121,10 +123,10 @@ export function telaMotivosPonte() {
           const doGrupo = edicao.map((m, i) => [m, i]).filter(([m]) => grupoDoMotivo(m) === chave);
           return doGrupo.length > 0 && el('section', { class: `motivo-grupo ${chave}` },
             el('h2', { class: 'motivo-grupo-titulo' }, titulo, el('span', { class: 'motivo-grupo-conta' }, String(doGrupo.length)), el('small', null, explica)),
-            el('div', { class: 'motivo-lista' }, doGrupo.map(([m, i]) => linhaDoMotivo(m, i, edicao, dados.podeApagar))));
+            el('div', { class: 'motivo-lista' }, doGrupo.map(([m, i]) => linhaDoMotivo(m, i, edicao, dados.podeApagar, dados.podeEditar))));
         })),
       // Barra fixa: à esquerda o que mexe na lista; à direita descartar e salvar.
-      el('div', { class: `bot-barra motivos-barra${mudou ? ' ativa' : ''}`, role: 'status' },
+      dados.podeEditar && el('div', { class: `bot-barra motivos-barra${mudou ? ' ativa' : ''}`, role: 'status' },
         el('p', null, mudou ? 'Mudanças não salvas' : 'Tudo salvo'),
         el('div', { class: 'motivos-barra-acoes' },
           el('div', { class: 'acoes' },
