@@ -18,7 +18,8 @@ const Denuncia = require('../models/Denuncia');
 const Usuario = require('../models/Usuario');
 const { getConfig: getCachedConfig } = require('../utils/configCache');
 const { handleExportButton } = require('../Handlers/exportDenuncia'); 
-const { handleClaimButton } = require('../Handlers/handlerStatusButton'); 
+const { handleClaimButton } = require('../Handlers/handlerStatusButton');
+const { botaoAbrirTicket } = require('../Handlers/ticketExterno');
 const { notificarAcusadoPv } = require('../utils/userSyncAndNotify');
 const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('../utils/youtubeUtils');
 const dateUtils = require('../utils/dateUtils');
@@ -128,11 +129,15 @@ async function handleEntrarNoTopico(interaction) {
     });
 }
 
-function createStatusButtonsRow2() {
-    return new ActionRowBuilder().addComponents(
+function createStatusButtonsRow2(config) {
+    const botoes = [
         new ButtonBuilder().setCustomId('add_player').setLabel('Add Player').setEmoji('➕').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('finalizar_denuncia').setLabel('Finalizar').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
-    );
+    ];
+    // "Abrir Ticket" só aparece com a integração do bot de tickets configurada.
+    const abrirTicket = botaoAbrirTicket(config);
+    if (abrirTicket) botoes.push(abrirTicket);
+    return new ActionRowBuilder().addComponents(...botoes);
 }
 
 // Com o site ligado, "Minhas Denúncias" abre a lista no site; sem ele, mostra a
@@ -690,7 +695,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         }
 
         const threadMessage = await thread.send({ content: textoDenunciaTopico });
-        const controlsMessage = await thread.send({ components: [createStatusButtons(), createStatusButtonsRow2()] });
+        const controlsMessage = await thread.send({ components: [createStatusButtons(), createStatusButtonsRow2(config)] });
 
         try {
             await Usuario.findOneAndUpdate(

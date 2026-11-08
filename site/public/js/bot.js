@@ -37,7 +37,8 @@ const GRUPOS_DE_CANAIS = [
 const CANAIS_EXTERNOS = [
   { chave: 'cloud', nome: 'Cloud', explica: 'Destino principal do arquivo da denúncia finalizada (conversa e provas). Costuma ficar num servidor só de armazenamento.' },
   { chave: 'registro', nome: 'Registro', explica: 'Cada denúncia nova ganha uma cópia (tópico espelho) neste canal de outro servidor.' },
-  { chave: 'canalDenuncia', nome: 'Canal fixo de denúncias', explica: 'Onde fica a mensagem do /denuncia com os botões "Denúncia PC" e "Denúncia Mobile". Ao trocar, o bot publica a mensagem no canal novo.' }
+  { chave: 'canalDenuncia', nome: 'Canal fixo de denúncias', explica: 'Onde fica a mensagem do /denuncia com os botões "Denúncia PC" e "Denúncia Mobile". Ao trocar, o bot publica a mensagem no canal novo.' },
+  { chave: 'ponteTickets', nome: 'Ponte com o bot de tickets', explica: 'Canal oculto que só o Althea e o bot de tickets veem. O botão "Abrir Ticket" da denúncia pede o ticket aqui e o bot de tickets responde com o link. Sem este canal, o botão não aparece.' }
 ];
 
 const CARGOS = [
@@ -83,6 +84,7 @@ function aplicar(dados) {
     topicosPrivados: dados.valores.topicosPrivados !== false,
     senhaCadeia: dados.valores.senhaCadeia === true,
     provasExigirMotivo: dados.valores.provasExigirMotivo !== false,
+    botaoTicket: dados.valores.botaoTicket !== false,
     isentos: dados.valores.isentos.map(item => item.id).join('\n')
   };
   estado.painelBot = { ...dados, edicao: valores, salvo: JSON.stringify(valores) };
@@ -384,6 +386,7 @@ export function telaPainelDoBot() {
     edicao.topicosPrivados !== antes.topicosPrivados,
     edicao.senhaCadeia !== antes.senhaCadeia,
     edicao.provasExigirMotivo !== antes.provasExigirMotivo,
+    edicao.botaoTicket !== antes.botaoTicket,
     edicao.isentos.trim() !== antes.isentos.trim(),
     ...todosOsCanais.map(item => edicao.channels[item.chave] !== antes.channels[item.chave]),
     ...CARGOS.map(item => edicao.roles[item.chave] !== antes.roles[item.chave])
@@ -456,6 +459,9 @@ export function telaPainelDoBot() {
         linha({ nome: 'Provas da staff só com motivo da tabela', explica: 'Ligada, o registro do /provastaff entra com qualquer motivo, mas o responsável só consegue aceitar quando o motivo está em Motivos de punição (o bot avisa para cadastrar o motivo e o tempo, ou como "Neutro"). Recusar vale com qualquer motivo. Desligada, aceita com qualquer motivo.' },
           'bot-provas-motivo', interruptor(edicao, 'provasExigirMotivo', 'bot-provas-motivo', { ligado: 'Exige motivo', desligado: 'Aceita qualquer' }), null,
           { valor: edicao.provasExigirMotivo, mudou: edicao.provasExigirMotivo !== antes.provasExigirMotivo }),
+        linha({ nome: 'Botão de ticket de revisão', explica: `Ligado, o tópico da denúncia ganha o botão "Abrir Ticket" ao lado de Finalizar: quem clicar recebe um ticket de revisão no bot de tickets, já com o link e o motivo da denúncia. Desligado, o botão some das denúncias novas e o das antigas avisa que está desativado.${painel.valores.channels.ponteTickets ? '' : ' Ainda não aparece: falta escolher o canal "Ponte com o bot de tickets" em Canais de outros servidores.'}` },
+          'bot-botao-ticket', interruptor(edicao, 'botaoTicket', 'bot-botao-ticket', { ligado: 'Mostra o botão', desligado: 'Sem botão' }), null,
+          { valor: edicao.botaoTicket, mudou: edicao.botaoTicket !== antes.botaoTicket }),
         linha({ nome: 'Arquivar tópicos sem mensagem', explica: 'Tempo sem mensagem até o tópico de uma denúncia nova ser arquivado. Arquivado, ele some da lista do lado no Discord, mas continua aberto pelo link e volta sozinho quando alguém escreve. Vale para as denúncias abertas depois de salvar.' },
           'bot-arquivar', el('select', {
             id: 'bot-arquivar',

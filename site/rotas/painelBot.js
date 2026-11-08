@@ -17,10 +17,9 @@ const { getUsuariosIsentos, salvarUsuariosIsentos, normalizarIds } = require('..
 const { acessoAoServidor, limparCacheDeAcesso } = require('../acesso');
 const { resolverPessoas, ErroHttp, assincrono } = require('./comum');
 const { obterTabela } = require('../../services/ponteSamp/motivos');
-
 // Canais do próprio servidor (escolhidos numa lista) e de outros servidores (pelo ID).
 const CANAIS_LOCAIS = ['pc', 'mobile', 'logs', 'log', 'backup', 'armazem', 'analysis', 'topDaily', 'relatorioPunicoes', 'provasStaff'];
-const CANAIS_EXTERNOS = ['registro', 'cloud', 'canalDenuncia'];
+const CANAIS_EXTERNOS = ['registro', 'cloud', 'canalDenuncia', 'ponteTickets'];
 const CANAIS_OBRIGATORIOS = ['pc', 'mobile', 'logs'];
 const CARGOS = ['permitido', 'pc', 'administrador', 'suporte', 'responsavel_admin', 'fundador'];
 const CARGOS_OBRIGATORIOS = ['permitido', 'pc', 'responsavel_admin'];
@@ -91,6 +90,7 @@ function validarPainel(entrada, { atual = {}, canais, cargos, canaisVisiveis, ca
     topicosPrivados: entrada?.topicosPrivados !== false,
     senhaCadeiaStaff: entrada?.senhaCadeia === true,
     provasExigirMotivo: entrada?.provasExigirMotivo !== false,
+    botaoTicketRevisao: entrada?.botaoTicket !== false,
     isentos
   };
 }
@@ -170,6 +170,7 @@ function registrarRotasDoPainelDoBot(router, { client }) {
         topicosPrivados: config?.topicosPrivados !== false,
         senhaCadeia: config?.senhaCadeiaStaff === true,
         provasExigirMotivo: config?.provasExigirMotivo !== false,
+        botaoTicket: config?.botaoTicketRevisao !== false,
         isentos: isentos.map(id => ({ id, nome: pessoas[id]?.nome || null }))
       },
       canais: [...guild.channels.cache.values()]
@@ -291,7 +292,7 @@ async function salvarPainel(client, acesso, entrada, usuarioId, { manterIsentos 
   }
 
   const quem = member.user?.tag || usuarioId;
-  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, minutosEntreDenuncias: novo.minutosEntreDenuncias, avisoReivindicacao: novo.avisoReivindicacao, minutosAvisoReivindicacao: novo.minutosAvisoReivindicacao, minutosArquivarTopico: novo.minutosArquivarTopico, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, analiseAutomatica: novo.analiseAutomatica, minutosAnaliseAutomatica: novo.minutosAnaliseAutomatica, topicosPrivados: novo.topicosPrivados, senhaCadeiaStaff: novo.senhaCadeiaStaff, provasExigirMotivo: novo.provasExigirMotivo, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
+  const ajustes = { manutencaoDenuncia: novo.manutencaoDenuncia, bloquearReivindicacaoComPendentes: novo.bloquearReivindicacaoComPendentes, siteSomenteLeitura: novo.siteSomenteLeitura, alertaMotivoCritico: novo.alertaMotivoCritico, esperaEntreDenuncias: novo.esperaEntreDenuncias, minutosEntreDenuncias: novo.minutosEntreDenuncias, avisoReivindicacao: novo.avisoReivindicacao, minutosAvisoReivindicacao: novo.minutosAvisoReivindicacao, minutosArquivarTopico: novo.minutosArquivarTopico, esperaEntreReivindicacoes: novo.esperaEntreReivindicacoes, minutosEntreReivindicacoes: novo.minutosEntreReivindicacoes, analiseAutomatica: novo.analiseAutomatica, minutosAnaliseAutomatica: novo.minutosAnaliseAutomatica, topicosPrivados: novo.topicosPrivados, senhaCadeiaStaff: novo.senhaCadeiaStaff, provasExigirMotivo: novo.provasExigirMotivo, botaoTicketRevisao: novo.botaoTicketRevisao, lastUpdated: new Date(), updatedBy: `${quem} (site)` };
   for (const [chave, valor] of Object.entries(novo.channels)) ajustes[`channels.${chave}`] = valor;
   for (const [chave, valor] of Object.entries(novo.roles)) ajustes[`roles.${chave}`] = valor;
 

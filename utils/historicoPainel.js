@@ -5,7 +5,8 @@ const PainelHistorico = require('../models/PainelHistorico');
 const CANAIS = {
   pc: 'Canal Denúncias PC', mobile: 'Canal Denúncias Mobile', logs: 'Canal Cadeia Staff', log: 'Canal Log administrativo',
   analysis: 'Canal Em análise', topDaily: 'Canal Top diário', relatorioPunicoes: 'Canal Relatório de punições', provasStaff: 'Canal Provas da staff',
-  backup: 'Canal Backup', armazem: 'Canal Armazém', registro: 'Canal Registro', cloud: 'Canal Cloud', canalDenuncia: 'Canal fixo de denúncias'
+  backup: 'Canal Backup', armazem: 'Canal Armazém', registro: 'Canal Registro', cloud: 'Canal Cloud', canalDenuncia: 'Canal fixo de denúncias',
+  ponteTickets: 'Canal ponte com o bot de tickets'
 };
 const CARGOS = { pc: 'Cargo PC', permitido: 'Cargo Mobile', administrador: 'Cargo Staff', responsavel_admin: 'Cargo Responsável', fundador: 'Cargo Fundador', suporte: 'Cargo Suporte' };
 const OPCOES = {
@@ -24,7 +25,8 @@ const OPCOES = {
   minutosArquivarTopico: 'Arquivar tópicos após (minutos)',
   topicosPrivados: 'Tópicos privados',
   senhaCadeiaStaff: 'Senha na Cadeia Staff',
-  provasExigirMotivo: 'Provas só com motivo da tabela'
+  provasExigirMotivo: 'Provas só com motivo da tabela',
+  botaoTicketRevisao: 'Botão de ticket de revisão'
 };
 
 const texto = (valor) => {

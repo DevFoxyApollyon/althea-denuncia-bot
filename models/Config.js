@@ -23,7 +23,9 @@ const configSchema = new mongoose.Schema({
     // Histórico das punições aplicadas pelo painel do jogo (vazio: usa o Log Admin).
     relatorioPunicoes: { type: String, required: false, default: '' },
     // Canal fixo do /provastaff (provas da staff).
-    provasStaff: { type: String, required: false, default: '' }
+    provasStaff: { type: String, required: false, default: '' },
+    // Canal ponte com o bot de tickets: o Althea pede o ticket aqui e o outro bot responde.
+    ponteTickets: { type: String, required: false, default: '' }
   },
   manutencaoDenuncia: { type: Boolean, default: false },
   bloquearReivindicacaoComPendentes: { type: Boolean, default: true },
@@ -47,6 +49,9 @@ const configSchema = new mongoose.Schema({
   // Denúncia com todos os acusados identificados abre em tópico privado. Desligado,
   // abre em tópico público (só as partes e a staff falam nele, como antes).
   topicosPrivados: { type: Boolean, default: true },
+  // Botão "Abrir Ticket" no tópico da denúncia (pede um ticket de revisão ao bot de
+  // tickets). Só aparece com o canal ponteTickets configurado.
+  botaoTicketRevisao: { type: Boolean, default: true },
   // Aceitar e Recusar da Cadeia Staff pedem a senha pessoal da staff (30 min liberado).
   senhaCadeiaStaff: { type: Boolean, default: false },
   // Mensagem do painel do /provastaff (sai e volta no fim do canal a cada registro).

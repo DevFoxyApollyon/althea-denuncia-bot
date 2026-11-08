@@ -22,6 +22,7 @@ const {
 } = require('../Handlers/handlerStatusButton');
 
 const { handleExportButton } = require('../Handlers/exportDenuncia');
+const { BOTAO_ABRIR_TICKET, handleAbrirTicket } = require('./ticketExterno');
 const { MODAL_MOTIVOS, handlePonteMotivosModal } = require('../commands/ponte');
 const { handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, handleIncertoDaPunicaoGm } = require('./ponteGamemode');
 const { BOTAO_INCERTO_OK, BOTAO_INCERTO_REENVIAR } = require('../services/ponteSamp/incertosGm');
@@ -444,6 +445,7 @@ const ROTAS = {
       consulta_denuncias_id: handleMyDenunciasButton,
       reivindicar: handleClaimButton,
       finalizar_denuncia: handleExportButton,
+      [BOTAO_ABRIR_TICKET]: (interaction) => handleAbrirTicket(interaction),
       aceitar: handleStatusChange,
       recusar: handleStatusChange,
       analiser: handleStatusChange,

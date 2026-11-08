@@ -277,6 +277,7 @@ const painelDoBot = {
     arquivarTopico: 1440,
     senhaCadeia: false,
     provasExigirMotivo: true,
+    botaoTicket: true,
     isentos: [{ id: '200000000000000200', nome: 'Lucas Prado' }]
   },
   canais: [

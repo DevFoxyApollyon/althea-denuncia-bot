@@ -35,7 +35,8 @@ const NECESSARIAS = {
   armazem: { perms: [...BASE, P.AttachFiles, ...TOPICOS], para: 'Criar a cópia (tópico espelho) de cada denúncia.' },
   registro: { perms: [...BASE, P.AttachFiles, ...TOPICOS], para: 'Criar a cópia (tópico espelho) de cada denúncia.' },
   cloud: { perms: [...BASE, P.AttachFiles], para: 'Enviar o arquivo da denúncia finalizada.' },
-  canalDenuncia: { perms: [...BASE, P.ManageMessages], para: 'Manter a mensagem do /denuncia com os botões.' }
+  canalDenuncia: { perms: [...BASE, P.ManageMessages], para: 'Manter a mensagem do /denuncia com os botões.' },
+  ponteTickets: { perms: BASE, para: 'Pedir tickets ao bot de tickets e ler a resposta.' }
 };
 
 // Cada canal configurado: { chave, canalId, nome, situacao: 'ok'|'falta'|'sumiu', faltando: [nomes], para }.

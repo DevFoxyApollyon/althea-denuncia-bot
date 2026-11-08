@@ -429,6 +429,8 @@ test('painel do bot: valida canais, cargos e isentos antes de salvar', () => {
   assert.throws(() => validarPainel({ ...entrada(), minutosDenuncia: 0 }, servidor), /de 1 a 60 minutos/);
   assert.equal(validarPainel(entrada(), servidor).topicosPrivados, true, 'tópicos privados ligados por padrão');
   assert.equal(validarPainel({ ...entrada(), topicosPrivados: false }, servidor).topicosPrivados, false);
+  assert.equal(validarPainel(entrada(), servidor).botaoTicketRevisao, true, 'botão de ticket ligado por padrão');
+  assert.equal(validarPainel({ ...entrada(), botaoTicket: false }, servidor).botaoTicketRevisao, false);
   assert.throws(() => validarPainel({ ...entrada(), minutosReivindicar: 2.5 }, servidor), /de 1 a 60 minutos/);
   assert.equal(limpo.channels.backup, '900000000000000009', 'valor que não mudou é mantido mesmo fora do servidor');
   assert.equal(limpo.channels.analysis, '');
