@@ -72,13 +72,25 @@ function rotularTabelas(raizBusca = document) {
 }
 const aviso = (texto) => { $('#aviso').textContent = texto || ''; };
 
+// Resposta que demora mais de 20 s desiste com um aviso claro (a hospedagem devolveria 408).
 async function api(caminho, opcoes = {}) {
-  const resposta = await fetch(`/admin/api${caminho}`, {
-    ...opcoes,
-    headers: { 'Content-Type': 'application/json', ...(opcoes.method ? { 'X-CSRF': csrf } : {}) },
-    credentials: 'same-origin'
-  });
+  const parar = new AbortController();
+  const relogio = setTimeout(() => parar.abort(), 20000);
+  let resposta;
+  try {
+    resposta = await fetch(`/admin/api${caminho}`, {
+      ...opcoes,
+      headers: { 'Content-Type': 'application/json', ...(opcoes.method ? { 'X-CSRF': csrf } : {}) },
+      credentials: 'same-origin',
+      signal: parar.signal
+    });
+  } catch (erro) {
+    throw new Error(erro.name === 'AbortError' ? 'O servidor demorou para responder. Tente de novo em instantes.' : 'Sem conexão com o servidor.');
+  } finally {
+    clearTimeout(relogio);
+  }
   const corpo = await resposta.json().catch(() => ({}));
+  if (resposta.status === 408 || resposta.status === 504) throw new Error('O servidor demorou para responder. Tente de novo em instantes.');
   if (!resposta.ok) throw new Error(corpo.erro || `Erro ${resposta.status}`);
   return corpo;
 }

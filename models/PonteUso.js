@@ -17,5 +17,7 @@ const ponteUsoSchema = new mongoose.Schema({
 
 ponteUsoSchema.index({ guildId: 1, em: -1 });
 ponteUsoSchema.index({ em: -1 });
+// Painel da ponte: última aplicada e logs da gamemode por ação.
+ponteUsoSchema.index({ acao: 1, em: -1 });
 
 module.exports = modelSecundario('PonteUso', ponteUsoSchema, 'ponteusos');

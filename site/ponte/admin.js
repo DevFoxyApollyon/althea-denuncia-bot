@@ -46,6 +46,15 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   router.get(['/admin.js', '/admin.css'], (req, res) => res.sendFile(path.join(PASTA, path.basename(req.path))));
 
   router.use('/api', express.json({ limit: '8kb' }));
+  // Rota do painel que demora (banco ou Discord lentos) fica no log, com o tempo, para saber qual é.
+  router.use('/api', (req, res, next) => {
+    const inicio = Date.now();
+    res.on('finish', () => {
+      const ms = Date.now() - inicio;
+      if (ms >= 2000) log?.warn?.(`[Painel] ${req.method} /admin/api${req.path} levou ${(ms / 1000).toFixed(1)} s (status ${res.statusCode}).`);
+    });
+    next();
+  });
   router.get('/api/csrf', (req, res) => {
     res.json({ csrf: criarToken({ sid: req.sid, csrf: true }, config.segredo, DURACAO_CSRF_MS), dono: req.dono });
   });
@@ -113,11 +122,12 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   router.get('/api/servidores', rota(async (req, res) => {
     const [servidores, ultimos] = await Promise.all([
       PonteServidor.find().sort({ ativadoEm: -1 }).limit(500).lean(),
+      // Último uso de cada servidor nos últimos 30 dias (sem olhar a auditoria inteira).
       PonteUso.aggregate([
-        { $match: { guildId: { $ne: '' }, acao: { $nin: ACOES_ROTINA } } },
+        { $match: { em: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, guildId: { $ne: '' }, acao: { $nin: ACOES_ROTINA } } },
         { $sort: { em: -1 } },
         { $group: { _id: '$guildId', registro: { $first: '$$ROOT' } } }
-      ])
+      ]).allowDiskUse(true)
     ]);
     const ultimoPorGuild = new Map(ultimos.map(u => [u._id, u.registro]));
     const [autor, ativadores] = await Promise.all([
@@ -151,7 +161,7 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
         { $group: { _id: { guildId: '$guildId', status: '$status' }, total: { $sum: 1 } } }
       ]),
       PonteUso.aggregate([
-        { $match: { guildId: { $in: guilds }, acao: 'gm_resultado' } },
+        { $match: { acao: 'gm_resultado', guildId: { $in: guilds } } },
         { $sort: { em: -1 } },
         { $group: { _id: '$guildId', em: { $first: '$em' }, acao: { $first: '$acao' }, nick: { $first: '$nick' }, contaId: { $first: '$contaId' } } }
       ]),
