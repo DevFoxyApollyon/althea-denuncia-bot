@@ -212,6 +212,11 @@ async function registrarAplicada(pedido, conexao, dados, agora) {
   return item;
 }
 
+// Ban permanente que a gamemode recusou porque a conta já estava banida: o resultado é o
+// mesmo de aplicado (a conta fica banida), então conta como aplicado no relatório.
+const permanenteJaBanido = (p) => p.status === 'recusada' && p.codigo === 'JA_BANIDO' && p.tipo === 'ban' && Number(p.tempo) === 0;
+const contaComoAplicado = (p) => p.status === 'aplicada' || permanenteJaBanido(p);
+
 // Quando o último pedido de cada alvo tem resposta final, a punição sai de "executando":
 // aplicada se ao menos um foi aplicado; senão volta para "aceita" (a staff decide de novo).
 async function fecharPunicaoSePronta({ client, punicaoId, conexao, agora = Date.now() }) {
@@ -221,10 +226,10 @@ async function fecharPunicaoSePronta({ client, punicaoId, conexao, agora = Date.
   const lista = [...ultimos.values()];
   if (lista.length === 0 || !lista.every(p => STATUS_FINAIS.includes(p.status))) return null;
 
-  const algumAplicado = lista.some(p => p.status === 'aplicada');
+  const algumAplicado = lista.some(contaComoAplicado);
   // Fechada por um cancelamento no Discord: o nome vem da conexão que aplicou.
   if (!conexao) {
-    const aplicou = lista.find(p => p.status === 'aplicada' && p.conexaoId);
+    const aplicou = lista.find(p => contaComoAplicado(p) && p.conexaoId);
     conexao = (aplicou && await PonteConexaoGm.findById(aplicou.conexaoId, { nome: 1 }).lean()) || { nome: 'gamemode' };
   }
   const nomePc = `gamemode:${conexao.nome}`;
@@ -239,7 +244,7 @@ async function fecharPunicaoSePronta({ client, punicaoId, conexao, agora = Date.
   if (punicao.status === 'aplicada') {
     require('./incertosGm').apagarAvisosDeIncerto(client, punicaoId).catch(() => {});
     marcarAplicadaNoDiscord(client, punicao, `➱ Aplicado (gamemode: ${conexao.nome})`).catch(() => {});
-    const aplicados = new Set(lista.filter(p => p.status === 'aplicada').map(p => String(p.alvoId)));
+    const aplicados = new Set(lista.filter(contaComoAplicado).map(p => String(p.alvoId)));
     const itens = (punicao.resultado || []).filter(r => r.ok && aplicados.has(String(r.alvoId)) && String(r.pc || '').startsWith('gamemode:'));
     avisarAplicadas(client, punicao, itens, nomePc).catch(() => {});
   }
@@ -288,7 +293,7 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   }
 
   // Desbanimento não entra no histórico de punições aplicadas.
-  if (pedido.status === 'aplicada' && ['ban', 'cadeia'].includes(pedido.tipo)) await registrarAplicada(pedido, conexao, dados, agora);
+  if ((pedido.status === 'aplicada' && ['ban', 'cadeia'].includes(pedido.tipo)) || permanenteJaBanido(pedido)) await registrarAplicada(pedido, conexao, dados, agora);
   if (STATUS_FINAIS.includes(pedido.status)) await fecharPunicaoSePronta({ client, punicaoId: pedido.punicaoId, conexao, agora });
   // TIMEOUT: espera uma resposta atrasada e depois tenta de novo (uma vez; ver verificarIncertos).
   let reenvio = null;
@@ -301,8 +306,39 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   return { http: 200, pedido, novo: true, alerta, reenvio };
 }
 
+// Punições antigas que ficaram em "Ban permanente já setado" (antes de JA_BANIDO no permanente
+// contar como aplicado): passam a aplicadas, com o aviso "Banimento aplicado" no Relatório de
+// punições. Roda ao iniciar; sem nenhuma assim, não muda nada.
+async function fecharBansJaSetados(client) {
+  const PonteConexaoGm = require('../../models/PonteConexaoGm');
+  let fechadas = 0;
+  const pendentes = await PontePunicao.find({ status: 'aceita' }).sort({ criadoEm: 1 }).limit(200).lean();
+  for (const punicao of pendentes) {
+    const ativos = (punicao.alvos || []).filter(a => !a.removido);
+    if (!ativos.length || !ativos.every(a => a.cmd === 'ban' && Number(a.tempo) === 0)) continue;
+    const pedidos = await PontePedidoGm.find({ punicaoId: punicao._id }).sort({ rodada: -1 }).lean();
+    const ultimos = ativos.map(a => pedidos.find(p => String(p.alvoId) === String(a._id)));
+    if (!ultimos.every(p => p && permanenteJaBanido(p))) continue;
+    const conexao = await PonteConexaoGm.findById(ultimos[0].conexaoId, { nome: 1 }).lean() || { nome: 'gamemode' };
+    // Só quem tomou a punição ainda: o update protege de duas instâncias ao mesmo tempo.
+    const tomada = await PontePunicao.findOneAndUpdate({ _id: punicao._id, status: 'aceita' }, { $set: { status: 'executando', executor: 'gamemode' }, $inc: { versao: 1 } }).lean();
+    if (!tomada) continue;
+    for (const p of ultimos) {
+      if (!(punicao.resultado || []).some(r => String(r.alvoId) === String(p.alvoId) && r.ok)) {
+        await registrarAplicada(p, conexao, { nome: p.resultado?.nome || p.nick || '', organizacao: p.resultado?.organizacao || '', conta: p.resultado?.conta || p.conta }, new Date(p.respondidoEm || Date.now()).getTime());
+      }
+    }
+    if (await fecharPunicaoSePronta({ client, punicaoId: punicao._id, conexao })) {
+      fechadas++;
+      await require('./discordGm').atualizarMensagemGm(client, punicao._id).catch(() => {});
+    }
+  }
+  return fechadas;
+}
+
 module.exports = {
   LEASE_S,
+  fecharBansJaSetados,
   MAX_DEVOLUCOES,
   STATUS_FINAIS,
   CODIGOS,

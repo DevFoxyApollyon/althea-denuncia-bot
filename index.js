@@ -156,6 +156,8 @@ client.once('clientReady', async (readyClient) => {
     iniciarJobGamemode(client); // ponte com a gamemode: pedido sem resposta vira incerto e vai para o Log Admin
     // O PC da staff saiu da ponte: apaga os dados dele e passa o que ficou para a gamemode.
     if (ponteLigada()) limparDadosDoPc(client).catch(err => log.warn('Falha ao limpar os dados do PC da staff: ' + err.message));
+    // Ban permanente que ficou em "já setado": vira "Banimento aplicado" no Relatório de punições.
+    if (ponteLigada()) require('./services/ponteSamp/pedidosGm').fecharBansJaSetados(client).catch(err => log.warn('Falha ao fechar os bans permanentes já setados: ' + err.message));
     servidorDoSite = iniciarSite(client, log);
 
     readyClient.user.setPresence({

@@ -2047,3 +2047,47 @@ test('banir ou expulsar o dono do bot de um servidor bloqueia quem fez', async (
   await bloqueioBot.desbloquear('300000000000000990');
   await bloqueioBot.desbloquear('300000000000000991');
 });
+
+test('ban permanente com a conta já banida (JA_BANIDO) vira "Banimento aplicado"; as antigas "já setado" também', async () => {
+  const { registrarResultado, fecharBansJaSetados } = require('../services/ponteSamp/pedidosGm');
+  const guildId = '100000000000000995';
+  const { conexao } = await guildGm(guildId);
+  await comLogAdmin(guildId);
+  const { client, enviadas } = discordComDm();
+  const permanente = [{ contaId: '1270234', cmd: 'ban', tempo: 0, avisos: 0, motivo: 'MOD PROIBIDO', regra: 'MOD PROIBIDO' }];
+
+  // Resposta nova: fecha como aplicada e manda o aviso de banimento aplicado.
+  const nova = await punicaoAceita(guildId, permanente);
+  await discordGm().enviarAoJogo({ punicaoId: nova._id, guildId, staff: staffA });
+  const pedido = await m.PontePedidoGm.findOneAndUpdate({ punicaoId: nova._id }, { $set: { status: 'entregue', conexaoId: conexao._id, entregueEm: new Date() } }, { new: true }).lean();
+  const r = await registrarResultado({ client, conexao, pedidoId: String(pedido._id), dados: { status: 'recusada', codigo: 'JA_BANIDO', nome: 'QuelitaDelgado', organizacao: '', conta: 1270234 } });
+  assert.equal(r.http, 200);
+  const fechada = await m.PontePunicao.findById(nova._id).lean();
+  assert.equal(fechada.status, 'aplicada');
+  assert.equal(fechada.resultado[0].ok, true);
+  await new Promise(resolve => setTimeout(resolve, 200)); // o aviso sai sem segurar a resposta
+  const aviso = enviadas.map(e => e.embeds?.[0]?.toJSON?.()).find(e => e?.title?.includes('Banimento aplicado'));
+  assert.ok(aviso, 'o Relatório de punições recebe "Banimento aplicado"');
+  assert.match(aviso.description, /QuelitaDelgado/);
+
+  // Antiga, parada em "já setado" (aceita, com o pedido recusado JA_BANIDO): fecha ao iniciar.
+  enviadas.length = 0;
+  const antiga = await punicaoAceita(guildId, permanente);
+  await m.PontePedidoGm.create({
+    punicaoId: antiga._id, alvoId: antiga.alvos[0]._id, rodada: 1, denunciaId: antiga.denunciaId, guildId, tipo: 'ban', conta: 1270234, nick: '', tempo: 0, avisos: 0,
+    motivo: 'MOD PROIBIDO [DC]', aprovadoPor: 'Joao_Staff', teste: false, status: 'recusada', codigo: 'JA_BANIDO', conexaoId: conexao._id, respondidoEm: new Date(),
+    resultado: { nome: 'QuelitaDelgado', organizacao: '', conta: 1270234 }
+  });
+  // Uma temporária recusada JA_BANIDO não muda (pode ser outra punição que baniu).
+  const temporaria = await punicaoAceita(guildId, [{ contaId: '5', cmd: 'ban', tempo: 3, avisos: 1, motivo: 'SAAV', regra: 'SAAV' }]);
+  await m.PontePedidoGm.create({
+    punicaoId: temporaria._id, alvoId: temporaria.alvos[0]._id, rodada: 1, denunciaId: temporaria.denunciaId, guildId, tipo: 'ban', conta: 5, nick: '', tempo: 3, avisos: 1,
+    motivo: 'SAAV [DC]', aprovadoPor: 'Joao_Staff', teste: false, status: 'recusada', codigo: 'JA_BANIDO', conexaoId: conexao._id, respondidoEm: new Date()
+  });
+  assert.ok(await fecharBansJaSetados(client) >= 1);
+  assert.equal((await m.PontePunicao.findById(antiga._id).lean()).status, 'aplicada');
+  assert.equal((await m.PontePunicao.findById(temporaria._id).lean()).status, 'aceita');
+  await new Promise(resolve => setTimeout(resolve, 200));
+  assert.ok(enviadas.some(e => e.embeds?.[0]?.toJSON?.().title?.includes('Banimento aplicado')));
+  assert.equal(await fecharBansJaSetados(client), 0, 'rodar de novo não muda nada');
+});
