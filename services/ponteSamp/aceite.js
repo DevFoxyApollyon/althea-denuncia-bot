@@ -253,6 +253,60 @@ async function limparAguardando(client, punicao) {
   });
 }
 
+// Mensagem da Cadeia Staff da denúncia: a gravada no aceite pela Cadeia Staff ou, se a
+// punição nasceu no tópico, a do log da denúncia (ou do registro das provas da staff).
+async function mensagemDaCadeia(punicao) {
+  const Denuncia = require('../../models/Denuncia');
+  const DenunciaStaff = require('../../models/DenunciaStaff');
+  const [denuncia, provas] = await Promise.all([
+    Denuncia.findById(punicao.denunciaId, { messageId: 1, logMessageId: 1 }).lean().catch(() => null),
+    DenunciaStaff.findById(punicao.denunciaId, { messageId: 1, cadeia: 1 }).lean().catch(() => null)
+  ]);
+  const messageId = denuncia?.messageId || provas?.messageId || '';
+  if (!messageId) return null;
+  const { canalId, canalMsgId } = punicao.mensagens || {};
+  if (canalId && canalMsgId) return { canalId, msgId: canalMsgId, messageId, provasId: provas?._id || null };
+  if (provas?.cadeia?.msgId) return { canalId: provas.cadeia.canalId, msgId: provas.cadeia.msgId, messageId, provasId: provas._id };
+  if (denuncia?.logMessageId) {
+    const config = await require('../../utils/configCache').getConfig(punicao.guildId).catch(() => null);
+    if (config?.channels?.logs) return { canalId: config.channels.logs, msgId: denuncia.logMessageId, messageId, provasId: null };
+  }
+  return null;
+}
+
+// Envio cancelado: a mensagem da Cadeia Staff volta a ser como antes do aceite (sem o
+// "||data|| por @fulano", sem as linhas da ponte e com Aceitar e Recusar), para alguém
+// aceitar de novo como da primeira vez. Devolve true se a mensagem foi refeita.
+async function voltarParaCadeiaStaff(client, punicao) {
+  if (!client || !punicao) return false;
+  const alvo = await mensagemDaCadeia(punicao);
+  if (!alvo?.canalId) return false;
+  const canal = await client.channels.fetch(alvo.canalId).catch(() => null);
+  const msg = canal?.messages ? await canal.messages.fetch(alvo.msgId).catch(() => null) : null;
+  if (!msg) return false;
+
+  const linhasDaPonte = [AGUARDANDO, AGUARDANDO_ANTIGO, LIBERADO];
+  let texto = String(msg.content || '').split('\n')
+    .filter(l => !linhasDaPonte.includes(l.trim()) && !l.trim().startsWith('➱ Aplicado'))
+    .join('\n');
+  // Tira só a última confirmação ("||08/11/2026 16:25|| por @fulano"): é a do aceite.
+  const confirmacoes = [...texto.matchAll(/ \|\|[^|\n]+\|\| por <@!?\d+>/g)];
+  const ultima = confirmacoes[confirmacoes.length - 1];
+  if (ultima) texto = texto.slice(0, ultima.index) + texto.slice(ultima.index + ultima[0].length);
+
+  // O "Entrar no tópico" (tópico privado) continua ao lado de Aceitar e Recusar.
+  const entrar = (msg.components || []).flatMap(l => l.components || []).find(b => String(b.customId || '').startsWith('entrar_topico:'));
+  const threadPrivado = entrar ? String(entrar.customId).split(':')[1]
+    : punicao.mensagens?.topicoPrivado ? punicao.mensagens.topicoId : null;
+  const { createLogActionRow } = require('../../Handlers/statusDenuncia/mensagensStatus');
+  const editada = await msg.edit({ content: corta(texto.trim() || '​', 2000), components: [createLogActionRow(alvo.messageId, false, threadPrivado || null)] })
+    .then(() => true).catch(e => { log.warn('Falha ao devolver a mensagem para a Cadeia Staff', e?.message); return false; });
+  if (editada && alvo.provasId) {
+    await require('../../models/DenunciaStaff').updateOne({ _id: alvo.provasId }, { $set: { 'cadeia.status': '' } }).catch(() => {});
+  }
+  return editada;
+}
+
 // Motivo que estava fora da tabela e passou a existir (cadastrado no site ou no Discord),
 // ou motivo da tabela que mudou de punição: o jogador ganha tipo, tempo e avisos da tabela
 // atual. Não mexe em quem foi editado à mão (regra "editado por ...") nem em quem está sem motivo. Quando a denúncia inteira fica com regra, a
@@ -288,4 +342,4 @@ async function reclassificarFila({ client = null, lista = null, tabela = null } 
   return fila;
 }
 
-module.exports = { registrarAceite, atualizarMensagensDiscord, marcarAplicadaNoDiscord, limparAguardando, montarAlvos, motivosPorAcusado, reclassificarFila };
+module.exports = { registrarAceite, atualizarMensagensDiscord, marcarAplicadaNoDiscord, limparAguardando, montarAlvos, motivosPorAcusado, reclassificarFila, voltarParaCadeiaStaff };

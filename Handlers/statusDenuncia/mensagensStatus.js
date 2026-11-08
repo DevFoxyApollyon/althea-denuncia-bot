@@ -438,4 +438,5 @@ module.exports = {
   statusConfig,
   sendReanaliseNotice,
   manageStatusMessages,
+  createLogActionRow,
 };

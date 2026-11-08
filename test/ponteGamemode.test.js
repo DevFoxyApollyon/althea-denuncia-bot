@@ -698,6 +698,39 @@ test('cancelar: antes do envio cancela a punição; depois, cancela o que a game
   assert.deepEqual([fechada.status, fechada.executor], ['aceita', ''], 'nenhum aplicado: volta a esperar envio');
 });
 
+test('cancelar envio: a denúncia volta para a Cadeia Staff com Aceitar e Recusar; aceitar de novo reenvia', async () => {
+  const Denuncia = require('../models/Denuncia');
+  const { registrarAceite } = require('../services/ponteSamp/aceite');
+  const guildId = '100000000000000869';
+  const { conexao, segredo } = await guildGm(guildId);
+  const denunciaId = new mongoose.Types.ObjectId();
+  await Denuncia.collection.insertOne({ _id: denunciaId, guildId, status: 'aceita', messageId: '600000000000000021', threadId: '600000000000000022', acusadoId: '472860', motivoAceite: 'DM' });
+  // Mensagem da Cadeia Staff depois do aceite: confirmação no fim e só o "Entrar no tópico".
+  const original = '➱ Denúncia aceita Acusado (472860) tomará punição por (DM) Data 08/11 Link:|| https://discord.com/x ||';
+  const msg = {
+    content: `${original} ||08/11/2026 16:25|| por <@300000000000000001>`,
+    components: [{ components: [{ customId: 'entrar_topico:600000000000000022' }] }],
+    edit: async ({ content, components }) => { msg.content = content; msg.components = components.map(l => l.toJSON()).map(l => ({ components: l.components.map(b => ({ customId: b.custom_id })) })); return msg; }
+  };
+  const client = { channels: { fetch: async (id) => (id === '400000000000000069' ? { messages: { fetch: async () => msg } } : null) } };
+  const { punicao } = await registrarAceite({ client: null, denuncia: { _id: denunciaId, guildId, acusadoId: '472860', motivoAceite: 'DM', messageId: '600000000000000021', threadId: '600000000000000022' },
+    origem: 'canal_staff', staff: staffA, canalMensagem: { channelId: '400000000000000069', id: '500000000000000069' } });
+  await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId, staff: staffA });
+
+  const r = await discordGm().cancelarGm({ client, punicaoId: punicao._id, guildId, staff: staffA });
+  assert.equal(r.voltouParaCadeia, true);
+  assert.equal(msg.content, original, 'sem o "por @fulano"');
+  assert.deepEqual(msg.components[0].components.map(b => b.customId), ['log_aceitar_600000000000000021', 'log_recusar_600000000000000021', 'entrar_topico:600000000000000022']);
+  assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'cancelada');
+  assert.equal((await chamar(conexao, segredo, '/pedidos')).corpo.pedidos.length, 0, 'nada vai para a gamemode');
+
+  // Aceitar de novo na Cadeia Staff: a punição reabre e o envio sai normal.
+  const denovo = await registrarAceite({ client: null, denuncia: { _id: denunciaId, guildId, acusadoId: '472860', motivoAceite: 'DM' }, origem: 'canal_staff', staff: staffA });
+  assert.equal(denovo.reaberta, true);
+  assert.equal((await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId, staff: staffA })).ok, true);
+  assert.equal((await chamar(conexao, segredo, '/pedidos')).corpo.pedidos.length, 1);
+});
+
 test('reenvio depois de simulada cria a rodada 2; embed mostra o estado de cada alvo', async () => {
   const { conexao, segredo } = await guildGm('866');
   const punicao = await punicaoAceita('866');

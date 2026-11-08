@@ -56,6 +56,7 @@ async function handleCancelarGm(interaction) {
   const r = await gm.cancelarGm({ client: interaction.client, punicaoId, guildId: interaction.guild.id, staff: staffDe(interaction) });
   let texto;
   if (r.erro) texto = `❌ ${r.erro}`;
+  else if (r.voltouParaCadeia) texto = '✖️ Envio cancelado: a denúncia voltou para a Cadeia Staff com Aceitar e Recusar. Aceitar de novo envia ao jogo normalmente.';
   else if (r.status === 'cancelada') texto = '✖️ Punição cancelada: não vai para o jogo.';
   else texto = r.emAndamento
     ? `✖️ ${r.cancelados} pedido(s) cancelado(s). ${r.emAndamento} já estava(m) com a gamemode: o resultado deles ainda vai chegar.`

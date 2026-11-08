@@ -334,6 +334,8 @@ async function enviarAoJogo({ client = null, punicaoId, guildId, staff }) {
 
 // Botão "Cancelar": antes do envio, a punição não vai para o jogo; depois, cancela
 // o que a gamemode ainda não buscou (o que já foi entregue espera a resposta).
+// Sem nada aplicado nem com a gamemode, a denúncia volta para a Cadeia Staff como
+// antes do aceite (Aceitar e Recusar de novo); aceitar outra vez reabre e envia.
 async function cancelarGm({ client = null, punicaoId, guildId, staff }) {
   const punicao = await PontePunicao.findOne({ _id: punicaoId, guildId: String(guildId) }).lean();
   if (!punicao) return { erro: 'Punição não encontrada.' };
@@ -343,19 +345,31 @@ async function cancelarGm({ client = null, punicaoId, guildId, staff }) {
       { _id: punicao._id, status: 'aceita' }, { $set: { status: 'cancelada' }, $inc: { versao: 1 } }, { new: true }
     ).lean();
     if (!cancelada) return { erro: 'A punição mudou. Confira o embed.' };
-    require('./aceite').limparAguardando(client, cancelada).catch(() => {});
-    await auditar('gm_cancelar', punicao, staff, { etapa: 'antes_do_envio' });
+    const voltouParaCadeia = await require('./aceite').voltarParaCadeiaStaff(client, cancelada).catch(() => false);
+    if (!voltouParaCadeia) require('./aceite').limparAguardando(client, cancelada).catch(() => {});
+    await auditar('gm_cancelar', punicao, staff, { etapa: 'antes_do_envio', voltouParaCadeia });
     await atualizarMensagemGm(client, punicao._id).catch(() => {});
-    return { ok: true, status: 'cancelada' };
+    return { ok: true, status: 'cancelada', voltouParaCadeia };
   }
 
   if (punicao.status !== 'executando' || punicao.executor !== 'gamemode') return { erro: 'Esta punição não pode mais ser cancelada por aqui.' };
   const { modifiedCount } = await PontePedidoGm.updateMany({ punicaoId: punicao._id, status: 'aprovado' }, { $set: { status: 'cancelado' } });
   const emAndamento = await PontePedidoGm.countDocuments({ punicaoId: punicao._id, status: { $in: ['entregue', 'incerto'] } });
   await fecharPunicaoSePronta({ client, punicaoId: punicao._id });
-  await auditar('gm_cancelar', punicao, staff, { etapa: 'depois_do_envio', cancelados: modifiedCount, emAndamento });
+  // Tudo cancelado antes da gamemode buscar: a punição fica cancelada e a denúncia volta
+  // para a Cadeia Staff. Sem mensagem da Cadeia Staff (ex.: /tempban), volta a esperar envio.
+  let voltouParaCadeia = false;
+  if (!emAndamento) {
+    const devolvida = await PontePunicao.findOne({ _id: punicao._id, status: 'aceita' }).lean();
+    if (devolvida && await require('./aceite').voltarParaCadeiaStaff(client, devolvida).catch(() => false)) {
+      voltouParaCadeia = Boolean(await PontePunicao.findOneAndUpdate(
+        { _id: punicao._id, status: 'aceita', versao: devolvida.versao }, { $set: { status: 'cancelada' }, $inc: { versao: 1 } }
+      ).lean());
+    }
+  }
+  await auditar('gm_cancelar', punicao, staff, { etapa: 'depois_do_envio', cancelados: modifiedCount, emAndamento, voltouParaCadeia });
   await atualizarMensagemGm(client, punicao._id).catch(() => {});
-  return { ok: true, cancelados: modifiedCount, emAndamento };
+  return { ok: true, cancelados: modifiedCount, emAndamento, voltouParaCadeia };
 }
 
 // Modal de edição de um alvo: tipo, tempo, avisos e motivo. Passa pela mesma validação do aceite.
