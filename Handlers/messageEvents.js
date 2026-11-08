@@ -224,6 +224,8 @@ function registerMessageEvents(client, { log, getConfig }) {
         if (await handleYoutubeDenuncia(message)) return;
 
         if (!message.content.startsWith('!')) return;
+        // Bloqueado pelo dono do bot: os comandos com "!" também não funcionam.
+        if (await require('../services/bloqueioBot').estaBloqueado(message.author.id)) return;
 
         const args = message.content.slice(1).trim().split(/ +/);
         const commandName = args.shift().toLowerCase();

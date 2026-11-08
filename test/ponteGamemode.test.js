@@ -1970,3 +1970,80 @@ test('Adicionar o jogador: vários IDs com + viram um jogador cada, com o motivo
   assert.equal(r.ok, true);
   assert.deepEqual(r.punicao.alvos.map(a => [a.contaId, a.motivo, a.tempo]), [['1270101', 'CL', 3], ['360429', 'saav', 3]]);
 });
+
+test('/admin bloqueados: o dono bloqueia pelo ID; a pessoa não usa botões nem comandos; desbloquear libera', async () => {
+  process.env.OWNER_DISCORD_ID = DONO;
+  const ALVO = '300000000000000780';
+  const AMIGO = '300000000000000781';
+  const bloqueioBot = require('../services/bloqueioBot');
+  const { registerInteractionEvents } = require('../Handlers/interactionEvents');
+  // Interação falsa: só importa se o bot respondeu "bloqueado" ou seguiu para o handler.
+  let aoInteragir;
+  registerInteractionEvents({ on: (evento, fn) => { if (evento === 'interactionCreate') aoInteragir = fn; } }, { error: () => {}, warn: () => {} });
+  const clicar = async (userId) => {
+    const respostas = [];
+    await aoInteragir({
+      user: { id: userId }, customId: 'botao_que_nao_existe', isButton: () => true, isAutocomplete: () => false, isRepliable: () => true,
+      isChatInputCommand: () => false, isModalSubmit: () => false, replied: false, deferred: false,
+      reply: async (r) => respostas.push(r.content)
+    });
+    return respostas;
+  };
+
+  await comAdmin(async (pedir) => {
+    const { csrf } = (await pedir('/csrf')).corpo;
+    await pedir('/acessos', { metodo: 'POST', corpo: { userId: AMIGO }, csrf });
+    const doAmigo = (await pedir('/csrf', { usuario: AMIGO })).corpo.csrf;
+    assert.equal((await pedir('/bloqueios', { usuario: AMIGO })).status, 403, 'só o dono vê');
+    assert.equal((await pedir('/bloqueios', { usuario: AMIGO, metodo: 'POST', corpo: { userId: ALVO }, csrf: doAmigo })).status, 403, 'só o dono bloqueia');
+    assert.equal((await pedir('/bloqueios', { metodo: 'POST', corpo: { userId: 'abc' }, csrf })).status, 400);
+    assert.match((await pedir('/bloqueios', { metodo: 'POST', corpo: { userId: DONO }, csrf })).corpo.erro, /dono/);
+
+    assert.deepEqual(await clicar(ALVO), [], 'antes: segue para o bot');
+    assert.equal((await pedir('/bloqueios', { metodo: 'POST', corpo: { userId: ALVO, motivo: 'abuso' }, csrf })).corpo.ok, true);
+    assert.match((await pedir('/bloqueios', { metodo: 'POST', corpo: { userId: ALVO }, csrf })).corpo.erro, /já está bloqueada/);
+    assert.deepEqual((await pedir('/bloqueios')).corpo.map(b => [b.userId, b.motivo]), [[ALVO, 'abuso']]);
+    assert.equal(await bloqueioBot.estaBloqueado(ALVO), true);
+    assert.equal(await bloqueioBot.estaBloqueado(DONO), false);
+    assert.deepEqual(await clicar(ALVO), [bloqueioBot.AVISO_BLOQUEADO]);
+    assert.ok(await m.PonteUso.exists({ acao: 'gm_config', 'detalhes.sub': 'bloqueio_adicionar', 'detalhes.userId': ALVO }));
+
+    assert.equal((await pedir(`/bloqueios/${ALVO}/remover`, { metodo: 'POST', csrf })).corpo.ok, true);
+    assert.equal(await bloqueioBot.estaBloqueado(ALVO), false);
+    assert.deepEqual(await clicar(ALVO), []);
+    await pedir(`/acessos/${AMIGO}/remover`, { metodo: 'POST', csrf });
+  });
+});
+
+test('banir ou expulsar o dono do bot de um servidor bloqueia quem fez', async () => {
+  process.env.OWNER_DISCORD_ID = DONO;
+  const bloqueioBot = require('../services/bloqueioBot');
+  const { AuditLogEvent } = require('discord.js');
+  const guildCom = (registros) => ({
+    id: '100000000000000990', name: 'BRP Teste', client: { user: { id: '900000000000000999' } },
+    fetchAuditLogs: async ({ type }) => ({ entries: (registros[type] || []) })
+  });
+  const agora = Date.now();
+
+  // Expulsou o dono: bloqueado, com o motivo.
+  const kick = guildCom({ [AuditLogEvent.MemberKick]: [{ target: { id: DONO }, executor: { id: '300000000000000990', username: 'traira' }, createdTimestamp: agora }] });
+  assert.equal(await bloqueioBot.bloquearQuemTirouODono(kick, DONO, 'kick', { esperaMs: 0 }), '300000000000000990');
+  assert.equal(await bloqueioBot.estaBloqueado('300000000000000990'), true);
+  assert.match((await bloqueioBot.listarBloqueios()).find(b => b.userId === '300000000000000990').motivo, /Expulsou o dono do bot do servidor BRP Teste/);
+
+  // Baniu o dono: também.
+  const ban = guildCom({ [AuditLogEvent.MemberBanAdd]: [{ target: { id: DONO }, executor: { id: '300000000000000991' }, createdTimestamp: agora }] });
+  assert.equal(await bloqueioBot.bloquearQuemTirouODono(ban, DONO, 'ban', { esperaMs: 0 }), '300000000000000991');
+
+  // Outra pessoa expulsa, o dono saiu sozinho (sem registro) ou o próprio bot fez: nada.
+  assert.equal(await bloqueioBot.bloquearQuemTirouODono(kick, '300000000000000555', 'kick', { esperaMs: 0 }), null);
+  assert.equal(await bloqueioBot.bloquearQuemTirouODono(guildCom({}), DONO, 'kick', { esperaMs: 0 }), null);
+  const peloBot = guildCom({ [AuditLogEvent.MemberKick]: [{ target: { id: DONO }, executor: { id: '900000000000000999' }, createdTimestamp: agora }] });
+  assert.equal(await bloqueioBot.bloquearQuemTirouODono(peloBot, DONO, 'kick', { esperaMs: 0 }), null);
+  // Registro velho (outra expulsão): não conta.
+  const velho = guildCom({ [AuditLogEvent.MemberKick]: [{ target: { id: DONO }, executor: { id: '300000000000000992' }, createdTimestamp: agora - 3600e3 }] });
+  assert.equal(await bloqueioBot.bloquearQuemTirouODono(velho, DONO, 'kick', { esperaMs: 0 }), null);
+
+  await bloqueioBot.desbloquear('300000000000000990');
+  await bloqueioBot.desbloquear('300000000000000991');
+});

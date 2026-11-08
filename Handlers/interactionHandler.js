@@ -66,6 +66,7 @@ const DenunciaStaff = require('../models/DenunciaStaff');
 const { MINUTOS_ANALISE_AUTOMATICA } = require('../utils/esperas');
 const { registrarAlteracao } = require('../utils/historicoPainel');
 const { MODAL_SENHA, senhaCadeiaAtiva, situacaoDaSenha, modalDaSenha, validarSenha } = require('../utils/senhaStaff');
+const { ehDono } = require('../services/ponteSamp/gestao');
 
 async function handlePanelModalSubmit(interaction) {
   try {
@@ -410,9 +411,27 @@ async function recusaSemCargoResponsavel(interaction, config) {
   return false;
 }
 
+async function liberarSenhaDoJogo(interaction) {
+  const config = await getCachedConfig(interaction.guild.id);
+  const cargo = config?.roles?.responsavel_admin;
+  if (!ehDono(interaction.user.id) && !(cargo && interaction.member?.roles?.cache?.has(cargo))) {
+    return interaction.reply({ content: '🚫 Só o responsável (ou o dono do bot) usa os comandos que vão ao jogo.', flags: [64] });
+  }
+  let confirmar;
+  try { confirmar = interaction.fields.getTextInputValue('confirmar'); } catch { confirmar = undefined; }
+  const r = await validarSenha(interaction.user.id, { senha: interaction.fields.getTextInputValue('senha'), confirmar });
+  if (r.erro) return interaction.reply({ content: `🔒 ${r.erro}`, flags: [64] });
+  return interaction.reply({
+    content: `🔓 ${r.criada ? 'Senha criada.' : 'Senha certa.'} Liberado até <t:${Math.floor(r.liberadoAte.getTime() / 1000)}:t>: use o comando de novo.`,
+    flags: [64]
+  });
+}
+
 // Formulário da senha: criou ou acertou, libera por 30 minutos e faz o que a pessoa clicou.
 async function handleSenhaCadeiaModal(interaction) {
   const [acao, messageId] = interaction.customId.slice(MODAL_SENHA.length).split(':');
+  // Senha pedida pelo /tempban ou /desbanir: só libera; a pessoa usa o comando de novo.
+  if (acao === 'jogo') return liberarSenhaDoJogo(interaction);
   if (!['aceitar', 'recusar'].includes(acao) || !/^\d{15,21}$/.test(messageId || '')) return;
   if (!await recusaSemCargoResponsavel(interaction, await getCachedConfig(interaction.guild.id))) return;
   let confirmar;

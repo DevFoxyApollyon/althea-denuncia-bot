@@ -4,7 +4,9 @@ import { marca } from './marca.js';
 import { el, icone } from './util.js';
 
 export function telaEntrada() {
-  const falhou = new URLSearchParams(location.search).get('erro') === 'login';
+  const erro = new URLSearchParams(location.search).get('erro');
+  const falhou = erro === 'login';
+  const bloqueado = erro === 'bloqueado';
 
   return el('main', { class: 'entrada' },
     el('section', { class: 'entrada-apresentacao' },
@@ -18,6 +20,7 @@ export function telaEntrada() {
         el('h2', null, 'Entrar'),
         el('p', null, 'Use a mesma conta do Discord que você usa no servidor.'),
         falhou && el('div', { class: 'aviso erro', role: 'alert' }, 'O login não foi concluído. Tente de novo.'),
+        bloqueado && el('div', { class: 'aviso erro', role: 'alert' }, 'Esta conta está bloqueada no bot e não pode entrar no site.'),
         el('a', { class: 'botao primario largo', href: '/auth/entrar' }, 'Entrar com Discord'),
         el('p', { class: 'dica' }, icone('cadeado'), 'O site só lê seu nome e avatar. Sua senha nunca passa por aqui. Ao entrar, você concorda com os termos de serviço.'),
         el('p', { class: 'politicas' }, el('a', { href: '/termos.html' }, 'Termos'), el('a', { href: '/privacidade.html' }, 'Privacidade'), el('a', { href: '/cookies.html' }, 'Cookies'))

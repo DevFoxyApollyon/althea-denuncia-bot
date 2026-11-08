@@ -183,6 +183,8 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
 
     try {
       const perfil = await buscarUsuarioDoCodigo(config, String(codigo));
+      // Bloqueado pelo dono do bot: não entra no site.
+      if (await require('../services/bloqueioBot').estaBloqueado(perfil.id)) return res.redirect(302, '/?erro=bloqueado');
       const avatar = perfil.avatar
         ? `https://cdn.discordapp.com/avatars/${perfil.id}/${perfil.avatar}.png?size=64`
         : null;
@@ -208,6 +210,14 @@ function criarApp({ client, config, log, buscarUsuarioDoCodigo = trocarCodigoPor
 
   // Público: a tela de login mostra o nome e o ícone do servidor.
   app.get('/api/site', (req, res) => res.json(infoPublicaDoSite(client)));
+
+  // Bloqueado pelo dono do bot depois de entrar: a sessão é encerrada e nada responde.
+  app.use(['/api', '/admin'], async (req, res, next) => {
+    if (!req.usuario || !await require('../services/bloqueioBot').estaBloqueado(req.usuario.id).catch(() => false)) return next();
+    sessoes.encerrarSessao(req.sid);
+    res.clearCookie(COOKIE_SESSAO, { path: '/' });
+    next(new ErroHttp(403, 'Você está bloqueado no bot e não pode usar o site.'));
+  });
 
   // Painel do dono (ponte com o jogo). Fica depois da checagem de Origin.
   app.use('/admin', criarAdmin({ client, config, log }));

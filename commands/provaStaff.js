@@ -28,6 +28,8 @@ const BOTAO_ACEITAR = 'provastaff_aceitar:';
 const BOTAO_RECUSAR = 'provastaff_recusar:';
 const MODAL_ACEITE = 'provastaff_aceite:';
 const MODAL_TEMPBAN = 'provastaff_tempban';
+const { ehDono } = require('../services/ponteSamp/gestao');
+const { exigirSenhaDoJogo, senhaDoJogoLiberada, SENHA_VENCEU } = require('../utils/senhaStaff');
 const MAX_IDS = 10;
 
 const efemero = (content) => ({ content, flags: [MessageFlags.Ephemeral] });
@@ -216,14 +218,16 @@ async function handleModalRegistro(interaction) {
   return interaction.editReply(`✅ Registro criado${topico ? ` com o tópico ${topico}` : ''}. ${dms ? `📨 ${dms} DM(s) enviada(s).` : ''} O responsável vai aceitar ou recusar.`);
 }
 
-// /tempban: só o responsável (o mesmo que aceita e envia ao jogo). Abre o formulário.
+// /tempban: só o responsável (o mesmo que aceita e envia ao jogo) e o dono do bot. Com a
+// senha da Cadeia Staff ligada, pede a senha antes. Abre o formulário.
 async function handleTempbanSlash(interaction) {
   const { config, responsavel } = await papeis(interaction);
-  if (!responsavel) return interaction.reply(efemero('🚫 Só o responsável usa o /tempban.'));
+  if (!responsavel && !ehDono(interaction.user.id)) return interaction.reply(efemero('🚫 Só o responsável usa o /tempban.'));
   const canal = await canalFixo(interaction, config);
   if (!canal?.isTextBased?.()) {
     return interaction.reply(efemero('❌ Configure o canal das provas da staff no `/painel` (Canais principais) ou no site (Painel do bot) antes.'));
   }
+  if (!await exigirSenhaDoJogo(interaction, config)) return;
   return interaction.showModal(modalDoRegistro({ customId: MODAL_TEMPBAN, titulo: '🔨 Tempban direto no jogo', comLink: true }));
 }
 
@@ -299,7 +303,8 @@ async function tempbanPeloLink(interaction, digitado, { contas, motivo, quem }) 
 async function handleModalTempban(interaction) {
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
   const { config, responsavel } = await papeis(interaction);
-  if (!responsavel) return interaction.editReply('🚫 Só o responsável usa o /tempban.');
+  if (!responsavel && !ehDono(interaction.user.id)) return interaction.editReply('🚫 Só o responsável usa o /tempban.');
+  if (!await senhaDoJogoLiberada(config, interaction.user.id)) return interaction.editReply(SENHA_VENCEU);
   const canal = await canalFixo(interaction, config);
   if (!canal?.isTextBased?.()) return interaction.editReply('❌ Canal das provas da staff não configurado.');
 

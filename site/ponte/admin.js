@@ -16,6 +16,7 @@ const { ACOES_USO, STATUS_PEDIDO_GM, VERSAO_INCLUDE_GM: VERSAO_INCLUDE, LIMITES_
 const { chaveMestraConfigurada, impressaoDaChave } = require('../../services/ponteSamp/cifra');
 const { trocarChaveMestra } = require('../../services/ponteSamp/chaveMestra');
 const acessos = require('../../services/ponteSamp/acessoAdmin');
+const bloqueioBot = require('../../services/bloqueioBot');
 const { lerIps } = require('../../services/ponteSamp/conexoesGm');
 const { criarToken, lerToken } = require('../sessao');
 const { criarLimitador } = require('../rotas/comum');
@@ -449,6 +450,29 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
   router.post('/api/acessos/:userId/remover', soDono, rota(async (req, res) => {
     const ok = await acessos.removerAcesso(req.params.userId);
     if (ok) await PonteUso.create({ acao: 'gm_config', detalhes: { sub: 'acesso_admin_remover', userId: req.params.userId, por: req.usuario.id } }).catch(() => {});
+    res.json({ ok });
+  }));
+
+  // Pessoas bloqueadas no bot inteiro (botões, comandos e site). Só o dono vê e mexe.
+  router.get('/api/bloqueios', soDono, rota(async (req, res) => {
+    const lista = await bloqueioBot.listarBloqueios();
+    const nomes = await nomesDe(lista.map(b => b.bloqueadoPor));
+    res.json(lista.map(b => ({ userId: b.userId, nome: b.nome, motivo: b.motivo, bloqueadoEm: b.bloqueadoEm, bloqueadoPor: nomes.get(b.bloqueadoPor) || b.bloqueadoPor })));
+  }));
+
+  router.post('/api/bloqueios', soDono, rota(async (req, res) => {
+    const userId = String(req.body?.userId || '').trim();
+    const usuario = /^\d{15,21}$/.test(userId) && client?.users ? await client.users.fetch(userId).catch(() => null) : null;
+    const r = await bloqueioBot.bloquear({ userId, nome: usuario?.globalName || usuario?.username || '', motivo: req.body?.motivo, por: req.usuario.id });
+    if (r.erro) return res.status(400).json({ erro: r.erro });
+    await PonteUso.create({ acao: 'gm_config', detalhes: { sub: 'bloqueio_adicionar', userId, motivo: r.bloqueio.motivo, por: req.usuario.id } }).catch(() => {});
+    log?.info?.(`Usuário ${userId} bloqueado no bot pelo dono.`);
+    res.json({ ok: true, nome: r.bloqueio.nome, encontrado: !!usuario });
+  }));
+
+  router.post('/api/bloqueios/:userId/remover', soDono, rota(async (req, res) => {
+    const ok = await bloqueioBot.desbloquear(req.params.userId);
+    if (ok) await PonteUso.create({ acao: 'gm_config', detalhes: { sub: 'bloqueio_remover', userId: req.params.userId, por: req.usuario.id } }).catch(() => {});
     res.json({ ok });
   }));
 

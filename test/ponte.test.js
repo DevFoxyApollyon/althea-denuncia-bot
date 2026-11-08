@@ -746,3 +746,45 @@ test('Relatório de punições: o Discord do jogador vem com o nome em texto ao 
   assert.equal(await discordDaConta('822', '1242810', ''), '<@1501018070691614802>');
   assert.equal(await discordDaConta('822', '999', ''), 'Não informado');
 });
+
+test('/tempban e /desbanir: o dono do bot usa sem o cargo; com a senha da Cadeia Staff ligada, pedem a senha', async () => {
+  const Config = require('../models/Config');
+  const { validarSenha } = require('../utils/senhaStaff');
+  const provaStaff = require('../commands/provaStaff');
+  const desbanir = require('../commands/desbanir');
+  const g = '100000000000000823';
+  await Config.create({ guildId: g, channels: { provasStaff: '600000000000000823' }, roles: { responsavel_admin: '777000000000000823' }, senhaCadeiaStaff: true });
+  const interacao = (userId, cargo = false) => {
+    const i = {
+      guild: { id: g, channels: { fetch: async () => ({ id: '600000000000000823', isTextBased: () => true }) } },
+      member: { roles: { cache: new Map(cargo ? [['777000000000000823', {}]] : []) } },
+      user: { id: userId },
+      respostas: [],
+      reply: async (r) => i.respostas.push(r),
+      showModal: async (m) => i.respostas.push({ modal: m.toJSON().custom_id })
+    };
+    return i;
+  };
+
+  // Sem o cargo e sem ser o dono: recusa.
+  const outro = interacao('300000000000000823');
+  await provaStaff.handleTempbanSlash(outro);
+  assert.match(outro.respostas[0].content, /Só o responsável/);
+
+  // Dono do bot sem o cargo, senha ligada e ainda sem senha: abre o formulário da senha.
+  const dono = interacao(process.env.OWNER_DISCORD_ID);
+  await provaStaff.handleTempbanSlash(dono);
+  assert.equal(dono.respostas[0].modal, 'senha_cadeia:jogo:0');
+  const doDesbanir = interacao(process.env.OWNER_DISCORD_ID);
+  await desbanir.handleDesbanirSlash(doDesbanir);
+  assert.equal(doDesbanir.respostas[0].modal, 'senha_cadeia:jogo:0');
+
+  // Com a senha certa: abre o formulário do próprio comando.
+  await validarSenha(process.env.OWNER_DISCORD_ID, { senha: 'segredo1', confirmar: 'segredo1' });
+  const liberado = interacao(process.env.OWNER_DISCORD_ID);
+  await provaStaff.handleTempbanSlash(liberado);
+  assert.equal(liberado.respostas[0].modal, provaStaff.MODAL_TEMPBAN);
+  const desbanirLiberado = interacao(process.env.OWNER_DISCORD_ID);
+  await desbanir.handleDesbanirSlash(desbanirLiberado);
+  assert.equal(desbanirLiberado.respostas[0].modal, desbanir.MODAL_DESBANIR);
+});

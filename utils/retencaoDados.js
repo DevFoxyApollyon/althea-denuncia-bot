@@ -32,6 +32,7 @@ const COLECOES_PERMANENTES = [
   'pontemotivos',     // tabela de motivos da ponte (a mesma para todos os servidores)
   'ponteconexoesgm',  // credenciais da ponte com a gamemode (segredo cifrado)
   'ponteacessosadmin', // pessoas liberadas pelo dono no painel da ponte (/admin)
+  'bloqueiosbot',     // pessoas bloqueadas pelo dono no bot inteiro (painel da ponte)
   'senhastaffs'        // senha da staff para aceitar e recusar na Cadeia Staff (só o hash)
 ];
 

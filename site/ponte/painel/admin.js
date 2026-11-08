@@ -55,6 +55,7 @@ const SUBROTULOS = {
   criar: 'criou uma credencial da gamemode', revogar: 'revogou uma credencial da gamemode', renovar: 'renovou uma credencial da gamemode',
   chave_mestra: 'trocou a chave mestra', pausar: 'pausou a gamemode', retomar: 'retomou a gamemode',
   limites: 'mudou os limites da gamemode', acesso_admin_adicionar: 'liberou alguém no painel', acesso_admin_remover: 'tirou o acesso de alguém ao painel',
+  bloqueio_adicionar: 'bloqueou alguém no bot', bloqueio_remover: 'desbloqueou alguém no bot',
   apagar_codigo: 'apagou um código de ativação'
 };
 const rotulo = (acao, subacao) => SUBROTULOS[subacao] || ROTULOS[acao] || acao;
@@ -537,6 +538,13 @@ const carregadores = {
       { texto: proximoPasso(s, chaveMestra), classe: 'detalhes' }
     ])));
   },
+  async bloqueios() {
+    const lista = await api('/bloqueios');
+    preencher('bloqueios', lista.map(b => linha(
+      [b.nome || '(nome não encontrado)', b.userId, b.motivo || '—', data(b.bloqueadoEm), b.bloqueadoPor || '—'],
+      { texto: 'Desbloquear', perigo: false, confirmar: `Desbloquear ${b.nome || b.userId}? A pessoa volta a usar o bot.`, executar: () => post(`/bloqueios/${b.userId}/remover`), recarregar: 'bloqueios' }
+    )));
+  },
   async acessos() {
     const lista = await api('/acessos');
     preencher('acessos', lista.map(a => linha(
@@ -653,6 +661,17 @@ async function iniciar() {
       aviso(r.encontrado ? `Acesso liberado para ${r.nome}.` : 'Acesso liberado. O bot não achou o nome dessa conta: confira se o ID está certo.');
       e.target.reset();
       carregar('acessos');
+    } catch (erro) { aviso(erro.message); }
+  });
+  $('#novo-bloqueio').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const { userId, motivo } = Object.fromEntries(new FormData(e.target));
+    if (!confirm(`Bloquear ${userId.trim()} no bot inteiro? A pessoa não vai usar botões, comandos nem o site.`)) return;
+    try {
+      const r = await post('/bloqueios', { userId: userId.trim(), motivo: motivo.trim() });
+      aviso(r.encontrado ? `${r.nome} bloqueado no bot.` : 'Bloqueado. O bot não achou o nome dessa conta: confira se o ID está certo.');
+      e.target.reset();
+      carregar('bloqueios');
     } catch (erro) { aviso(erro.message); }
   });
   trocarAba(location.hash.slice(1) || 'geral');

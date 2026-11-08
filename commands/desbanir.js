@@ -1,7 +1,8 @@
 // /desbanir: formulário com o link da denúncia; se o bot já aplicou a punição dela,
 // mostra a denúncia (só para quem usou) com o botão "Desbanir", que manda a
 // gamemode desbanir cada jogador banido nela (preso sai com /tirarprisao; avisos com
-// /limparavisooff). Só o responsável usa.
+// /limparavisooff). Só o responsável e o dono do bot usam; com a senha da Cadeia Staff
+// ligada, pedem a senha antes.
 const {
   MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder
 } = require('discord.js');
@@ -9,6 +10,8 @@ const { getConfig: getCachedConfig } = require('../utils/configCache');
 const { lerLinkDoDiscord } = require('./link');
 const { prepararDesbanimento, desbanir, consultarConta, desfazerPorConta } = require('../services/ponteSamp/desbanirGm');
 const { punicaoLegivel } = require('../services/ponteSamp/avisoOrganizacao');
+const { ehDono } = require('../services/ponteSamp/gestao');
+const { exigirSenhaDoJogo, senhaDoJogoLiberada, SENHA_VENCEU } = require('../utils/senhaStaff');
 
 const MODAL_DESBANIR = 'desbanir_modal';
 const BOTAO_DESBANIR = 'ponte_gm_desbanir:';
@@ -19,14 +22,21 @@ const MODAL_AVISOS_ID = 'desbanir_avisos:';
 const efemero = (content) => ({ content, flags: [MessageFlags.Ephemeral] });
 
 async function ehResponsavel(interaction) {
+  if (ehDono(interaction.user.id)) return true;
   const config = await getCachedConfig(interaction.guild.id);
   const cargo = config?.roles?.responsavel_admin;
   return !!cargo && (interaction.member?.roles?.cache?.has?.(cargo) || interaction.member?.roles?.includes?.(cargo));
 }
 const SEM_PERMISSAO = '🚫 Só o responsável pode desbanir pelo bot.';
 
+// Antes de responder: com a senha ligada e vencida, abre o formulário da senha.
+const pedeSenha = async (interaction) => !await exigirSenhaDoJogo(interaction, await getCachedConfig(interaction.guild.id));
+// Já respondida (formulário enviado): só confere a senha.
+const senhaVencida = async (interaction) => !await senhaDoJogoLiberada(await getCachedConfig(interaction.guild.id), interaction.user.id);
+
 async function handleDesbanirSlash(interaction) {
   if (!await ehResponsavel(interaction)) return interaction.reply(efemero(SEM_PERMISSAO));
+  if (await pedeSenha(interaction)) return;
   const campo = new TextInputBuilder()
     .setCustomId('link').setLabel('Link da denúncia ou ID da conta')
     .setPlaceholder('https://discord.com/channels/... ou 1067694').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(200);
@@ -65,6 +75,7 @@ function telaDoDesbanimento({ denuncia, punicao, alvos }, servidor) {
 async function handleDesbanirModal(interaction) {
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
   if (!await ehResponsavel(interaction)) return interaction.editReply(SEM_PERMISSAO);
+  if (await senhaVencida(interaction)) return interaction.editReply(SENHA_VENCEU);
   const digitado = String(interaction.fields.getTextInputValue('link') || '').trim();
   // Só números: é o ID da conta. Pergunta ao jogo como ela está antes de qualquer coisa.
   if (/^\d{1,9}$/.test(digitado)) return consultarPeloId(interaction, Number(digitado));
@@ -80,6 +91,7 @@ async function handleDesbanirBotao(interaction) {
   if (!await ehResponsavel(interaction)) return interaction.reply(efemero(SEM_PERMISSAO));
   const punicaoId = interaction.customId.slice(BOTAO_DESBANIR.length);
   if (!/^[0-9a-f]{24}$/.test(punicaoId)) return interaction.reply(efemero('❌ Botão inválido.'));
+  if (await pedeSenha(interaction)) return;
   await interaction.deferUpdate();
   const staff = { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username };
   const r = await desbanir({ client: interaction.client, punicaoId, guildId: interaction.guild.id, staff }).catch(() => ({ erro: 'Não foi possível criar o pedido. Tente de novo.' }));
@@ -150,6 +162,7 @@ async function handleDesbanirIdBotao(interaction) {
   if (!await ehResponsavel(interaction)) return interaction.reply(efemero(SEM_PERMISSAO));
   const [conta, avisos] = interaction.customId.slice(BOTAO_DESBANIR_ID.length).split(':').map(Number);
   if (!Number.isInteger(conta) || conta < 1) return interaction.reply(efemero('❌ Botão inválido.'));
+  if (await pedeSenha(interaction)) return;
   const campo = new TextInputBuilder()
     .setCustomId('avisos').setLabel(`Quantos avisos tirar? (a conta tem ${avisos || 0})`)
     .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2).setValue(String(Math.min(1, avisos || 0)));
@@ -159,6 +172,7 @@ async function handleDesbanirIdBotao(interaction) {
 
 async function handleAvisosIdModal(interaction) {
   if (!await ehResponsavel(interaction)) return interaction.reply(efemero(SEM_PERMISSAO));
+  if (await senhaVencida(interaction)) return interaction.reply(efemero(SENHA_VENCEU));
   const [conta, temAvisos] = interaction.customId.slice(MODAL_AVISOS_ID.length).split(':').map(Number);
   const avisos = Number(String(interaction.fields.getTextInputValue('avisos') || '').trim());
   if (!Number.isInteger(avisos) || avisos < 0 || avisos > temAvisos) {
@@ -177,6 +191,7 @@ async function handleSoltarIdBotao(interaction) {
   if (!await ehResponsavel(interaction)) return interaction.reply(efemero(SEM_PERMISSAO));
   const conta = Number(interaction.customId.slice(BOTAO_SOLTAR_ID.length));
   if (!Number.isInteger(conta) || conta < 1) return interaction.reply(efemero('❌ Botão inválido.'));
+  if (await pedeSenha(interaction)) return;
   await interaction.deferUpdate();
   const staff = { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username };
   const r = await desfazerPorConta({ guildId: interaction.guild.id, conta, acao: 'soltar', staff }).catch(() => ({ erro: 'Não foi possível criar o pedido.' }));

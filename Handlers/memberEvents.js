@@ -80,6 +80,20 @@ function registerMemberEvents(client, log) {
             log.error(`Erro ao restaurar nickname: ${error.message}`);
         }
     });
+
+    // Quem banir ou expulsar o dono do bot de um servidor fica bloqueado no bot inteiro.
+    const { bloquearQuemTirouODono } = require('../services/bloqueioBot');
+    const avisarBloqueio = (guild, tipo) => (id) => {
+        if (id) log.warn(`${id} ${tipo === 'ban' ? 'baniu' : 'expulsou'} o dono do bot de ${guild.name} e foi bloqueado no bot.`);
+    };
+    client.on('guildBanAdd', ban => {
+        bloquearQuemTirouODono(ban.guild, ban.user?.id, 'ban').then(avisarBloqueio(ban.guild, 'ban'))
+            .catch(error => log.warn('Falha ao bloquear quem baniu o dono: ' + error.message));
+    });
+    client.on('guildMemberRemove', member => {
+        bloquearQuemTirouODono(member.guild, member.user?.id, 'kick').then(avisarBloqueio(member.guild, 'kick'))
+            .catch(error => log.warn('Falha ao bloquear quem expulsou o dono: ' + error.message));
+    });
 }
 
 module.exports = { registerMemberEvents };

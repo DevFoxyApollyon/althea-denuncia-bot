@@ -1,4 +1,5 @@
-// Senha da staff para os botões Aceitar e Recusar da Cadeia Staff.
+// Senha da staff para os botões Aceitar e Recusar da Cadeia Staff e para os comandos
+// que mandam ao jogo (/tempban e /desbanir).
 // Ligada no Painel do bot (senhaCadeiaStaff). Na primeira vez a pessoa cria a senha;
 // depois, a cada 30 minutos, digita de novo. Só o hash (scrypt) fica no banco.
 const crypto = require('crypto');
@@ -74,7 +75,22 @@ async function validarSenha(userId, { senha, confirmar }, agora = Date.now()) {
   return { ok: true, criada: false, liberadoAte };
 }
 
+// /tempban e /desbanir com a senha ligada: sem estar liberado, abre o formulário da senha
+// (criar ou digitar) e devolve false; depois da senha, a pessoa usa o comando de novo.
+// Só serve antes de responder a interação (o formulário é a resposta).
+async function exigirSenhaDoJogo(interaction, config) {
+  if (!senhaCadeiaAtiva(config)) return true;
+  const situacao = await situacaoDaSenha(interaction.user.id);
+  if (situacao.liberado) return true;
+  await interaction.showModal(modalDaSenha({ temSenha: situacao.temSenha, acao: 'jogo', messageId: '0' }));
+  return false;
+}
+
+// Mesma regra quando a interação já foi respondida (envio de formulário): só confere.
+const senhaDoJogoLiberada = async (config, userId) => !senhaCadeiaAtiva(config) || (await situacaoDaSenha(userId)).liberado;
+const SENHA_VENCEU = '🔒 Sua senha da Cadeia Staff venceu: use o comando de novo e digite a senha.';
+
 // Apaga a senha de alguém (esqueceu): na próxima vez a pessoa cria outra.
 const apagarSenha = (userId) => SenhaStaff.deleteOne({ userId: String(userId) });
 
-module.exports = { MODAL_SENHA, LIBERADO_MS, senhaCadeiaAtiva, situacaoDaSenha, modalDaSenha, validarSenha, apagarSenha };
+module.exports = { MODAL_SENHA, LIBERADO_MS, SENHA_VENCEU, senhaCadeiaAtiva, situacaoDaSenha, modalDaSenha, validarSenha, apagarSenha, exigirSenhaDoJogo, senhaDoJogoLiberada };

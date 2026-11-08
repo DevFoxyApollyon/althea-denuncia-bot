@@ -66,6 +66,10 @@
         <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/></svg>
         <span>Acessos</span>
       </button>
+      <button type="button" class="menu-item so-dono" data-aba="bloqueios" hidden>
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>
+        <span>Bloqueados</span>
+      </button>
     </nav>
   </aside>
 
@@ -305,6 +309,24 @@ public OnRconCommand(cmd[]) { if (Althea_ComandoRcon(cmd)) return 1; /* ... */ }
         </form>
         <div class="tabela-rolagem">
           <table><thead><tr><th>Pessoa</th><th>ID do Discord</th><th>Adicionada em</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================== bloqueados (só o dono) -->
+    <section id="aba-bloqueios" hidden>
+      <header class="pagina-topo">
+        <h1>Bloqueados no bot</h1>
+        <p class="sub">Quem estiver aqui não usa nada do bot, em nenhum servidor: botões, comandos (barra e !), formulários e o site. Vale na hora (até 1 minuto). Só você (dono do bot) bloqueia e desbloqueia.</p>
+      </header>
+      <div class="cartao">
+        <form id="novo-bloqueio">
+          <label>ID do Discord <input name="userId" inputmode="numeric" pattern="[0-9]{15,21}" placeholder="657014871228940336" required></label>
+          <label>Motivo <input name="motivo" maxlength="200" placeholder="Opcional"></label>
+          <button type="submit" class="perigo">Bloquear</button>
+        </form>
+        <div class="tabela-rolagem">
+          <table><thead><tr><th>Pessoa</th><th>ID do Discord</th><th>Motivo</th><th>Bloqueada em</th><th>Por</th><th></th></tr></thead><tbody></tbody></table>
         </div>
       </div>
     </section>

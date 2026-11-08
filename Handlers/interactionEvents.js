@@ -3,11 +3,19 @@ const interactionHandler = require('./interactionHandler');
 const { advancedMonitor } = require('../utils/advancedMonitoring');
 const { bloquearReivindicacaoSeHouverPendentes } = require('../utils/avisoPendentesAnteriores');
 const { bloquearReivindicacaoSemTeste } = require('../utils/testesObrigatorios');
+const { estaBloqueado, AVISO_BLOQUEADO } = require('../services/bloqueioBot');
 
 function registerInteractionEvents(client, log) {
     client.on('interactionCreate', async interaction => {
         try {
             const startTime = Date.now();
+
+            // Bloqueado pelo dono do bot (painel da ponte): nenhum botão, comando ou formulário.
+            if (await estaBloqueado(interaction.user?.id)) {
+                if (interaction.isAutocomplete?.()) return interaction.respond([]).catch(() => {});
+                if (interaction.isRepliable?.()) await interaction.reply({ content: AVISO_BLOQUEADO, flags: [MessageFlags.Ephemeral] }).catch(() => {});
+                return;
+            }
 
             if (interaction.isButton() && interaction.customId === 'reivindicar') {
                 // Teste obrigatório da staff ainda sem aprovação em dia.
