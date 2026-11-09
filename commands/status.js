@@ -1,4 +1,4 @@
-﻿// status.js
+// status.js
 const { 
     EmbedBuilder, 
     ActionRowBuilder, 
@@ -9,9 +9,9 @@ const {
     version: djsVersion,
 } = require('discord.js');
 const os = require('os');
-const { monitor } = require('../utils/monitoring');
 const { advancedMonitor } = require('../utils/advancedMonitoring');
 const { globalCache } = require('../utils/smartCache');
+const { getConfig } = require('../utils/configCache');
 
 const MAX_RAM_MB        = 4096;
 const PING_HISTORY_MAX  = 20; 
@@ -86,13 +86,12 @@ function recordMetrics(ping, ramMB) {
 function createStatusEmbed(client) {
     const mem       = process.memoryUsage();
     const uptime    = process.uptime();
-    const dbLatency = monitor.getMetrics().dbLatency || 0;
+    const dbLatency = Math.max(advancedMonitor.getDbLatency(), 0);
     const wsPing    = client.ws.ping;
     const memUsedMB = parseFloat(formatMB(mem.rss));
     const memPct    = (memUsedMB / MAX_RAM_MB) * 100;
     const cpuPct    = parseFloat(getCpuUsage());
-    const report    = advancedMonitor.generateDetailedReport();
-    const errors    = monitor.generateReport().summary.errors;
+    const totals    = advancedMonitor.getTotals();
     const cache     = globalCache.getStats();
 
     recordMetrics(wsPing, memUsedMB);
@@ -104,10 +103,10 @@ function createStatusEmbed(client) {
     const totalChannels = client.guilds.cache.reduce((acc, g) => acc + g.channels.cache.size, 0);
 
     const peakRamStr  = peakStats.ramTime
-        ? `\`${peakStats.ram.toFixed(1)} MB\` Ã s ${peakStats.ramTime.toLocaleTimeString('pt-BR')}`
+        ? `\`${peakStats.ram.toFixed(1)} MB\` às ${peakStats.ramTime.toLocaleTimeString('pt-BR')}`
         : '`Sem dados`';
     const peakPingStr = peakStats.pingTime
-        ? `\`${peakStats.ping}ms\` Ã s ${peakStats.pingTime.toLocaleTimeString('pt-BR')}`
+        ? `\`${peakStats.ping}ms\` às ${peakStats.pingTime.toLocaleTimeString('pt-BR')}`
         : '`Sem dados`';
 
     return new EmbedBuilder()
@@ -163,14 +162,14 @@ function createStatusEmbed(client) {
                 name: '🗃️ Cache',
                 value: `**Objetos:** \`${cache.size ?? 'N/A'}\`\n` +
                        `**Hit Rate:** \`${cache.hitRate ?? 'N/A'}\`\n` +
-                       `**Tamanho:** \`${cache.memoryUsage ?? 'N/A'}\``,
+                       `**Tamanho:** \`${cache.memoryUsage ?? 'N/A'} KB\``,
                 inline: true
             },
             {
                 name: '⚡ Performance',
-                value: `**Cmds/Sessão:** \`${report.totalCommands || 0}\`\n` +
-                       `**Interações:** \`${report.totalInteractions || 0}\`\n` +
-                       `**Erros:** \`${errors || 0}\``,
+                value: `**Cmds/Sessão:** \`${totals.commands}\`\n` +
+                       `**Interações:** \`${totals.interactions}\`\n` +
+                       `**Erros (última hora):** \`${totals.errors}\``,
                 inline: true
             },
         )
@@ -178,7 +177,7 @@ function createStatusEmbed(client) {
         .setTimestamp();
 }
 
-function createStatusButtons(restarting = false) {
+function createStatusButtons() {
     return [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('refresh_status').setLabel('Atualizar').setEmoji('🔄').setStyle(ButtonStyle.Primary),
@@ -187,11 +186,6 @@ function createStatusButtons(restarting = false) {
         ),
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('status_toggle_autorefresh').setLabel('Auto-Refresh').setEmoji('⏱️').setStyle(ButtonStyle.Success),
-            new ButtonBuilder()
-                .setCustomId('status_restart_confirm')
-                .setLabel(restarting ? 'Confirmar Reinício' : 'Reiniciar Bot')
-                .setEmoji(restarting ? '⚠️' : '🔁')
-                .setStyle(restarting ? ButtonStyle.Danger : ButtonStyle.Secondary),
         )
     ];
 }
@@ -202,7 +196,7 @@ async function checkAndSendAlerts(client, logChannelId, adminRoleId) {
     const mem     = process.memoryUsage();
     const memPct  = (parseFloat(formatMB(mem.rss)) / MAX_RAM_MB) * 100;
     const wsPing  = client.ws.ping;
-    const dbLat   = monitor.getMetrics().dbLatency || 0;
+    const dbLat   = Math.max(advancedMonitor.getDbLatency(), 0);
 
     const alertas = [];
     if (wsPing > ALERT_PING_MS)  alertas.push(`🔴 **Ping alto:** \`${wsPing}ms\` (limite: ${ALERT_PING_MS}ms)`);
@@ -226,29 +220,49 @@ async function checkAndSendAlerts(client, logChannelId, adminRoleId) {
     }).catch(() => {});
 }
 
-async function handleStatusCommand(message, config) {
-    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
+async function enviarStatus(ctx) {
+    const { client, guild } = ctx;
+    await advancedMonitor.measureDbLatency();
 
-    const msg = await message.reply({
-        embeds: [createStatusEmbed(message.client)],
+    const msg = await ctx.reply({
+        embeds: [createStatusEmbed(client)],
         components: createStatusButtons()
     });
 
-    if (config?.channels?.log || config?.roles?.responsavel_admin) {
-        await checkAndSendAlerts(message.client, config?.channels?.log, config?.roles?.responsavel_admin);
+    const config = await getConfig(guild.id).catch(() => null);
+    if (config?.channels?.log) {
+        await checkAndSendAlerts(client, config.channels.log, config?.roles?.responsavel_admin);
     }
 
     return msg;
 }
 
-const restartConfirmPending = new Set();
+async function handleStatusCommand(message) {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
+    return enviarStatus({ client: message.client, guild: message.guild, reply: (payload) => message.reply(payload) });
+}
 
-async function handleStatusButtons(interaction, config) {
+async function handleStatusSlash(interaction) {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: '❌ Acesso negado.', flags: [MessageFlags.Ephemeral] });
+    }
+
+    return enviarStatus({
+        client: interaction.client,
+        guild: interaction.guild,
+        reply: async (payload) => {
+            await interaction.reply(payload);
+            return interaction.fetchReply();
+        }
+    });
+}
+
+async function handleStatusButtons(interaction) {
     if (!interaction.isButton()) return;
 
     const validIds = [
         'refresh_status', 'status_ping_test', 'status_cache_clear',
-        'status_toggle_autorefresh', 'status_restart_confirm'
+        'status_toggle_autorefresh'
     ];
     if (!validIds.includes(interaction.customId)) return;
 
@@ -257,9 +271,11 @@ async function handleStatusButtons(interaction, config) {
     }
 
     const { customId, client, message } = interaction;
+    const config = await getConfig(interaction.guild.id).catch(() => null);
 
     if (customId === 'refresh_status') {
         await interaction.deferUpdate();
+        await advancedMonitor.measureDbLatency();
         await interaction.editReply({ embeds: [createStatusEmbed(client)], components: createStatusButtons() });
         return;
     }
@@ -321,24 +337,6 @@ async function handleStatusButtons(interaction, config) {
         return;
     }
 
-    if (customId === 'status_restart_confirm') {
-        const userId = interaction.user.id;
-
-        if (!restartConfirmPending.has(userId)) {
-            restartConfirmPending.add(userId);
-            setTimeout(() => restartConfirmPending.delete(userId), 10_000);
-            await interaction.deferUpdate();
-            await interaction.editReply({ embeds: [createStatusEmbed(client)], components: createStatusButtons(true) });
-            await interaction.followUp({
-                content: '⚠️ Clique em **Confirmar Reinício** novamente em até 10 segundos para reiniciar o bot.',
-                flags: [MessageFlags.Ephemeral]
-            });
-        } else {
-            restartConfirmPending.delete(userId);
-            await interaction.reply({ content: '🔁 Reiniciando o bot...', flags: [MessageFlags.Ephemeral] });
-            setTimeout(() => process.exit(0), 1500);
-        }
-    }
 }
 
-module.exports = { handleStatusCommand, handleStatusButtons, checkAndSendAlerts };
+module.exports = { handleStatusCommand, handleStatusSlash, handleStatusButtons, checkAndSendAlerts };

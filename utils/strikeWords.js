@@ -1,4 +1,4 @@
-﻿const { EmbedBuilder, MessageReferenceType } = require('discord.js');
+const { EmbedBuilder, MessageReferenceType } = require('discord.js');
 const dateUtils = require('./dateUtils');
 const { usuarioIsento } = require('./usuariosIsentos');
 
@@ -39,36 +39,35 @@ async function podeFalarSemBloqueio(message, config) {
   return false;
 }
 
-const PALAVRAS_PROIBIDAS = [
-  'animal', 'anta', 'arrombada', 'arrombado', 'chorão', 'mds', 'mds',
-  'babaca', 'besta', 'bobalhão', 'bobalhona', 'bocó', 'bosta', 'burra', 'burrice', 'burro',
-  'canalha', 'caralho', 'corna', 'corno', 'cretina', 'cretino', 'crápula', 'cuzão', 'cuzona',
-  'desgraçado', 'doente', 'doida', 'doido', 'PCD', 'deficiente', 'deficiente mental', 'deficiente físico',
-  'energúmeno', 'escrota', 'escroto',
-  'fdp', 'v conta', 'vendo conta', 'Choro',
-  'galinha','mds', 'seu buraquinho','mrd',
-  'idiota', 'idiotice', 'imbecil','Chora n','Desgracado','vacilão','vacilão',
-  'jegue', 'jumento',
-  'lambe botas', 'lixo',
-  'maluca', 'maluco', 'mané', 'merda', 'mongoloide', 'mongol', 'mula',
-  'noob',
-  'otaria', 'otário', 'otária',
-  'palhaça', 'palhaço', 'panaca', 'passa pano', 'piranha', 'pnc', 'porra', 'prostituta', 'puta', 'puto', 'puxa saco',
-  'retardada', 'retardado',
-  'tanso', 'tapada', 'tapado', 'traste', 'trouxa',
-  'vadia', 'vagabunda', 'vagabundo', 'viado',
-  'zé ninguém', 'zé povinho', 'zé ruela',
-  'chorao',
-];
+function estaEmCanalDeDenuncia(message, config) {
+  if (!message?.channel || !config?.channels) return false;
 
-const PALAVRAS_INTEIRAS_PROIBIDAS = [
-  /\bk+\b/i,
-];
+  const canaisDenuncia = [config.channels.pc, config.channels.mobile].filter(Boolean);
+  if (canaisDenuncia.includes(message.channel.id)) return true;
+
+  return Boolean(
+    message.channel.isThread?.() &&
+    message.channel.parentId &&
+    canaisDenuncia.includes(message.channel.parentId)
+  );
+}
+
+const {
+  PALAVRAS_PROIBIDAS_NO_CHAT: PALAVRAS_PROIBIDAS,
+  PALAVRAS_INTEIRAS_PROIBIDAS_NO_CHAT: PALAVRAS_INTEIRAS_PROIBIDAS
+} = require('./palavrasProibidas');
+
+// Junta letras repetidas ("putaaaa" vira "puta", "gordooo" vira "gordo") para
+// quem estica a palavra não escapar do filtro. A lista passa pelo mesmo
+// tratamento, então palavras com letra dobrada ("arrombado") continuam batendo.
+const juntarLetrasRepetidas = (texto) => String(texto).toLowerCase().replace(/(\p{L})\1+/gu, '$1');
+const PALAVRAS_PROIBIDAS_JUNTAS = [...new Set(PALAVRAS_PROIBIDAS.map(juntarLetrasRepetidas))];
 
 function contemPalavraProibida(texto) {
   if (!texto) return false;
   const lower = texto.toLowerCase();
-  if (PALAVRAS_PROIBIDAS.some(p => lower.includes(p))) return true;
+  const junto = juntarLetrasRepetidas(texto);
+  if (PALAVRAS_PROIBIDAS_JUNTAS.some(p => junto.includes(p))) return true;
   if (PALAVRAS_INTEIRAS_PROIBIDAS.some(r => r.test(lower))) return true;
   return false;
 }
@@ -76,7 +75,7 @@ function contemPalavraProibida(texto) {
 function palavraProibidaUsada(texto) {
   if (!texto) return null;
   const lower = texto.toLowerCase();
-  const encontrada = PALAVRAS_PROIBIDAS.find(p => lower.includes(p));
+  const encontrada = PALAVRAS_PROIBIDAS_JUNTAS.find(p => juntarLetrasRepetidas(texto).includes(p));
   if (encontrada) return encontrada;
   for (const r of PALAVRAS_INTEIRAS_PROIBIDAS) {
     const match = lower.match(r);
@@ -187,6 +186,7 @@ function descricaoMensagemEncaminhada(message) {
 
 const REGEX_EMOJI_CUSTOM = /<a?:\w+:\d+>/;
 
+// eslint-disable-next-line no-misleading-character-class
 const REGEX_EMOJI_UNICODE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
 
 const REGEX_LINK_GIF = /(tenor\.com|giphy\.com|media\.tenor\.com)\/\S+|\.gif(\?\S*)?(\s|$)/i;
@@ -245,14 +245,7 @@ function motivoEmojiFigurinhaOuGif(message) {
 
 async function processaStrike(message, Strike, config) {
   try {
-    const canaisRegistrados = [config?.channels?.pc, config?.channels?.mobile].filter(Boolean);
-    let canalPrincipalId = message.channel.id;
-
-    if (message.channel.isThread?.() && message.channel.parentId) {
-      canalPrincipalId = message.channel.parentId;
-    }
-
-    if (!canaisRegistrados.includes(canalPrincipalId)) return;
+    if (!estaEmCanalDeDenuncia(message, config)) return;
 
     let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
     if (!strike) {
@@ -370,14 +363,7 @@ async function processaStrike(message, Strike, config) {
 
 async function processaStrikeLink(message, Strike, config) {
   try {
-    const canaisRegistrados = [config?.channels?.pc, config?.channels?.mobile].filter(Boolean);
-    let canalPrincipalId = message.channel.id;
-
-    if (message.channel.isThread?.() && message.channel.parentId) {
-      canalPrincipalId = message.channel.parentId;
-    }
-
-    if (!canaisRegistrados.includes(canalPrincipalId)) return;
+    if (!estaEmCanalDeDenuncia(message, config)) return;
 
     let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
     if (!strike) {
@@ -506,14 +492,7 @@ async function processaStrikeLink(message, Strike, config) {
 
 async function processaStrikeEmoji(message, Strike, config) {
   try {
-    const canaisRegistrados = [config?.channels?.pc, config?.channels?.mobile].filter(Boolean);
-    let canalPrincipalId = message.channel.id;
-
-    if (message.channel.isThread?.() && message.channel.parentId) {
-      canalPrincipalId = message.channel.parentId;
-    }
-
-    if (!canaisRegistrados.includes(canalPrincipalId)) return;
+    if (!estaEmCanalDeDenuncia(message, config)) return;
 
     let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
     if (!strike) {
@@ -670,6 +649,7 @@ async function verificaEdicao(oldMessage, newMessage, Strike, config) {
 module.exports = {
   PALAVRAS_PROIBIDAS,
   contemPalavraProibida,
+  juntarLetrasRepetidas,
   contemMarcacaoAdmin,
   contemLinkProibido,
   contemEmojiFigurinhaOuGif,

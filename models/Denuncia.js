@@ -1,5 +1,7 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
+const { model } = require('../utils/persistencia');
 const { getBrasiliaDate } = require('../utils/dateUtils');
+const { avisarMudanca, avisarStatus, avisarServidor } = require('../utils/eventosDenuncia');
 
 const denunciaSchema = new mongoose.Schema({
   guildId: { 
@@ -21,6 +23,11 @@ const denunciaSchema = new mongoose.Schema({
     required: true,
     index: true 
   },
+  armazemThreadId: { type: String, default: null, index: true },
+  registroThreadId: { type: String, default: null, index: true },
+  // Tópico público aberto na mensagem do canal quando a denúncia de tópico
+  // privado é aceita com acusado fora do banco. O que é escrito nele vai para o privado.
+  topicoPublicoId: { type: String, default: null, index: true },
   denunciante: { 
     type: String, 
     required: true 
@@ -62,6 +69,11 @@ const denunciaSchema = new mongoose.Schema({
       tamanho: { type: Number, default: null }
     }],
     embeds: { type: mongoose.Schema.Types.Mixed, default: [] },
+    espelhos: [{
+      _id: false,
+      threadId: { type: String, required: true },
+      messageId: { type: String, required: true }
+    }],
     apagadaEm: { type: Date, default: null }
   }],
   platform: { 
@@ -76,9 +88,13 @@ const denunciaSchema = new mongoose.Schema({
   status: { 
     type: String, 
     required: true, 
-    enum: ['pendente', 'reivindicacao', 'aceita', 'recusada', 'analise'],
+    enum: ['pendente', 'reivindicacao', 'aceita', 'recusada', 'analise', 'finalizada'],
     default: 'pendente'
   },
+  // O tópico da denúncia foi apagado no Discord: ela sai da fila (não trava o
+  // bloqueio de pendências). Ver utils/denunciasTravadas.js.
+  topicoApagadoEm: { type: Date, default: null },
+  topicoApagadoPor: { type: String, default: '' },
   dataCriacao: { 
     type: Date, 
     default: () => getBrasiliaDate(),
@@ -91,7 +107,7 @@ const denunciaSchema = new mongoose.Schema({
       date.setDate(date.getDate() + 45);
       return date;
     },
-    index: { expires: 0 }
+    index: true
   },
   punicao: { 
     type: String 
@@ -139,9 +155,13 @@ const denunciaSchema = new mongoose.Schema({
   motivoAceite: { 
     type: String
   },
-  dataPunicao: { 
+  dataPunicao: {
     type: String
   },
+  // Trava contra cliques simultâneos nos botões de status. Sem estes campos no
+  // schema o mongoose descartava o $set e a trava nunca travava.
+  processingLock: { type: Boolean, default: false },
+  processingLockEm: { type: Date, default: null },
   claimedBy: {
     type: String,
     default: null
@@ -151,10 +171,45 @@ const denunciaSchema = new mongoose.Schema({
     default: null,
     set: (v) => v ? getBrasiliaDate(v) : v
   },
+  claimedReminderSentAt: {
+    type: Date,
+    default: null,
+    set: (v) => v ? getBrasiliaDate(v) : v
+  },
+  claimedWarningMessageId: {
+    type: String,
+    default: null
+  },
+  claimedWarningExpiresAt: {
+    type: Date,
+    default: null,
+    set: (v) => v ? getBrasiliaDate(v) : v
+  },
+  autoAnalysisAt: {
+    type: Date,
+    default: null,
+    set: (v) => v ? getBrasiliaDate(v) : v
+  },
+  autoAnalysisMessageId: {
+    type: String,
+    default: null
+  },
+  autoAnalysisExpiresAt: {
+    type: Date,
+    default: null,
+    set: (v) => v ? getBrasiliaDate(v) : v
+  },
   isInAnalysis: {
     type: Boolean,
     default: false
-  }
+  },
+  // Avaliação do atendimento feita pelo denunciante (Discord ou site).
+  // O /rank calcula a nota de cada staff a partir destes campos.
+  feedbackEnviado: { type: Boolean, default: false },
+  feedbackNota: { type: Number, default: null, min: 1, max: 10 },
+  feedbackComentario: { type: String, default: '' },
+  feedbackStaffId: { type: String, default: null },
+  feedbackEm: { type: Date, default: null }
 }, {
   timestamps: { 
     currentTime: () => getBrasiliaDate()
@@ -162,6 +217,7 @@ const denunciaSchema = new mongoose.Schema({
 });
 
 denunciaSchema.pre('save', function(next) {
+  this.$locals.statusMudou = !this.isNew && this.isModified('status');
   if (this.isModified()) {
     const now = getBrasiliaDate();
     if (this.isNew) {
@@ -172,9 +228,37 @@ denunciaSchema.pre('save', function(next) {
   next();
 });
 
-denunciaSchema.index({ status: 1 });
-denunciaSchema.index({ platform: 1 });
 denunciaSchema.index({ 'ultimaEdicao.data': 1 });
 denunciaSchema.index({ guildId: 1, createdAt: 1 });
+// Lista do responsável no site: todas as denúncias do servidor, das mais novas para as mais antigas.
+denunciaSchema.index({ guildId: 1, dataCriacao: -1 });
+// Fila de pendências por servidor e auto-finalizador (status + data de criação).
+denunciaSchema.index({ guildId: 1, status: 1, dataCriacao: 1 });
+denunciaSchema.index({ status: 1, dataCriacao: 1 });
+// Jobs de aviso/análise automática de reivindicações.
+denunciaSchema.index({ status: 1, claimedAt: 1 });
+// Cooldown de reivindicação por staff.
+denunciaSchema.index({ guildId: 1, claimedBy: 1, claimedAt: -1 });
+// "Minhas denúncias" e limite de denúncias recentes contra o mesmo acusado.
+denunciaSchema.index({ criadoPor: 1, dataCriacao: -1 });
+denunciaSchema.index({ guildId: 1, acusado: 1, dataCriacao: -1 });
 
-module.exports = mongoose.model('Denuncia', denunciaSchema);
+// Mudanças de status chegam ao site na hora (ver site/rotas.js, /eventos).
+denunciaSchema.post('save', function(doc) {
+  avisarMudanca(doc?.threadId);
+  avisarServidor(doc?.guildId);
+  if (this.$locals.statusMudou) avisarStatus(doc.toObject());
+});
+denunciaSchema.post('findOneAndUpdate', function(doc) {
+  avisarMudanca(doc?.threadId);
+  avisarServidor(doc?.guildId);
+  // O documento pode vir de antes ou de depois da alteração; o status novo é o do pedido.
+  const alteracao = this.getUpdate() || {};
+  const status = alteracao.$set?.status || alteracao.status;
+  if (!doc || !status) return;
+  const antes = !this.getOptions().new && !this.getOptions().returnDocument;
+  if (antes && doc.status === status) return;
+  avisarStatus({ ...(doc.toObject?.() || doc), ...(alteracao.$set || {}), status });
+});
+
+module.exports = model('Denuncia', denunciaSchema);

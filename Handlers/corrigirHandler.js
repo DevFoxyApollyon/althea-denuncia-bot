@@ -9,17 +9,15 @@ const {
   MessageFlags
 } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
-const Config = require('../models/Config');
-const { getCachedConfig, getCachedDenuncia, invalidateCache } = require('../utils/performance');
+const { getConfig: getCachedConfig } = require('../utils/configCache');
 
 const CORRIGIR_MODAL_PREFIX = 'corrigir_modal_aceite_';
 const RESPONSE_DELETE_DELAY_MS = 5 * 1000;
 
-function isResponsavelAdmin(interaction, config) {
-  return Boolean(
-    config?.roles?.responsavel_admin &&
-    interaction.member?.roles?.cache.has(config.roles.responsavel_admin)
-  );
+async function isResponsavelAdmin(interaction, config) {
+  const roleId = config?.roles?.responsavel_admin;
+  const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  return Boolean(roleId && member?.roles?.cache?.has(roleId));
 }
 
 function getPermissionError(config) {
@@ -85,9 +83,9 @@ async function respondAndDelete(interaction, payload) {
 }
 
 async function handleCorrigirDenunciaButton(interaction) {
-  const config = await getCachedConfig(interaction.guild.id, Config);
+  const config = await getCachedConfig(interaction.guild.id);
 
-  if (!isResponsavelAdmin(interaction, config)) {
+  if (!await isResponsavelAdmin(interaction, config)) {
     return respondAndDelete(interaction, { content: getPermissionError(config) });
   }
 
@@ -111,11 +109,40 @@ async function handleCorrigirDenunciaButton(interaction) {
   await interaction.showModal(createCorrectionModal(denuncia));
 }
 
+// A correção troca só a primeira linha; o que vem depois (link para compartilhar,
+// linhas da ponte com o jogo) continua na mensagem.
+const linhasDeBaixo = (texto) => {
+  const i = String(texto || '').indexOf('\n');
+  return i === -1 ? '' : String(texto).slice(i);
+};
+// Na Cadeia Staff a primeira linha ganha, depois do link, quem confirmou ("||data|| por @x").
+const depoisDoLink = (texto) => (String(texto || '').split('\n')[0].match(/Link: ?\|\| ?\S+ ?\|\|(.*)$/) || [])[1] || '';
+
+// Punição para o jogo ainda esperando envio: os jogadores saem de novo do ID e do
+// motivo corrigidos (a já enviada ou aplicada não muda). Devolve true se atualizou.
+async function atualizarPunicaoDoJogo(client, denuncia) {
+  const PontePunicao = require('../models/PontePunicao');
+  const punicao = await PontePunicao.findOne({ denunciaId: denuncia._id, status: 'aceita' }).lean();
+  if (!punicao) return false;
+  const { montarAlvos } = require('../services/ponteSamp/aceite');
+  const { tabela } = await require('../services/ponteSamp/motivos').obterTabela();
+  const alvos = montarAlvos(denuncia, tabela).filter(a => a.cmd !== 'registro');
+  if (!alvos.length) return false;
+  const salva = await PontePunicao.findOneAndUpdate(
+    { _id: punicao._id, status: 'aceita', versao: punicao.versao },
+    { $set: { alvos, 'msgDiscord.motivo': String(denuncia.motivoAceite || '').slice(0, 300) }, $inc: { versao: 1 } },
+    { new: true, runValidators: true }
+  ).lean();
+  if (!salva) return false;
+  await require('../services/ponteSamp/discordGm').atualizarMensagemGm(client, salva._id).catch(() => {});
+  return true;
+}
+
 async function handleSalvarCorrigirDenuncia(interaction) {
   const messageId = getMessageId(interaction.customId);
-  const config = await getCachedConfig(interaction.guild.id, Config);
+  const config = await getCachedConfig(interaction.guild.id);
 
-  if (!isResponsavelAdmin(interaction, config)) {
+  if (!await isResponsavelAdmin(interaction, config)) {
     return respondAndDelete(interaction, { content: getPermissionError(config) });
   }
 
@@ -133,7 +160,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
   try {
-    const denuncia = await getCachedDenuncia({ messageId }, Denuncia);
+    const denuncia = await Denuncia.findOne({ messageId });
 
     if (!denuncia || denuncia.status !== 'aceita') {
       return respondAndDelete(interaction, {
@@ -161,7 +188,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
     });
 
     await denuncia.save();
-    invalidateCache('denuncia', denuncia._id);
+    const ponteAtualizada = await atualizarPunicaoDoJogo(interaction.client, denuncia).catch(() => false);
 
     let logEdited = false;
     let topicEdited = false;
@@ -176,7 +203,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
         const newContent = `➱ Denúncia aceita Acusado (${acusadoId}) tomará punição por (${motivoAceite}) Data ${dataPunicao} Link: ||${denunciaURL}||`;
 
         if (logMsg) {
-          await logMsg.edit(newContent);
+          await logMsg.edit(`${newContent}${depoisDoLink(logMsg.content)}${linhasDeBaixo(logMsg.content)}`.slice(0, 2000));
           logEdited = true;
           logMsgURL = `https://discord.com/channels/${interaction.guild.id}/${logChannel.id}/${denuncia.logMessageId}`;
         } else {
@@ -200,7 +227,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
       const newContent = `✅ Denúncia aceita por <@${staffId}> (${acusadoId}) tomará punição por (${motivoAceite}) Data ${dataPunicao} Link: ${logMsgURL || denunciaURL}`;
 
       if (acceptedMessage) {
-        await acceptedMessage.edit({ content: newContent, components: [createCorrectionButtonRow()] });
+        await acceptedMessage.edit({ content: `${newContent}${linhasDeBaixo(acceptedMessage.content)}`.slice(0, 2000), components: [createCorrectionButtonRow()] });
         topicEdited = true;
       } else {
         errors.push('mensagem de aceite não encontrada no tópico');
@@ -217,6 +244,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
             'Os dados foram atualizados no banco de dados.',
             logEdited ? '✅ Canal de logs atualizado.' : '❌ O canal de logs não foi atualizado.',
             topicEdited ? '✅ Mensagem do tópico atualizada.' : '❌ Mensagem do tópico não foi atualizada.',
+            ponteAtualizada ? '🎮 Punição para o jogo atualizada com o ID e o motivo novos.' : '',
             errors.length ? `Detalhes: ${errors.join('; ')}` : ''
           ].filter(Boolean).join('\n'))
           .setColor(logEdited && topicEdited ? '#27ae60' : '#e67e22')
@@ -231,5 +259,8 @@ async function handleSalvarCorrigirDenuncia(interaction) {
 module.exports = {
   handleCorrigirDenunciaButton,
   handleSalvarCorrigirDenuncia,
-  createCorrectionButtonRow
+  createCorrectionButtonRow,
+  atualizarPunicaoDoJogo,
+  linhasDeBaixo,
+  depoisDoLink
 };

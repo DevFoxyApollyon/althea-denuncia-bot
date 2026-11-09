@@ -1,0 +1,726 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { fecharConexoes } = require('./helpers/env');
+
+test.after(fecharConexoes);
+
+test('categoria é reconhecida pelo texto do motivo', () => {
+  const { categoriaDoMotivo } = require('../site/categorias');
+  assert.equal(categoriaDoMotivo('Anti-RP durante abordagem'), 'Anti-RP');
+  assert.equal(categoriaDoMotivo('anti rp'), 'Anti-RP');
+  assert.equal(categoriaDoMotivo('ZARALHO na praça'), 'Zaralho');
+  assert.equal(categoriaDoMotivo('fez slide na perseguição'), 'Slide');
+  assert.equal(categoriaDoMotivo('rdm sem motivo'), 'RDM');
+  assert.equal(categoriaDoMotivo('Amor à vida'), 'Amor à vida');
+  assert.equal(categoriaDoMotivo('combatlog'), 'Combat log');
+  assert.equal(categoriaDoMotivo('algo que ninguém previu'), 'Outros');
+  assert.equal(categoriaDoMotivo(''), 'Outros');
+});
+
+test('upload: o conteúdo precisa combinar com a extensão', () => {
+  const { conteudoCombinaComExtensao } = require('../site/rotas');
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypmp42')]);
+  const executavel = Buffer.from('MZ\x90\x00\x03\x00\x00\x00', 'latin1');
+
+  assert.equal(conteudoCombinaComExtensao(png, 'png'), true);
+  assert.equal(conteudoCombinaComExtensao(mp4, 'mp4'), true);
+  assert.equal(conteudoCombinaComExtensao(Buffer.from('prova em texto'), 'txt'), true);
+  assert.equal(conteudoCombinaComExtensao(executavel, 'png'), false, 'executável renomeado para .png');
+  assert.equal(conteudoCombinaComExtensao(executavel, 'mp4'), false);
+  assert.equal(conteudoCombinaComExtensao(executavel, 'txt'), false, 'binário não passa como texto');
+  assert.equal(conteudoCombinaComExtensao(png, 'exe'), false, 'extensão fora da lista');
+});
+
+test('limitador bloqueia depois do máximo e separa por chave', () => {
+  const { criarLimitador } = require('../site/rotas');
+  const permitido = criarLimitador(2, 60 * 1000);
+  assert.equal(permitido('a'), true);
+  assert.equal(permitido('a'), true);
+  assert.equal(permitido('a'), false);
+  assert.equal(permitido('b'), true);
+});
+
+test('sessão: token adulterado ou vencido é recusado', () => {
+  const { criarToken, lerToken } = require('../site/sessao');
+  const segredo = 'segredo-de-teste-com-mais-de-32-caracteres';
+  const token = criarToken({ id: '1', nome: 'Teste' }, segredo);
+
+  assert.equal(lerToken(token, segredo).id, '1');
+  assert.equal(lerToken(token, 'outro-segredo-com-mais-de-32-caracteres!'), null);
+  assert.equal(lerToken(token.replace(/.$/, c => (c === 'A' ? 'B' : 'A')), segredo), null);
+  assert.equal(lerToken(criarToken({ id: '1' }, segredo, -1000), segredo), null, 'vencido');
+  assert.equal(lerToken('lixo', segredo), null);
+});
+
+test('prioridade: infrações graves têm prioridade alta', () => {
+  const { prioridadeDoMotivo } = require('../site/categorias');
+  for (const motivo of ['Mods proibidos', 'zaralho no centro', 'slide em fuga', 'uso de hack']) {
+    assert.equal(prioridadeDoMotivo(motivo), 'alta', motivo);
+  }
+  assert.equal(prioridadeDoMotivo('Anti-RP'), 'normal');
+  assert.equal(prioridadeDoMotivo('motivo qualquer'), 'normal');
+});
+
+test('alerta de motivo crítico: marca o responsável só com a opção ligada', async () => {
+  const { alertarMotivoCritico } = require('../utils/alertaMotivoCritico');
+  const enviados = [];
+  const thread = { send: async (msg) => enviados.push(msg) };
+  const roles = { responsavel_admin: '200000000000000003' };
+  assert.equal(await alertarMotivoCritico({ config: { roles }, thread, motivo: 'zaralho no centro' }), true);
+  assert.equal(await alertarMotivoCritico({ config: { roles, alertaMotivoCritico: false }, thread, motivo: 'zaralho no centro' }), false);
+  assert.equal(await alertarMotivoCritico({ config: { roles }, thread, motivo: 'anti rp' }), false);
+  assert.equal(enviados.length, 1);
+  assert.equal(enviados[0].content, '<@&200000000000000003>');
+});
+
+test('identificação: separa os IDs do acusado', () => {
+  const { idsDoAcusado } = require('../site/rotas/identificacao');
+  assert.deepEqual(idsDoAcusado('1039+2471'), ['1039', '2471']);
+  assert.deepEqual(idsDoAcusado(' 1039 + ABC12 '), ['1039', 'abc12']);
+  assert.deepEqual(idsDoAcusado(''), []);
+  assert.equal(idsDoAcusado('10390').includes('1039'), false, 'ID parecido não vale');
+});
+
+test('categorias: siglas só casam com a palavra inteira', () => {
+  const { categoriaDoMotivo } = require('../site/categorias');
+  assert.equal(categoriaDoMotivo('Pg'), 'Power gaming');
+  assert.equal(categoriaDoMotivo('db na favela'), 'Drive-by');
+  assert.equal(categoriaDoMotivo('Flod'), 'Flood');
+  assert.equal(categoriaDoMotivo('saav'), 'Amor à vida');
+  assert.equal(categoriaDoMotivo('Algemando em ação'), 'Algemar em ação');
+  assert.equal(categoriaDoMotivo('pagou a conta'), 'Outros', '"pg" não pode casar com "pagou"');
+  assert.equal(categoriaDoMotivo('clima ruim'), 'Outros', '"cl" não pode casar com "clima"');
+});
+
+test('configuração do site: valida e limpa o que o responsável salva', () => {
+  const { validarConfig } = require('../site/configSite');
+  const base = { categorias: [{ nome: ' Hack ', prioridade: 'alta', termos: ' hack , Cheat, x' }] };
+
+  const limpa = validarConfig(base);
+  assert.deepEqual(limpa.categorias, [{ nome: 'Hack', grupo: '', prioridade: 'alta', termos: ['hack', 'cheat'] }]);
+
+  assert.throws(() => validarConfig({ ...base, categorias: [] }), /pelo menos uma categoria/);
+  assert.throws(() => validarConfig({ ...base, categorias: [{ nome: 'A', termos: 'x' }] }), /pelo menos um termo/);
+});
+
+test('aviso ao acusado: identifica o autor real e respeita o intervalo', () => {
+  const { autorReal, podeAvisar, INTERVALO_MS } = require('../utils/avisoResposta');
+  assert.equal(autorReal({ author: { id: '1', bot: false }, content: 'oi' }), '1');
+  assert.equal(autorReal({ author: { id: '9', bot: true }, content: 'Enviado por <@657014871228940336>' }), '657014871228940336');
+  assert.equal(autorReal({ author: { id: '9', bot: true }, content: 'O administrador reivindicou.' }), null, 'registro do bot não avisa');
+
+  assert.equal(podeAvisar('u1', 't1', 1000), true);
+  assert.equal(podeAvisar('u1', 't1', 1000 + INTERVALO_MS - 1), false);
+  assert.equal(podeAvisar('u1', 't2', 1000), true, 'outro tópico tem intervalo próprio');
+  assert.equal(podeAvisar('u1', 't1', 1000 + INTERVALO_MS), true);
+});
+
+test('categorias: motivos das regras de RP e seus grupos', () => {
+  const { categoriaDoMotivo, configVisivel } = require('../site/categorias');
+  assert.equal(categoriaDoMotivo('sk no hospital'), 'Spawn kill');
+  assert.equal(categoriaDoMotivo('nlr'), 'Voltar ao local da morte');
+  assert.equal(categoriaDoMotivo('non rp'), 'Anti-RP');
+  assert.equal(categoriaDoMotivo('mod menu'), 'Mods proibidos');
+  assert.equal(categoriaDoMotivo('skate na praça'), 'Outros');
+  assert.ok(configVisivel('servidor-sem-config').categorias.every(item => item.grupo));
+});
+
+test('perfil do jogador: finalizada com punição conta como aceita', () => {
+  const { resultadoDoCaso, resumir } = require('../site/rotas/jogadores');
+  assert.equal(resultadoDoCaso({ status: 'finalizada', motivoAceite: 'RDM: 3 dias' }), 'aceita');
+  assert.equal(resultadoDoCaso({ status: 'finalizada' }), 'finalizada');
+  assert.equal(resultadoDoCaso({ status: 'analise' }), 'andamento');
+
+  const resumo = resumir([
+    { _id: 'a1', status: 'aceita', motivo: 'rdm' },
+    { _id: 'a2', status: 'recusada', motivo: 'rdm' },
+    { _id: 'a3', status: 'pendente', motivo: 'vdm' }
+  ], 'servidor');
+  assert.equal(resumo.taxaDeAceitas, 0.5);
+  assert.deepEqual(resumo.porCategoria[0], { nome: 'RDM', total: 2 });
+});
+
+test('notificações: só aceita inscrição de serviço de push conhecido', () => {
+  const { validarInscricao, podeAvisar } = require('../site/push');
+  const keys = { p256dh: 'B'.repeat(87), auth: 'a'.repeat(22) };
+  assert.ok(validarInscricao({ endpoint: 'https://fcm.googleapis.com/fcm/send/abc', keys }));
+  assert.ok(validarInscricao({ endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/abc', keys }));
+  assert.equal(validarInscricao({ endpoint: 'https://exemplo.com/roubar', keys }), null);
+  assert.equal(validarInscricao({ endpoint: 'http://fcm.googleapis.com/x', keys }), null);
+  assert.equal(validarInscricao({ endpoint: 'https://fcm.googleapis.com/x', keys: {} }), null);
+
+  assert.equal(podeAvisar('u1', 't1', 1000), true);
+  assert.equal(podeAvisar('u1', 't1', 2000), false);
+  assert.equal(podeAvisar('u1', 't1', 1000 + 3 * 60 * 1000), true);
+});
+
+test('chat: flood por rajada ou por mensagem repetida', () => {
+  const { ehFlood } = require('../site/rotas/chat');
+  const t0 = 1_000_000;
+  // Quatro mensagens diferentes em sequência ainda passam; a quinta em 8 s é flood.
+  for (let i = 0; i < 4; i++) assert.equal(ehFlood('g:rajada', `mensagem ${i}`, t0 + i * 1000), false);
+  assert.equal(ehFlood('g:rajada', 'mensagem 4', t0 + 4000), true);
+
+  // Três vezes a mesma mensagem dentro de um minuto também.
+  assert.equal(ehFlood('g:repete', 'oi', t0), false);
+  assert.equal(ehFlood('g:repete', 'OI', t0 + 15000), false);
+  assert.equal(ehFlood('g:repete', 'oi', t0 + 30000), true);
+
+  // Conversa normal, espaçada, não é flood.
+  for (let i = 0; i < 10; i++) assert.equal(ehFlood('g:normal', `fala ${i}`, t0 + i * 20000), false);
+});
+
+test('chat: música só aceita YouTube e Spotify e guarda só o identificador', () => {
+  const { analisarMusica } = require('../site/rotas/chatSala');
+  assert.deepEqual(analisarMusica('https://youtu.be/jNQXAC9IVRw?si=abc'), { tipo: 'youtube', ref: 'jNQXAC9IVRw' });
+  assert.deepEqual(analisarMusica('https://music.youtube.com/watch?v=jNQXAC9IVRw&t=3'), { tipo: 'youtube', ref: 'jNQXAC9IVRw' });
+  assert.deepEqual(analisarMusica('https://open.spotify.com/intl-pt/track/4cOdK2wGLETKBW3PvgPWqT?si=1'), { tipo: 'spotify', ref: 'track/4cOdK2wGLETKBW3PvgPWqT' });
+  assert.equal(analisarMusica('https://exemplo.com/watch?v=jNQXAC9IVRw'), null);
+  assert.equal(analisarMusica('javascript:alert(1)'), null);
+  assert.equal(analisarMusica('https://youtu.be/"><script>'), null);
+});
+
+test('chat: reações mostram o total e se a pessoa já reagiu', () => {
+  const { serializarReacoes } = require('../site/rotas/chatSala');
+  assert.deepEqual(serializarReacoes([{ emoji: '👍', usuarios: ['a', 'b'] }, { emoji: '❌', usuarios: [] }], 'b'), [{ emoji: '👍', total: 2, minha: true }]);
+});
+
+test('retenção: configurações e cadastros são permanentes; registros expiram', () => {
+  const { COLECOES_PERMANENTES } = require('../utils/retencaoDados');
+  const permanentes = ['Config', 'GlobalConfig', 'ConfigSite', 'ChatSala', 'ChatFixada', 'ChatBanimento', 'ChavePush', 'InscricaoPush', 'StaffProfile', 'Usuario'];
+  for (const nome of permanentes) {
+    const modelo = require(`../models/${nome}`);
+    assert.equal(modelo.schema.path('dataRetencaoAte'), undefined, `${nome} não pode ter prazo`);
+    assert.ok(COLECOES_PERMANENTES.includes(modelo.collection.name), `${modelo.collection.name} deve estar na lista de permanentes`);
+  }
+  for (const nome of ['DenunciaMensagem', 'ModerationAction', 'AcessoCaso', 'ChatMensagem', 'ChatModeracao', 'NotaInterna']) {
+    const modelo = require(`../models/${nome}`);
+    assert.ok(modelo.schema.path('dataRetencaoAte'), `${nome} deve ter validade`);
+    assert.equal(COLECOES_PERMANENTES.includes(modelo.collection.name), false);
+  }
+});
+
+test('retenção: prazos por coleção e em qual banco cada modelo fica', () => {
+  const { validadePara, COLECOES_COM_REGRA_PROPRIA } = require('../utils/retencaoDados');
+  const { primaryConnection, secondaryConnection } = require('../utils/persistencia');
+  const agora = new Date('2026-10-10T12:00:00.000Z');
+  const dias = (colecao) => Math.round((validadePara(colecao, agora) - agora) / 86400000);
+
+  assert.equal(dias('denunciamensagems'), 45);
+  assert.equal(dias('moderationactions'), 30);
+  assert.equal(dias('acessocasos'), 15);
+  assert.ok(dias('chatmensagems') > 180, 'o que não tem prazo próprio dura seis meses');
+
+  // Denúncias (45 dias) e strikes (24 horas) têm a regra no próprio modelo.
+  const Denuncia = require('../models/Denuncia');
+  const Strike = require('../models/Strike');
+  assert.deepEqual(COLECOES_COM_REGRA_PROPRIA, ['strikes', 'denuncias', 'backups.files', 'backups.chunks']);
+  assert.equal(Denuncia.schema.path('dataRetencaoAte'), undefined);
+  assert.ok(Strike.schema.indexes().some(([campos, opcoes]) => campos.updatedAt === 1 && opcoes.expireAfterSeconds === 86400));
+
+  // O site e as mensagens das denúncias ficam no secundário; o bot, no principal.
+  const doSecundario = ['Usuario', 'ChavePush', 'InscricaoPush', 'Sugestao', 'DenunciaMensagem', 'AcessoCaso', 'AvisoSite',
+    'ChatBanimento', 'ChatFixada', 'ChatMensagem', 'ChatModeracao', 'ChatSala', 'ChatSinalizacao', 'ConfigSite', 'LoginSite',
+    'RascunhoDenuncia', 'TesteStaff', 'TesteResposta', 'MetaStaff', 'NotaInterna', 'StaffProfile', 'Strike'];
+  for (const nome of doSecundario) assert.equal(require(`../models/${nome}`).db, secondaryConnection, nome);
+  for (const nome of ['Denuncia', 'ModerationAction', 'Config', 'GlobalConfig']) {
+    assert.equal(require(`../models/${nome}`).db, primaryConnection, nome);
+  }
+});
+
+test('teste da staff: valida o que o responsável monta e corrige as respostas', () => {
+  const { validarTeste, corrigir } = require('../site/rotas/teste');
+  const base = {
+    titulo: ' Admissão ', video: 'https://youtu.be/jNQXAC9IVRw?si=x', notaMinima: 70,
+    perguntas: [
+      { texto: 'Atirar sem interação é?', opcoes: ['VDM', '', 'RDM', 'MG'], correta: 2 },
+      { texto: 'Antes de analisar?', opcoes: ['Reivindicar', 'Recusar'], correta: 0 }
+    ]
+  };
+
+  const teste = validarTeste(base);
+  assert.equal(teste.titulo, 'Admissão');
+  assert.equal(teste.video, 'jNQXAC9IVRw', 'guarda só o identificador do vídeo');
+  // A alternativa vazia sai e a certa continua apontando para "RDM".
+  assert.deepEqual(teste.perguntas[0].opcoes, ['VDM', 'RDM', 'MG']);
+  assert.equal(teste.perguntas[0].correta, 1);
+
+  assert.throws(() => validarTeste({ ...base, perguntas: [] }), /pelo menos uma pergunta/);
+  assert.throws(() => validarTeste({ ...base, video: 'https://exemplo.com/video' }), /YouTube/);
+  assert.throws(() => validarTeste({ ...base, perguntas: [{ texto: 'x', opcoes: ['a', 'b'], correta: -1 }] }), /alternativa certa/);
+  assert.throws(() => validarTeste({ ...base, perguntas: [{ texto: 'x', opcoes: ['a'], correta: 0 }] }), /duas alternativas/);
+
+  const [p1, p2] = teste.perguntas;
+  assert.deepEqual(corrigir(teste, { [p1.id]: 1, [p2.id]: 0 }), { acertos: 2, total: 2, erradas: [], aprovado: true });
+  const metade = corrigir(teste, { [p1.id]: 0, [p2.id]: 0 });
+  assert.equal(metade.acertos, 1);
+  assert.equal(metade.aprovado, false, '50% não chega aos 70%');
+  assert.deepEqual(metade.erradas, [p1.id]);
+
+  // Vários testes por servidor: cada um tem título, pode ser rascunho e as perguntas podem ter vídeo próprio.
+  assert.throws(() => validarTeste({ ...base, titulo: '  ' }), /título/);
+  assert.equal(teste.ativo, true, 'publicado por padrão');
+  assert.equal(validarTeste({ ...base, ativo: false }).ativo, false);
+  const comVideos = validarTeste({ ...base, perguntas: [
+    { texto: 'Cena 1?', video: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', opcoes: ['a', 'b'], correta: 0 },
+    { texto: 'Cena 2?', video: 'https://youtu.be/jNQXAC9IVRw', opcoes: ['a', 'b'], correta: 1 },
+    { texto: 'Sem vídeo?', opcoes: ['a', 'b'], correta: 1 }
+  ] });
+  assert.deepEqual(comVideos.perguntas.map(item => item.video), ['dQw4w9WgXcQ', 'jNQXAC9IVRw', '']);
+  assert.throws(() => validarTeste({ ...base, perguntas: [{ texto: 'x', video: 'https://exemplo.com/v', opcoes: ['a', 'b'], correta: 0 }] }), /vídeo da pergunta 1/);
+
+  const { ultimasPorPessoa } = require('../site/rotas/teste');
+  const ultimas = ultimasPorPessoa([
+    { usuarioId: 'a', acertos: 3, total: 3, aprovado: true, erradas: [], em: 3 },
+    { usuarioId: 'b', acertos: 1, total: 3, aprovado: false, erradas: ['x'], em: 2 },
+    { usuarioId: 'a', acertos: 0, total: 3, aprovado: false, erradas: ['x'], em: 1 }
+  ]);
+  assert.equal(ultimas.length, 2);
+  assert.equal(ultimas[0].aprovado, true, 'vale a tentativa mais recente');
+  assert.equal(ultimas[0].tentativas, 2);
+});
+
+test('botões da denúncia: o que já foi feito fica desativado', async () => {
+  const { sincronizarBotoes, botoesDesativados } = require('../Handlers/statusDenuncia/botoesStatus');
+  assert.deepEqual(botoesDesativados('pendente'), []);
+  assert.deepEqual(botoesDesativados('reivindicacao'), ['reivindicar']);
+  assert.deepEqual(botoesDesativados('recusada'), ['reivindicar', 'recusar']);
+
+  // Mensagem de botões de mentira, no formato que o discord.js entrega.
+  const botao = (customId, disabled = false) => ({ customId, toJSON: () => ({ type: 2, custom_id: customId, disabled }) });
+  const criar = (botoes) => {
+    const mensagem = {
+      components: [{ toJSON: () => ({ type: 1 }), components: botoes }],
+      edit: async ({ components }) => {
+        mensagem.editada = components[0].components;
+        mensagem.components = [{ toJSON: () => ({ type: 1 }), components: mensagem.editada.map(b => botao(b.custom_id, b.disabled)) }];
+      }
+    };
+    return mensagem;
+  };
+  const desativados = (mensagem) => mensagem.editada.filter(b => b.disabled).map(b => b.custom_id);
+
+  const mensagem = criar(['reivindicar', 'analiser', 'aceitar', 'recusar'].map(id => botao(id)));
+  assert.equal(await sincronizarBotoes(null, 'reivindicacao', mensagem), true);
+  assert.deepEqual(desativados(mensagem), ['reivindicar']);
+
+  await sincronizarBotoes(null, 'analise', mensagem);
+  assert.deepEqual(desativados(mensagem), ['reivindicar', 'analiser']);
+
+  // Recusada: "recusar" trava, "aceitar" continua para uma reanálise, e "analisar" segue travado.
+  await sincronizarBotoes(null, 'recusada', mensagem);
+  assert.deepEqual(desativados(mensagem), ['reivindicar', 'analiser', 'recusar']);
+
+  // Repetir a mesma situação não edita a mensagem de novo.
+  assert.equal(await sincronizarBotoes(null, 'recusada', mensagem), false);
+});
+
+test('DMs: depois do limite do Discord (340002) os avisos opcionais pausam por uma hora', () => {
+  const { dmPausada, registrarErroDeDM, motivoDaFalha, CODIGOS_ESPERADOS } = require('../utils/dmSegura');
+  const agora = 5_000_000;
+  assert.equal(registrarErroDeDM({ code: 50007 }, agora), false, 'DM fechada não pausa nada');
+  assert.equal(dmPausada(agora), false);
+
+  assert.equal(registrarErroDeDM({ code: 340002 }, agora), true);
+  assert.equal(dmPausada(agora + 59 * 60 * 1000), true);
+  assert.equal(dmPausada(agora + 61 * 60 * 1000), false);
+
+  assert.ok(CODIGOS_ESPERADOS.includes(340002));
+  assert.match(motivoDaFalha({ code: 340002 }), /limitou/);
+  assert.match(motivoDaFalha({ code: 50007 }), /desativou as DMs/);
+
+  // Quarentena (20026): pausa mais longa, e os avisos extras ficam desligados por padrão.
+  const { avisosExtrasLigados } = require('../utils/dmSegura');
+  assert.equal(registrarErroDeDM({ code: 20026 }, agora), true);
+  assert.equal(dmPausada(agora + 5 * 60 * 60 * 1000), true);
+  assert.equal(dmPausada(agora + 7 * 60 * 60 * 1000), false);
+  delete process.env.DM_AVISOS_EXTRAS;
+  assert.equal(avisosExtrasLigados(), false);
+});
+
+test('site: cada versão serve JS e CSS num endereço próprio, guardado por muito tempo', async () => {
+  const { criarApp } = require('../site/servidor');
+  const app = criarApp({
+    client: { guilds: { cache: new Map() }, user: { id: '1' } },
+    config: { origem: 'http://localhost', seguro: false, segredo: 'x'.repeat(40), clientId: '1', clientSecret: 's' },
+    log: { warn() {}, error() {}, info() {}, success() {} }
+  });
+  const servidor = app.listen(0);
+  const base = `http://127.0.0.1:${servidor.address().port}`;
+  try {
+    const pagina = await fetch(`${base}/`);
+    const html = await pagina.text();
+    assert.equal(pagina.headers.get('cache-control'), 'no-store', 'a página inicial nunca fica em cache');
+    const versao = /\/v\/([a-z0-9]+)\/app\.js/.exec(html)?.[1];
+    assert.ok(versao, 'a página aponta para /v/<versão>/app.js');
+    assert.ok(html.includes(`/v/${versao}/estilo.css`));
+    assert.equal(/\?v=\d+/.test(html), false, 'não sobra o número antigo de versão');
+    assert.ok(html.includes(`<link rel="modulepreload" href="/v/${versao}/js/desenho.js">`), 'os módulos são baixados em paralelo');
+    assert.equal(html.includes('tema-estatico'), false);
+
+    // Os módulos importados com caminho relativo caem dentro da mesma versão.
+    const modulo = await fetch(`${base}/v/${versao}/js/painel.js`);
+    assert.equal(modulo.status, 200);
+    assert.match(modulo.headers.get('cache-control'), /max-age=31536000.*immutable/);
+
+    assert.equal((await fetch(`${base}/termos.html`)).status, 200);
+    assert.equal((await fetch(`${base}/.env`)).status, 404);
+  } finally {
+    servidor.close();
+  }
+});
+
+test('avisos do responsável: valida texto, tipo e duração', () => {
+  const { validarAviso } = require('../site/rotas/avisos');
+  const agora = 1_000_000;
+  assert.deepEqual(validarAviso({ texto: '  Manutenção às 23h  ', tipo: 'urgente', horas: 6 }, agora),
+    { texto: 'Manutenção às 23h', tipo: 'urgente', expiraEm: new Date(agora + 6 * 3600000) });
+  assert.equal(validarAviso({ texto: 'Evento sábado', tipo: 'qualquer' }, agora).tipo, 'info');
+  assert.equal(validarAviso({ texto: 'Evento sábado' }, agora).expiraEm, null, 'sem duração, fica até ser removido');
+  assert.throws(() => validarAviso({ texto: 'a' }), /Escreva o aviso/);
+  assert.throws(() => validarAviso({ texto: 'x'.repeat(401) }), /400 caracteres/);
+  assert.throws(() => validarAviso({ texto: 'Evento', horas: 5 }), /Duração inválida/);
+});
+
+test('denúncias abertas: entra quem ainda tem acusado sem conta do Discord', () => {
+  const { faltaIdentificar } = require('../site/rotas/identificacao');
+  assert.equal(faltaIdentificar({ acusado: '1039', acusadoUserIds: [] }), true, 'nenhum identificado');
+  assert.equal(faltaIdentificar({ acusado: '1039', acusadoUserIds: ['111111111111111111'] }), false);
+  assert.equal(faltaIdentificar({ acusado: '1039+2471', acusadoUserIds: ['111111111111111111'] }), true, '1 marcado e 2 denunciados');
+  assert.equal(faltaIdentificar({ acusado: '1039+2471', acusadoUserIds: ['111111111111111111', '222222222222222222'] }), false);
+});
+
+test('painel do bot: valida canais, cargos e isentos antes de salvar', () => {
+  const { validarPainel } = require('../site/rotas/painelBot');
+  const servidor = {
+    atual: { channels: { backup: '900000000000000009' }, roles: {} },
+    canais: new Set(['100000000000000001', '100000000000000002', '100000000000000003']),
+    cargos: new Set(['200000000000000001', '200000000000000002', '200000000000000003']),
+    canaisVisiveis: new Set(['100000000000000001', '300000000000000001']),
+    cargosDeQuemSalva: new Set(['200000000000000003'])
+  };
+  const entrada = () => ({
+    channels: { pc: '100000000000000001', mobile: '100000000000000002', logs: '100000000000000003', backup: '900000000000000009', cloud: '300000000000000001' },
+    roles: { pc: '200000000000000001', permitido: '200000000000000002', responsavel_admin: '200000000000000003' },
+    manutencao: true,
+    isentos: '123456789012345678\n123456789012345678, abc'
+  });
+
+  const limpo = validarPainel(entrada(), servidor);
+  assert.equal(limpo.manutencaoDenuncia, true);
+  assert.equal(limpo.bloquearReivindicacaoComPendentes, true);
+  assert.equal(limpo.alertaMotivoCritico, true, 'alerta de motivo crítico fica ligado se não vier');
+  assert.equal(validarPainel({ ...entrada(), alertaCritico: false }, servidor).alertaMotivoCritico, false);
+  assert.equal(validarPainel(entrada(), servidor).esperaEntreDenuncias, true, 'espera entre denúncias vem ligada');
+  assert.equal(validarPainel({ ...entrada(), esperaDenuncia: false }, servidor).esperaEntreDenuncias, false);
+  assert.equal(validarPainel({ ...entrada(), esperaReivindicar: true }, servidor).esperaEntreReivindicacoes, true);
+  assert.equal(validarPainel(entrada(), servidor).minutosEntreReivindicacoes, 1, 'tempo para reivindicar começa em 1 minuto');
+  assert.equal(validarPainel({ ...entrada(), minutosReivindicar: 5 }, servidor).minutosEntreReivindicacoes, 5);
+  assert.throws(() => validarPainel({ ...entrada(), minutosReivindicar: 0 }, servidor), /de 1 a 60 minutos/);
+  assert.equal(validarPainel(entrada(), servidor).analiseAutomatica, true, 'análise automática vem ligada');
+  assert.equal(validarPainel(entrada(), servidor).minutosAnaliseAutomatica, 30, 'análise automática começa em 30 minutos');
+  assert.equal(validarPainel({ ...entrada(), analiseAutomatica: false }, servidor).analiseAutomatica, false);
+  assert.equal(validarPainel({ ...entrada(), minutosAnalise: 60 }, servidor).minutosAnaliseAutomatica, 60);
+  assert.throws(() => validarPainel({ ...entrada(), minutosAnalise: 2 }, servidor), /de 5 a 240 minutos/);
+  assert.equal(validarPainel({ ...entrada(), minutosDenuncia: 3, minutosAviso: 20, arquivarTopico: 60 }, servidor).minutosArquivarTopico, 60);
+  assert.equal(validarPainel(entrada(), servidor).minutosAvisoReivindicacao, 15);
+  assert.throws(() => validarPainel({ ...entrada(), arquivarTopico: 99 }, servidor), /arquivamento inválido/);
+  assert.throws(() => validarPainel({ ...entrada(), minutosDenuncia: 0 }, servidor), /de 1 a 60 minutos/);
+  assert.equal(validarPainel(entrada(), servidor).topicosPrivados, true, 'tópicos privados ligados por padrão');
+  assert.equal(validarPainel({ ...entrada(), topicosPrivados: false }, servidor).topicosPrivados, false);
+  assert.equal(validarPainel(entrada(), servidor).botaoTicketRevisao, true, 'botão de ticket ligado por padrão');
+  assert.equal(validarPainel({ ...entrada(), botaoTicket: false }, servidor).botaoTicketRevisao, false);
+  assert.throws(() => validarPainel({ ...entrada(), minutosReivindicar: 2.5 }, servidor), /de 1 a 60 minutos/);
+  assert.equal(limpo.channels.backup, '900000000000000009', 'valor que não mudou é mantido mesmo fora do servidor');
+  assert.equal(limpo.channels.analysis, '');
+  assert.deepEqual(limpo.isentos, ['123456789012345678']);
+
+  const com = (mudar) => { const e = entrada(); mudar(e); return () => validarPainel(e, servidor); };
+  assert.throws(com(e => { e.channels.pc = ''; }), /principais/);
+  assert.throws(com(e => { e.channels.log = '100000000000000999'; }), /não existe mais/);
+  assert.throws(com(e => { e.channels.registro = '300000000000000999'; }), /não enxerga/);
+  assert.throws(com(e => { e.roles.administrador = '200000000000000999'; }), /cargos escolhidos/);
+  assert.throws(com(e => { e.roles.responsavel_admin = '200000000000000001'; }), /sem acesso/);
+  assert.throws(com(e => { e.isentos = 'abc'; }), /isentos/);
+});
+
+test('lista do responsável: a busca acha por qualquer campo, sem ligar para acento ou pontuação', () => {
+  const { filtroDaListaAdmin, bateComABusca } = require('../site/rotas/denuncias');
+  assert.deepEqual(filtroDaListaAdmin('1', {}), { guildId: '1' });
+  const filtro = filtroDaListaAdmin('1', { busca: 'flood', status: 'andamento', plataforma: 'PC' });
+  assert.equal(filtro.platform, 'PC');
+  assert.deepEqual(filtro.status.$in, ['pendente', 'reivindicacao', 'analise']);
+  assert.equal(filtroDaListaAdmin('1', { status: 'inventado', plataforma: 'TV' }).status, undefined);
+
+  const caso = {
+    _id: '6ac2c0de56c5b47538757fa7', acusado: '827653+1039', denunciante: '1247173',
+    motivo: 'Anti-RP e Flood no chat após abordagem', categoria: 'Anti-RP',
+    criadoPor: '111111111111111111', claimedBy: '222222222222222222', acusadoUserIds: ['333333333333333333']
+  };
+  const acha = (termo) => bateComABusca(caso, termo);
+  assert.ok(acha('flood'));
+  assert.ok(acha('FLOOD'));
+  assert.ok(acha('apos abordagem'), 'sem acento');
+  assert.ok(acha('abordagem flood'), 'palavras em qualquer ordem');
+  assert.ok(acha('anti rp'), 'pontuação não atrapalha');
+  assert.ok(acha('antirp'));
+  assert.ok(acha('1039'), 'segundo acusado');
+  assert.ok(acha('1247173'), 'denunciante');
+  assert.ok(acha('#757FA7'), 'número do caso');
+  assert.ok(acha('222222222222222222'), 'ID do Discord de quem atendeu');
+  assert.ok(acha(''), 'sem termo, tudo passa');
+  assert.equal(acha('rdm'), false);
+  assert.equal(acha('flood rdm'), false, 'todas as palavras precisam aparecer');
+  assert.equal(acha('x.y(('), false, 'símbolos não quebram a busca');
+});
+
+test('espelhos: finalizada tranca, aberta só arquiva, recém-criado fica', () => {
+  const { destinoDoEspelho } = require('../utils/espelhos');
+  const agora = Date.now();
+  const antigo = agora - 3 * 60 * 60 * 1000;
+  assert.equal(destinoDoEspelho({ status: 'finalizada' }, antigo, agora), 'trancar');
+  assert.equal(destinoDoEspelho(null, antigo, agora), 'trancar', 'denúncia antiga, já apagada do banco');
+  assert.equal(destinoDoEspelho({ status: 'analise' }, antigo, agora), 'arquivar');
+  assert.equal(destinoDoEspelho({ status: 'recusada' }, antigo, agora), 'arquivar');
+  assert.equal(destinoDoEspelho(null, agora - 60 * 1000, agora), null, 'espelho recém-criado ainda recebe as primeiras mensagens');
+});
+
+test('proteção do site: limita, bloqueia quem insiste e libera depois', () => {
+  const { criarProtecao, ipDoCliente } = require('../site/protecao');
+  let relogio = 1_000_000;
+  const protecao = criarProtecao({ maximoPorJanela: 5, maximoAntesDoBloqueio: 8, bloqueioMs: 60_000, janelaMs: 10_000 }, { agora: () => relogio });
+
+  for (let i = 0; i < 5; i += 1) assert.equal(protecao.avaliar('1.1.1.1').permitido, true);
+  assert.equal(protecao.avaliar('1.1.1.1').motivo, 'limite', 'passou do limite: recusa até a janela virar');
+  assert.equal(protecao.avaliar('2.2.2.2').permitido, true, 'outro IP não é afetado');
+
+  relogio += 10_000;
+  assert.equal(protecao.avaliar('1.1.1.1').permitido, true, 'janela nova libera de novo');
+
+  for (let i = 0; i < 8; i += 1) protecao.avaliar('3.3.3.3');
+  assert.equal(protecao.avaliar('3.3.3.3').motivo, 'bloqueado', 'insistiu muito: bloqueio temporário');
+  relogio += 30_000;
+  assert.equal(protecao.avaliar('3.3.3.3').motivo, 'bloqueado', 'continua bloqueado mesmo com janela nova');
+  relogio += 31_000;
+  assert.equal(protecao.avaliar('3.3.3.3').permitido, true, 'bloqueio acaba sozinho');
+
+  // Pela Cloudflare (162.158.x.x / 2606:4700::) o cabeçalho vale; direto, não (não dá para falsificar o IP).
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '162.158.1.2' }), '9.9.9.9');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '2001:db8::1' }, ip: '::ffff:162.158.1.2' }), '2001:db8::1');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '2606:4700::1' }), '9.9.9.9');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '10.0.0.1' }), '10.0.0.1');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '::ffff:203.0.113.5' }), '203.0.113.5');
+  assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '<script>' }, ip: '162.158.1.2' }), '162.158.1.2');
+  assert.equal(ipDoCliente({ headers: {}, ip: undefined, socket: {} }), 'desconhecido');
+
+  // Proxy extra (outra camada da hospedagem) só por configuração.
+  const original = process.env.SITE_PROXIES_CONFIAVEIS;
+  try {
+    process.env.SITE_PROXIES_CONFIAVEIS = '10.0.0.0/8, 192.168.0.9';
+    assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '10.1.2.3' }), '9.9.9.9');
+    assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '192.168.0.9' }), '9.9.9.9');
+    assert.equal(ipDoCliente({ headers: { 'cf-connecting-ip': '9.9.9.9' }, ip: '192.168.0.10' }), '192.168.0.10');
+  } finally {
+    if (original === undefined) delete process.env.SITE_PROXIES_CONFIAVEIS;
+    else process.env.SITE_PROXIES_CONFIAVEIS = original;
+  }
+});
+
+test('proteção do site: enxurrada de pedidos recebe 429 e o site segue respondendo', async () => {
+  const { criarApp } = require('../site/servidor');
+  const app = criarApp({
+    client: { guilds: { cache: new Map() }, user: { id: '1' } },
+    config: { origem: 'http://localhost', seguro: false, segredo: 'x'.repeat(40), clientId: '1', clientSecret: 's' },
+    log: { warn() {}, error() {}, info() {}, success() {} }
+  });
+  const servidor = app.listen(0);
+  const base = `http://127.0.0.1:${servidor.address().port}`;
+  // O teste faz o papel da Cloudflare: só assim o cf-connecting-ip separa os visitantes.
+  const original = process.env.SITE_PROXIES_CONFIAVEIS;
+  process.env.SITE_PROXIES_CONFIAVEIS = '127.0.0.1';
+  try {
+    const pedir = (ip) => fetch(`${base}/logo.png`, { headers: { 'cf-connecting-ip': ip } }).then(async (r) => { await r.arrayBuffer(); return r; });
+    const respostas = [];
+    for (let lote = 0; lote < 7; lote += 1) respostas.push(...await Promise.all(Array.from({ length: 100 }, () => pedir('7.7.7.7'))));
+    assert.equal(respostas.filter(r => r.status === 200).length, 600);
+    assert.equal(respostas.filter(r => r.status === 429).length, 100);
+    assert.ok(respostas.find(r => r.status === 429).headers.get('retry-after'));
+    assert.equal((await pedir('8.8.8.8')).status, 200, 'quem não está atacando continua entrando');
+  } finally {
+    if (original === undefined) delete process.env.SITE_PROXIES_CONFIAVEIS;
+    else process.env.SITE_PROXIES_CONFIAVEIS = original;
+    servidor.close();
+  }
+});
+
+test('acesso: perder cargo ou mudar apelido no Discord renova o acesso no site', () => {
+  const { mudouParaOSite } = require('../site/acesso');
+  const membro = (cargos, nickname = 'Fulano 1039') => ({ nickname, roles: { cache: new Map(cargos.map(id => [id, {}])) } });
+  assert.equal(mudouParaOSite(membro(['a', 'b']), membro(['a', 'b'])), false, 'nada mudou');
+  assert.equal(mudouParaOSite(membro(['a', 'b']), membro(['a'])), true, 'perdeu um cargo');
+  assert.equal(mudouParaOSite(membro(['a']), membro(['a', 'b'])), true, 'ganhou um cargo');
+  assert.equal(mudouParaOSite(membro(['a', 'b']), membro(['a', 'c'])), true, 'trocou de cargo');
+  assert.equal(mudouParaOSite(membro(['a']), membro(['a'], 'Fulano 2000')), true, 'mudou o apelido');
+  assert.equal(mudouParaOSite({ partial: true }, membro(['a'])), true, 'sem o estado anterior, confere por garantia');
+});
+
+test('metas da staff: conta atendimentos da semana e aponta quem está abaixo', () => {
+  const { montarMetas, lerBackup } = require('../site/rotas/gestao');
+  const metas = montarMetas(5, ['a', 'b', 'c'], new Map([['a', 7], ['b', 2], ['ex', 4]]));
+  assert.deepEqual(metas.linhas.map(linha => linha.id), ['c', 'b', 'ex', 'a'], 'quem atendeu menos vem primeiro');
+  assert.equal(metas.abaixo, 2, 'b e c estão abaixo; quem saiu da equipe não conta');
+  assert.equal(metas.linhas.find(linha => linha.id === 'b').faltam, 3);
+  assert.equal(metas.linhas.find(linha => linha.id === 'ex').naEquipe, false);
+  assert.equal(montarMetas(0, ['a'], new Map()).abaixo, 0, 'sem meta, ninguém está abaixo');
+
+  assert.throws(() => lerBackup({ tipo: 'outro' }), /não é um backup/);
+  assert.throws(() => lerBackup({ tipo: 'althea-backup', versao: 99, painelBot: {} }), /versão/);
+  const lido = lerBackup({ tipo: 'althea-backup', versao: 1, painelBot: { channels: {} }, minimoSemanal: '12' });
+  assert.equal(lido.minimoSemanal, 12);
+  assert.equal(lido.configSite, null);
+});
+
+test('testes obrigatórios: situação da pessoa considera reprovação e validade', () => {
+  const { situacaoNoTeste } = require('../utils/testesObrigatorios');
+  const agora = Date.UTC(2026, 9, 12);
+  const dia = 24 * 60 * 60 * 1000;
+  const ha = (dias) => new Date(agora - dias * dia);
+
+  assert.equal(situacaoNoTeste({ validadeDias: 0 }, null, agora).situacao, 'novo');
+  assert.equal(situacaoNoTeste({ validadeDias: 30 }, { aprovado: false, em: ha(1) }, agora).situacao, 'reprovado');
+  assert.equal(situacaoNoTeste({ validadeDias: 0 }, { aprovado: true, em: ha(900) }, agora).situacao, 'aprovado', 'sem validade, não vence');
+  const emDia = situacaoNoTeste({ validadeDias: 30 }, { aprovado: true, em: ha(10) }, agora);
+  assert.equal(emDia.situacao, 'aprovado');
+  assert.equal(emDia.venceEm.getTime(), agora + 20 * dia);
+  assert.equal(situacaoNoTeste({ validadeDias: 30 }, { aprovado: true, em: ha(31) }, agora).situacao, 'vencido');
+
+  const { validarTeste } = require('../site/rotas/teste');
+  const base = { titulo: 'T', notaMinima: 70, perguntas: [{ texto: 'x', opcoes: ['a', 'b'], correta: 0 }] };
+  assert.equal(validarTeste(base).obrigatorio, false);
+  assert.equal(validarTeste({ ...base, obrigatorio: true, validadeDias: '90' }).validadeDias, 90);
+  assert.throws(() => validarTeste({ ...base, validadeDias: 5000 }), /validade/);
+});
+
+test('qualidade da staff: decisão contrária depois conta como revertida', () => {
+  const { contarRevertidas } = require('../site/rotas/gestao');
+  const porPessoa = contarRevertidas([
+    { moderatorId: 'ana', action: 'aceita', denunciaId: 'c1' },
+    { moderatorId: 'bia', action: 'recusada', denunciaId: 'c1' },
+    { moderatorId: 'ana', action: 'recusada', denunciaId: 'c2' },
+    { moderatorId: 'ana', action: 'recusada', denunciaId: 'c2' },
+    { moderatorId: 'ana', action: 'analise', denunciaId: 'c3' }
+  ]);
+  assert.deepEqual(porPessoa.get('ana'), { decisoes: 2, revertidas: 1 }, 'c1 foi revertido; c2 repetido conta uma vez');
+  assert.deepEqual(porPessoa.get('bia'), { decisoes: 1, revertidas: 0 });
+});
+
+test('horários de pico usam o horário de Brasília', () => {
+  const { horaDeBrasilia } = require('../site/rotas/staff');
+  // 02:30 UTC de segunda é 23:30 de domingo em Brasília.
+  assert.deepEqual(horaDeBrasilia('2026-10-12T02:30:00Z'), { hora: 23, diaDaSemana: 0 });
+  assert.deepEqual(horaDeBrasilia('2026-10-12T15:00:00Z'), { hora: 12, diaDaSemana: 1 });
+});
+
+test('modo somente leitura: bloqueia quem altera, menos o responsável e as rotas livres', () => {
+  const { exigirEscritaLiberada, pedidoAtual } = require('../site/acesso');
+  const ligado = { siteSomenteLeitura: true };
+  const em = (metodo, caminho, fn) => pedidoAtual.run({ metodo, caminho }, fn);
+
+  em('GET', '/denuncias', () => assert.doesNotThrow(() => exigirEscritaLiberada(ligado, {})));
+  em('POST', '/denuncias', () => assert.throws(() => exigirEscritaLiberada(ligado, { staff: true }), /somente leitura/));
+  em('POST', '/denuncias', () => assert.doesNotThrow(() => exigirEscritaLiberada(ligado, { responsavel: true })));
+  em('POST', '/denuncias', () => assert.doesNotThrow(() => exigirEscritaLiberada({ siteSomenteLeitura: false }, {})));
+  em('POST', '/push/inscricao', () => assert.doesNotThrow(() => exigirEscritaLiberada(ligado, {})));
+  assert.doesNotThrow(() => exigirEscritaLiberada(ligado, {}), 'fora de um pedido do site (bot), nada é bloqueado');
+});
+
+test('registro de erros: esconde segredos e junta repetições', () => {
+  const { limpar } = require('../utils/registroDeErros');
+  assert.equal(limpar('falha em mongodb+srv://usuario:senha123@cluster.mongodb.net/db'), 'falha em mongodb+srv://***@cluster.mongodb.net/db');
+  assert.match(limpar('token: abcDEF123456'), /token: \*\*\*/);
+  assert.equal(limpar('\u001b[31mErro vermelho\u001b[0m'), 'Erro vermelho');
+});
+
+test('rascunho na conta: só os campos do formulário, dentro do tamanho', () => {
+  const { limparRascunho, temConteudo } = require('../site/rotas/rascunho');
+  const limpo = limparRascunho({ acusado: '1039', detalhes: 'x'.repeat(200), invasor: 'sim' });
+  assert.equal(limpo.detalhes.length, 75);
+  assert.equal(limpo.invasor, undefined);
+  assert.equal(temConteudo(limpo), true);
+  assert.equal(temConteudo(limparRascunho({ platform: 'PC', categoria: 'RDM' })), false, 'só plataforma e categoria não é rascunho');
+});
+
+test('esperas: 1 minuto, ligadas e desligadas pelo painel', () => {
+  const { ESPERA_ENTRE_DENUNCIAS_MS, esperaEntreReivindicacoesMs, esperaEntreDenunciasAtiva, esperaEntreReivindicacoesAtiva, tempoRestante } = require('../utils/esperas');
+  assert.equal(ESPERA_ENTRE_DENUNCIAS_MS, 60000);
+  assert.equal(esperaEntreReivindicacoesMs({}), 60000, 'sem escolha, 1 minuto');
+  assert.equal(esperaEntreReivindicacoesMs({ minutosEntreReivindicacoes: 5 }), 300000);
+  assert.equal(esperaEntreReivindicacoesMs({ minutosEntreReivindicacoes: 999 }), 3600000, 'no máximo 60 minutos');
+  assert.equal(esperaEntreDenunciasAtiva({}), true);
+  assert.equal(esperaEntreDenunciasAtiva({ esperaEntreDenuncias: false }), false);
+  assert.equal(esperaEntreReivindicacoesAtiva({ esperaEntreReivindicacoes: true }, '1'), true);
+  assert.equal(esperaEntreReivindicacoesAtiva({ esperaEntreReivindicacoes: false }, '817924556358156360'), false);
+  // Sem escolha no painel, vale a lista antiga do .env.
+  assert.equal(esperaEntreReivindicacoesAtiva({}, '817924556358156360'), true);
+  assert.equal(esperaEntreReivindicacoesAtiva({}, '1'), false);
+  assert.equal(tempoRestante(45000), '45s');
+  assert.equal(tempoRestante(80000), '1m 20s');
+});
+
+test('análise automática: ligada em 30 minutos, tempo e liga/desliga pelo painel', () => {
+  const { analiseAutomaticaAtiva, minutosAnaliseAutomatica } = require('../utils/esperas');
+  assert.equal(analiseAutomaticaAtiva({}), true);
+  assert.equal(analiseAutomaticaAtiva({ analiseAutomatica: false }), false);
+  assert.equal(minutosAnaliseAutomatica({}), 30);
+  assert.equal(minutosAnaliseAutomatica({ minutosAnaliseAutomatica: 45 }), 45);
+  assert.equal(minutosAnaliseAutomatica({ minutosAnaliseAutomatica: 1 }), 5, 'no mínimo 5 minutos');
+  assert.equal(minutosAnaliseAutomatica({ minutosAnaliseAutomatica: 999 }), 240, 'no máximo 240 minutos');
+});
+
+test('painel: tempos novos (espera entre denúncias, aviso de reivindicação, arquivamento)', () => {
+  const e = require('../utils/esperas');
+  assert.equal(e.esperaEntreDenunciasMs({}), 60000);
+  assert.equal(e.esperaEntreDenunciasMs({ minutosEntreDenuncias: 5 }), 300000);
+  assert.equal(e.minutosAvisoReivindicacao({}), 15);
+  assert.equal(e.minutosAvisoReivindicacao({ minutosAvisoReivindicacao: 1 }), 5, 'no mínimo 5');
+  assert.equal(e.avisoReivindicacaoAtivo({ avisoReivindicacao: false }), false);
+  assert.equal(e.minutosArquivarTopico({}), 1440);
+  assert.equal(e.minutosArquivarTopico({ minutosArquivarTopico: 60 }), 60);
+  assert.equal(e.minutosArquivarTopico({ minutosArquivarTopico: 99 }), 1440, 'valor que o Discord não aceita volta ao padrão');
+});
+
+test('histórico do painel: só registra o que mudou, com nome legível', () => {
+  const { diferencas } = require('../utils/historicoPainel');
+  const lista = diferencas(
+    { analiseAutomatica: true, channels: { pc: '1' }, roles: { responsavel_admin: '9' } },
+    { analiseAutomatica: false, channels: { pc: '1' }, roles: { responsavel_admin: '8' }, minutosAnaliseAutomatica: 30 }
+  );
+  assert.deepEqual(lista, [
+    { campo: 'Análise automática', antes: 'ligado', depois: 'desligado' },
+    { campo: 'Minutos da análise automática', antes: '(vazio)', depois: '30' },
+    { campo: 'Cargo Responsável', antes: '9', depois: '8' }
+  ]);
+  assert.deepEqual(diferencas({ topicosPrivados: true }, { topicosPrivados: true }), []);
+});
+
+test('permissões do bot: aponta o que falta em cada canal e o canal sumido', () => {
+  const { PermissionFlagsBits: P } = require('discord.js');
+  const { verificarPermissoes } = require('../utils/permissoesDoBot');
+  const me = {};
+  const canal = (id, name, tem) => ({ id, name, guild: null, permissionsFor: () => ({ has: (flag) => tem.includes(flag) }) });
+  const guild = { id: 'g', name: 'Servidor', members: { me }, roles: { cache: new Map([['r', { name: 'Responsável' }]]) } };
+  const todas = Object.values(P);
+  const pc = canal('1', 'denuncias-pc', todas.filter(f => f !== P.ManageRoles && f !== P.Administrator));
+  const logs = canal('2', 'cadeia', todas.filter(f => f !== P.Administrator));
+  for (const c of [pc, logs]) c.guild = guild;
+  guild.channels = { cache: new Map([['1', pc], ['2', logs]]) };
+  const r = verificarPermissoes({ channels: { cache: new Map() } }, guild, { channels: { pc: '1', logs: '2', log: '3' }, roles: { responsavel_admin: 'r' } });
+  assert.deepEqual(r.canais.map(c => [c.chave, c.situacao, c.faltando]), [
+    ['pc', 'falta', ['Gerenciar permissões']],
+    ['logs', 'ok', []],
+    ['log', 'sumiu', []]
+  ]);
+  assert.deepEqual(r.responsavel.canais.map(c => c.situacao), ['ok']);
+  assert.equal(r.responsavel.cargo, 'Responsável');
+});

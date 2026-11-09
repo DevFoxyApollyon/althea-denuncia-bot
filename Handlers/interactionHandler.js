@@ -1,14 +1,14 @@
-﻿const { InteractionType, PermissionFlagsBits } = require('discord.js');
 const Config = require('../models/Config');
 
 const {
-  handleDenunciaCommand,
   handleDenunciaPC,
   handleDenunciaMobile,
   handleModalSubmit, 
   handleMyDenunciasButton,    
+  handleEntrarNoTopico,
   handleConsultaModalSubmit,
-  atualizarMensagemDenuncia
+  atualizarMensagemDenuncia,
+  liberarTopicosPrivadosNoServidor
 } = require('../commands/denuncia');
 
 const {
@@ -22,6 +22,12 @@ const {
 } = require('../Handlers/handlerStatusButton');
 
 const { handleExportButton } = require('../Handlers/exportDenuncia');
+const { BOTAO_ABRIR_TICKET, handleAbrirTicket } = require('./ticketExterno');
+const { MODAL_MOTIVOS, handlePonteMotivosModal } = require('../commands/ponte');
+const { handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, handleIncertoDaPunicaoGm } = require('./ponteGamemode');
+const { BOTAO_INCERTO_OK, BOTAO_INCERTO_REENVIAR } = require('../services/ponteSamp/incertosGm');
+const { MODAL_LIMITES, handleLimitesGmModal } = require('../commands/ponteGamemode');
+const { BOTAO_ENVIAR, BOTAO_EDITAR, BOTAO_CANCELAR, BOTAO_GM_APLICADA, BOTAO_GM_REAPLICAR, MENU_ALVO, MODAL_ALVO } = require('../services/ponteSamp/discordGm');
 
 const {
   handleCorrigirDenunciaButton,
@@ -32,33 +38,47 @@ const {
   createChannelsModal1,
   createChannelsModal2,
   createChannelsModal3,
-  createChannelsModal4,
   createRolesModal1,
   createRolesModal2,
   createExemptUsersModal,
+  createAutoAnalysisModal,
+  atualizarPainelMensagem,
+  atualizarPainelCategoria,
   saveExemptUsers,
-  showConfig,
   hasPermission,
   cachePanelConfig,
   getPanelConfig,
-  getPanelExemptUsers
+  getPanelExemptUsers,
+  bloqueioPendentesAtivo,
+  alertaMotivoCriticoAtivo,
+  topicosPrivadosAtivos
 } = require('../commands/painel');
 
 const { handleStatusButtons } = require('../commands/status');
+const { handleSlashCommand } = require('../commands/slash');
 const { handleFeedbackMenu, handleFeedbackModal } = require('../utils/feedback');
-const { getCachedConfig, invalidateCache } = require('../utils/performance');
+const { getConfig: getCachedConfig } = require('../utils/configCache');
 const Denuncia = require('../models/Denuncia');
+const { MODAL_LINK, handleLinkModal } = require('../commands/link');
+const { MODAL_DESBANIR, BOTAO_DESBANIR, BOTAO_DESBANIR_ID, BOTAO_SOLTAR_ID, MODAL_AVISOS_ID, handleDesbanirModal, handleDesbanirBotao, handleDesbanirIdBotao, handleAvisosIdModal, handleSoltarIdBotao } = require('../commands/desbanir');
+const provaStaff = require('../commands/provaStaff');
+const DenunciaStaff = require('../models/DenunciaStaff');
+const { MINUTOS_ANALISE_AUTOMATICA } = require('../utils/esperas');
+const { registrarAlteracao } = require('../utils/historicoPainel');
+const { MODAL_SENHA, senhaCadeiaAtiva, situacaoDaSenha, modalDaSenha, validarSenha } = require('../utils/senhaStaff');
+const { ehDono } = require('../services/ponteSamp/gestao');
 
 async function handlePanelModalSubmit(interaction) {
   try {
     await interaction.deferReply({ flags: 64 });
     const fields = interaction.fields;
     let config = await Config.findOne({ guildId: interaction.guild.id });
+    const antes = config?.toObject ? config.toObject() : null;
 
     if (!config) {
       config = new Config({
         guildId: interaction.guild.id,
-        channels: { pc: '', mobile: '', logs: '', log: '', backup: '', armazem: '', registro: '', cloud: '', canalDenuncia: '', analysis: '', topDaily: '', databaseprovas: '' },
+        channels: { pc: '', mobile: '', logs: '', log: '', backup: '', armazem: '', registro: '', cloud: '', canalDenuncia: '', analysis: '', topDaily: '' },
         roles: { permitido: '', pc: '', administrador: '', responsavel_admin: '' },
         updatedBy: interaction.user.tag
       });
@@ -69,6 +89,8 @@ async function handlePanelModalSubmit(interaction) {
         config.channels.pc = fields.getTextInputValue('pc_channel').trim();
         config.channels.mobile = fields.getTextInputValue('mobile_channel').trim();
         config.channels.logs = fields.getTextInputValue('logs_channel').trim();
+        config.channels.relatorioPunicoes = fields.getTextInputValue('relatorio_punicoes_channel').trim();
+        config.channels.provasStaff = fields.getTextInputValue('provas_staff_channel').trim();
         break;
       case 'channels_modal_2':
         config.channels.log = fields.getTextInputValue('log_admin_channel').trim();
@@ -82,17 +104,38 @@ async function handlePanelModalSubmit(interaction) {
         config.channels.cloud = fields.getTextInputValue('cloud_channel').trim();
         config.channels.canalDenuncia = fields.getTextInputValue('canal_denuncia_channel').trim();
         break;
-      case 'channels_modal_4':
-        config.channels.databaseprovas = fields.getTextInputValue('databaseprovas_channel').trim();
-        break;
       case 'roles_modal_1':
         config.roles.permitido = fields.getTextInputValue('permitido_role').trim();
         config.roles.pc = fields.getTextInputValue('pc_role').trim();
+        config.roles.suporte = fields.getTextInputValue('suporte_role').trim();
         break;
       case 'roles_modal_2':
         config.roles.administrador = fields.getTextInputValue('admin_role').trim();
         config.roles.responsavel_admin = fields.getTextInputValue('resp_admin_role').trim();
+        {
+          // Quem salva precisa continuar podendo abrir o /painel.
+          const fundador = fields.getTextInputValue('fundador_role').trim();
+          if (fundador && !interaction.member?.roles?.cache?.has(fundador) && !interaction.member?.permissions?.has?.(8n)) {
+            await interaction.editReply({ content: '❌ Você não tem o cargo de fundador escolhido e ficaria sem acesso ao /painel. Pegue o cargo antes.' });
+            return;
+          }
+          config.roles.fundador = fundador;
+        }
         break;
+      case 'auto_analysis_modal': {
+        const { minimo, maximo } = MINUTOS_ANALISE_AUTOMATICA;
+        const minutos = Number(fields.getTextInputValue('auto_analysis_minutes').trim());
+        if (minutos === 0) {
+          config.analiseAutomatica = false;
+        } else if (Number.isInteger(minutos) && minutos >= minimo && minutos <= maximo) {
+          config.analiseAutomatica = true;
+          config.minutosAnaliseAutomatica = minutos;
+        } else {
+          await interaction.editReply({ content: `❌ Use um número inteiro de ${minimo} a ${maximo}, ou 0 para desligar.` });
+          return;
+        }
+        break;
+      }
       default:
         return;
     }
@@ -101,6 +144,9 @@ async function handlePanelModalSubmit(interaction) {
     config.updatedBy = interaction.user.tag;
     await config.save();
     cachePanelConfig(interaction.guild.id, config);
+    registrarAlteracao({ guildId: interaction.guild.id, por: interaction.user.tag, via: 'discord', antes, depois: config }).catch(() => {});
+    liberarTopicosPrivadosNoServidor(interaction.client, config).catch(() => {});
+    await atualizarPainelMensagem(interaction, config);
 
     await interaction.editReply({ content: '✅ Configuração salva com sucesso!' });
 
@@ -122,6 +168,9 @@ async function handleGlobalExemptUsersSubmit(interaction) {
 
     await interaction.deferReply({ flags: 64 });
     const users = await saveExemptUsers(interaction);
+    const config = await Config.findOne({ guildId: interaction.guild.id });
+    cachePanelConfig(interaction.guild.id, config);
+    await atualizarPainelMensagem(interaction, config);
     await interaction.editReply({
       content: users.length
         ? `✅ Lista global atualizada com **${users.length}** usuário(s) isento(s).`
@@ -141,11 +190,12 @@ async function handleGlobalExemptUsersSubmit(interaction) {
 }
 
 async function handlePanelMenu(interaction) {
-  if (!await hasPermission(interaction)) {
+  const cachedConfig = getPanelConfig(interaction.guild.id);
+  const storedConfig = cachedConfig || await Config.findOne({ guildId: interaction.guild.id }).catch(() => null);
+  if (!await hasPermission(interaction, storedConfig)) {
     return interaction.reply({ content: '❌ Sem permissão.', flags: [64] });
   }
 
-  const cachedConfig = getPanelConfig(interaction.guild.id);
   const [selectedOption, ...encodedValues] = interaction.values[0].split('|');
   const encodedConfig = {
     channels: {},
@@ -158,62 +208,127 @@ async function handlePanelMenu(interaction) {
     [encodedConfig.channels.log, encodedConfig.channels.backup, encodedConfig.channels.armazem, encodedConfig.channels.analysis, encodedConfig.channels.topDaily] = encodedValues;
   } else if (selectedOption === 'edit_channels_3') {
     [encodedConfig.channels.registro, encodedConfig.channels.cloud, encodedConfig.channels.canalDenuncia] = encodedValues;
-  } else if (selectedOption === 'edit_channels_4') {
-    [encodedConfig.channels.databaseprovas] = encodedValues;
   } else if (selectedOption === 'edit_roles_1') {
     [encodedConfig.roles.permitido, encodedConfig.roles.pc] = encodedValues;
   } else if (selectedOption === 'edit_roles_2') {
     [encodedConfig.roles.administrador, encodedConfig.roles.responsavel_admin] = encodedValues;
   }
 
-  const config = cachedConfig || encodedConfig;
+  const config = storedConfig || cachedConfig || encodedConfig;
+  if (storedConfig) cachePanelConfig(interaction.guild.id, storedConfig);
 
   switch (selectedOption) {
     case 'toggle_maintenance': {
-      const manutencaoDenuncia = !Boolean(config?.manutencaoDenuncia);
+      const manutencaoDenuncia = !config?.manutencaoDenuncia;
+      await interaction.deferUpdate();
       const configAtualizada = await Config.findOneAndUpdate(
         { guildId: interaction.guild.id },
         { $set: { manutencaoDenuncia, lastUpdated: new Date(), updatedBy: interaction.user.tag } },
         { new: true, upsert: true }
       );
-      invalidateCache('config', interaction.guild.id);
       cachePanelConfig(interaction.guild.id, configAtualizada);
+      registrarAlteracao({ guildId: interaction.guild.id, por: interaction.user.tag, via: 'discord', antes: config, depois: configAtualizada }).catch(() => {});
       await atualizarMensagemDenuncia(interaction.client, interaction.guild, configAtualizada);
-      await interaction.reply({
+      await atualizarPainelMensagem(interaction, configAtualizada);
+      await interaction.followUp({
         content: manutencaoDenuncia
           ? '🛠️ Modo manutenção ativado. Novos envios foram bloqueados.'
           : '✅ Modo manutenção desativado. Os botões foram restaurados.',
         flags: [64]
-      });
+      }).catch(() => {});
+      break;
+    }
+    case 'toggle_pending_claim_block': {
+      const bloquearReivindicacaoComPendentes = !bloqueioPendentesAtivo(config);
+      await interaction.deferUpdate();
+      const configAtualizada = await Config.findOneAndUpdate(
+        { guildId: interaction.guild.id },
+        { $set: { bloquearReivindicacaoComPendentes, lastUpdated: new Date(), updatedBy: interaction.user.tag } },
+        { new: true, upsert: true }
+      );
+      cachePanelConfig(interaction.guild.id, configAtualizada);
+      registrarAlteracao({ guildId: interaction.guild.id, por: interaction.user.tag, via: 'discord', antes: config, depois: configAtualizada }).catch(() => {});
+      await atualizarPainelMensagem(interaction, configAtualizada);
+      await interaction.followUp({
+        content: bloquearReivindicacaoComPendentes
+          ? '✅ O bloqueio de reivindicação por pendências anteriores foi ativado neste servidor.'
+          : '⚪ O bloqueio de reivindicação por pendências anteriores foi desativado neste servidor.',
+        flags: [64]
+      }).catch(() => {});
+      break;
+    }
+    case 'toggle_private_threads': {
+      const topicosPrivados = !topicosPrivadosAtivos(config);
+      await interaction.deferUpdate();
+      const configAtualizada = await Config.findOneAndUpdate(
+        { guildId: interaction.guild.id },
+        { $set: { topicosPrivados, lastUpdated: new Date(), updatedBy: interaction.user.tag } },
+        { new: true, upsert: true }
+      );
+      cachePanelConfig(interaction.guild.id, configAtualizada);
+      registrarAlteracao({ guildId: interaction.guild.id, por: interaction.user.tag, via: 'discord', antes: config, depois: configAtualizada }).catch(() => {});
+      await atualizarPainelMensagem(interaction, configAtualizada);
+      await interaction.followUp({
+        content: topicosPrivados
+          ? '🔒 Tópicos privados ligados: denúncia com todos os acusados no banco abre em tópico privado.'
+          : '🌐 Tópicos privados desligados: toda denúncia nova abre em tópico público. As que já estão abertas continuam como estão.',
+        flags: [64]
+      }).catch(() => {});
+      break;
+    }
+    case 'toggle_critical_alert': {
+      const alertaMotivoCritico = !alertaMotivoCriticoAtivo(config);
+      await interaction.deferUpdate();
+      const configAtualizada = await Config.findOneAndUpdate(
+        { guildId: interaction.guild.id },
+        { $set: { alertaMotivoCritico, lastUpdated: new Date(), updatedBy: interaction.user.tag } },
+        { new: true, upsert: true }
+      );
+      cachePanelConfig(interaction.guild.id, configAtualizada);
+      registrarAlteracao({ guildId: interaction.guild.id, por: interaction.user.tag, via: 'discord', antes: config, depois: configAtualizada }).catch(() => {});
+      await atualizarPainelMensagem(interaction, configAtualizada);
+      await interaction.followUp({
+        content: alertaMotivoCritico
+          ? '🚨 O alerta de motivo crítico foi ativado: o responsável volta a ser marcado no tópico (zaralho, dark RP, hack, mods proibidos).'
+          : '⚪ O alerta de motivo crítico foi desativado: o responsável não é mais marcado nesses motivos.',
+        flags: [64]
+      }).catch(() => {});
       break;
     }
     case 'view_config': {
-      await interaction.deferReply({ flags: [64] });
+      await interaction.deferUpdate();
       const config = await Config.findOne({ guildId: interaction.guild.id });
       cachePanelConfig(interaction.guild.id, config);
-      await showConfig(interaction, config);
+      await atualizarPainelMensagem(interaction, config);
       break;
     }
     case 'edit_exempt_users':
       await interaction.showModal(createExemptUsersModal(getPanelExemptUsers(interaction.guild.id)));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     case 'edit_channels_1':
       await interaction.showModal(createChannelsModal1(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     case 'edit_channels_2':
       await interaction.showModal(createChannelsModal2(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     case 'edit_channels_3':
       await interaction.showModal(createChannelsModal3(config));
-      break;
-    case 'edit_channels_4':
-      await interaction.showModal(createChannelsModal4(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     case 'edit_roles_1':
       await interaction.showModal(createRolesModal1(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     case 'edit_roles_2':
       await interaction.showModal(createRolesModal2(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
+      break;
+    case 'edit_auto_analysis':
+      await interaction.showModal(createAutoAnalysisModal(config));
+      await atualizarPainelCategoria(interaction, selectedOption, config);
       break;
     default:
       await interaction.reply({ content: '❌ Opção do painel inválida.', flags: [64] });
@@ -221,169 +336,242 @@ async function handlePanelMenu(interaction) {
 }
 
 // =========================
+// ROTEAMENTO
+// =========================
+async function handleFeedbackSelect(interaction) {
+  try {
+    await handleFeedbackMenu(interaction);
+  } catch (err) {
+    console.error('Erro no feedback select:', err);
+    if (err?.code === 10062) return;
+    if (interaction.replied || interaction.deferred) await interaction.editReply({ content: '❌ Erro ao processar feedback.' }).catch(() => {});
+    else await interaction.reply({ content: '❌ Erro ao processar feedback.', flags: [64] }).catch(() => {});
+  }
+}
+
+async function handleFeedbackModalSubmit(interaction) {
+  try {
+    await handleFeedbackModal(interaction, Denuncia, getCachedConfig);
+  } catch (err) {
+    console.error('Erro no feedback modal:', err);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.editReply({ content: '❌ Erro ao enviar feedback.' });
+    } else {
+      await interaction.reply({ content: '❌ Erro ao enviar feedback.', flags: [64] });
+    }
+  }
+}
+
+// Botões "Aceitar"/"Recusar" da mensagem de log (customId: log_<ação>_<messageId>).
+async function handleLogButton(interaction) {
+  const acao = interaction.customId.startsWith('log_aceitar_') ? 'aceitar' : 'recusar';
+  const messageId = interaction.customId.replace(/^log_(?:aceitar|recusar)_/, '');
+
+  // Senha da Cadeia Staff (ligada no Painel do bot): sem estar liberado, abre o
+  // formulário de criar ou digitar a senha; a ação continua depois dele.
+  const config = await getCachedConfig(interaction.guild.id);
+  if (senhaCadeiaAtiva(config)) {
+    if (!await recusaSemCargoResponsavel(interaction, config)) return;
+    const senha = await situacaoDaSenha(interaction.user.id);
+    if (!senha.liberado) return interaction.showModal(modalDaSenha({ temSenha: senha.temSenha, acao, messageId }));
+  }
+
+  try {
+    await interaction.deferReply({ flags: [64] });
+  } catch (error) {
+    if (error?.code === 10062) return;
+    throw error;
+  }
+  await executarAcaoDaCadeia(interaction, acao, messageId);
+}
+
+async function executarAcaoDaCadeia(interaction, acao, messageId) {
+  const denuncia = await Denuncia.findOne({ messageId, guildId: interaction.guild.id });
+  if (!denuncia) {
+    // Provas da staff (/provastaff) aceitas: o mesmo Aceitar e Recusar da Cadeia Staff.
+    const doc = await DenunciaStaff.findOne({ messageId, guildId: interaction.guild.id }).lean();
+    if (!doc) return interaction.editReply({ content: '❌ Denúncia não encontrada.' });
+    if (acao === 'recusar') return provaStaff.recusarNaCadeia(interaction, doc);
+    await handleLogAceitarButton(interaction, provaStaff.comoDenuncia(doc));
+    await DenunciaStaff.updateOne({ _id: doc._id, 'cadeia.status': '' }, { $set: { 'cadeia.status': 'aceita' } }).catch(() => {});
+    return;
+  }
+  if (acao === 'aceitar') await handleLogAceitarButton(interaction, denuncia);
+  else await handleLogRecusarButton(interaction, denuncia);
+}
+
+// Só o cargo Responsável usa Aceitar/Recusar da Cadeia Staff: sem ele, nem cria nem digita a senha.
+// Devolve true se pode seguir; senão já respondeu a pessoa.
+async function recusaSemCargoResponsavel(interaction, config) {
+  const cargo = config?.roles?.responsavel_admin;
+  const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  if (cargo && member?.roles?.cache?.has(cargo)) return true;
+  const nome = cargo ? `<@&${cargo}>` : '`Responsável Admin não configurado`';
+  await interaction.reply({ content: `❌ Apenas o cargo ${nome} pode usar estes botões.`, flags: [64] }).catch(() => {});
+  return false;
+}
+
+async function liberarSenhaDoJogo(interaction) {
+  const config = await getCachedConfig(interaction.guild.id);
+  const cargo = config?.roles?.responsavel_admin;
+  if (!ehDono(interaction.user.id) && !(cargo && interaction.member?.roles?.cache?.has(cargo))) {
+    return interaction.reply({ content: '🚫 Só o responsável (ou o dono do bot) usa os comandos que vão ao jogo.', flags: [64] });
+  }
+  let confirmar;
+  try { confirmar = interaction.fields.getTextInputValue('confirmar'); } catch { confirmar = undefined; }
+  const r = await validarSenha(interaction.user.id, { senha: interaction.fields.getTextInputValue('senha'), confirmar });
+  if (r.erro) return interaction.reply({ content: `🔒 ${r.erro}`, flags: [64] });
+  return interaction.reply({
+    content: `🔓 ${r.criada ? 'Senha criada.' : 'Senha certa.'} Liberado até <t:${Math.floor(r.liberadoAte.getTime() / 1000)}:t>: use o comando de novo.`,
+    flags: [64]
+  });
+}
+
+// Formulário da senha: criou ou acertou, libera por 30 minutos e faz o que a pessoa clicou.
+async function handleSenhaCadeiaModal(interaction) {
+  const [acao, messageId] = interaction.customId.slice(MODAL_SENHA.length).split(':');
+  // Senha pedida pelo /tempban ou /desbanir: só libera; a pessoa usa o comando de novo.
+  if (acao === 'jogo') return liberarSenhaDoJogo(interaction);
+  if (!['aceitar', 'recusar'].includes(acao) || !/^\d{15,21}$/.test(messageId || '')) return;
+  if (!await recusaSemCargoResponsavel(interaction, await getCachedConfig(interaction.guild.id))) return;
+  let confirmar;
+  try { confirmar = interaction.fields.getTextInputValue('confirmar'); } catch { confirmar = undefined; }
+  const r = await validarSenha(interaction.user.id, { senha: interaction.fields.getTextInputValue('senha'), confirmar });
+  if (r.erro) return interaction.reply({ content: `🔒 ${r.erro}`, flags: [64] });
+  await interaction.deferReply({ flags: [64] });
+  await executarAcaoDaCadeia(interaction, acao, messageId);
+  await interaction.followUp({
+    content: `🔓 ${r.criada ? 'Senha criada.' : 'Senha certa.'} Aceitar e Recusar da Cadeia Staff liberados até <t:${Math.floor(r.liberadoAte.getTime() / 1000)}:t>.`,
+    flags: [64]
+  }).catch(() => {});
+}
+
+const handleStatusChange = (interaction) => handleStatusButton(interaction, interaction.customId);
+const handleDenunciaModal = (interaction) =>
+  handleModalSubmit(interaction, interaction.customId === 'denuncia_pc_modal' ? 'PC' : 'Mobile');
+
+// Para adicionar um componente novo, basta registrar o customId aqui.
+// "exatos" casa o customId inteiro; "prefixos" casa customIds com dados no final.
+const ROTAS = {
+  botao: {
+    exatos: {
+      corrigir_denuncia_aceita: handleCorrigirDenunciaButton,
+      denuncia_pc: handleDenunciaPC,
+      denuncia_mobile: handleDenunciaMobile,
+      minhas_denuncias: handleMyDenunciasButton,
+      entrar_topico: handleEntrarNoTopico,
+      [provaStaff.BOTAO_UPAR]: provaStaff.handleBotaoUpar,
+      consulta_denuncias_id: handleMyDenunciasButton,
+      reivindicar: handleClaimButton,
+      finalizar_denuncia: handleExportButton,
+      [BOTAO_ABRIR_TICKET]: (interaction) => handleAbrirTicket(interaction),
+      aceitar: handleStatusChange,
+      recusar: handleStatusChange,
+      analiser: handleStatusChange,
+      add_player: handleAddPlayer,
+      refresh_status: handleStatusButtons,
+      detailed_status: handleStatusButtons,
+      status_ping_test: handleStatusButtons,
+      status_cache_clear: handleStatusButtons,
+      status_toggle_autorefresh: handleStatusButtons,
+      status_restart_confirm: handleStatusButtons
+    },
+    prefixos: [
+      ['entrar_topico:', handleEntrarNoTopico],
+      ['log_aceitar_', handleLogButton],
+      ['log_recusar_', handleLogButton],
+      [BOTAO_ENVIAR, handleEnviarGm],
+      [BOTAO_EDITAR, handleEditarGm],
+      [BOTAO_CANCELAR, handleCancelarGm],
+      [BOTAO_INCERTO_OK, handleIncertoGm],
+      [BOTAO_INCERTO_REENVIAR, handleIncertoGm],
+      [BOTAO_GM_APLICADA, handleIncertoDaPunicaoGm],
+      [BOTAO_GM_REAPLICAR, handleIncertoDaPunicaoGm],
+      [BOTAO_DESBANIR, handleDesbanirBotao],
+      [BOTAO_DESBANIR_ID, handleDesbanirIdBotao],
+      [BOTAO_SOLTAR_ID, handleSoltarIdBotao],
+      [provaStaff.BOTAO_ACEITAR, provaStaff.handleBotaoAceitar],
+      [provaStaff.BOTAO_RECUSAR, provaStaff.handleBotaoRecusar]
+    ]
+  },
+  modal: {
+    exatos: {
+      denuncia_pc_modal: handleDenunciaModal,
+      denuncia_mobile_modal: handleDenunciaModal,
+      consulta_denuncias_modal: handleConsultaModalSubmit,
+      punishment_modal: handlePunishmentModal,
+      add_player_modal: handleAddPlayerModal,
+      channels_modal_1: handlePanelModalSubmit,
+      channels_modal_2: handlePanelModalSubmit,
+      channels_modal_3: handlePanelModalSubmit,
+      roles_modal_1: handlePanelModalSubmit,
+      roles_modal_2: handlePanelModalSubmit,
+      auto_analysis_modal: handlePanelModalSubmit,
+      [MODAL_LINK]: handleLinkModal,
+      [MODAL_DESBANIR]: handleDesbanirModal,
+      [provaStaff.MODAL_REGISTRO]: provaStaff.handleModalRegistro,
+      [provaStaff.MODAL_TEMPBAN]: provaStaff.handleModalTempban,
+      global_exempt_users_modal: handleGlobalExemptUsersSubmit,
+      [MODAL_MOTIVOS]: handlePonteMotivosModal,
+      [MODAL_LIMITES]: handleLimitesGmModal
+    },
+    prefixos: [
+      ['feedback:modal:', handleFeedbackModalSubmit],
+      ['corrigir_modal_aceite_', handleSalvarCorrigirDenuncia],
+      [MODAL_SENHA, handleSenhaCadeiaModal],
+      [MODAL_AVISOS_ID, handleAvisosIdModal],
+      [provaStaff.MODAL_ACEITE, provaStaff.handleModalAceite],
+      [MODAL_ALVO, handleModalAlvoGm]
+    ]
+  },
+  menu: {
+    exatos: {
+      panel_menu: handlePanelMenu
+    },
+    prefixos: [
+      ['feedback:select:', handleFeedbackSelect],
+      [MENU_ALVO, handleMenuAlvoGm]
+    ]
+  }
+};
+
+function tipoDaInteracao(interaction) {
+  if (interaction.isButton()) return 'botao';
+  if (interaction.isModalSubmit()) return 'modal';
+  if (interaction.isStringSelectMenu()) return 'menu';
+  return null;
+}
+
+function resolverRota(tipo, customId) {
+  const rotas = ROTAS[tipo];
+  if (!rotas || typeof customId !== 'string') return null;
+  if (Object.hasOwn(rotas.exatos, customId)) return rotas.exatos[customId];
+  return rotas.prefixos.find(([prefixo]) => customId.startsWith(prefixo))?.[1] || null;
+}
+
+// =========================
 // HANDLER PRINCIPAL
 // =========================
 async function interactionHandler(interaction) {
   try {
-
-    // ======== FEEDBACK SELECT MENU ========
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('feedback:select:')) {
-      try {
-        const denunciaId = interaction.customId.replace('feedback:select:', '');
-        const denuncia = await Denuncia.findById(denunciaId);
-
-        if (!denuncia) {
-          return interaction.reply({ content: '❌ Denúncia não encontrada.', ephemeral: true });
-        }
-
-        await handleFeedbackMenu(interaction, denuncia);
-      } catch (err) {
-        console.error('Erro no feedback select:', err);
-        if (interaction.replied || interaction.deferred) {
-          await interaction.editReply({ content: '❌ Erro ao processar feedback.' });
-        } else {
-          await interaction.reply({ content: '❌ Erro ao processar feedback.', ephemeral: true });
-        }
-      }
+    if (interaction.isChatInputCommand()) {
+      await handleSlashCommand(interaction);
       return;
     }
 
-    // ======== MENU DO PAINEL ========
-    if (interaction.isStringSelectMenu() && interaction.customId === 'panel_menu') {
-      await handlePanelMenu(interaction);
-      return;
-    }
-
-    // ======== FEEDBACK MODAL ========
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('feedback:modal:')) {
-      try {
-        await handleFeedbackModal(interaction, Denuncia, getCachedConfig);
-      } catch (err) {
-        console.error('Erro no feedback modal:', err);
-        if (interaction.replied || interaction.deferred) {
-          await interaction.editReply({ content: '❌ Erro ao enviar feedback.' });
-        } else {
-          await interaction.reply({ content: '❌ Erro ao enviar feedback.', ephemeral: true });
-        }
-      }
-      return;
-    }
-
-    // ======== CORREÇÃO ACEITE ========
-    if (interaction.isButton() && (interaction.customId.startsWith('log_aceitar_') || interaction.customId.startsWith('log_recusar_'))) {
-      const messageId = interaction.customId.replace(/^log_(?:aceitar|recusar)_/, '');
-      const denuncia = await Denuncia.findOne({ messageId, guildId: interaction.guild.id });
-      if (!denuncia) return interaction.reply({ content: '❌ Denúncia não encontrada.', flags: [64] });
-
-      if (interaction.customId.startsWith('log_aceitar_')) {
-        await handleLogAceitarButton(interaction, denuncia);
-      } else {
-        await handleLogRecusarButton(interaction, denuncia);
-      }
-      return;
-    }
-
-    if (interaction.isButton() && interaction.customId === 'corrigir_denuncia_aceita') {
-      await handleCorrigirDenunciaButton(interaction);
-      return;
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('corrigir_modal_aceite_')) {
-      await handleSalvarCorrigirDenuncia(interaction);
-      return;
-    }
-
-    // ======== BOTÕES ========
-    if (interaction.isButton()) {
-      if (interaction.customId === 'denuncia_pc') {
-        await handleDenunciaPC(interaction);
-        return;
-      }
-
-      if (interaction.customId === 'denuncia_mobile') {
-        await handleDenunciaMobile(interaction);
-        return;
-      }
-
-      if (interaction.customId === 'minhas_denuncias' || interaction.customId === 'consulta_denuncias_id') {
-        await handleMyDenunciasButton(interaction);
-        return;
-      }
-
-      switch (interaction.customId) {
-        case 'reivindicar':
-          await handleClaimButton(interaction);
-          break;
-
-        case 'finalizar_denuncia':
-          await handleExportButton(interaction);
-          break;
-
-        case 'aceitar':
-        case 'recusar':
-        case 'analiser':
-          await handleStatusButton(interaction, interaction.customId);
-          break;
-
-        case 'add_player':
-          await handleAddPlayer(interaction);
-          break;
-
-        case 'refresh_status':
-        case 'detailed_status':
-        case 'status_ping_test':
-        case 'status_cache_clear':
-        case 'status_toggle_autorefresh':
-        case 'status_restart_confirm':
-          await handleStatusButtons(interaction);
-          break;
-      }
-    }
-
-    if (interaction.isModalSubmit()) {
-      switch (interaction.customId) {
-        case 'denuncia_pc_modal':
-        case 'denuncia_mobile_modal': {
-          const platform = interaction.customId === 'denuncia_pc_modal' ? 'PC' : 'Mobile';
-          await handleModalSubmit(interaction, platform);
-          break;
-        }
-
-        case 'consulta_denuncias_modal':
-          await handleConsultaModalSubmit(interaction);
-          break;
-
-        case 'punishment_modal':
-          await handlePunishmentModal(interaction);
-          break;
-
-        case 'add_player_modal':
-          await handleAddPlayerModal(interaction);
-          break;
-
-        case 'channels_modal_1':
-        case 'channels_modal_2':
-        case 'channels_modal_3':
-        case 'channels_modal_4':
-        case 'roles_modal_1':
-        case 'roles_modal_2':
-          await handlePanelModalSubmit(interaction);
-          break;
-
-        case 'global_exempt_users_modal':
-          await handleGlobalExemptUsersSubmit(interaction);
-          break;
-
-      }
-    }
+    const handler = resolverRota(tipoDaInteracao(interaction), interaction.customId);
+    if (handler) await handler(interaction);
 
   } catch (error) {
+    if (error?.code === 10062) return;
     console.error('❌ Erro na interação:', error);
 
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: '❌ Ocorreu um erro.', ephemeral: true });
+      await interaction.reply({ content: '❌ Ocorreu um erro.', flags: [64] }).catch(() => {});
     }
   }
 }
 
 module.exports = interactionHandler;
+module.exports.resolverRota = resolverRota;
+module.exports.ROTAS = ROTAS;

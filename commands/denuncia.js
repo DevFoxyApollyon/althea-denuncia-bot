@@ -1,4 +1,4 @@
-﻿const { 
+const { 
     EmbedBuilder, 
     ActionRowBuilder, 
     ButtonBuilder, 
@@ -6,98 +6,50 @@
     MessageFlags,
     ModalBuilder,
     TextInputBuilder,
-    TextInputStyle
+    TextInputStyle,
+    LabelBuilder,
+    FileUploadBuilder,
+    ChannelType,
+    PermissionFlagsBits
 } = require('discord.js');
 
 const { garantirAvisoNoTopo } = require('../Handlers/leiaAvisoHandler');
 const Denuncia = require('../models/Denuncia'); 
-const Config = require('../models/Config'); 
 const Usuario = require('../models/Usuario');
-const { getCachedConfig } = require('../utils/performance');
+const { getConfig: getCachedConfig } = require('../utils/configCache');
 const { handleExportButton } = require('../Handlers/exportDenuncia'); 
-const { handleClaimButton } = require('../Handlers/handlerStatusButton'); 
+const { handleClaimButton } = require('../Handlers/handlerStatusButton');
+const { botaoAbrirTicket } = require('../Handlers/ticketExterno');
 const { notificarAcusadoPv } = require('../utils/userSyncAndNotify');
 const { extractYouTubeVideoId, fetchYouTubeTitle, findYouTubeLinks } = require('../utils/youtubeUtils');
 const dateUtils = require('../utils/dateUtils');
 const { extrairContaDoNickname } = require('../utils/nickUtils');
-const { registrarTopicoRestrito } = require('../utils/restricaoTopicos');
-const { serializarMensagem, buscarCanal } = require('../utils/denunciaMensagens');
+const { registrarTopicoRestrito, botaoEntrarNoTopico } = require('../utils/restricaoTopicos');
+const { registrarMensagens, buscarCanal } = require('../utils/denunciaMensagens');
+const { ARQUIVAR_APOS_MINUTOS } = require('../utils/espelhos');
+const { alertarMotivoCritico } = require('../utils/alertaMotivoCritico');
+const { esperaEntreDenunciasMs, esperaEntreDenunciasAtiva, minutosArquivarTopico, tempoRestante } = require('../utils/esperas');
 
 require('dotenv').config();
 
 const BUTTON_REFRESH_INTERVAL = 1800000;
 const SUPORTE_BOT_ID = process.env.SUPORTE_BOT_ID;
-const COOLDOWN_MS = 3 * 60 * 1000;
 const PROVAS_TIMEOUT_MS = 5 * 60 * 1000;
 
 const URL_REGEX = /https?:\/\/[^\s]+/gi;
 const BROKEN_LINK_REGEX = /\b(?!https?:\/\/)[a-zA-Z]{1,5}:\/\/[^\s]+/gi;
 
-const PALAVRAS_BLOQUEADAS = [
-    'mtfe7',
-    'virada de saldo',
-    'equipe mtfe',
-    'entra no grupo',
-    'vem aprender',
-    'trampo do',
-    'trampo ',
-    'saldo equipe',
-    't.me/',
-    'telegram.me/',
-    'ADM',
-    'TOMA NO CU',
-    'FILHO DA PUTA',
-    'FILHA DA PUTA',
-    'mcc',
-];
+const { PALAVRAS_BLOQUEADAS, PALAVROES, CONTEUDO_INVALIDO } = require('../utils/palavrasProibidas');
 
-const PALAVROES = [
-    'fdp', 'filho da puta', 'filha da puta','ADM',
-    'TOMA NO CU',
-    'viado', 'viadão', 'viadinho',
-    'cuzao', 'cuzão', 'cu','chores',
-    'porra', 'puta merda', 'puta que pariu',
-    'vai se foder', 'vai tomar no cu', 'vai tomar no',
-    'foder', 'fodase', 'foda-se', 'foda se',
-    'otario', 'otário', 'otaria', 'otária',
-    'idiota', 'imbecil', 'retardado', 'retardada',
-    'burro', 'burra', 'animal',
-    'lixo humano', 'escoria', 'escória',
-    'vagabundo', 'vagabunda',
-    'prostituta', 'puta', 'piranha',
-    'corno', 'corna',
-    'babaca', 'baba ovo', 'babaovo',
-    'arrombado', 'arrombada','mcc',
-    'merda','preto',
-    'inútil',
-    'desgraçado', 'desgraçado', 'desgraca',
-    'maldito', 'maldita',
-    'lázaro', 'lazarento', 'lazarenta',
-    'peste',
-    'sua mãe', 'tua mãe',
-    'cala boca', 'cala a boca',
-    'bosta',
-    'cagão',
-    'covarde',
-    'lixo',
-];
-
-const CONTEUDO_INVALIDO = [
-    'fdp', 'filho da puta', 'filha da puta',
-    'adm', 'admin', 'staff', 'suporte', 'moderador', 'mod', 'dono',
-    'líder', 'sub líder', 'sublíder','ADM',
-    'TOMA NO CU',
-    'princesa', 'lixo',
-    'vai tomar no cu', 'fdp','macacada','macaco',
-];
+const { juntarLetrasRepetidas } = require('../utils/strikeWords');
 
 const PALAVRAS_PROIBIDAS = [...new Set([
     ...PALAVRAS_BLOQUEADAS,
     ...PALAVROES,
     ...CONTEUDO_INVALIDO
-].map(p => p.toLowerCase()))];
+].map(juntarLetrasRepetidas))];
 
-const RISADA_REPETICAO_REGEX = /(.{1,3})\1{3,}/i;
+const RISADA_REPETICAO_REGEX = /([a-zA-Zà-úÀ-Ú]{1,3})\1{3,}/i;
 
 function pareceRisadaSpam(palavra) {
     const limpa = palavra.replace(/[^a-zA-Zà-úÀ-Ú]/g, '');
@@ -131,76 +83,74 @@ function createStatusButtons() {
     );
 }
 
-function createStatusButtonsRow2() {
-    return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('add_player').setLabel('Add Player').setEmoji('➕').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('finalizar_denuncia').setLabel('Finalizar').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
-    );
+async function handleEntrarNoTopico(interaction) {
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const config = await getCachedConfig(interaction.guild.id);
+    const cargos = [config?.roles?.administrador, config?.roles?.responsavel_admin].filter(Boolean);
+    const membro = interaction.member;
+    const temCargo = cargos.some(id => membro?.roles?.cache?.has?.(id) || membro?.roles?.includes?.(id));
+    if (!temCargo) {
+        return interaction.editReply('🚫 Só quem tem o cargo de administrador ou de responsável pode entrar por aqui.');
+    }
+
+    // Botão com o ID do tópico (Log Admin, canal de análise) ou sem ele (mensagem principal).
+    const threadIdDoBotao = String(interaction.customId || '').split(':')[1];
+    const denuncia = await Denuncia.findOne(threadIdDoBotao
+        ? { guildId: interaction.guild.id, threadId: threadIdDoBotao }
+        : { guildId: interaction.guild.id, messageId: interaction.message.id }).select('threadId').lean();
+    if (!denuncia?.threadId) return interaction.editReply('❌ Esta denúncia não tem tópico salvo no bot.');
+    // O motivo de não achar muda o que fazer: apagado não volta; sem acesso, é permissão do bot.
+    let erroDoDiscord = null;
+    const topico = await interaction.client.channels.fetch(denuncia.threadId).catch((erro) => { erroDoDiscord = erro; return null; });
+    if (!topico?.isThread?.()) {
+        if (erroDoDiscord?.code === 10003) return interaction.editReply('❌ O tópico desta denúncia foi apagado no Discord.');
+        if (erroDoDiscord?.code === 50001 || erroDoDiscord?.code === 50013) {
+            return interaction.editReply('❌ O bot não tem acesso ao tópico desta denúncia. Dê a ele "Ver canal", "Gerenciar tópicos" e "Enviar mensagens em tópicos" no canal das denúncias.');
+        }
+        console.warn(`Tópico ${denuncia.threadId} não encontrado: ${erroDoDiscord?.message || 'não é um tópico'}`);
+        return interaction.editReply('❌ Não encontrei o tópico desta denúncia.');
+    }
+
+    // Tópico arquivado não aceita membros novos: reabre antes.
+    if (topico.archived) await topico.setArchived(false).catch(() => {});
+    try {
+        await topico.members.add(interaction.user.id);
+    } catch (erro) {
+        console.warn(`Não foi possível pôr ${interaction.user.id} no tópico ${topico.id}: ${erro.message}`);
+        return interaction.editReply('❌ O Discord não deixou pôr você no tópico. Confira se o bot tem permissão no canal.');
+    }
+    // O Discord não deixa o bot mudar a tela de ninguém: o botão de link leva
+    // ao tópico com um clique.
+    return interaction.editReply({
+        content: `✅ Você entrou no tópico: ${topico}`,
+        components: [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setLabel('Abrir tópico').setEmoji('➡️').setStyle(ButtonStyle.Link).setURL(topico.url)
+        )]
+    });
 }
 
-function createDenunciaButtons() {
+function createStatusButtonsRow2(config) {
+    const botoes = [
+        new ButtonBuilder().setCustomId('add_player').setLabel('Add Player').setEmoji('➕').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('finalizar_denuncia').setLabel('Finalizar').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
+    ];
+    // "Abrir Ticket" só aparece com a integração do bot de tickets configurada.
+    const abrirTicket = botaoAbrirTicket(config);
+    if (abrirTicket) botoes.push(abrirTicket);
+    return new ActionRowBuilder().addComponents(...botoes);
+}
+
+// Com o site ligado, "Minhas Denúncias" abre a lista no site; sem ele, mostra a
+// lista no próprio Discord.
+function createDenunciaButtons(siteUrl = '') {
+    const minhas = siteUrl
+        ? new ButtonBuilder().setLabel('Minhas Denúncias').setEmoji('📂').setStyle(ButtonStyle.Link).setURL(siteUrl)
+        : new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas Denúncias').setEmoji('📂').setStyle(ButtonStyle.Secondary);
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('denuncia_pc').setLabel('Denúncia PC').setEmoji('🖥️').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('denuncia_mobile').setLabel('Denúncia Mobile').setEmoji('📱').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('minhas_denuncias').setLabel('Minhas Denúncias').setEmoji('📂').setStyle(ButtonStyle.Secondary)
+        minhas
     );
-}
-
-async function atualizarMensagemDenuncia(client, guild, config) {
-    const canal = config.channels?.canalDenuncia
-        ? await buscarCanal(client, config.channels.canalDenuncia)
-        : null;
-    if (!canal?.isTextBased?.()) return null;
-
-    const emManutencao = Boolean(config.manutencaoDenuncia);
-    const embed = emManutencao
-        ? new EmbedBuilder()
-            .setColor('#F0A500')
-            .setTitle('🛠️ Sistema de Denúncias em Manutenção')
-            .setDescription([
-                'O sistema de denúncias está temporariamente indisponível.',
-                '',
-                'A equipe está realizando ajustes de estabilidade, segurança e armazenamento.',
-                '',
-                '📌 **Durante a manutenção:**',
-                '• Novas denúncias estão bloqueadas.',
-                '• Denúncias já abertas continuam preservadas.',
-                '• Mensagens e provas existentes permanecem armazenadas.',
-                '',
-                'Aguarde a liberação do sistema e tente novamente mais tarde.'
-            ].join('\n'))
-            .setFooter({ text: `${guild.name} • Sistema Althea` })
-            .setTimestamp()
-        : new EmbedBuilder()
-            .setColor('#FF0000')
-            .setTitle('🚨 Sistema de Denúncias')
-            .setDescription([
-                '### Faça sua Denúncia',
-                'Escolha abaixo o dispositivo usado para registrar sua denúncia.',
-                '',
-                '• Informe dados verdadeiros e descreva o caso com clareza.',
-                '• Envie provas diretamente no tópico após sua criação.',
-                '• Não apague mensagens ou provas.',
-                '• Conversas paralelas e conteúdo ofensivo podem gerar punição.',
-                '',
-                '### Regras importantes',
-                '• O tópico é exclusivo para denúncia e contra-prova.',
-                '• Vídeos devem mostrar claramente a infração.',
-                '• O mau uso do sistema poderá resultar em punição.',
-                '',
-                `📍 **Horário de Brasília:** \`${dateUtils.getBrasiliaTime()}\``
-            ].join('\n'))
-            .setFooter({ text: 'Brasil RolePlay' });
-
-    const mensagens = await canal.messages.fetch({ limit: 50 }).catch(() => null);
-    const existente = mensagens?.find(message =>
-        message.author?.id === client.user.id &&
-        ['🚨 Sistema de Denúncias', '🛠️ Sistema de Denúncias em Manutenção'].includes(message.embeds?.[0]?.title)
-    );
-    const components = emManutencao ? [] : [createDenunciaButtons()];
-    return existente
-        ? existente.edit({ embeds: [embed], components })
-        : canal.send({ embeds: [embed], components });
 }
 
 async function atualizarMensagemDenuncia(client, guild, config) {
@@ -211,6 +161,9 @@ async function atualizarMensagemDenuncia(client, guild, config) {
     if (!canalDestino) return null;
 
     const emManutencao = Boolean(config.manutencaoDenuncia);
+    // Endereço público do site (só https: o endereço local de testes não é divulgado).
+    const enderecoDoSite = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
+    const siteUrl = enderecoDoSite.startsWith('https://') ? enderecoDoSite : '';
     const embed = emManutencao
         ? new EmbedBuilder()
             .setColor('#F0A500')
@@ -234,23 +187,53 @@ async function atualizarMensagemDenuncia(client, guild, config) {
             .setTitle('🚨 Sistema de Denúncias')
             .setDescription([
                 '### Faça sua Denúncia',
-                'Escolha abaixo o tipo de dispositivo usado para registrar sua denúncia.',
+                'Para realizar a sua denúncia, você deverá apertar no botão abaixo de acordo com o seu dispositivo, lembrando que:',
                 '',
-                '• Informe dados verdadeiros e descreva o caso com clareza.',
-                '• Envie provas diretamente no tópico após sua criação.',
-                '• Não apague mensagens ou provas.',
-                '• Conversas paralelas e conteúdo ofensivo podem gerar punição.',
+                '• É obrigatório estar com o Discord autenticado com o jogo',
+                '• Após o envio da Denúncia, você **NÃO** poderá apagar',
+                '• Caso seja constatado que foi apagada alguma prova, você poderá tomar punição',
+                '• O mau uso das denúncias resultará em punição',
                 '',
-                '### Regras importantes',
-                '• O tópico é exclusivo para denúncia e contra-prova.',
-                '• Vídeos do YouTube devem mostrar claramente a infração.',
-                '• O mau uso do sistema poderá resultar em punição.',
+                '### Regras do Tópico:',
+                '• O tópico é exclusivo para denúncia e contra-prova',
+                '• Conversas paralelas resultarão em punição',
+                '• Apagar mensagens ou provas resultará em punição',
+                '• Todas as mensagens apagadas serão registradas',
                 '',
+                '### Sobre as Provas em Vídeo:',
+                '• É recomendado enviar vídeos pelo YouTube',
+                '• O vídeo deve mostrar claramente a infração',
+                '• Você pode deixar o vídeo como "não listado"',
+                '• Links de outros sites podem não funcionar',
+                '',
+                '### Como enviar provas:',
+                '**Opção 1 - No formulário:**',
+                '1. Faça upload do vídeo no YouTube',
+                '2. Copie o link do vídeo',
+                '3. Cole o link no campo "Provas" da denúncia',
+                '**Opção 2 - No tópico:**',
+                '1. Envie sua denúncia normalmente',
+                '2. Aguarde o tópico ser criado',
+                '3. Envie suas provas (vídeos/imagens) diretamente no tópico',
+                '',
+                '### Tutorial:',
+                'Confira nosso tutorial detalhado aqui: https://www.instagram.com/p/DPcEkcHlHDe/',
+                '',
+                // O site só é anunciado quando está configurado (SITE_URL no .env).
+                ...(siteUrl ? [
+                    '### Também pelo site:',
+                    `Você pode abrir a denúncia, enviar as provas e acompanhar cada etapa pelo navegador, sem precisar ficar no Discord: ${siteUrl}`,
+                    '• Entre com a mesma conta do Discord que você usa aqui',
+                    '• Tudo o que você envia pelo site aparece no tópico, e vice-versa',
+                    ''
+                ] : []),
                 `📍 **Horário de Brasília:** \`${dateUtils.getBrasiliaTime()}\``
             ].join('\n'))
             .setFooter({ text: 'Brasil RolePlay' });
 
-    const componentes = emManutencao ? [] : [createDenunciaButtons()];
+    // Com o site ligado, "Minhas Denúncias" leva direto a ele.
+    const botoes = createDenunciaButtons(siteUrl);
+    const componentes = emManutencao ? [] : [botoes];
     const mensagens = await canalDestino.messages.fetch({ limit: 50 }).catch(() => null);
     const existente = mensagens?.find(message =>
         message.author?.id === client.user.id &&
@@ -262,7 +245,8 @@ async function atualizarMensagemDenuncia(client, guild, config) {
 }
 
 function validarConteudoProibido(texto, nomeCampo) {
-    const lower = texto.toLowerCase();
+    // "putaaaa" e "gordooo" contam como "puta" e "gordo".
+    const lower = juntarLetrasRepetidas(texto);
     const encontrada = PALAVRAS_PROIBIDAS.find(p => {
         const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         return new RegExp(`\\b${escaped}\\b`, 'i').test(lower);
@@ -282,6 +266,76 @@ function validarMotivo(motivo) {
 function validarMotivoTamanho(motivo) {
     if (motivo.trim().length < 2) return '❌ O campo **Motivo** é muito curto. Digite pelo menos 2 caracteres.';
     return null;
+}
+
+// No Discord, quem tem "Gerenciar tópicos" no canal vê todo tópico privado dele
+// sem precisar entrar: abre pelo link ou pela lista de tópicos, e ninguém vê
+// aviso de "adicionou". Como a mesma permissão deixa apagar e arquivar tópicos,
+// o bot dá isso (com "Ver canal") só ao cargo de responsável no canal da
+// denúncia, uma vez só: se o cargo já
+// tem as duas permissões no canal, não mexe. Precisa de "Gerenciar cargos" no
+// bot; sem isso, só avisa no log e a denúncia segue.
+async function liberarTopicosPrivadosParaCargos(canal, cargos) {
+    const ids = [...new Set(cargos.map(String).filter(id => /^\d{15,21}$/.test(id)))];
+    const permissoes = canal?.permissionOverwrites;
+    if (!ids.length || !permissoes?.edit) return 0;
+    let liberados = 0;
+    for (const id of ids) {
+        const atual = permissoes.cache?.get(id);
+        if (atual?.allow?.has?.(PermissionFlagsBits.ManageThreads) && atual.allow.has(PermissionFlagsBits.ViewChannel)) continue;
+        try {
+            await permissoes.edit(id, { ViewChannel: true, ManageThreads: true },
+                { reason: 'O responsável vê os tópicos privados das denúncias sem precisar entrar.' });
+            liberados++;
+        } catch (erro) {
+            console.warn(`Não foi possível dar "Gerenciar tópicos" ao cargo ${id} no canal ${canal.id}: ${erro.message}`);
+        }
+    }
+    return liberados;
+}
+
+// O mesmo, nos canais de denúncia PC e Mobile do servidor de uma vez: roda
+// quando o bot liga e quando o painel é salvo, para os tópicos privados antigos
+// também abrirem para o responsável, sem esperar uma denúncia nova.
+async function liberarTopicosPrivadosNoServidor(client, config) {
+    const cargo = config?.roles?.responsavel_admin;
+    if (!client || !cargo) return 0;
+    const ids = [...new Set([config.channels?.pc, config.channels?.mobile].filter(Boolean))];
+    let liberados = 0;
+    for (const id of ids) {
+        const canal = client.channels.cache.get(id) || await client.channels.fetch(id).catch(() => null);
+        if (!canal || canal.guildId !== config.guildId) continue;
+        liberados += await liberarTopicosPrivadosParaCargos(canal, [cargo]);
+    }
+    return liberados;
+}
+
+// Cria o tópico privado da denúncia e põe cada pessoa nele. O primeiro da lista
+// é o denunciante: se ele não puder entrar (ou o bot não puder criar tópico
+// privado), apaga o que criou e devolve null para a denúncia abrir em tópico
+// público. Acusado que não vê o canal (Missing Access) fica de fora, como
+// ficaria num tópico público, e a denúncia segue privada.
+async function criarTopicoPrivado(canal, nome, membros, arquivarAposMinutos = 1440) {
+    let topico = null;
+    try {
+        topico = await canal.threads.create({
+            name: nome,
+            type: ChannelType.PrivateThread,
+            invitable: false,
+            autoArchiveDuration: arquivarAposMinutos,
+            reason: 'Denúncia com acusado identificado: tópico visível só para as partes e a staff.'
+        });
+        const [denunciante, ...outros] = [...new Set(membros)];
+        await topico.members.add(denunciante);
+        await Promise.all(outros.map(id => topico.members.add(id).catch(erro => {
+            console.warn(`Acusado ${id} não entrou no tópico privado: ${erro.message}`);
+        })));
+        return topico;
+    } catch (erro) {
+        console.warn(`Tópico privado não criado, a denúncia abre pública: ${erro.message}`);
+        if (topico) await topico.delete().catch(() => {});
+        return null;
+    }
 }
 
 function validarAcusadoVazio(acusado) {
@@ -352,7 +406,7 @@ async function validarVideosHL(provas) {
 
 async function handleDenunciaCommand(message) {
     try {
-        const config = await getCachedConfig(message.guild.id, Config);
+        const config = await getCachedConfig(message.guild.id);
         const hasPerm = message.member.roles.cache.has(config.roles.responsavel_admin);
         
         if (!hasPerm && message.author.id !== SUPORTE_BOT_ID) return message.reply('❌ Sem permissão.');
@@ -361,7 +415,66 @@ async function handleDenunciaCommand(message) {
     } catch (error) { console.error(error); }
 }
 
+async function handleDenunciaSlash(interaction) {
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+
+    try {
+        const config = await getCachedConfig(interaction.guild.id);
+        if (!config) return interaction.editReply('⚠️ Configure o servidor primeiro com `/painel`.');
+
+        const responsavelAdmin = config.roles?.responsavel_admin;
+        const hasPerm = Boolean(responsavelAdmin && interaction.member.roles.cache.has(responsavelAdmin));
+        if (!hasPerm && interaction.user.id !== SUPORTE_BOT_ID) return interaction.editReply('❌ Sem permissão.');
+
+        const mensagem = await atualizarMensagemDenuncia(interaction.client, interaction.guild, config);
+        return interaction.editReply(mensagem
+            ? `✅ Mensagem do sistema de denúncias atualizada em <#${mensagem.channelId}>.`
+            : '⚠️ O canal de denúncias não está configurado (ou o bot não tem acesso a ele). Ajuste em `/painel` > Canais externos.');
+    } catch (error) {
+        console.error('Erro no /denuncia:', error);
+        return interaction.editReply('❌ Não foi possível atualizar a mensagem de denúncias.').catch(() => {});
+    }
+}
+
+function lerAnexosDoModal(interaction) {
+    // Campo ausente (discord.js antigo ou modal aberto antes da atualização) => sem anexos.
+    try {
+        return [...(interaction.fields.getUploadedFiles('anexos_input')?.values() ?? [])];
+    } catch {
+        return [];
+    }
+}
+
+async function enviarAnexosNoTopico(thread, anexos, autor) {
+    // Um por mensagem: se um passar do limite do servidor, os outros ainda chegam.
+    for (const anexo of anexos) {
+        const nome = anexo.name || `anexo-${anexo.id}`;
+        try {
+            await thread.send({
+                content: `📎 Prova anexada por ${autor}`,
+                files: [{ attachment: anexo.url, name: nome }],
+                allowedMentions: { parse: [] }
+            });
+        } catch (error) {
+            // "Request entity too large": o arquivo passa do limite de envio do servidor,
+            // que depende do nível de impulso (10, 50 ou 100 MB).
+            const grande = error?.code === 40005 || /too large/i.test(String(error?.message || ''));
+            const nivel = Number(thread.guild?.premiumTier) || 0;
+            const limiteMb = nivel >= 3 ? 100 : nivel === 2 ? 50 : 10;
+            const tamanho = anexo.size ? ` (${(anexo.size / 1048576).toFixed(1)} MB)` : '';
+            console.warn(grande
+                ? `Não foi possível reenviar o anexo ${nome}${tamanho} no tópico: passa do limite de ${limiteMb} MB deste servidor (nível de impulso ${nivel}).`
+                : `Não foi possível reenviar o anexo ${nome}${tamanho} no tópico: ${error.message}`);
+            await thread.send({
+                content: `⚠️ Não foi possível anexar **${nome}** (provavelmente grande demais para este servidor). ${autor}, envie o arquivo direto aqui no tópico.`,
+                allowedMentions: { users: [autor.id] }
+            }).catch(() => {});
+        }
+    }
+}
+
 async function handleDenunciaSubmit(interaction, platform) {
+    let confirmacaoEnviada = false;
     try {
         if (!interaction.replied && !interaction.deferred) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
@@ -375,22 +488,18 @@ async function handleDenunciaSubmit(interaction, platform) {
         const userId = interaction.user.id;
         const agora = Date.now();
         const ultimaEnvio = denunciaCooldowns.get(userId);
+        const config = await getCachedConfig(interaction.guild.id);
 
-        if (ultimaEnvio && agora - ultimaEnvio < COOLDOWN_MS) {
-            const restante = Math.ceil((COOLDOWN_MS - (agora - ultimaEnvio)) / 1000);
-            const minutos = Math.floor(restante / 60);
-            const segundos = restante % 60;
-            const tempoFormatado = minutos > 0 ? `${minutos}m ${segundos}s` : `${segundos}s`;
+        // Espera entre uma denúncia e outra (liga e desliga no painel do bot).
+        if (esperaEntreDenunciasAtiva(config) && ultimaEnvio && agora - ultimaEnvio < esperaEntreDenunciasMs(config)) {
             return await interaction.editReply({
-                content: `⏳ Você precisa aguardar **${tempoFormatado}** antes de enviar outra denúncia.`,
+                content: `⏳ Você precisa aguardar **${tempoRestante(esperaEntreDenunciasMs(config) - (agora - ultimaEnvio))}** antes de enviar outra denúncia.`,
             });
         }
 
         const guildId  = interaction.guild.id;
         const username = interaction.user.username;
         const nickname = interaction.member?.nickname || null;
-
-        const config = await getCachedConfig(interaction.guild.id, Config);
 
         if (config?.manutencaoDenuncia) {
             return await interaction.editReply({
@@ -447,6 +556,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         const acusado = interaction.fields.getTextInputValue('acusado_input');
         const motivo  = interaction.fields.getTextInputValue('motivo_input');
         let provas    = interaction.fields.getTextInputValue('provas_input') || 'Tópico';
+        const anexos  = lerAnexosDoModal(interaction);
 
         if (!/^[a-zA-Z0-9+ ]+$/.test(acusado)) {
             return await interaction.editReply({ content: '❌ O campo **Acusado** só pode conter letras, números e o símbolo "+" para múltiplos IDs.' });
@@ -535,9 +645,120 @@ async function handleDenunciaSubmit(interaction, platform) {
             `➱ **Prova(s)**: ${provas}`
         ].join('\n');
 
-        const mainMessage = await channel.send({
-            content: textoDenuncia,
-            allowedMentions: { parse: ['users'] }
+        const mirrorThreads = {};
+
+        // Com todos os acusados identificados, o tópico é privado: só o
+        // denunciante, os acusados, os cargos de administrador e responsável e
+        // quem tem "Gerenciar tópicos" veem.
+        // No canal fica a mesma mensagem de sempre. Se o tópico privado não der
+        // certo, a denúncia abre pública, como antes.
+        let mainMessage;
+        let thread;
+        try {
+            // Os tópicos privados podem ser desligados no painel (site ou /painel).
+            if (restritoParticipacao && config.topicosPrivados !== false) {
+                // O responsável vê o tópico mesmo sem entrar nele (o administrador não:
+                // "Gerenciar tópicos" também deixa apagar o tópico).
+                liberarTopicosPrivadosParaCargos(channel, [config.roles?.responsavel_admin]).catch(() => {});
+                thread = await criarTopicoPrivado(channel, `Denúncia: ${denunciante}`, [interaction.user.id, ...acusadoUserIds], minutosArquivarTopico(config));
+                if (thread) {
+                    // O tópico privado não fica preso à mensagem: o link vai no texto.
+                    // A linha em branco no fim (caractere ⠀, que o Discord não
+                    // apaga) separa uma denúncia da outra no canal, já que o
+                    // Discord junta as mensagens seguidas do bot.
+                    mainMessage = await channel.send({
+                        content: `${textoDenuncia.replace('➱ **Status**', `➱ **Tópico**: ${thread}\n➱ **Status**`)}\n⠀`,
+                        components: [botaoEntrarNoTopico(thread.id)],
+                        allowedMentions: { parse: ['users'] }
+                    }).catch(async (erro) => {
+                        await thread.delete().catch(() => {});
+                        throw erro;
+                    });
+                }
+            }
+            if (!thread) {
+                mainMessage = await channel.send({
+                    content: textoDenuncia,
+                    allowedMentions: { parse: ['users'] }
+                });
+                thread = await mainMessage.startThread({
+                    name: `Denúncia: ${denunciante}`,
+                    autoArchiveDuration: minutosArquivarTopico(config)
+                });
+            }
+        } catch (e) {
+            console.error('Erro ao criar o tópico da denúncia:', e.message);
+            await interaction.editReply({
+                content: '❌ Erro ao criar o tópico da denúncia. Isso pode ocorrer por falta de permissão, limite de tópicos ou configuração do canal. Por favor, tente novamente ou contate um administrador.'
+            });
+            return;
+        }
+
+        const threadMessage = await thread.send({ content: textoDenunciaTopico });
+        const controlsMessage = await thread.send({ components: [createStatusButtons(), createStatusButtonsRow2(config)] });
+
+        try {
+            await Usuario.findOneAndUpdate(
+                { guildId: interaction.guild.id, userId: interaction.user.id },
+                { $set: { ultimoThreadId: thread.id, updatedAt: new Date() } },
+                { upsert: true }
+            );
+        } catch (e) {
+            console.warn('Não foi possível atualizar o último threadId do usuário:', e.message);
+        }
+
+        const denunciaSalva = await new Denuncia({
+            guildId: interaction.guild.id,
+            messageId: mainMessage.id,
+            channelId: channel.id,
+            threadId: thread.id,
+            denunciante, acusado, motivo, provas, platform,
+            acusadoUserIds,
+            restritoParticipacao,
+            criadoPor: interaction.user.id,
+            status: 'pendente',
+            dataCriacao: dateUtils.getBrasiliaDate(),
+            armazemThreadId: mirrorThreads.armazem || null,
+            registroThreadId: mirrorThreads.registro || null
+        }).save();
+
+        // Estas três foram enviadas antes de a denúncia existir no banco, então
+        // o evento messageCreate não as registrou.
+        await registrarMensagens(denunciaSalva, [mainMessage, threadMessage, controlsMessage])
+            .catch(error => console.warn('Não foi possível registrar as mensagens iniciais da denúncia:', error.message));
+
+        registrarTopicoRestrito(thread.id, interaction.user.id, acusadoUserIds, restritoParticipacao);
+
+        denunciaCooldowns.set(interaction.user.id, Date.now());
+
+        // Link direto para o caso no site (só com endereço público, em https).
+        const enderecoDoSite = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
+        const linkNoSite = enderecoDoSite.startsWith('https://') ? `${enderecoDoSite}/#/d/${denunciaSalva._id}` : '';
+
+        await interaction.editReply({
+            content: [
+                `✅ Sua denúncia foi criada com sucesso às \`${dateUtils.getBrasiliaTime()}\`.`,
+                ...(linkNoSite ? ['', `🌐 **Acompanhe pelo site:** ${linkNoSite}`] : []),
+                '',
+                '⚠️ **Atenção — leia antes de interagir no tópico:**',
+                '• Utilize linguagem respeitosa. Xingamentos e palavras ofensivas resultarão em **punição imediata**.',
+                '• Enviar **imagens ofensivas**, memes ou qualquer conteúdo por brincadeira dentro do tópico resultará em **banimento permanente do servidor**, sem direito a recurso.',
+                '• O tópico é exclusivo para apresentação de provas e contra-provas. Mensagens fora desse contexto serão removidas e o responsável punido.',
+                '',
+                `💬 **Tópico no Discord:** ${thread}`,
+            ].join('\n')
+        });
+        confirmacaoEnviada = true;
+
+        // Alerta para os cargos responsáveis quando o motivo envolve zaralho, dark rp, hack ou mods proibidos.
+        await alertarMotivoCritico({
+            client: interaction.client,
+            config,
+            thread,
+            mainMessage,
+            denunciante,
+            acusado,
+            motivo
         });
 
         const canaisEspelho = [...new Set([
@@ -550,58 +771,40 @@ async function handleDenunciaSubmit(interaction, platform) {
                 console.warn(`Canal de espelho não encontrado ou sem suporte a texto: ${channelId}`);
                 continue;
             }
-            await canalEspelho.send({
+            const mensagemEspelho = await canalEspelho.send({
                 content: `🗄️ **Cópia da denúncia original**\n${textoDenuncia}\n\n🔗 [Abrir denúncia original](${mainMessage.url})`,
                 allowedMentions: { parse: [] }
             }).catch(error => {
                 console.warn(`Não foi possível espelhar a denúncia no canal ${channelId}:`, error.message);
+                return null;
             });
+            if (!mensagemEspelho?.startThread) continue;
+            const mirrorThread = await mensagemEspelho.startThread({
+                name: `Denúncia ${mainMessage.id}`,
+                // Arquiva sozinho depois de 1 hora parado, para não ocupar o limite de tópicos ativos.
+                autoArchiveDuration: ARQUIVAR_APOS_MINUTOS,
+                reason: 'Espelho permanente da denúncia'
+            }).catch(error => {
+                console.warn(`Não foi possível criar thread espelho em ${channelId}:`, error.message);
+                return null;
+            });
+            if (!mirrorThread) continue;
+            await mirrorThread.send({ content: textoDenunciaTopico }).catch(() => {});
+            mirrorThreads[channelId === config.channels.armazem ? 'armazem' : 'registro'] = mirrorThread.id;
         }
 
-        let thread;
-        try {
-            thread = await mainMessage.startThread({
-                name: `Denúncia: ${denunciante}`,
-                autoArchiveDuration: 1440
-            });
-        } catch (e) {
-            console.error('Erro ao criar o tópico da denúncia:', e.message);
-            await interaction.editReply({
-                content: '❌ Erro ao criar o tópico da denúncia. Isso pode ocorrer por falta de permissão, limite de tópicos ou configuração do canal. Por favor, tente novamente ou contate um administrador.'
-            });
-            return;
-        }
-
-        const threadMessage = await thread.send({ content: textoDenunciaTopico });
-        const controlsMessage = await thread.send({ components: [createStatusButtons(), createStatusButtonsRow2()] });
-
-        try {
-            await Usuario.findOneAndUpdate(
-                { guildId: interaction.guild.id, userId: interaction.user.id },
-                { $set: { ultimoThreadId: thread.id, updatedAt: new Date() } },
-                { upsert: true }
+        if (mirrorThreads.armazem || mirrorThreads.registro) {
+            await Denuncia.updateOne(
+                { _id: denunciaSalva._id },
+                { $set: {
+                    armazemThreadId: mirrorThreads.armazem || null,
+                    registroThreadId: mirrorThreads.registro || null,
+                } }
             );
-        } catch (e) {
-            console.warn('Não foi possível atualizar o último threadId do usuário:', e.message);
         }
 
-        await new Denuncia({
-            guildId: interaction.guild.id,
-            messageId: mainMessage.id,
-            channelId: channel.id,
-            threadId: thread.id,
-            denunciante, acusado, motivo, provas, platform,
-            acusadoUserIds,
-            restritoParticipacao,
-            criadoPor: interaction.user.id,
-            status: 'pendente',
-            dataCriacao: dateUtils.getBrasiliaDate(),
-            mensagens: [mainMessage, threadMessage, controlsMessage].map(serializarMensagem)
-        }).save();
-
-        registrarTopicoRestrito(thread.id, interaction.user.id, acusadoUserIds, restritoParticipacao);
-
-        denunciaCooldowns.set(interaction.user.id, Date.now());
+        // Depois dos espelhos salvos: o messageCreate registra e espelha cada anexo como as demais mensagens do tópico.
+        await enviarAnexosNoTopico(thread, anexos, interaction.user);
 
         try {
             const TRES_HORAS_MS = 3 * 60 * 60 * 1000;
@@ -644,7 +847,7 @@ async function handleDenunciaSubmit(interaction, platform) {
         }
 
         try {
-            const denunciaLink = `https://discord.com/channels/${interaction.guild.id}/${channel.id}/${mainMessage.id}`;
+            const denunciaLink = `https://discord.com/channels/${interaction.guild.id}/${thread.id}`;
             const mensagemDetalhada = [
                 `⚠️ **Você foi denunciado no servidor ${interaction.guild.name}!**`,
                 '',
@@ -653,8 +856,11 @@ async function handleDenunciaSubmit(interaction, platform) {
                 `**Provas:** ${provas}`,
                 '',
                 `${denunciaLink}`,
+                // Acusado que não vê o canal fica fora do tópico privado: pelo site
+                // ele acompanha o caso e responde do mesmo jeito.
+                ...(linkNoSite ? [`🌐 **Pelo site:** ${linkNoSite}`] : []),
                 '',
-                'Se você acredita que esta denúncia é injusta, responda no tópico da denúncia com as contraprovas ou aguarde a análise da equipe.'
+                'Se você acredita que esta denúncia é injusta, responda no tópico da denúncia (ou pelo site) com as contraprovas ou aguarde a análise da equipe.'
             ].join('\n');
 
             for (const id of acusadoIds) {
@@ -671,23 +877,14 @@ async function handleDenunciaSubmit(interaction, platform) {
 
         await garantirAvisoNoTopo(channel, interaction.channelId);
 
-        await interaction.editReply({ 
-            content: [
-                `✅ Sua denúncia foi criada com sucesso em ${thread} às \`${dateUtils.getBrasiliaTime()}\`.`,
-                '',
-                '⚠️ **Atenção — leia antes de interagir no tópico:**',
-                '• Utilize linguagem respeitosa. Chingamentos e palavras ofensivas resultarão em **punição imediata**.',
-                '• Enviar **imagens ofensivas**, memes ou qualquer conteúdo por brincadeira dentro do tópico resultará em **banimento permanente do servidor**, sem direito a recurso.',
-                '• O tópico é exclusivo para apresentação de provas e contra-provas. Mensagens fora desse contexto serão removidas e o responsável punido.',
-            ].join('\n')
-        });
-
     } catch (error) {
         console.error(error);
-        try {
-            await interaction.editReply({ content: '❌ Erro ao processar sua denúncia.' });
-        } catch (e) {
-            console.error('Não foi possível editar a resposta de erro:', e.message);
+        if (!confirmacaoEnviada) {
+            try {
+                await interaction.editReply({ content: '❌ Erro ao processar sua denúncia.' });
+            } catch (e) {
+                console.error('Não foi possível editar a resposta de erro:', e.message);
+            }
         }
     }
 }
@@ -718,22 +915,66 @@ async function handleDenunciaButtons(interaction, client) {
     } catch (error) { console.error(error); }
 }
 
-async function handleDenunciaPC(interaction) {
-    const config = await getCachedConfig(interaction.guild.id, Config);
-    const roleRequired = config.roles.pc;
-    if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
-        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia PC. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
+async function interactionHasRole(interaction, roleId) {
+    const roles = interaction.member?.roles;
+    if (roles?.cache?.has) return roles.cache.has(roleId);
+    if (Array.isArray(roles)) return roles.includes(roleId);
+
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    return member.roles.cache.has(roleId);
+}
+
+async function handleDenunciaPorPlataforma(interaction, platform, configRole) {
+    if (!interaction.guild) {
+        return interaction.reply({
+            content: '❌ Este botão só pode ser usado em um servidor.',
+            flags: [MessageFlags.Ephemeral]
+        });
     }
-    await openDenunciaModal(interaction, 'PC');
+
+    const config = await getCachedConfig(interaction.guild.id);
+    if (!config) {
+        return interaction.reply({
+            content: '⚠️ Este servidor ainda não tem configuração salva. Configure-o pelo `/painel` ou migre a configuração existente para o banco secundário.',
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    const roleRequired = config?.roles?.[configRole];
+    if (!roleRequired) {
+        return interaction.reply({
+            content: `⚠️ O cargo permitido para denúncias ${platform} não está configurado. Ajuste-o pelo \`/painel\`.`,
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    let hasRole;
+    try {
+        hasRole = await interactionHasRole(interaction, roleRequired);
+    } catch (error) {
+        console.error(`Erro ao verificar o cargo para denúncia ${platform}:`, error);
+        return interaction.reply({
+            content: '❌ Não foi possível verificar seu cargo. Tente novamente.',
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    if (!hasRole) {
+        return interaction.reply({
+            content: `❌ Você não tem permissão para usar o botão de denúncia ${platform}. É necessário o cargo <@&${roleRequired}>.`,
+            flags: [MessageFlags.Ephemeral]
+        });
+    }
+
+    await openDenunciaModal(interaction, platform);
+}
+
+async function handleDenunciaPC(interaction) {
+    await handleDenunciaPorPlataforma(interaction, 'PC', 'pc');
 }
 
 async function handleDenunciaMobile(interaction) {
-    const config = await getCachedConfig(interaction.guild.id, Config);
-    const roleRequired = config.roles.permitido;
-    if (!roleRequired || !interaction.member.roles.cache.has(roleRequired)) {
-        return interaction.reply({ content: `❌ Você não tem permissão para usar o botão de denúncia Mobile. É necessário o cargo <@&${roleRequired}>.`, flags: [MessageFlags.Ephemeral] });
-    }
-    await openDenunciaModal(interaction, 'Mobile');
+    await handleDenunciaPorPlataforma(interaction, 'Mobile', 'permitido');
 }
 
 async function buscarContaComTimeout(guildId, userId, timeoutMs = 1500) {
@@ -806,6 +1047,22 @@ async function openDenunciaModal(interaction, platform) {
             new ActionRowBuilder().addComponents(motivoInput),
             new ActionRowBuilder().addComponents(provasInput)
         );
+
+        // Upload no modal exige discord.js >= 14.23; em versão antiga o formulário abre sem esse campo.
+        if (LabelBuilder && FileUploadBuilder) {
+            modal.addLabelComponents(
+                new LabelBuilder()
+                    .setLabel('Vídeos / imagens (opcional)')
+                    .setDescription('Até 10 arquivos — serão enviados no tópico da denúncia')
+                    .setFileUploadComponent(
+                        new FileUploadBuilder()
+                            .setCustomId('anexos_input')
+                            .setRequired(false)
+                            .setMinValues(0)
+                            .setMaxValues(10)
+                    )
+            );
+        }
 
         await interaction.showModal(modal);
 
@@ -896,11 +1153,11 @@ async function handleConsultaModalSubmit(interaction) {
                 .setTimestamp();
 
             chunk.forEach((d) => {
-                    let statusEmoji = '⏳';
+                let statusEmoji = '⏳';
                 let statusNome  = 'PENDENTE / EM ANÁLISE';
 
-                    if (d.status === 'aceita')   { statusEmoji = '✅'; statusNome = 'ACEITA'; }
-                    if (d.status === 'recusada') { statusEmoji = '❌'; statusNome = 'RECUSADA'; }
+                if (d.status === 'aceita')   { statusEmoji = '✅'; statusNome = 'ACEITA'; }
+                if (d.status === 'recusada') { statusEmoji = '❌'; statusNome = 'RECUSADA'; }
 
                 const motivoOriginal = (d.status === 'aceita' && d.motivoAceite) ? d.motivoAceite : (d.motivo || 'N/A');
                 const motivoFinal    = motivoOriginal.length > 150 ? motivoOriginal.substring(0, 150) + '...' : motivoOriginal;
@@ -922,8 +1179,8 @@ async function handleConsultaModalSubmit(interaction) {
 
     } catch (error) {
         console.error('Erro no modal de consulta:', error);
-        
-                if (!deferred) {
+
+        if (!deferred) {
             try {
                 await interaction.reply({ content: '❌ Erro ao consultar o banco de dados.', flags: 64 });
             } catch (replyError) {
@@ -938,16 +1195,23 @@ async function handleConsultaModalSubmit(interaction) {
         }
     }
 }
- 
+
 module.exports = {
     handleDenunciaCommand,
+    handleDenunciaSlash,
     handleDenunciaSubmit,
     handleDenunciaButtons,
     handleDenunciaPC,
     handleDenunciaMobile,
+    interactionHasRole,
     handleModalSubmit,
     handleMyDenunciasButton,
+    handleEntrarNoTopico,
     handleConsultaModalSubmit,
     atualizarMensagemDenuncia,
-    atualizarStatusNaMensagem
+    atualizarStatusNaMensagem,
+    criarTopicoPrivado,
+    liberarTopicosPrivadosParaCargos,
+    liberarTopicosPrivadosNoServidor,
+    enviarAnexosNoTopico
 };

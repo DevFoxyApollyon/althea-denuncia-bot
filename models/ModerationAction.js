@@ -1,7 +1,7 @@
-﻿// models/ModerationAction.js
+// models/ModerationAction.js
 const mongoose = require('mongoose');
 const { getBrasiliaDate, getWeekDates } = require('../utils/dateUtils');
-const cron = require('node-cron');
+const { model } = require('../utils/persistencia');
 
 const ModerationActionSchema = new mongoose.Schema(
   {
@@ -31,7 +31,7 @@ const ModerationActionSchema = new mongoose.Schema(
       type: Number,
       required: true,
       default: function () {
-        return mongoose.model('ModerationAction').getCurrentWeekNumber();
+        return this.constructor.getCurrentWeekNumber();
       },
     },
   },
@@ -162,23 +162,6 @@ ModerationActionSchema.statics.validarAcao = async function (moderatorId, action
   }
 };
  
-const ModerationAction =
-  mongoose.models.ModerationAction || mongoose.model('ModerationAction', ModerationActionSchema);
-
-cron.schedule(
-  '5 0 1 * *',
-  async () => {
-    try {
-      await ModerationAction.deleteMany({});
-      console.log(`[DATABASE] Reset mensal do ranking realizado.`);
-    } catch (error) {
-      console.error('Erro no reset mensal:', error);
-    }
-  },
-  {
-    timezone: 'America/Sao_Paulo',
-    scheduled: true,
-  }
-);
+const ModerationAction = model('ModerationAction', ModerationActionSchema);
 
 module.exports = ModerationAction;

@@ -1,12 +1,13 @@
-﻿const chalk = require('chalk');
+const chalk = require('chalk');
+const { CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM } = require('../utils/dmSegura');
 const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const Denuncia = require('../models/Denuncia');
 const Config = require('../models/Config');
 const { toBrasiliaDate } = require('../utils/dateUtils');
-const archiver = require('archiver');
 const fetch = require('node-fetch');
-const { PassThrough } = require('stream');
+const { escapeHtml, safeFileName, getHighestRole, buildZipBuffer } = require('../utils/exportUtils');
 const { buscarCanal } = require('../utils/denunciaMensagens');
+const { fecharEspelhos } = require('../utils/espelhos');
 
 const MODULO_TAG = chalk.gray('[AutoFinalizador]');
 
@@ -29,12 +30,19 @@ function formatLevel(label, colorFn) {
     return colorFn(label.padEnd(7, ' '));
 }
 
+// Só avisos e erros vão para o log. As linhas de INFO, SUCESSO e SISTEMA
+// (cada denúncia finalizada, memória, próximo ciclo) enchiam o console;
+// para vê-las de novo ao investigar um problema, use AUTOFINALIZADOR_DETALHADO=1.
+const DETALHADO = ['1', 'true', 'sim'].includes(String(process.env.AUTOFINALIZADOR_DETALHADO || '').trim().toLowerCase());
+const linha = (rotulo, cor, msg, meta) => `${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel(rotulo, cor)} ${msg}${formatMeta(meta)}`;
+const detalhe = (rotulo, cor) => (msg, meta = {}) => { if (DETALHADO) console.log(linha(rotulo, cor, msg, meta)); };
+
 const log = {
-    info:    (msg, meta = {}) => console.log(`${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel('INFO', chalk.blue)} ${msg}${formatMeta(meta)}`),
-    success: (msg, meta = {}) => console.log(`${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel('SUCESSO', chalk.green)} ${msg}${formatMeta(meta)}`),
-    warn:    (msg, meta = {}) => console.log(`${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel('AVISO', chalk.yellow)} ${msg}${formatMeta(meta)}`),
-    error:   (msg, meta = {}) => console.error(`${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel('ERRO', chalk.red)} ${msg}${formatMeta(meta)}`),
-    system:  (msg, meta = {}) => console.log(`${chalk.gray(nowTimestamp())} ${MODULO_TAG} ${formatLevel('SISTEMA', chalk.magenta)} ${msg}${formatMeta(meta)}`),
+    info:    detalhe('INFO', chalk.blue),
+    success: detalhe('SUCESSO', chalk.green),
+    warn:    (msg, meta = {}) => console.log(linha('AVISO', chalk.yellow, msg, meta)),
+    error:   (msg, meta = {}) => console.error(linha('ERRO', chalk.red, msg, meta)),
+    system:  detalhe('SISTEMA', chalk.magenta),
 };
 
 const DIAS_PARA_FINALIZAR     = 7;
@@ -55,39 +63,6 @@ const EXPORT = {
 };
 
 const urlRegex = /(https?:\/\/[^\s]+)/g;
-
-function escapeHtml(str = '') {
-    return String(str)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-}
-
-function safeFileName(name = '') {
-    return String(name)
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9._-]+/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_+|_+$/g, '')
-        .slice(0, 80);
-}
-
-function getHighestRole(member) {
-    if (!member) return { name: '', color: '#99aab5' };
-    const highestRole = member.roles.cache
-        .filter(role => role.name !== '@everyone')
-        .sort((a, b) => b.position - a.position)
-        .first();
-    return {
-        name:  highestRole ? highestRole.name : '',
-        color: highestRole && highestRole.color !== 0
-            ? '#' + highestRole.color.toString(16).padStart(6, '0')
-            : '#99aab5',
-    };
-}
 
 function combinarAbort(signalPai, controller) {
     if (!signalPai) return () => {};
@@ -269,8 +244,9 @@ function calcularDataLimite() {
 async function fetchAllThreadMessages(thread) {
     const all = [];
     let lastId;
+    thread.messages.cache.clear();
     while (true) {
-        const batch = await thread.messages.fetch({ limit: 100, ...(lastId ? { before: lastId } : {}) });
+        const batch = await thread.messages.fetch({ limit: 100, cache: false, ...(lastId ? { before: lastId } : {}) });
         if (!batch || batch.size === 0) break;
         const values = Array.from(batch.values());
         all.push(...values);
@@ -279,21 +255,6 @@ async function fetchAllThreadMessages(thread) {
     }
     all.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
     return all;
-}
-
-function buildZipBuffer(files) {
-    return new Promise((resolve, reject) => {
-        const archive = archiver('zip', { zlib: { level: 6 } });
-        const pass    = new PassThrough();
-        const chunks  = [];
-        pass.on('data',  c   => chunks.push(c));
-        pass.on('end',   ()  => resolve(Buffer.concat(chunks)));
-        pass.on('error', reject);
-        archive.on('error', reject);
-        archive.pipe(pass);
-        for (const f of files) if (f.content) archive.append(f.content, { name: f.name });
-        archive.finalize();
-    });
 }
 
 class ZipBatcher {
@@ -349,7 +310,6 @@ async function enviarParteComSplit(items, meta, ctx) {
     if (items.length === 0) return;
 
     let buf = await buildZipBuffer(items);
-    for (const item of items) item.content = null;
 
     ctx.contador.valor++;
     const numeroParte = ctx.contador.valor;
@@ -360,17 +320,19 @@ async function enviarParteComSplit(items, meta, ctx) {
     });
 
     try {
-        const sent = await comRetry(
-            () => ctx.logsChannel.send({ content: partLabel, files: [zipAttachment] }),
-            {
-                label: `enviar parte ${numeroParte} do ZIP`,
-                meta,
-                
-                
-                isRetryable: err => !isErroEntidadeGrandeDemais(err),
+        for (const logsChannel of ctx.logsChannels) {
+            const sent = await comRetry(
+                () => logsChannel.send({ content: partLabel, files: [zipAttachment] }),
+                {
+                    label: `enviar parte ${numeroParte} do ZIP`,
+                    meta,
+                    isRetryable: err => !isErroEntidadeGrandeDemais(err),
+                }
+            );
+            if (!ctx.estado.logMessages.has(logsChannel.id)) {
+                ctx.estado.logMessages.set(logsChannel.id, sent);
             }
-        );
-        if (!ctx.estado.logMessage) ctx.estado.logMessage = sent;
+        }
         ctx.estado.partsEnviadas++;
     } catch (err) {
         if (isErroEntidadeGrandeDemais(err) && items.length > 1) {
@@ -403,6 +365,7 @@ async function enviarParteComSplit(items, meta, ctx) {
         ctx.estado.houveErroCritico = true;
     }
 
+    for (const item of items) item.content = null;
     zipAttachment.attachment = null;
     zipAttachment = null;
     buf = null;
@@ -602,8 +565,11 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
         
         
         
-        const cloudChannelId = config?.channels?.cloud || config?.channels?.backup || config?.channels?.log;
-        if (!cloudChannelId) {
+        const logChannelIds = [...new Set([
+            config?.channels?.cloud,
+            config?.channels?.backup,
+        ].filter(Boolean))];
+        if (logChannelIds.length === 0) {
             log.error(
                 `Canal de log não configurado para este servidor — denúncia será finalizada SEM exportação de anexos. ` +
             `Configure "channels.cloud" nas configurações do servidor para habilitar a exportação completa.`,
@@ -622,13 +588,12 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
             return false;
         }
 
-        const cloudChannel = await buscarCanal(client, cloudChannelId);
-        if (!cloudChannel?.isTextBased?.()) {
-            log.error(`Canal Cloud não encontrado ou sem suporte a texto: ${cloudChannelId}`, meta);
+        const logsChannels = (await Promise.all(logChannelIds.map(channelId => buscarCanal(client, channelId))))
+            .filter(channel => channel?.isTextBased?.());
+        if (logsChannels.length === 0) {
+            log.error(`Nenhum canal de arquivamento encontrado: ${logChannelIds.join(', ')}`, meta);
             return false;
         }
-
-        const maxUploadBytes = getGuildUploadLimitBytes(cloudChannel.guild || guild);
 
         const [thread, channel] = await Promise.all([
             denuncia.threadId
@@ -675,6 +640,8 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                     await thread.setLocked(true).catch(() => { sucessoRecusaAuto = false; });
                     await thread.setArchived(true).catch(() => { sucessoRecusaAuto = false; });
                     if (guild) guild.channels.cache.delete(thread.id);
+                    // Os tópicos espelho fecham junto com o da denúncia.
+                    await fecharEspelhos(client, denuncia._id, 'Denúncia recusada automaticamente.');
                     if (sucessoRecusaAuto) log.success(`Denúncia ${denuncia._id} recusada automaticamente.`, meta);
                 } catch (err) {
                     log.error(`Erro ao recusar automaticamente: ${err.message}`, meta);
@@ -716,8 +683,6 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
             const executorTag  = 'Sistema Automatico';
             const baseFileName = safeFileName(`denuncia_${denuncia.messageId}_${denuncia.acusado}`);
             const statusMeta   = makeStatusMeta(denuncia.status);
-            const logsChannel  = cloudChannel;
-
             let zipHtmlContent = await generateHtmlString(
                 thread, denuncia, executorTag, true,
                 sortedMessages, avatarNameByUserId, attachmentNameByUrl, membersMap
@@ -735,23 +700,31 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
             
             
             
-            const contadorPartes = { valor: 0 };
-            const estadoEnvio    = { logMessage: null, partsEnviadas: 0, houveErroCritico: false };
+            const estadoEnvio = { logMessages: new Map(), partsEnviadas: 0, houveErroCritico: false };
+            const channelBatchers = logsChannels.map((logsChannel) => {
+                const contadorPartes = { valor: 0 };
+                const maxUploadBytes = getGuildUploadLimitBytes(logsChannel.guild || guild);
+                const batcher = new ZipBatcher(maxUploadBytes, async (items) => {
+                    await enviarParteComSplit(items, meta, {
+                        logsChannels: [logsChannel],
+                        baseFileName,
+                        contador: contadorPartes,
+                        estado: estadoEnvio,
+                    });
+                }, meta);
+                return { logsChannel, maxUploadBytes, batcher };
+            });
 
-            const batcher = new ZipBatcher(maxUploadBytes, async (items) => {
-                if (!logsChannel) return;
-                await enviarParteComSplit(items, meta, {
-                    logsChannel,
-                    baseFileName,
-                    contador: contadorPartes,
-                    estado: estadoEnvio,
-                });
-            }, meta);
-
-            await batcher.add(`${baseFileName}.html`, Buffer.from(zipHtmlContent, 'utf8'));
+            const htmlBuffer = Buffer.from(zipHtmlContent, 'utf8');
+            for (const { batcher } of channelBatchers) {
+                await batcher.add(`${baseFileName}.html`, htmlBuffer);
+            }
             zipHtmlContent = null;
 
             let downloadedBytes  = 0;
+            const anexosNaoArquivadosPorCanal = new Map(
+                channelBatchers.map(({ logsChannel }) => [logsChannel.id, []])
+            );
             for (const msg of sortedMessages) {
                 if (signal?.aborted) { log.warn('Download de anexos abortado: timeout global do ciclo', meta); break; }
                 if (downloadedBytes >= EXPORT.MAX_TOTAL_DOWNLOAD_BYTES) break;
@@ -761,16 +734,29 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                     try {
                         const bytesRestantes = EXPORT.MAX_TOTAL_DOWNLOAD_BYTES - downloadedBytes;
                         
-                        const limiteEfetivo  = Math.min(EXPORT.MAX_SINGLE_DOWNLOAD_BYTES, maxUploadBytes, bytesRestantes);
+                        const limiteEfetivo  = Math.min(EXPORT.MAX_SINGLE_DOWNLOAD_BYTES, bytesRestantes);
                         const resultado = await fetchBufferComTimeout(attachment.url, EXPORT.FETCH_TIMEOUT_MS, signal, limiteEfetivo);
                         if (!resultado.ok) {
-                            if (resultado.tooLarge) log.warn(`Anexo descartado por exceder o limite de tamanho: ${attachment.url}`, meta);
+                            if (resultado.tooLarge) {
+                                const anexoGrande = { nome: attachment.name || 'arquivo', url: attachment.url };
+                                for (const { logsChannel } of channelBatchers) {
+                                    anexosNaoArquivadosPorCanal.get(logsChannel.id).push(anexoGrande);
+                                }
+                                log.warn(`Anexo preservado como link por exceder o limite de tamanho: ${attachment.url}`, meta);
+                            }
                             continue;
                         }
                         let buf = resultado.buffer;
                         downloadedBytes += buf.length;
+                        const anexo = { nome: attachment.name || 'arquivo', url: attachment.url };
+                        for (const { logsChannel, maxUploadBytes, batcher } of channelBatchers) {
+                            if (buf.length > maxUploadBytes) {
+                                anexosNaoArquivadosPorCanal.get(logsChannel.id).push(anexo);
+                                continue;
+                            }
+                            await batcher.add(`anexos/${attachmentNameByUrl.get(attachment.url)}`, buf);
+                        }
                         anexosBaixados++;
-                        await batcher.add(`anexos/${attachmentNameByUrl.get(attachment.url)}`, buf);
                         buf = null;
                     } catch (err) {
                         log.warn(`Falha ao baixar attachment: ${err.message}`, meta);
@@ -789,7 +775,11 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                     let buf = resultado.buffer;
                     downloadedBytes += buf.length;
                     avataresBaixados++;
-                    await batcher.add(`anexos/${avatarName}`, buf);
+                    for (const { batcher, maxUploadBytes } of channelBatchers) {
+                        if (buf.length <= maxUploadBytes) {
+                            await batcher.add(`anexos/${avatarName}`, buf);
+                        }
+                    }
                     buf = null;
                     client.users.cache.delete(uid);
                 } catch (err) {
@@ -804,7 +794,43 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
             );
             logMemoria(`pós-download ${denuncia._id}`);
 
-            await batcher.finalize();
+            for (const { logsChannel, batcher } of channelBatchers) {
+                const anexosNaoArquivados = anexosNaoArquivadosPorCanal.get(logsChannel.id);
+                if (anexosNaoArquivados.length > 0) {
+                    const linksAnexos = [
+                        `Anexos grandes não incluídos no ZIP da denúncia ${denuncia.messageId}`,
+                        'Os arquivos abaixo excederam o limite deste canal e foram preservados pelos links originais:',
+                        '',
+                        ...anexosNaoArquivados.flatMap((anexo, index) => [
+                            `${index + 1}. ${anexo.nome}`,
+                            anexo.url,
+                            '',
+                        ]),
+                    ].join('\n');
+                    await batcher.add(
+                        `${baseFileName}_ANEXOS_GRANDES.txt`,
+                        Buffer.from(linksAnexos, 'utf8')
+                    );
+                }
+            }
+
+            for (const { batcher } of channelBatchers) {
+                await batcher.finalize();
+            }
+
+            for (const { logsChannel } of channelBatchers) {
+                const anexosNaoArquivados = anexosNaoArquivadosPorCanal.get(logsChannel.id);
+                if (anexosNaoArquivados.length > 0) {
+                    const linksAnexos = anexosNaoArquivados
+                        .map(anexo => `📎 **${anexo.nome}**\n${anexo.url}`)
+                        .join('\n\n');
+                    await logsChannel.send({
+                        content: `⚠️ **Anexos grandes não incluídos no ZIP deste canal**\nOs arquivos abaixo excedem o limite de upload e foram preservados como links:\n\n${linksAnexos}`,
+                        allowedMentions: { parse: [] },
+                    }).catch(error => log.warn(`Falha ao enviar links de anexos grandes: ${error.message}`, meta));
+                }
+            }
+
             houveErroCritico = houveErroCritico || estadoEnvio.houveErroCritico;
 
             duracaoProcessamento = Date.now() - processStart;
@@ -821,7 +847,7 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
 
             await runGcComLog('pós-batcher', meta);
 
-            if (logsChannel && estadoEnvio.logMessage) {
+            if (estadoEnvio.logMessages.size > 0) {
                 try {
                     const denunciaMsgLink = `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`;
                     const threadLink      = denuncia.threadId
@@ -869,25 +895,37 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                         })
                         .setTimestamp();
 
-                    await comRetry(() => estadoEnvio.logMessage.edit({ embeds: [logEmbed] }), { label: 'editar embed de log', meta });
+                    for (const [channelId, logMessage] of estadoEnvio.logMessages) {
+                        try {
+                            await comRetry(
+                                () => logMessage.edit({ embeds: [logEmbed] }),
+                                { label: `editar embed de log (${channelId})`, meta: { ...meta, channelId } }
+                            );
+                        } catch (err) {
+                            log.error(`Falha ao editar embed no canal ${channelId}: ${err.message}`, { ...meta, channelId });
+                        }
+                    }
                 } catch (err) {
                     log.error(`Falha ao editar embed de log: ${err.message}`, meta);
                 }
             }
 
-            if (logsChannel) {
+            if (logsChannels.length > 0) {
                 try {
-                    await logsChannel.send({
-                        content: `**[PRÉ-VISUALIZAÇÃO]** ${thread.name} — Denúncia \`${denuncia._id}\` (Status: \`${statusMeta.label}\`)`,
-                        files:   [htmlAttachment],
-                    });
+                    for (const logsChannel of logsChannels) {
+                        await logsChannel.send({
+                            content: `**[PRÉ-VISUALIZAÇÃO]** ${thread.name} — Denúncia \`${denuncia._id}\` (Status: \`${statusMeta.label}\`)`,
+                            files:   [htmlAttachment],
+                        });
+                    }
                 } catch (err) {
                     log.warn(`Falha ao enviar preview: ${err.message}`, meta);
                 }
             }
 
             const denunciante = await client.users.fetch(String(denuncia.criadoPor), { cache: false }).catch(() => null);
-            if (denunciante) {
+            // Enquanto o Discord estiver bloqueando as DMs do bot, não insiste.
+            if (denunciante && !dmPausada()) {
                 try {
                     const denunciaMsgLinkDm = `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`;
                     const threadLinkDm = denuncia.threadId
@@ -911,7 +949,8 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                         files: [htmlAttachment],
                     });
                 } catch (err) {
-                    log.warn(`Falha ao notificar denunciante: ${err.message}`, meta);
+                    registrarErroDeDM(err);
+                    if (!CODIGOS_ESPERADOS.includes(err?.code)) log.warn(`Falha ao notificar denunciante: ${err.message}`, meta);
                 }
                 client.users.cache.delete(String(denuncia.criadoPor));
             }
@@ -948,16 +987,17 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
 
             if (guild) guild.channels.cache.delete(thread.id);
 
-            if (estadoEnvio.logMessage) {
+            const logMessage = estadoEnvio.logMessages.values().next().value;
+            if (logMessage) {
                 try {
                     await Denuncia.findByIdAndUpdate(denuncia._id, {
-                        logMessageId: estadoEnvio.logMessage.id,
+                        logMessageId: logMessage.id,
                         $push: {
                             historico: {
                                 acao:      'FINALIZADA_AUTOMATICAMENTE',
                                 staffId:   'sistema',
                                 data:      new Date(),
-                                detalhes:  { messageLink: estadoEnvio.logMessage.url },
+                                detalhes:  { messageLink: logMessage.url },
                             },
                         },
                     });
@@ -1001,6 +1041,8 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                 'ultimaEdicao.data':            new Date(),
             });
             log.success(`Status atualizado para 'finalizada': ${denuncia._id}`, meta);
+            // Os tópicos espelho (armazém e registro) fecham junto com o da denúncia.
+            await fecharEspelhos(client, denuncia._id, 'Denúncia finalizada automaticamente.');
         } catch (err) {
             log.warn(`Falha ao atualizar status no banco: ${err.message}`, meta);
             houveErroCritico = true;
@@ -1024,7 +1066,7 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
         }
         return !houveErroCritico;
     } catch (error) {
-        log.error(`Erro ao finalizar ${denuncia._id}: ${error.message}`, meta);
+        log.error(`Erro ao finalizar ${denuncia._id}: ${error.message}`, { guildName, denunciaId: String(denuncia._id) });
         return false;
     }
 }
@@ -1041,7 +1083,7 @@ async function verificarEFinalizarDenuncias(client, signal = null) {
     const dataLimite = calcularDataLimite();
     const denuncias  = await Denuncia.find({
         dataCriacao: { $lte: dataLimite },
-        guildId:     { $exists: true, $ne: null, $ne: '' },
+        guildId:     { $exists: true, $nin: [null, ''] },
         status:      { $in: STATUS_FINALIZAVEIS },
     })
     .sort({ dataCriacao: 1 })

@@ -1,4 +1,4 @@
-﻿const {
+const {
     ActionRowBuilder,
     StringSelectMenuBuilder,
     ModalBuilder,
@@ -7,20 +7,16 @@
     EmbedBuilder
 } = require('discord.js');
 
-const { v4: uuidv4 } = require('uuid');
-const FeedbackTemp = require('../models/FeedbackTemp');
-
-const DELAY_ENTRE_ITENS_MS = 250;
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
+const { randomUUID } = require('crypto');
+const DenunciaModel = require('../models/Denuncia');
+const StaffProfile = require('../models/StaffProfile');
+const { avisosExtrasLigados, CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM } = require('./dmSegura');
 
 // =========================
 // UTILITARIOS
 // =========================
 function gerarCodigoFeedback() {
-    return uuidv4().split('-')[0].toUpperCase();
+    return randomUUID().split('-')[0].toUpperCase();
 }
 
 function gerarEmojiNota(nota) {
@@ -49,39 +45,6 @@ function gerarEstrelasNota(nota) {
     const cheias = '\u2B50'.repeat(n);
     const vazias  = '\u25E6'.repeat(10 - n);
     return cheias + vazias;
-}
-
-async function limparMenusOrfaos(client) {
-    try {
-        const pendentes = await FeedbackTemp.find({});
-
-        if (pendentes.length === 0) return;
-
-        const canaisCache = new Map();
-
-        for (const entry of pendentes) {
-            try {
-                let channel = canaisCache.get(entry.channelId);
-                if (channel === undefined) {
-                    channel = await client.channels.fetch(entry.channelId).catch(() => null);
-                    canaisCache.set(entry.channelId, channel);
-                }
-
-                if (channel) {
-                    const msg = await channel.messages.fetch(entry.messageId).catch(() => null);
-                    if (msg) await msg.delete().catch(() => {});
-                }
-
-                await FeedbackTemp.deleteOne({ _id: entry._id });
-            } catch (err) {
-                console.error(`[FeedbackTemp] Erro ao limpar orfao ${entry.denunciaId}:`, err.message);
-            }
-            await sleep(DELAY_ENTRE_ITENS_MS);
-        }
-
-    } catch (err) {
-        console.error('[FeedbackTemp] Erro ao buscar menus orfaos:', err.message);
-    }
 }
 
 // =========================
@@ -133,8 +96,11 @@ async function enviarFeedbackCanais(client, config, data) {
 // =========================
 // ENVIAR DM PARA O STAFF
 // =========================
+// A avaliação já vai para o canal de log e aparece no site; a DM é um aviso
+// extra, desligado por padrão (DM_AVISOS_EXTRAS=1 liga) e nunca enviado
+// enquanto o Discord estiver limitando as DMs do bot.
 async function enviarFeedbackStaff(client, staffId, data) {
-    if (!staffId) return;
+    if (!staffId || !avisosExtrasLigados() || dmPausada()) return;
 
     const staff = await client.users.fetch(staffId).catch(() => null);
 
@@ -149,7 +115,8 @@ async function enviarFeedbackStaff(client, staffId, data) {
         content: '\uD83D\uDCEC **Voce recebeu uma avaliacao pela denuncia que atendeu!**',
         embeds: [embed]
     }).catch((err) => {
-        console.warn(`[Feedback] DM bloqueada para staff ${staffId}: ${err.message}`);
+        if (registrarErroDeDM(err)) return console.warn('[Feedback] DMs do bot limitadas pelo Discord: avisos por DM pausados.');
+        if (!CODIGOS_ESPERADOS.includes(err?.code)) console.warn(`[Feedback] DM não enviada para staff ${staffId}: ${err.message}`);
     });
 }
 
@@ -249,6 +216,50 @@ async function handleFeedbackMenu(interaction) {
 // =========================
 // MODAL SUBMIT
 // =========================
+// Grava a avaliação e avisa a staff. Devolve null se a denúncia já tinha sido
+// avaliada (a marcação é atômica: duas avaliações simultâneas não passam).
+async function registrarFeedback(client, denuncia, { nota, comentario }, config) {
+    const n = Number(nota);
+    const staffId = denuncia.staffId || denuncia.claimedBy || null;
+
+    const marcada = await DenunciaModel.findOneAndUpdate(
+        { _id: denuncia._id, feedbackEnviado: { $ne: true } },
+        { $set: {
+            feedbackEnviado: true,
+            feedbackNota: n,
+            feedbackComentario: comentario || '',
+            feedbackStaffId: staffId,
+            feedbackEm: new Date()
+        } },
+        { new: true }
+    );
+    if (!marcada) return null;
+
+    if (staffId) {
+        await StaffProfile.registrarFeedback(denuncia.guildId, staffId, n)
+            .catch(err => console.error('[Feedback] Falha ao atualizar o perfil do staff:', err));
+    }
+
+    const codigo = gerarCodigoFeedback();
+    const threadUrl = `https://discord.com/channels/${denuncia.guildId}/${denuncia.channelId}/${denuncia.messageId}`;
+    const feedbackData = { nota: n, comentario, denuncianteId: denuncia.criadoPor, staffId, codigo, threadUrl };
+
+    const [canalResult, dmResult] = await Promise.allSettled([
+        enviarFeedbackCanais(client, config || { channels: { log: null } }, feedbackData),
+        enviarFeedbackStaff(client, staffId, feedbackData)
+    ]);
+
+    if (canalResult.status === 'rejected')
+        console.error('[Feedback] Falha ao enviar no canal de log:', canalResult.reason);
+
+    if (dmResult.status === 'rejected')
+        console.error('[Feedback] Falha ao enviar DM para o staff:', dmResult.reason);
+
+    await removerFeedbackMenu(client, String(denuncia._id)).catch(() => {});
+
+    return { codigo, nota: n };
+}
+
 async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
     try {
         await interaction.deferReply({ flags: 64 });
@@ -270,45 +281,12 @@ async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
             return interaction.editReply({ content: '\u274C Apenas o denunciante pode enviar feedback.' });
         }
 
-        const codigo = gerarCodigoFeedback();
-
-        let config = await getCachedConfig(interaction.guild.id);
-        if (!config) {
-            console.warn('[Feedback] Config nao encontrada, usando fallback.');
-            config = { channels: { log: null } };
+        const config = await getCachedConfig(interaction.guild.id);
+        const registrado = await registrarFeedback(interaction.client, denuncia, { nota, comentario }, config);
+        if (!registrado) {
+            return interaction.editReply({ content: '\u274C Voc\u00EA j\u00E1 avaliou esta den\u00FAncia.' });
         }
-
-        const threadUrl = `https://discord.com/channels/${interaction.guild.id}/${denuncia.channelId}/${denuncia.messageId}`;
-        const staffId   = denuncia.staffId || denuncia.reivindicadoPor || null;
-
-        const feedbackData = { nota, comentario, denuncianteId: denuncia.criadoPor, staffId, codigo, threadUrl };
-
-        const [canalResult, dmResult] = await Promise.allSettled([
-            enviarFeedbackCanais(interaction.client, config, feedbackData),
-            enviarFeedbackStaff(interaction.client, staffId, feedbackData)
-        ]);
-
-        if (canalResult.status === 'rejected')
-            console.error('[Feedback] Falha ao enviar no canal de log:', canalResult.reason);
-
-        if (dmResult.status === 'rejected')
-            console.error('[Feedback] Falha ao enviar DM para o staff:', dmResult.reason);
-
-        await Denuncia.updateOne({ _id: denunciaId }, { $set: { feedbackEnviado: true } });
-
-        try {
-            const temp = await FeedbackTemp.findOne({ denunciaId: denunciaId.toString() });
-            if (temp) {
-                const channel = await interaction.client.channels.fetch(temp.channelId).catch(() => null);
-                if (channel) {
-                    const msg = await channel.messages.fetch(temp.messageId).catch(() => null);
-                    if (msg) await msg.edit({ components: [] }).catch(() => {});
-                }
-                await FeedbackTemp.deleteOne({ denunciaId: denunciaId.toString() });
-            }
-        } catch (err) {
-            console.error('[Feedback] Erro ao deletar menu:', err.message);
-        }
+        const { codigo } = registrado;
 
         const n      = Number(nota);
         const emoji  = gerarEmojiNota(n);
@@ -358,42 +336,39 @@ async function handleFeedbackModal(interaction, Denuncia, getCachedConfig) {
 // =========================
 async function inserirFeedbackMenu(client, denuncia) {
     try {
-        if (!denuncia.channelId || !denuncia.messageId) {
-            console.error('[Feedback] channelId/messageId nao definido na denuncia.');
+        if (!denuncia.threadId) {
+            console.error('[Feedback] threadId nao definido na denuncia.');
             return;
         }
 
-        let channel = client.channels.cache.get(denuncia.channelId);
+        let thread = client.channels.cache.get(denuncia.threadId);
 
-        if (!channel) {
-            channel = await client.channels.fetch(denuncia.channelId).catch(() => null);
+        if (!thread) {
+            thread = await client.channels.fetch(denuncia.threadId).catch(() => null);
         }
 
-        if (!channel) {
-            console.error(`[Feedback] Canal da denuncia nao encontrado: ${denuncia.channelId}`);
-            return;
-        }
-
-        const message = await channel.messages.fetch(denuncia.messageId).catch(() => null);
-        if (!message) {
-            console.error(`[Feedback] Mensagem principal nao encontrada: ${denuncia.messageId}`);
+        if (!thread?.isThread?.() || !thread.isTextBased?.()) {
+            console.error(`[Feedback] Tópico da denúncia não encontrado: ${denuncia.threadId}`);
             return;
         }
 
         const menu = criarMenuFeedback(denuncia._id);
-
-        await message.edit({ components: [menu] });
-
-        await FeedbackTemp.findOneAndUpdate(
-            { denunciaId: denuncia._id.toString() },
-            {
-                denunciaId: denuncia._id.toString(),
-                messageId: message.id,
-                channelId: channel.id,
-                criadoEm: new Date()
-            },
-            { upsert: true, new: true }
+        const mensagens = await thread.messages.fetch({ limit: 50 }).catch(() => null);
+        const menuExistente = mensagens?.find(message =>
+            message.author?.id === client.user.id &&
+            message.components?.some(row => row.components?.some(component =>
+                component.customId === `feedback:select:${denuncia._id}`
+            ))
         );
+
+        if (menuExistente) {
+            await menuExistente.edit({ components: [menu] });
+        } else {
+            await thread.send({
+                content: '⭐ **Avalie o atendimento da sua denúncia:**',
+                components: [menu],
+            });
+        }
 
     } catch (err) {
         console.error('[Feedback] Erro ao inserir menu de feedback:', err.message);
@@ -401,22 +376,25 @@ async function inserirFeedbackMenu(client, denuncia) {
 }
 
 async function removerFeedbackMenu(client, denunciaId) {
-    const temp = await FeedbackTemp.findOne({ denunciaId: denunciaId.toString() }).catch(() => null);
-    if (!temp) return;
+    const denuncia = await DenunciaModel.findById(denunciaId).select('threadId').lean().catch(() => null);
+    if (!denuncia) return;
 
-    const channel = await client.channels.fetch(temp.channelId).catch(() => null);
-    const message = channel
-        ? await channel.messages.fetch(temp.messageId).catch(() => null)
-        : null;
-    if (message) await message.edit({ components: [] }).catch(() => {});
-    await FeedbackTemp.deleteOne({ _id: temp._id }).catch(() => {});
+    const thread = await client.channels.fetch(denuncia.threadId).catch(() => null);
+    if (!thread?.isTextBased?.()) return;
+
+    const mensagens = await thread.messages.fetch({ limit: 50 }).catch(() => null);
+    const menuId = `feedback:select:${denunciaId}`;
+    for (const message of mensagens?.values?.() || []) {
+        const temMenu = message.components?.some(row => row.components?.some(component => component.customId === menuId));
+        if (temMenu) await message.delete().catch(() => {});
+    }
 }
 
 module.exports = {
+    registrarFeedback,
     criarMenuFeedback,
     inserirFeedbackMenu,
     handleFeedbackMenu,
     handleFeedbackModal,
-    limparMenusOrfaos,
     removerFeedbackMenu
 };

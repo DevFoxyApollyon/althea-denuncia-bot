@@ -1,5 +1,5 @@
-﻿const secondaryConnection = require('../utils/secondaryDb');
 const { Schema } = require('mongoose');
+const { modelSecundarioPermanente } = require('../utils/persistencia');
 
 const usuariosSchema = new Schema({
   guildId: { type: String, required: true, index: true },
@@ -10,7 +10,9 @@ const usuariosSchema = new Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
+// Os upserts usam { guildId, userId }; sem o índice único, dois upserts
+// simultâneos do mesmo membro criavam registros duplicados.
+usuariosSchema.index({ guildId: 1, userId: 1 }, { unique: true });
+usuariosSchema.index({ guildId: 1, conta: 1 });
 
-
-module.exports = secondaryConnection.model('Usuarios', usuariosSchema, 'usuarios');
- 
+module.exports = modelSecundarioPermanente('Usuarios', usuariosSchema, 'usuarios');

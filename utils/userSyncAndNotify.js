@@ -1,6 +1,7 @@
 ﻿// utils/userSyncAndNotify.js
 
 const Usuario = require('../models/Usuario');
+const { CODIGOS_ESPERADOS, dmPausada, registrarErroDeDM } = require('./dmSegura');
 
 async function syncUserOnNicknameChange(oldMember, newMember) {
     try {
@@ -9,17 +10,10 @@ async function syncUserOnNicknameChange(oldMember, newMember) {
             const userId = newMember.id;
             const username = newMember.user.username;
             const nickname = newMember.nickname || null;
-            let conta = null;
-            if (nickname) {
-                const match = nickname.match(/(\d{3,})$/);
-                if (match) {
-                    conta = match[1];
-                } else {
-                    conta = userId; // fallback para userId se não encontrar número
-                }
-            } else {
-                conta = userId; // fallback para userId se não houver nickname
-            }
+            // Nick sem ID do jogo no fim: a conta fica como estava. Gravar o
+            // userId como conta só criava registro para o reparo desfazer.
+            const conta = nickname?.match(/(\d{3,})$/)?.[1] || null;
+            if (!conta) return;
             await Usuario.findOneAndUpdate(
                 { guildId, userId },
                 { $set: { username, nickname, conta, updatedAt: new Date() } },
@@ -32,6 +26,8 @@ async function syncUserOnNicknameChange(oldMember, newMember) {
 }
 
 async function notificarAcusadoPv(client, guildId, acusadoId, mensagem) {
+    // Durante um bloqueio de DMs pelo Discord, o bot não insiste.
+    if (dmPausada()) return false;
     try {
         // Busca por userId OU conta (número ou userId)
         const usuario = await Usuario.findOne({
@@ -48,7 +44,8 @@ async function notificarAcusadoPv(client, guildId, acusadoId, mensagem) {
         await user.send(mensagem);
         return true;
     } catch (e) {
-        if (e.code !== 50007 && e.code !== 50001) {
+        registrarErroDeDM(e);
+        if (e.code !== 50001 && !CODIGOS_ESPERADOS.includes(e.code)) {
             console.warn('Não foi possível notificar acusado no PV:', e.message);
         }
         return false;

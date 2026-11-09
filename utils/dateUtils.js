@@ -1,33 +1,46 @@
-﻿function getBrasiliaDate() {
-    const now = new Date();
-    const BRASILIA_OFFSET = -3; 
-    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-    return new Date(utcTime + (3600000 * BRASILIA_OFFSET));
+// Todo o bot trabalha no horário de Brasília. Fixar o fuso aqui garante que os
+// getters locais de Date (getHours, getDate...) batam com Brasília mesmo quando
+// um script é executado sem passar pelo index.js.
+const TIMEZONE = 'America/Sao_Paulo';
+process.env.TZ = TIMEZONE;
+
+function toDate(dateInput) {
+    if (!dateInput) return new Date();
+    const date = (dateInput instanceof Date) ? new Date(dateInput.getTime()) : new Date(dateInput);
+    return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+// Retorna o instante real (UTC correto no banco); sem argumento, o momento atual.
+function getBrasiliaDate(dateInput) {
+    return toDate(dateInput);
 }
 
 function toBrasiliaDate(dateInput) {
-    if (!dateInput) return getBrasiliaDate();
-    const date = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
-    const utcTime = date.getTime() + (date.getTimezoneOffset() * 60000);
-    return new Date(utcTime + (3600000 * -3));
+    return toDate(dateInput);
 }
 
-function formatDateBR(dateInput = getBrasiliaDate()) {
-    const d = toBrasiliaDate(dateInput);
-    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: TIMEZONE, day: '2-digit', month: '2-digit', year: 'numeric'
+});
+
+const timeFormatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: TIMEZONE, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+});
+
+function formatDateBR(dateInput) {
+    return dateFormatter.format(toDate(dateInput));
 }
 
-function formatTimeBR(dateInput = getBrasiliaDate()) {
-    const d = toBrasiliaDate(dateInput);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+function formatTimeBR(dateInput) {
+    return timeFormatter.format(toDate(dateInput));
 }
 
 function getBrasiliaTime() {
-    return formatTimeBR(getBrasiliaDate());
+    return formatTimeBR();
 }
 
 function getBrasiliaDateTime() {
-    const d = getBrasiliaDate();
+    const d = new Date();
     return `${formatDateBR(d)} ${formatTimeBR(d)}`;
 }
 
@@ -48,8 +61,9 @@ function getWeekDates() {
     weekEnd.setHours(23, 59, 59, 999);
     return { weekStart, weekEnd };
 }
- 
+
 module.exports = {
+    TIMEZONE,
     getBrasiliaDate,
     toBrasiliaDate,
     formatDateBR,
