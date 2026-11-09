@@ -436,16 +436,24 @@ test('resultado: repetição idêntica dá 200, resultado diferente dá 409', as
   assert.equal(inexistente.status, 404);
 });
 
-test('nenhum alvo aplicado (recusada ou simulada): a punição volta para aceita', async () => {
+test('nenhum alvo aplicado (só recusadas): a punição volta para aceita; simulada fecha como aplicada (simulada)', async () => {
   const { conexao, segredo } = await guildGm('841');
   const { punicao, pedidos } = await punicaoComPedidos('841', 2);
   await chamar(conexao, segredo, '/pedidos');
   await chamar(conexao, segredo, `/resultados/${pedidos[0]._id}`, { metodo: 'POST', corpo: resultado('recusada', 'CONTA_PROTEGIDA') });
   assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'executando');
-  await chamar(conexao, segredo, `/resultados/${pedidos[1]._id}`, { metodo: 'POST', corpo: resultado('simulada', 'SIMULADA') });
+  await chamar(conexao, segredo, `/resultados/${pedidos[1]._id}`, { metodo: 'POST', corpo: resultado('recusada', 'RECUSADO') });
   const p = await m.PontePunicao.findById(punicao._id).lean();
   assert.equal(p.status, 'aceita');
   assert.equal(p.resultado.length, 0);
+
+  // Modo teste: simulada fecha como aplicada, com o resultado marcado como simulado.
+  const outra = await punicaoComPedidos('841', 1);
+  await chamar(conexao, segredo, '/pedidos');
+  await chamar(conexao, segredo, `/resultados/${outra.pedidos[0]._id}`, { metodo: 'POST', corpo: resultado('simulada', 'SIMULADA') });
+  const simulada = await m.PontePunicao.findById(outra.punicao._id).lean();
+  assert.equal(simulada.status, 'aplicada');
+  assert.equal(simulada.resultado[0].resposta, 'SIMULADA');
 });
 
 test('selo inválido pausa a conexão no Althea e fica auditado', async () => {
@@ -731,17 +739,17 @@ test('cancelar envio: a denúncia volta para a Cadeia Staff com Aceitar e Recusa
   assert.equal((await chamar(conexao, segredo, '/pedidos')).corpo.pedidos.length, 1);
 });
 
-test('reenvio depois de simulada cria a rodada 2; embed mostra o estado de cada alvo', async () => {
+test('reenvio depois de recusada cria a rodada 2; embed mostra o estado de cada alvo', async () => {
   const { conexao, segredo } = await guildGm('866');
   const punicao = await punicaoAceita('866');
   await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '866', staff: staffA });
   const [entregue] = (await chamar(conexao, segredo, '/pedidos')).corpo.pedidos;
-  await chamar(conexao, segredo, `/resultados/${entregue.id}`, { metodo: 'POST', corpo: resultado('simulada', 'SIMULADA') });
+  await chamar(conexao, segredo, `/resultados/${entregue.id}`, { metodo: 'POST', corpo: resultado('recusada', 'RECUSADO') });
   assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'aceita');
 
   const servidor = await m.PonteServidor.findOne({ guildId: '866' }).lean();
   let msg = discordGm().montarMensagemGm(await m.PontePunicao.findById(punicao._id).lean(), await m.PontePedidoGm.find({ punicaoId: punicao._id }).lean(), servidor);
-  assert.match(textoDoEmbed(msg), /Última tentativa: 🧪 simulada/);
+  assert.match(textoDoEmbed(msg), /Última tentativa: ❌ recusada/);
   assert.equal(msg.components[0].toJSON().components.length, 4, 'pode enviar de novo');
 
   assert.equal((await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId: '866', staff: staffA })).ok, true);
@@ -2150,6 +2158,34 @@ test('"Enviar ao jogo" numa punição sem jogador remonta pelo ID do aceite e en
   assert.equal(r.pedidos, 2);
 
   const ilegivel = await punicaoAceita(guildId, []);
-  await Denuncia.collection.insertOne({ _id: ilegivel.denunciaId, guildId, acusadoId: 'sem id', motivoAceite: 'SAAV' });
+  await Denuncia.collection.insertOne({ _id: ilegivel.denunciaId, guildId, acusadoId: 'não lembro o número', motivoAceite: 'SAAV' });
   assert.match((await discordGm().enviarAoJogo({ punicaoId: ilegivel._id, guildId, staff: staffA })).erro, /Editar/);
+});
+
+test('/admin limpar fila: todas as esperando envio saem sem ir ao jogo (simulada fica simulada) e mandam o aviso de aplicada', async () => {
+  process.env.OWNER_DISCORD_ID = DONO;
+  const guildId = '100000000000000999';
+  await guildGm(guildId);
+  const a = await punicaoAceita(guildId);
+  const b = await punicaoAceita(guildId);
+  await m.PontePedidoGm.create({ punicaoId: b._id, alvoId: b.alvos[0]._id, rodada: 1, denunciaId: b.denunciaId, guildId, tipo: 'ban', conta: 472860, tempo: 5, avisos: 1, motivo: 'DM [DC]', aprovadoPor: 'x', teste: true, status: 'simulada', codigo: 'SIMULADA' });
+  await comAdmin(async (pedir) => {
+    const { csrf } = (await pedir('/csrf')).corpo;
+    assert.equal((await pedir('/esperando/limpar', { metodo: 'POST', corpo: { guildId: 'x' }, csrf })).status, 400);
+    assert.equal((await pedir('/esperando/limpar', { metodo: 'POST', corpo: { guildId }, csrf })).corpo.tiradas, 2);
+  });
+  const [pa, pb] = await Promise.all([m.PontePunicao.findById(a._id).lean(), m.PontePunicao.findById(b._id).lean()]);
+  assert.deepEqual([pa.status, pb.status], ['aplicada', 'aplicada']);
+  assert.deepEqual([pa.resultado[0].resposta, pb.resultado[0].resposta], ['', 'SIMULADA']);
+  assert.equal(await m.PontePunicao.countDocuments({ guildId, status: 'aceita' }), 0);
+
+  // O aviso de aplicada: simulada sai cinza, marcada; "sem ir ao jogo" no rodapé.
+  const { avisarAplicadas } = require('../services/ponteSamp/avisoOrganizacao');
+  await comLogAdmin(guildId);
+  const { client, enviadas } = discordComDm();
+  await avisarAplicadas(client, pb, pb.resultado, pb.aplicadaPor.nomePc);
+  const embed = enviadas[0].embeds[0].toJSON();
+  assert.match(embed.title, /🧪 .*\(simulada\)/);
+  assert.match(embed.description, /só simulou/);
+  assert.match(embed.footer.text, /sem ir ao jogo/);
 });

@@ -199,6 +199,8 @@ async function registrarAplicada(pedido, conexao, dados, agora) {
     organizacao: dados.organizacao,
     contaId: String(dados.conta || pedido.conta || ''),
     pc: `gamemode:${conexao.nome}`,
+    // Modo teste: a gamemode só simulou (fica marcado; não entra no histórico de punições).
+    resposta: pedido.status === 'simulada' ? 'SIMULADA' : '',
     em: new Date(agora)
   };
   await PontePunicao.updateOne({ _id: pedido.punicaoId }, { $push: { resultado: item } });
@@ -215,7 +217,9 @@ async function registrarAplicada(pedido, conexao, dados, agora) {
 // Ban (permanente ou com tempo) que a gamemode recusou porque a conta já estava banida: a
 // conta fica banida do mesmo jeito, então conta como aplicado e sai da fila de envio.
 const banJaBanido = (p) => p.status === 'recusada' && p.codigo === 'JA_BANIDO' && p.tipo === 'ban';
-const contaComoAplicado = (p) => p.status === 'aplicada' || banJaBanido(p);
+// Simulada (modo teste): fecha como se tivesse sido aplicada, marcada como simulada, em vez
+// de voltar a esperar envio.
+const contaComoAplicado = (p) => p.status === 'aplicada' || p.status === 'simulada' || banJaBanido(p);
 
 // Quando o último pedido de cada alvo tem resposta final, a punição sai de "executando":
 // aplicada se ao menos um foi aplicado; senão volta para "aceita" (a staff decide de novo).
@@ -293,7 +297,7 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   }
 
   // Desbanimento não entra no histórico de punições aplicadas.
-  if ((pedido.status === 'aplicada' && ['ban', 'cadeia'].includes(pedido.tipo)) || banJaBanido(pedido)) await registrarAplicada(pedido, conexao, dados, agora);
+  if ((['aplicada', 'simulada'].includes(pedido.status) && ['ban', 'cadeia'].includes(pedido.tipo)) || banJaBanido(pedido)) await registrarAplicada(pedido, conexao, dados, agora);
   if (STATUS_FINAIS.includes(pedido.status)) await fecharPunicaoSePronta({ client, punicaoId: pedido.punicaoId, conexao, agora });
   // TIMEOUT: espera uma resposta atrasada e depois tenta de novo (uma vez; ver verificarIncertos).
   let reenvio = null;

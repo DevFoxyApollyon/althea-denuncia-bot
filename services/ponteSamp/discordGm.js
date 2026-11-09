@@ -244,8 +244,8 @@ async function atualizarMensagemGm(client, punicaoId) {
   const msg = canal?.messages ? await canal.messages.fetch(msgId).catch(() => null) : null;
   // Aplicada: o aviso "Punição aplicada" (avisoOrganizacao) já está no canal com
   // todos os dados; este embed sai para não repetir.
-  // Aceita sem ir ao jogo: o embed fica, dizendo isso e sem botões.
-  if (punicao.status === 'aplicada' && !String(punicao.aplicadaPor?.nomePc || '').startsWith(SEM_JOGO)) {
+  // Aplicada (pela gamemode ou sem ir ao jogo): o aviso de aplicada já está no canal.
+  if (punicao.status === 'aplicada') {
     if (msg) await msg.delete().catch(e => log.warn('Falha ao apagar o embed da gamemode', e?.message));
     await PontePunicao.updateOne({ _id: punicao._id }, { $unset: { mensagemGm: 1 } }).catch(() => {});
     return;
@@ -397,9 +397,37 @@ async function aceitarSemJogo({ client = null, punicaoId, guildId, staff }) {
   ).lean();
   if (!fechada) return { erro: 'Esta punição não está mais esperando envio.' };
   await auditar('editar', fechada, staff, { sub: 'sem_jogo' });
-  require('./aceite').marcarAplicadaNoDiscord(client, fechada, `➱ Aceita sem ir ao jogo (por ${nome})`).catch(() => {});
+  // Registro de cada jogador como aplicado (histórico e "Punições no jogo"), com o nome e a
+  // organização que a gamemode já tinha informado numa tentativa anterior, se houver.
+  const pedidos = await PontePedidoGm.find({ punicaoId: fechada._id }).sort({ rodada: -1 }).lean();
+  const itens = alvosAtivos(fechada).map(a => {
+    const ultimo = pedidos.find(p => String(p.alvoId) === String(a._id));
+    return {
+      alvoId: a._id, ok: true, comando: 'sem ir ao jogo', nome: ultimo?.resultado?.nome || '', organizacao: ultimo?.resultado?.organizacao || '',
+      contaId: a.contaId || String(ultimo?.resultado?.conta || ''), pc: `${SEM_JOGO}${nome}`, em: new Date(),
+      // A última tentativa foi simulada (modo teste): fica como simulada, fora do histórico.
+      resposta: ultimo?.status === 'simulada' ? 'SIMULADA' : ''
+    };
+  });
+  const comResultado = itens.length
+    ? await PontePunicao.findOneAndUpdate({ _id: fechada._id }, { $push: { resultado: { $each: itens } } }, { new: true }).lean()
+    : fechada;
+  require('./aceite').marcarAplicadaNoDiscord(client, comResultado, `➱ Aceita sem ir ao jogo (por ${nome})`).catch(() => {});
+  // O mesmo aviso de punição aplicada no Relatório de punições; o embed de envio sai.
+  await require('./avisoOrganizacao').avisarAplicadas(client, comResultado, itens, `${SEM_JOGO}${nome}`).catch(() => {});
   await atualizarMensagemGm(client, fechada._id).catch(() => {});
   return { ok: true };
+}
+
+// "Limpar fila" do painel da ponte: tira da fila todas as punições do servidor que esperam
+// envio, sem ir ao jogo e sem voltar à Cadeia Staff (como o "Sem ir ao jogo" de cada uma).
+async function limparFila({ client = null, guildId, staff }) {
+  const lista = await PontePunicao.find({ guildId: String(guildId), status: 'aceita' }, { _id: 1 }).limit(200).lean();
+  let tiradas = 0;
+  for (const { _id } of lista) {
+    if ((await aceitarSemJogo({ client, punicaoId: _id, guildId, staff }).catch(() => ({}))).ok) tiradas++;
+  }
+  return { tiradas };
 }
 
 // Modal de edição de um alvo: tipo, tempo, avisos e motivo. Passa pela mesma validação do aceite.
@@ -446,6 +474,7 @@ module.exports = {
   BOTAO_CANCELAR,
   BOTAO_SEM_JOGO,
   aceitarSemJogo,
+  limparFila,
   BOTAO_GM_APLICADA,
   BOTAO_GM_REAPLICAR,
   MENU_ALVO,

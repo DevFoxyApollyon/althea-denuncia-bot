@@ -93,10 +93,14 @@ async function discordDaConta(guildId, contaId, informado) {
   return nome ? `<@${usuario.userId}> (${nome})` : `<@${usuario.userId}>`;
 }
 
-// Quem aplicou: a gamemode ("gamemode:brp teste"). Punições antigas podem ter sido do PC da staff.
-const quemAplicou = (nomePc) => (String(nomePc || '').startsWith('gamemode:')
-  ? `Gamemode · ${String(nomePc).slice('gamemode:'.length) || 'servidor do jogo'}`
-  : `PC da staff · ${nomePc || '?'}`);
+// Quem aplicou: a gamemode ("gamemode:brp teste") ou um responsável sem ir ao jogo
+// ("manual:Fulano"). Punições antigas podem ter sido do PC da staff.
+const quemAplicou = (nomePc) => {
+  const texto = String(nomePc || '');
+  if (texto.startsWith('gamemode:')) return `Gamemode · ${texto.slice('gamemode:'.length) || 'servidor do jogo'}`;
+  if (texto.startsWith('manual:')) return `${texto.slice('manual:'.length) || 'responsável'} (sem ir ao jogo)`;
+  return `PC da staff · ${texto || '?'}`;
+};
 
 const cargoAlto = (cargo) => cargo !== null && cargo >= CARGO_ALTO.min && cargo <= CARGO_ALTO.max;
 
@@ -146,24 +150,29 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
       // O mesmo embed com ou sem organização. Cor e título pelo tipo (ban, cadeia...),
       // quem foi punido no topo, os campos e, no rodapé, quem aplicou.
       const discord = await discordDaConta(punicao.guildId, contaId, r.discord);
-      const visual = visualDoTipo(alvo.cmd);
+      // Simulada (modo teste da gamemode): mesmo embed, cinza, dizendo que nada foi aplicado.
+      const simulada = r.resposta === 'SIMULADA';
+      const visual = simulada ? { ...visualDoTipo(alvo.cmd), cor: '#868E96', icone: '🧪' } : visualDoTipo(alvo.cmd);
       const servidor = client.guilds?.cache?.get?.(punicao.guildId);
       const embed = new EmbedBuilder()
         .setColor(visual.cor)
         .setAuthor({ name: `Relatório de punições${servidor?.name ? ` · ${servidor.name}` : ''}`.slice(0, 256), iconURL: servidor?.iconURL?.() || undefined })
-        .setTitle(`${visual.icone}  ${visual.titulo}`)
+        .setTitle(`${visual.icone}  ${visual.titulo}${simulada ? ' (simulada)' : ''}`)
         .setDescription([
           `👤 **Player:** ${String(nick).slice(0, 60)} (\`${contaId || '?'}\`)`,
           `💬 **Discord:** ${discord === 'Não informado' ? 'não vinculado' : discord}`,
-          `⚖️ **Punição:** ${legivel || `\`${String(r.comando || '?').slice(0, 120)}\``}`
-        ].join('\n'))
+          `⚖️ **Punição:** ${legivel || `\`${String(r.comando || '?').slice(0, 120)}\``}`,
+          simulada && '🧪 **Modo teste:** a gamemode só simulou, nada foi aplicado no jogo.'
+        ].filter(Boolean).join('\n'))
         .addFields(
           { name: '📝 Motivo', value: String(alvo.motivo || '—').slice(0, 200), inline: true },
           { name: '🏢 Organização', value: organizacao ? nomeDaOrganizacao(r.organizacao) || 'Não informada' : 'Nenhuma', inline: true },
+          // Cargo na organização, como a gamemode informou na hora de aplicar.
+          ...(organizacao ? [{ name: '🎖️ Cargo', value: cargoLegivel(r.organizacao), inline: true }] : []),
           { name: '🔗 Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link', inline: true },
           { name: alto ? '✅ Aceita na Cadeia Staff por' : '✅ Aceita por', value: aceitaPor, inline: true }
         )
-        .setFooter({ text: `🎮 Aplicada por ${quemAplicou(nomePc)} · Punição #${String(punicao._id || '').slice(-8) || '—'}`.slice(0, 2048) })
+        .setFooter({ text: `${String(nomePc || '').startsWith('manual:') ? '✅' : '🎮'} Aplicada por ${quemAplicou(nomePc)} · Punição #${String(punicao._id || '').slice(-8) || '—'}`.slice(0, 2048) })
         .setTimestamp();
       await canal.send({
         content: mencoes || undefined,

@@ -711,6 +711,18 @@ async function iniciar() {
     } catch (erro) { aviso(erro.message); }
   });
   $('#esperando-fechar').addEventListener('click', () => { $('#esperando-painel').hidden = true; });
+  // Limpar fila: todas saem sem ir ao jogo e sem voltar à Cadeia Staff (simuladas ficam como simuladas).
+  $('#esperando-limpar').addEventListener('click', async (e) => {
+    const painel = $('#esperando-painel');
+    if (!confirm(`Limpar a fila de ${painel.dataset.nome || painel.dataset.guild}? Todas as punições esperando envio saem sem ir ao jogo, não voltam para a Cadeia Staff e cada uma manda o aviso de aplicada no Relatório de punições.`)) return;
+    e.currentTarget.disabled = true;
+    try {
+      const r = await post('/esperando/limpar', { guildId: painel.dataset.guild });
+      aviso(`${r.tiradas} punição(ões) tiradas da fila.`);
+      carregar('geral');
+    } catch (erro) { aviso(erro.message); }
+    e.currentTarget.disabled = false;
+  });
   $('#novo-bloqueio').addEventListener('submit', async (e) => {
     e.preventDefault();
     const { userId, motivo } = Object.fromEntries(new FormData(e.target));

@@ -16,7 +16,7 @@ function separarContas(texto) {
   // "+", vírgula, ponto e vírgula, barra e ")(" separam trechos; dentro de um trecho com
   // espaços ("1270101 CL", "8285 708579"), só valem números de conta e nicks com "_": o
   // resto é motivo escrito junto e não pode virar jogador.
-  for (const trecho of String(texto || '').replace(/(?:ids?|contas?)\s*[:#-]?/gi, ' ').split(/[+,;/|]+|\)\(/)) {
+  for (const trecho of String(texto || '').replace(/\b(?:ids?|contas?)\b\s*[:#-]?/gi, ' ').split(/[+,;/|]+|\)\(/)) {
     const palavras = trecho.split(/\s+/).map(limpar).filter(t => t && !/^e$/i.test(t));
     if (palavras.length === 1) partes.push(palavras[0]);
     else partes.push(...palavras.filter(t => /^\d{1,9}$/.test(t) || t.includes('_')));

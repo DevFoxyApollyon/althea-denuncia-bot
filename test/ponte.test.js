@@ -192,7 +192,7 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   assert.deepEqual(enviados[0].allowedMentions, { roles: ['777'], users: ['22'] });
   const lider = enviados[0].embeds[0].toJSON().fields;
   assert.equal(lider.find(f => f.name === '🏢 Organização').value, 'equipe angola');
-  assert.equal(lider.some(f => f.name.includes('Cargo')), false, 'o embed não tem campo de cargo');
+  assert.equal(lider.find(f => f.name.includes('Cargo')).value, 'lider (12)', 'cargo que a gamemode informou');
   assert.equal(enviados[1].content, undefined); // cargo 4: registra sem marcar
   const membro = enviados[1].embeds[0].toJSON().fields;
   assert.equal(membro.find(f => f.name === '🏢 Organização').value, 'Tropa da Holanda');
@@ -207,7 +207,7 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   const gm = enviados[0].embeds[0].toJSON();
   const campo = (nome) => gm.fields.find(f => f.name.includes(nome))?.value;
   assert.equal(campo('Organização'), 'U$ BEN$A');
-  assert.equal(campo('Cargo'), undefined);
+  assert.equal(campo('Cargo'), '10');
   assert.match(gm.description, /Punição:\*\* Ban de 3 dias \+ 1 aviso/);
   assert.match(gm.title, /Banimento aplicado/);
   assert.equal(campo('Motivo'), 'saav');

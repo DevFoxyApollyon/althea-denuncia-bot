@@ -258,6 +258,16 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     res.json({ ok: true, voltouParaCadeia: !!r.voltouParaCadeia });
   }));
 
+  // Limpar a fila de um servidor: todas as punições esperando envio saem sem ir ao jogo.
+  router.post('/api/esperando/limpar', soDono, rota(async (req, res) => {
+    const guildId = String(req.body?.guildId || '');
+    if (!/^\d{5,25}$/.test(guildId)) return res.status(400).json({ erro: 'ID inválido.' });
+    const staff = { id: req.usuario.id, nome: `${req.usuario.nome || req.usuario.id} (painel)` };
+    const r = await require('../../services/ponteSamp/discordGm').limparFila({ client, guildId, staff });
+    log?.info?.(`Fila da ponte limpa em ${guildId} pelo dono: ${r.tiradas} punição(ões).`);
+    res.json({ ok: true, tiradas: r.tiradas });
+  }));
+
   // Aceitar pelo painel sem mandar ao jogo (o mesmo botão "Sem ir ao jogo" do embed).
   router.post('/api/esperando/:punicaoId/semjogo', soDono, rota(async (req, res) => {
     if (!idValido(req.params.punicaoId)) return res.status(400).json({ erro: 'ID inválido.' });
