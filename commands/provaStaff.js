@@ -127,7 +127,7 @@ const linhaDeDecisao = (id) => new ActionRowBuilder().addComponents(
 // Lê o formulário (do "Upar provas" ou do /tempban). Devolve { erro } ou os dados.
 function lerFormulario(interaction) {
   const ler = (id) => { try { return String(interaction.fields.getTextInputValue(id) || '').trim(); } catch { return ''; } };
-  const contas = [...new Set(ler('id').split('+').map(s => s.trim()).filter(Boolean))];
+  const contas = require('../services/ponteSamp/validacao').separarContas(ler('id'));
   const motivo = ler('motivo');
   const provas = ler('provas');
   let arquivos = [];
@@ -434,7 +434,7 @@ async function handleModalAceite(interaction) {
   const { config, responsavel } = await papeis(interaction);
   if (!responsavel) return interaction.editReply('🚫 Só o responsável aceita ou recusa as provas.');
   const id = interaction.customId.slice(MODAL_ACEITE.length);
-  const acusado = interaction.fields.getTextInputValue('acusado').split('+').map(s => s.trim()).filter(Boolean).join('+');
+  const acusado = require('../services/ponteSamp/validacao').separarContas(interaction.fields.getTextInputValue('acusado')).join('+');
   const motivo = interaction.fields.getTextInputValue('motivo').trim();
   if (!acusado || !acusado.split('+').every(c => /^\d{1,9}$/.test(c))) return interaction.editReply('❌ ID inválido: use só números, vários com `+`.');
   if (motivo.length < 2) return interaction.editReply('❌ Escreva o motivo.');

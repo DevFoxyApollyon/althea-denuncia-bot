@@ -146,7 +146,8 @@ async function handleSalvarCorrigirDenuncia(interaction) {
     return respondAndDelete(interaction, { content: getPermissionError(config) });
   }
 
-  const acusadoId = interaction.fields.getTextInputValue('acusadoId').trim();
+  const digitado = interaction.fields.getTextInputValue('acusadoId');
+  const acusadoId = require('../services/ponteSamp/validacao').separarContas(digitado).join('+') || digitado.trim();
   const motivoAceite = interaction.fields.getTextInputValue('motivoAceite').trim();
   const dataPunicao = interaction.fields.getTextInputValue('dataPunicao').trim();
   const dateRegex = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/;

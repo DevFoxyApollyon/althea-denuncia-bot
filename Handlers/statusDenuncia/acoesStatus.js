@@ -745,7 +745,9 @@ async function handlePunishmentModal(interaction) {
     }
   
     const { denuncia, messageUrl } = denunciaData;
-    const acusadoId = interaction.fields.getTextInputValue('acusadoId');
+    // Vários IDs: "+", vírgula, espaço, barra ou "e" viram "708579+8285" (a ponte lê pelo "+").
+    const digitado = interaction.fields.getTextInputValue('acusadoId');
+    const acusadoId = require('../../services/ponteSamp/validacao').separarContas(digitado).join('+') || String(digitado).trim();
     const motivo = interaction.fields.getTextInputValue('motivo');
     const dataPunicao = interaction.fields.getTextInputValue('data');
 

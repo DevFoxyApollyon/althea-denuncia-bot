@@ -21,6 +21,9 @@ const log = new Logger({ tag: 'PonteGamemode' });
 const BOTAO_ENVIAR = 'ponte_gm_enviar:';
 const BOTAO_EDITAR = 'ponte_gm_editar:';
 const BOTAO_CANCELAR = 'ponte_gm_cancelar:';
+// Aceita sem mandar ao jogo (já aplicada à mão, ou não precisa): fecha sem voltar à Cadeia Staff.
+const BOTAO_SEM_JOGO = 'ponte_gm_semjogo:';
+const SEM_JOGO = 'manual:';
 const MENU_ALVO = 'ponte_gm_alvo:';
 const MODAL_ALVO = 'ponte_gm_modal:';
 // Embed travado com pedido incerto (a gamemode não respondeu): o responsável
@@ -136,7 +139,10 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
     const ultimo = ultimos.get(String(a._id));
     return a.cmd === 'ban' && (Number(a.tempo) || 0) === 0 && ultimo?.status === 'recusada' && ultimo.codigo === 'JA_BANIDO';
   });
+  const semJogo = punicao.status === 'aplicada' && String(punicao.aplicadaPor?.nomePc || '').startsWith(SEM_JOGO);
+  const quemFechou = String(punicao.aplicadaPor?.nomePc || '').slice(SEM_JOGO.length) || 'responsável';
   const situacao = jaBanidoPermanente ? '🔨 A conta já está sendo banida no jogo.'
+    : semJogo ? `✅ Aceita por **${quemFechou}** sem enviar ao jogo.`
     : {
     aceita: pedidosDaVez.length
       ? '🔁 Nenhum alvo foi aplicado na última tentativa. Confira e envie de novo, se for o caso.'
@@ -162,6 +168,7 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
   ].filter(linha => linha !== false && linha !== null && linha !== undefined);
 
   const titulo = jaBanidoPermanente ? '🔨 Ban permanente já setado'
+    : semJogo ? '✅ Aceita sem ir ao jogo'
     : falhou ? '🔁 Punição não aplicada'
       : { aceita: '🎮 Punição esperando envio ao jogo', executando: '📤 Punição enviada ao jogo', aplicada: '✅ Punição aplicada no jogo', cancelada: '🚫 Punição cancelada' }[punicao.status]
         || '🎮 Punição para o jogo';
@@ -184,7 +191,8 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
     botoes.push(
       new ButtonBuilder().setCustomId(BOTAO_ENVIAR + id).setLabel('Enviar ao jogo').setEmoji('🎮').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(BOTAO_EDITAR + id).setLabel('Editar').setEmoji('✏️').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(BOTAO_CANCELAR + id).setLabel('Cancelar').setEmoji('✖️').setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(BOTAO_CANCELAR + id).setLabel('Cancelar').setEmoji('✖️').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(BOTAO_SEM_JOGO + id).setLabel('Sem ir ao jogo').setEmoji('✅').setStyle(ButtonStyle.Secondary)
     );
   } else if (punicao.status === 'executando' && punicao.executor === 'gamemode') {
     // A gamemode não respondeu: o responsável confere no jogo e decide aqui mesmo.
@@ -236,7 +244,8 @@ async function atualizarMensagemGm(client, punicaoId) {
   const msg = canal?.messages ? await canal.messages.fetch(msgId).catch(() => null) : null;
   // Aplicada: o aviso "Punição aplicada" (avisoOrganizacao) já está no canal com
   // todos os dados; este embed sai para não repetir.
-  if (punicao.status === 'aplicada') {
+  // Aceita sem ir ao jogo: o embed fica, dizendo isso e sem botões.
+  if (punicao.status === 'aplicada' && !String(punicao.aplicadaPor?.nomePc || '').startsWith(SEM_JOGO)) {
     if (msg) await msg.delete().catch(e => log.warn('Falha ao apagar o embed da gamemode', e?.message));
     await PontePunicao.updateOne({ _id: punicao._id }, { $unset: { mensagemGm: 1 } }).catch(() => {});
     return;
@@ -372,6 +381,22 @@ async function cancelarGm({ client = null, punicaoId, guildId, staff }) {
   return { ok: true, cancelados: modifiedCount, emAndamento, voltouParaCadeia };
 }
 
+// Botão "Sem ir ao jogo" (ou o painel da ponte): a denúncia continua aceita, mas a punição
+// não vai para a gamemode (já foi aplicada à mão, ou não precisa) e não volta à Cadeia Staff.
+async function aceitarSemJogo({ client = null, punicaoId, guildId, staff }) {
+  const nome = String(staff?.nome || staff?.id || 'responsável').slice(0, 60);
+  const fechada = await PontePunicao.findOneAndUpdate(
+    { _id: punicaoId, guildId: String(guildId), status: 'aceita' },
+    { $set: { status: 'aplicada', executor: '', executandoDesde: null, aplicadaEm: new Date(), aplicadaPor: { instalacaoId: null, nomePc: `${SEM_JOGO}${nome}` } }, $inc: { versao: 1 } },
+    { new: true }
+  ).lean();
+  if (!fechada) return { erro: 'Esta punição não está mais esperando envio.' };
+  await auditar('editar', fechada, staff, { sub: 'sem_jogo' });
+  require('./aceite').marcarAplicadaNoDiscord(client, fechada, `➱ Aceita sem ir ao jogo (por ${nome})`).catch(() => {});
+  await atualizarMensagemGm(client, fechada._id).catch(() => {});
+  return { ok: true };
+}
+
 // Modal de edição de um alvo: tipo, tempo, avisos e motivo. Passa pela mesma validação do aceite.
 async function editarAlvoGm({ client = null, punicaoId, guildId, alvoId, versao, campos, staff }) {
   const { servidor, erro } = await servidorGm(guildId);
@@ -390,7 +415,7 @@ async function editarAlvoGm({ client = null, punicaoId, guildId, alvoId, versao,
   const regra = `editado por ${String(staff.nome || '').slice(0, 40)}`;
   // Vários IDs com "+": um jogador por conta; o motivo é separado por conta quando cita cada uma
   // ("1270101 CL + 360429 saav"), como no aceite.
-  const contas = [...new Set(String(campos.conta || '').split('+').map(c => c.trim()).filter(Boolean))];
+  const contas = require('./validacao').separarContas(campos.conta);
   const porConta = novo ? require('./aceite').motivosPorAcusado(campos.motivo, contas) : new Map();
   const lista = novo
     ? [...(punicao.alvos || []), ...contas.map(c => ({ contaId: c, nick: '', cmd, tempo, avisos, motivo: porConta.get(c.toLowerCase()) || campos.motivo, regra }))]
@@ -414,6 +439,8 @@ module.exports = {
   BOTAO_ENVIAR,
   BOTAO_EDITAR,
   BOTAO_CANCELAR,
+  BOTAO_SEM_JOGO,
+  aceitarSemJogo,
   BOTAO_GM_APLICADA,
   BOTAO_GM_REAPLICAR,
   MENU_ALVO,

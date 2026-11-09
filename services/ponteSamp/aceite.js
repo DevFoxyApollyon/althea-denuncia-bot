@@ -2,7 +2,7 @@
 // pode quebrar o aceite normal: todo erro é engolido e só vai para o log.
 const PontePunicao = require('../../models/PontePunicao');
 const { servidorAtivo } = require('./gestao');
-const { RE_CONTA, RE_NICK, limparMotivo, classificarMotivo } = require('./validacao');
+const { RE_CONTA, RE_NICK, limparMotivo, classificarMotivo, separarContas } = require('./validacao');
 const { obterTabela } = require('./motivos');
 const { CMD_PADRAO, TEMPO_PADRAO } = require('./constantes');
 const { Logger } = require('../../utils/logger');
@@ -72,7 +72,7 @@ function motivosPorAcusado(texto, acusados) {
 // Modo automático: comando e tempo saem do motivo do aceite (tabela em constantes.js).
 function montarAlvos(denuncia, tabela) {
   // Cada acusado pode vir pelo ID da conta (472860) ou pelo nick (Fulano_Tal).
-  const acusados = [...new Set(String(denuncia.acusadoId || '').split('+').map(id => id.trim()).filter(Boolean))];
+  const acusados = separarContas(denuncia.acusadoId);
   const porAcusado = motivosPorAcusado(denuncia.motivoAceite, acusados);
   return acusados
     .filter(a => RE_CONTA.test(a) || RE_NICK.test(a))
@@ -342,4 +342,37 @@ async function reclassificarFila({ client = null, lista = null, tabela = null } 
   return fila;
 }
 
-module.exports = { registrarAceite, atualizarMensagensDiscord, marcarAplicadaNoDiscord, limparAguardando, montarAlvos, motivosPorAcusado, reclassificarFila, voltarParaCadeiaStaff };
+// Punições esperando envio que ficaram sem jogador porque o ID do aceite veio com espaço,
+// vírgula ou parênteses ("(8285 708579 1154255)"): refaz os jogadores com o ID e o motivo
+// do aceite, agora lidos com qualquer separador. Roda ao iniciar; sem nenhuma, não muda nada.
+async function refazerSemJogador(client) {
+  const Denuncia = require('../../models/Denuncia');
+  const DenunciaStaff = require('../../models/DenunciaStaff');
+  const lista = await PontePunicao.find({ status: 'aceita' }).limit(300).lean();
+  const semJogador = lista.filter(p => !(p.alvos || []).some(a => !a.removido));
+  if (!semJogador.length) return 0;
+  const { tabela } = await obterTabela();
+  let refeitas = 0;
+  for (const p of semJogador) {
+    const denuncia = await Denuncia.findById(p.denunciaId, { acusadoId: 1, motivoAceite: 1 }).lean()
+      || await DenunciaStaff.findById(p.denunciaId, { acusadoAceite: 1, motivoAceite: 1 }).lean().then(d => d && { acusadoId: d.acusadoAceite, motivoAceite: d.motivoAceite });
+    if (!denuncia?.acusadoId) continue;
+    const alvos = montarAlvos(denuncia, tabela).filter(a => a.cmd !== 'registro');
+    if (!alvos.length) continue;
+    const refeita = await PontePunicao.findOneAndUpdate(
+      { _id: p._id, status: 'aceita', versao: p.versao },
+      { $set: { alvos }, $inc: { versao: 1 } },
+      { new: true, runValidators: true }
+    ).lean();
+    if (!refeita) continue;
+    refeitas++;
+    if (separarContas(denuncia.acusadoId).join('+') !== denuncia.acusadoId) {
+      await Denuncia.updateOne({ _id: p.denunciaId }, { $set: { acusadoId: separarContas(denuncia.acusadoId).join('+') } }).catch(() => {});
+    }
+    await require('./discordGm').atualizarMensagemGm(client, refeita._id).catch(() => {});
+  }
+  if (refeitas) log.info(`${refeitas} punição(ões) sem jogador refeita(s) com o ID do aceite.`);
+  return refeitas;
+}
+
+module.exports = { registrarAceite, atualizarMensagensDiscord, marcarAplicadaNoDiscord, limparAguardando, montarAlvos, motivosPorAcusado, reclassificarFila, voltarParaCadeiaStaff, refazerSemJogador };

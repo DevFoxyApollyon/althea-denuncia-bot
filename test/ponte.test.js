@@ -593,8 +593,8 @@ test('aceite com motivo "só registro": segue normal, mas não cria punição pa
 test('aceite de novo com outro ID ou motivo refaz os jogadores da punição ainda não enviada', async () => {
   await guildAtiva('817');
   const staff = { id: '1', nome: 'Resp' };
-  const denuncia = { _id: new mongoose.Types.ObjectId(), guildId: '817', acusado: '1270101', motivo: 'CL', acusadoId: '1270101 CL + 360429 saav', motivoAceite: '1270101 CL + 360429 saav', channelId: '1', messageId: '2' };
-  // Primeiro aceite com o ID fora do formato: punição sem jogador.
+  const denuncia = { _id: new mongoose.Types.ObjectId(), guildId: '817', acusado: '1270101', motivo: 'CL', acusadoId: 'conta do cl', motivoAceite: '1270101 CL + 360429 saav', channelId: '1', messageId: '2' };
+  // Primeiro aceite sem nenhum ID de conta no campo: punição sem jogador.
   const primeiro = await m.aceite.registrarAceite({ client: null, denuncia, origem: 'canal_staff', staff });
   assert.equal(primeiro.criado, true);
   assert.equal(primeiro.punicao.alvos.length, 0);

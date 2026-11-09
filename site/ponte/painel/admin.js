@@ -56,7 +56,7 @@ const SUBROTULOS = {
   chave_mestra: 'trocou a chave mestra', pausar: 'pausou a gamemode', retomar: 'retomou a gamemode',
   limites: 'mudou os limites da gamemode', modo_teste: 'mudou o modo teste da gamemode', acesso_admin_adicionar: 'liberou alguém no painel', acesso_admin_remover: 'tirou o acesso de alguém ao painel',
   bloqueio_adicionar: 'bloqueou alguém no bot', bloqueio_remover: 'desbloqueou alguém no bot',
-  apagar_codigo: 'apagou um código de ativação'
+  apagar_codigo: 'apagou um código de ativação', sem_jogo: 'aceitou uma punição sem ir ao jogo'
 };
 const rotulo = (acao, subacao) => SUBROTULOS[subacao] || ROTULOS[acao] || acao;
 const ICONE_AUTOR = { gamemode: '🎮', pessoa: '👤' };
@@ -423,7 +423,10 @@ async function abrirEsperando(s) {
     tbody.replaceChildren(...(lista.length ? lista.map(p => {
       const tr = linha(
         [p.acusado || '—', p.punicao || '—', { texto: `${p.motivo}${p.semEmbed ? ' · sem embed no Relatório' : ''}`, classe: 'detalhes' }, p.aceitoPor || '—', data(p.desde), ''],
-        dono && { texto: 'Cancelar', confirmar: `Cancelar a punição de ${p.acusado}? Ela não vai para o jogo (volta para a Cadeia Staff quando tem mensagem lá).`, executar: () => post(`/esperando/${p.id}/cancelar`), recarregar: 'geral' }
+        dono && [
+          { texto: 'Sem ir ao jogo', perigo: false, confirmar: `Aceitar a punição de ${p.acusado} sem mandar ao jogo? Ela fica registrada como aceita e não volta para a Cadeia Staff.`, executar: () => post(`/esperando/${p.id}/semjogo`), recarregar: 'geral' },
+          { texto: 'Cancelar', confirmar: `Cancelar a punição de ${p.acusado}? Ela não vai para o jogo (volta para a Cadeia Staff quando tem mensagem lá).`, executar: () => post(`/esperando/${p.id}/cancelar`), recarregar: 'geral' }
+        ]
       );
       const celulaLink = tr.children[5];
       celulaLink.replaceChildren(p.link ? el('a', { href: p.link, target: '_blank', rel: 'noopener' }, 'Abrir') : '—');

@@ -258,6 +258,17 @@ function criarAdmin({ client, config, log, arquivoEnv }) {
     res.json({ ok: true, voltouParaCadeia: !!r.voltouParaCadeia });
   }));
 
+  // Aceitar pelo painel sem mandar ao jogo (o mesmo botão "Sem ir ao jogo" do embed).
+  router.post('/api/esperando/:punicaoId/semjogo', soDono, rota(async (req, res) => {
+    if (!idValido(req.params.punicaoId)) return res.status(400).json({ erro: 'ID inválido.' });
+    const punicao = await PontePunicao.findById(req.params.punicaoId, { guildId: 1 }).lean();
+    if (!punicao) return res.status(404).json({ erro: 'Punição não encontrada.' });
+    const staff = { id: req.usuario.id, nome: `${req.usuario.nome || req.usuario.id} (painel)` };
+    const r = await require('../../services/ponteSamp/discordGm').aceitarSemJogo({ client, punicaoId: punicao._id, guildId: punicao.guildId, staff });
+    if (r.erro) return res.status(409).json({ erro: r.erro });
+    res.json({ ok: true });
+  }));
+
   // Pedidos incertos (a gamemode não respondeu), agrupados por punição, para resolver
   // pelo painel com os mesmos efeitos dos botões do Discord.
   router.get('/api/gamemode/incertos', rota(async (req, res) => {
