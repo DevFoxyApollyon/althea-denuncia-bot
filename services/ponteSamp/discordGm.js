@@ -137,7 +137,7 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
   // não há o que reenviar (some Enviar, Editar e Cancelar).
   const jaBanidoPermanente = punicao.status === 'aceita' && alvos.length > 0 && alvos.every(a => {
     const ultimo = ultimos.get(String(a._id));
-    return a.cmd === 'ban' && (Number(a.tempo) || 0) === 0 && ultimo?.status === 'recusada' && ultimo.codigo === 'JA_BANIDO';
+    return a.cmd === 'ban' && ultimo?.status === 'recusada' && ultimo.codigo === 'JA_BANIDO';
   });
   const semJogo = punicao.status === 'aplicada' && String(punicao.aplicadaPor?.nomePc || '').startsWith(SEM_JOGO);
   const quemFechou = String(punicao.aplicadaPor?.nomePc || '').slice(SEM_JOGO.length) || 'responsável';
@@ -167,7 +167,7 @@ function montarMensagemGm(punicao, pedidos, servidor, nicks = new Map()) {
     punicao.msgDiscord?.link && `🔗 [Abrir denúncia](${punicao.msgDiscord.link})`
   ].filter(linha => linha !== false && linha !== null && linha !== undefined);
 
-  const titulo = jaBanidoPermanente ? '🔨 Ban permanente já setado'
+  const titulo = jaBanidoPermanente ? '🔨 Conta já banida'
     : semJogo ? '✅ Aceita sem ir ao jogo'
     : falhou ? '🔁 Punição não aplicada'
       : { aceita: '🎮 Punição esperando envio ao jogo', executando: '📤 Punição enviada ao jogo', aplicada: '✅ Punição aplicada no jogo', cancelada: '🚫 Punição cancelada' }[punicao.status]

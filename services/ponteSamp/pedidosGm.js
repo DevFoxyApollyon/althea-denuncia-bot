@@ -212,10 +212,10 @@ async function registrarAplicada(pedido, conexao, dados, agora) {
   return item;
 }
 
-// Ban permanente que a gamemode recusou porque a conta já estava banida: o resultado é o
-// mesmo de aplicado (a conta fica banida), então conta como aplicado no relatório.
-const permanenteJaBanido = (p) => p.status === 'recusada' && p.codigo === 'JA_BANIDO' && p.tipo === 'ban' && Number(p.tempo) === 0;
-const contaComoAplicado = (p) => p.status === 'aplicada' || permanenteJaBanido(p);
+// Ban (permanente ou com tempo) que a gamemode recusou porque a conta já estava banida: a
+// conta fica banida do mesmo jeito, então conta como aplicado e sai da fila de envio.
+const banJaBanido = (p) => p.status === 'recusada' && p.codigo === 'JA_BANIDO' && p.tipo === 'ban';
+const contaComoAplicado = (p) => p.status === 'aplicada' || banJaBanido(p);
 
 // Quando o último pedido de cada alvo tem resposta final, a punição sai de "executando":
 // aplicada se ao menos um foi aplicado; senão volta para "aceita" (a staff decide de novo).
@@ -293,7 +293,7 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   }
 
   // Desbanimento não entra no histórico de punições aplicadas.
-  if ((pedido.status === 'aplicada' && ['ban', 'cadeia'].includes(pedido.tipo)) || permanenteJaBanido(pedido)) await registrarAplicada(pedido, conexao, dados, agora);
+  if ((pedido.status === 'aplicada' && ['ban', 'cadeia'].includes(pedido.tipo)) || banJaBanido(pedido)) await registrarAplicada(pedido, conexao, dados, agora);
   if (STATUS_FINAIS.includes(pedido.status)) await fecharPunicaoSePronta({ client, punicaoId: pedido.punicaoId, conexao, agora });
   // TIMEOUT: espera uma resposta atrasada e depois tenta de novo (uma vez; ver verificarIncertos).
   let reenvio = null;
@@ -306,8 +306,8 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   return { http: 200, pedido, novo: true, alerta, reenvio };
 }
 
-// Punições antigas que ficaram em "Ban permanente já setado" (antes de JA_BANIDO no permanente
-// contar como aplicado): passam a aplicadas, com o aviso "Banimento aplicado" no Relatório de
+// Punições antigas paradas com a conta já banida (JA_BANIDO, antes de contar como aplicado):
+// passam a aplicadas, com o aviso "Banimento aplicado" no Relatório de
 // punições. Roda ao iniciar; sem nenhuma assim, não muda nada.
 async function fecharBansJaSetados(client) {
   const PonteConexaoGm = require('../../models/PonteConexaoGm');
@@ -315,10 +315,10 @@ async function fecharBansJaSetados(client) {
   const pendentes = await PontePunicao.find({ status: 'aceita' }).sort({ criadoEm: 1 }).limit(200).lean();
   for (const punicao of pendentes) {
     const ativos = (punicao.alvos || []).filter(a => !a.removido);
-    if (!ativos.length || !ativos.every(a => a.cmd === 'ban' && Number(a.tempo) === 0)) continue;
+    if (!ativos.length || !ativos.every(a => a.cmd === 'ban')) continue;
     const pedidos = await PontePedidoGm.find({ punicaoId: punicao._id }).sort({ rodada: -1 }).lean();
     const ultimos = ativos.map(a => pedidos.find(p => String(p.alvoId) === String(a._id)));
-    if (!ultimos.every(p => p && permanenteJaBanido(p))) continue;
+    if (!ultimos.every(p => p && banJaBanido(p))) continue;
     const conexao = await PonteConexaoGm.findById(ultimos[0].conexaoId, { nome: 1 }).lean() || { nome: 'gamemode' };
     // Só quem tomou a punição ainda: o update protege de duas instâncias ao mesmo tempo.
     const tomada = await PontePunicao.findOneAndUpdate({ _id: punicao._id, status: 'aceita' }, { $set: { status: 'executando', executor: 'gamemode' }, $inc: { versao: 1 } }).lean();

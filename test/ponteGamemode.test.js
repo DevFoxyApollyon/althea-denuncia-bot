@@ -693,7 +693,7 @@ test('cancelar: antes do envio cancela a punição; depois, cancela o que a game
   assert.equal((await chamar(conexao, segredo, '/pedidos')).corpo.pedidos.length, 0, 'cancelado não é entregue');
 
   const entregue = await m.PontePedidoGm.findOne({ punicaoId: depois._id, status: 'entregue' }).lean();
-  await chamar(conexao, segredo, `/resultados/${entregue._id}`, { metodo: 'POST', corpo: resultado('recusada', 'JA_BANIDO') });
+  await chamar(conexao, segredo, `/resultados/${entregue._id}`, { metodo: 'POST', corpo: resultado('recusada', 'RECUSADO') });
   const fechada = await m.PontePunicao.findById(depois._id).lean();
   assert.deepEqual([fechada.status, fechada.executor], ['aceita', ''], 'nenhum aplicado: volta a esperar envio');
 });
@@ -1390,11 +1390,11 @@ test('resultado da gamemode: console e Relatório de punições explicam o códi
   const msg = montarMensagemGm(permanente, jaBanido, {});
   assert.deepEqual(msg.components, []);
   // Só informa que já está banindo: sem "Última tentativa" nem "Por que não foi aplicada".
-  assert.equal(msg.embeds[0].data.title, '🔨 Ban permanente já setado');
+  assert.equal(msg.embeds[0].data.title, '🔨 Conta já banida');
   assert.match(textoDoEmbed(msg), /já está sendo banida/);
   assert.doesNotMatch(textoDoEmbed(msg), /Última tentativa|Por que não foi aplicada|recusada/);
-  // Ban com tempo e JA_BANIDO: continua dando para reenviar (ex.: somar dias).
-  assert.equal(montarMensagemGm(punicao, jaBanido, {}).components.length, 1);
+  // Ban com tempo e JA_BANIDO: também só informa (a conta já está banida).
+  assert.deepEqual(montarMensagemGm(punicao, jaBanido, {}).components, []);
 });
 
 test('enviar ao jogo: pedido pela conta leva o nick conhecido (confirmado pela gamemode ou do Discord)', async () => {
@@ -2048,7 +2048,7 @@ test('banir ou expulsar o dono do bot de um servidor bloqueia quem fez', async (
   await bloqueioBot.desbloquear('300000000000000991');
 });
 
-test('ban permanente com a conta já banida (JA_BANIDO) vira "Banimento aplicado"; as antigas "já setado" também', async () => {
+test('ban com a conta já banida (JA_BANIDO) vira "Banimento aplicado"; as antigas paradas também', async () => {
   const { registrarResultado, fecharBansJaSetados } = require('../services/ponteSamp/pedidosGm');
   const guildId = '100000000000000995';
   const { conexao } = await guildGm(guildId);
@@ -2078,7 +2078,7 @@ test('ban permanente com a conta já banida (JA_BANIDO) vira "Banimento aplicado
     motivo: 'MOD PROIBIDO [DC]', aprovadoPor: 'Joao_Staff', teste: false, status: 'recusada', codigo: 'JA_BANIDO', conexaoId: conexao._id, respondidoEm: new Date(),
     resultado: { nome: 'QuelitaDelgado', organizacao: '', conta: 1270234 }
   });
-  // Uma temporária recusada JA_BANIDO não muda (pode ser outra punição que baniu).
+  // Temporária recusada JA_BANIDO: também fecha (a conta já está banida).
   const temporaria = await punicaoAceita(guildId, [{ contaId: '5', cmd: 'ban', tempo: 3, avisos: 1, motivo: 'SAAV', regra: 'SAAV' }]);
   await m.PontePedidoGm.create({
     punicaoId: temporaria._id, alvoId: temporaria.alvos[0]._id, rodada: 1, denunciaId: temporaria.denunciaId, guildId, tipo: 'ban', conta: 5, nick: '', tempo: 3, avisos: 1,
@@ -2086,7 +2086,7 @@ test('ban permanente com a conta já banida (JA_BANIDO) vira "Banimento aplicado
   });
   assert.ok(await fecharBansJaSetados(client) >= 1);
   assert.equal((await m.PontePunicao.findById(antiga._id).lean()).status, 'aplicada');
-  assert.equal((await m.PontePunicao.findById(temporaria._id).lean()).status, 'aceita');
+  assert.equal((await m.PontePunicao.findById(temporaria._id).lean()).status, 'aplicada');
   await new Promise(resolve => setTimeout(resolve, 200));
   assert.ok(enviadas.some(e => e.embeds?.[0]?.toJSON?.().title?.includes('Banimento aplicado')));
   assert.equal(await fecharBansJaSetados(client), 0, 'rodar de novo não muda nada');
