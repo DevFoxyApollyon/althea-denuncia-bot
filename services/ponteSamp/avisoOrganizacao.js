@@ -114,7 +114,9 @@ const VISUAL_DO_TIPO = {
 const visualDoTipo = (cmd) => VISUAL_DO_TIPO[cmd] || { cor: '#1C7ED6', icone: '✅', titulo: 'Punição aplicada' };
 
 // resultado: itens aplicados pela gamemode (só os aplicados agora contam).
-async function avisarAplicadas(client, punicao, resultado, nomePc) {
+// quemApertou: ID de quem apertou o botão que mandou ao jogo ("Enviar ao jogo", Aceitar na
+// Cadeia Staff ou "Sem ir ao jogo"). Sem ele, vale quem aceitou na Cadeia Staff ou no tópico.
+async function avisarAplicadas(client, punicao, resultado, nomePc, { quemApertou = '' } = {}) {
   // Pulados por já terem levado ban há menos de 1h vêm com ok e erro preenchido.
   const alvos = resultado.filter(r => r.ok && !r.erro);
   if (!client || alvos.length === 0) return 0;
@@ -123,8 +125,8 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
     const canalId = config?.channels?.relatorioPunicoes || config?.channels?.log;
     const canal = canalId ? await client.channels.fetch(canalId).catch(() => null) : null;
     if (!canal?.send) return 0;
-    const cargo = config?.roles?.responsavel_admin;
     const link = punicao.msgDiscord?.link || '';
+    const quemMarcar = String(quemApertou || punicao.cadeiaStaffPor?.id || punicao.aceitoPor?.id || '');
 
     // Nick no jogo de quem veio só com a conta: o que a gamemode já confirmou ou o do Discord.
     const contas = alvos.map(r => ((punicao.alvos || []).find(a => String(a._id) === String(r.alvoId)) || {}).contaId || r.contaId);
@@ -133,14 +135,13 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
     for (const r of alvos) {
       const alvo = (punicao.alvos || []).find(a => String(a._id) === String(r.alvoId)) || {};
       const organizacao = temOrganizacao(r.organizacao);
-      // Cargo 6 a 12: marca o responsável admin e quem aceitou no botão da Cadeia Staff.
-      // Cargo fora disso não marca ninguém; sem cargo legível, marca só o responsável (como antes).
+      // Jogador de organização (qualquer cargo; 6 a 12 é cargo alto): marca quem apertou o
+      // botão, não o cargo de responsável. Sem organização, não marca ninguém.
       const numeroCargo = organizacao ? cargoDaOrganizacao(r.organizacao) : null;
       const alto = organizacao && cargoAlto(numeroCargo);
-      const quemAceitou = alto ? (punicao.cadeiaStaffPor?.id || (punicao.origem === 'canal_staff' ? punicao.aceitoPor?.id : '')) : '';
-      const papeis = cargo && (alto || (organizacao && numeroCargo === null)) ? [cargo] : [];
-      const usuarios = quemAceitou ? [quemAceitou] : [];
-      const mencoes = [...papeis.map(id => `<@&${id}>`), ...usuarios.map(id => `<@${id}>`)].join(' ');
+      const papeis = [];
+      const usuarios = organizacao && /^\d{15,21}$/.test(quemMarcar) ? [quemMarcar] : [];
+      const mencoes = usuarios.map(id => `<@${id}>`).join(' ');
       const contaId = alvo.contaId || r.contaId || '';
       const legivel = punicaoLegivel(alvo);
       const aceitaPor = punicao.cadeiaStaffPor?.id ? `<@${punicao.cadeiaStaffPor.id}>`

@@ -250,7 +250,9 @@ async function fecharPunicaoSePronta({ client, punicaoId, conexao, agora = Date.
     marcarAplicadaNoDiscord(client, punicao, `➱ Aplicado (gamemode: ${conexao.nome})`).catch(() => {});
     const aplicados = new Set(lista.filter(contaComoAplicado).map(p => String(p.alvoId)));
     const itens = (punicao.resultado || []).filter(r => r.ok && aplicados.has(String(r.alvoId)) && String(r.pc || '').startsWith('gamemode:'));
-    avisarAplicadas(client, punicao, itens, nomePc).catch(() => {});
+    // Quem apertou o botão que mandou ao jogo (o primeiro que confirmou o envio).
+    const quemApertou = lista.find(p => p.confirmadoPor?.length)?.confirmadoPor[0]?.id || '';
+    avisarAplicadas(client, punicao, itens, nomePc, { quemApertou }).catch(() => {});
   }
   return punicao;
 }

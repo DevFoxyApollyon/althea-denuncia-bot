@@ -414,7 +414,7 @@ async function aceitarSemJogo({ client = null, punicaoId, guildId, staff }) {
     : fechada;
   require('./aceite').marcarAplicadaNoDiscord(client, comResultado, `➱ Aceita sem ir ao jogo (por ${nome})`).catch(() => {});
   // O mesmo aviso de punição aplicada no Relatório de punições; o embed de envio sai.
-  await require('./avisoOrganizacao').avisarAplicadas(client, comResultado, itens, `${SEM_JOGO}${nome}`).catch(() => {});
+  await require('./avisoOrganizacao').avisarAplicadas(client, comResultado, itens, `${SEM_JOGO}${nome}`, { quemApertou: staff?.id }).catch(() => {});
   await atualizarMensagemGm(client, fechada._id).catch(() => {});
   return { ok: true };
 }

@@ -151,7 +151,7 @@ test('dois motivos somam tempo e avisos; permanente e banimento prevalecem', () 
   assert.equal(c('money farm (MF)').tempo, 30); // sinônimos não somam duas vezes
 });
 
-test('toda punição aplicada vai para o Log Admin; organização marca o responsável', async () => {
+test('toda punição aplicada vai para o Log Admin; organização marca quem apertou o botão (não o responsável)', async () => {
   const Config = require('../models/Config');
   const { avisarAplicadas, temOrganizacao } = require('../services/ponteSamp/avisoOrganizacao');
   await Config.create({ guildId: '810', channels: { log: '555' }, roles: { responsavel_admin: '777' } });
@@ -163,11 +163,12 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   const total = await avisarAplicadas(client, punicao, [
     { alvoId, ok: true, erro: '', comando: '/tempban 472860 5 DM [DC]', nome: 'Fulano_Tal', discord: 'fulano.dc', organizacao: 'Policia Militar' },
     { alvoId, ok: true, erro: '', comando: '/tempban 1 5 DM [DC]', nome: 'Civil_Um', organizacao: 'Nenhuma' }
-  ], 'gamemode:brp');
+  ], 'gamemode:brp', { quemApertou: '300000000000000111' });
 
   assert.equal(total, 2);
   assert.equal(enviados.length, 2);
-  assert.equal(enviados[0].content, '<@&777>');
+  assert.equal(enviados[0].content, '<@300000000000000111>'); // de organização: quem apertou o botão
+  assert.deepEqual(enviados[0].allowedMentions, { roles: [], users: ['300000000000000111'] });
   assert.equal(enviados[1].content, undefined); // sem organização: registra sem marcar
   const embed0 = enviados[0].embeds[0].toJSON();
   const campos = `${embed0.description} ${embed0.fields.map(f => f.value).join(' ')}`;
@@ -181,19 +182,19 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   assert.deepEqual(['U$ BEN$A (Gerente - 10)', 'Org (Cargo:[ lider - 12])', 'Org', 'U$ BEN$A [10]'].map(cargoLegivel),
     ['Gerente (10)', 'lider (12)', 'Não informado', '10']);
 
-  // Cargo 6 a 12: "Organização - cargo", marca o responsável e quem aceitou na Cadeia Staff.
+  // Cargo alto (12) ou baixo (4), de organização: marca quem aceitou na Cadeia Staff (o botão), nunca o responsável.
   enviados.length = 0;
-  const comCargo = { ...punicao, origem: 'topico', aceitoPor: { id: '11' }, cadeiaStaffPor: { id: '22' } };
+  const comCargo = { ...punicao, origem: 'topico', aceitoPor: { id: '300000000000000011' }, cadeiaStaffPor: { id: '300000000000000022' } };
   await avisarAplicadas(client, comCargo, [
     { alvoId, ok: true, erro: '', comando: '/tempban 1 5 DM [DC]', nome: 'Lider', organizacao: 'equipe angola (lider - 12)' },
     { alvoId, ok: true, erro: '', comando: '/tempban 1 5 DM [DC]', nome: 'Membro', organizacao: 'Tropa da Holanda ( Membro - 4)' }
   ], 'gamemode:brp');
-  assert.equal(enviados[0].content, '<@&777> <@22>');
-  assert.deepEqual(enviados[0].allowedMentions, { roles: ['777'], users: ['22'] });
+  assert.equal(enviados[0].content, '<@300000000000000022>');
+  assert.deepEqual(enviados[0].allowedMentions, { roles: [], users: ['300000000000000022'] });
   const lider = enviados[0].embeds[0].toJSON().fields;
   assert.equal(lider.find(f => f.name === '🏢 Organização').value, 'equipe angola');
   assert.equal(lider.find(f => f.name.includes('Cargo')).value, 'lider (12)', 'cargo que a gamemode informou');
-  assert.equal(enviados[1].content, undefined); // cargo 4: registra sem marcar
+  assert.equal(enviados[1].content, '<@300000000000000022>', 'cargo 4 de organização também marca');
   const membro = enviados[1].embeds[0].toJSON().fields;
   assert.equal(membro.find(f => f.name === '🏢 Organização').value, 'Tropa da Holanda');
   assert.equal(enviados[0].embeds[0].toJSON().title, enviados[1].embeds[0].toJSON().title, 'com ou sem organização, o mesmo embed');
@@ -217,7 +218,7 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   assert.equal(gm.thumbnail, undefined, 'sem foto');
   assert.equal(campo('Comando'), undefined);
 
-  assert.equal(enviados[0].content, '<@&777>'); // cargo 10: marca o responsável
+  assert.equal(enviados[0].content, undefined, 'aceito por 33 (não é ID do Discord): ninguém para marcar, nem o responsável');
 });
 
 test('motivo fora da tabela avisa na Cadeia Staff e o Aplicado substitui o aviso', async () => {
