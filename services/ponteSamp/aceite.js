@@ -345,34 +345,43 @@ async function reclassificarFila({ client = null, lista = null, tabela = null } 
 // Punições esperando envio que ficaram sem jogador porque o ID do aceite veio com espaço,
 // vírgula ou parênteses ("(8285 708579 1154255)"): refaz os jogadores com o ID e o motivo
 // do aceite, agora lidos com qualquer separador. Roda ao iniciar; sem nenhuma, não muda nada.
-async function refazerSemJogador(client) {
+// Uma punição sem jogador: lê o ID e o motivo do aceite (denúncia ou provas da staff) e
+// remonta os jogadores. Devolve a punição refeita ou null (sem ID que dê para ler).
+async function refazerJogadores(client, p, tabela = null) {
   const Denuncia = require('../../models/Denuncia');
   const DenunciaStaff = require('../../models/DenunciaStaff');
+  const denuncia = await Denuncia.findById(p.denunciaId, { acusadoId: 1, motivoAceite: 1 }).lean()
+    || await DenunciaStaff.findById(p.denunciaId, { acusadoAceite: 1, motivoAceite: 1 }).lean().then(d => d && { acusadoId: d.acusadoAceite, motivoAceite: d.motivoAceite });
+  if (!denuncia?.acusadoId) {
+    log.warn(`Punição ${p._id} sem jogador: a denúncia não tem ID do aceite para refazer.`);
+    return null;
+  }
+  const alvos = montarAlvos(denuncia, tabela || (await obterTabela()).tabela).filter(a => a.cmd !== 'registro');
+  if (!alvos.length) {
+    log.warn(`Punição ${p._id} sem jogador: o ID do aceite ("${String(denuncia.acusadoId).slice(0, 80)}") não tem conta nem nick que dê para ler.`);
+    return null;
+  }
+  const refeita = await PontePunicao.findOneAndUpdate(
+    { _id: p._id, status: 'aceita', versao: p.versao },
+    { $set: { alvos }, $inc: { versao: 1 } },
+    { new: true, runValidators: true }
+  ).lean();
+  if (!refeita) return null;
+  const normal = separarContas(denuncia.acusadoId).join('+');
+  if (normal && normal !== denuncia.acusadoId) await Denuncia.updateOne({ _id: p.denunciaId }, { $set: { acusadoId: normal } }).catch(() => {});
+  await require('./discordGm').atualizarMensagemGm(client, refeita._id).catch(() => {});
+  log.info(`Punição ${refeita._id} sem jogador refeita com o ID do aceite (${alvos.length} jogador(es)).`);
+  return refeita;
+}
+
+async function refazerSemJogador(client) {
   const lista = await PontePunicao.find({ status: 'aceita' }).limit(300).lean();
   const semJogador = lista.filter(p => !(p.alvos || []).some(a => !a.removido));
   if (!semJogador.length) return 0;
   const { tabela } = await obterTabela();
   let refeitas = 0;
-  for (const p of semJogador) {
-    const denuncia = await Denuncia.findById(p.denunciaId, { acusadoId: 1, motivoAceite: 1 }).lean()
-      || await DenunciaStaff.findById(p.denunciaId, { acusadoAceite: 1, motivoAceite: 1 }).lean().then(d => d && { acusadoId: d.acusadoAceite, motivoAceite: d.motivoAceite });
-    if (!denuncia?.acusadoId) continue;
-    const alvos = montarAlvos(denuncia, tabela).filter(a => a.cmd !== 'registro');
-    if (!alvos.length) continue;
-    const refeita = await PontePunicao.findOneAndUpdate(
-      { _id: p._id, status: 'aceita', versao: p.versao },
-      { $set: { alvos }, $inc: { versao: 1 } },
-      { new: true, runValidators: true }
-    ).lean();
-    if (!refeita) continue;
-    refeitas++;
-    if (separarContas(denuncia.acusadoId).join('+') !== denuncia.acusadoId) {
-      await Denuncia.updateOne({ _id: p.denunciaId }, { $set: { acusadoId: separarContas(denuncia.acusadoId).join('+') } }).catch(() => {});
-    }
-    await require('./discordGm').atualizarMensagemGm(client, refeita._id).catch(() => {});
-  }
-  if (refeitas) log.info(`${refeitas} punição(ões) sem jogador refeita(s) com o ID do aceite.`);
+  for (const p of semJogador) if (await refazerJogadores(client, p, tabela)) refeitas++;
   return refeitas;
 }
 
-module.exports = { registrarAceite, atualizarMensagensDiscord, marcarAplicadaNoDiscord, limparAguardando, montarAlvos, motivosPorAcusado, reclassificarFila, voltarParaCadeiaStaff, refazerSemJogador };
+module.exports = { registrarAceite, atualizarMensagensDiscord, marcarAplicadaNoDiscord, limparAguardando, montarAlvos, motivosPorAcusado, reclassificarFila, voltarParaCadeiaStaff, refazerSemJogador, refazerJogadores };

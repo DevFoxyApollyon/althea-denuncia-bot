@@ -294,8 +294,13 @@ async function enviarAoJogo({ client = null, punicaoId, guildId, staff }) {
   const punicao = await PontePunicao.findOne({ _id: punicaoId, guildId: String(guildId) }).lean();
   if (!punicao) return { erro: 'Punição não encontrada.' };
   if (punicao.status !== 'aceita') return { erro: 'Esta punição não está mais esperando envio.' };
+  // Sem jogador (ID do aceite com espaço, vírgula...): tenta remontar com o ID do aceite.
+  if (!alvosAtivos(punicao).length) {
+    const refeita = await require('./aceite').refazerJogadores(client, punicao).catch(() => null);
+    if (!refeita) return { erro: 'A punição não tem jogador e o ID do aceite não deu para ler. Use o Editar para adicionar o jogador.' };
+    return enviarAoJogo({ client, punicaoId, guildId, staff });
+  }
   const alvos = alvosAtivos(punicao);
-  if (alvos.length === 0) return { erro: 'A punição não tem alvos.' };
 
   const nicks = await nicksConhecidos(punicao.guildId, alvos.map(a => a.contaId));
   const montados = alvos.map(a => pedidoDoAlvo(a, servidor, nicks.get(Number(a.contaId))));

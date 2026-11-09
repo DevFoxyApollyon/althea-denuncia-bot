@@ -1913,7 +1913,7 @@ test('punição sem jogador: o Editar cria o jogador e o Corrigir refaz os jogad
   const staff = { id: '1', nome: 'Resp' };
   // Aceite com o ID num formato que não vira jogador ("1270101 CL + 360429 saav").
   const vazia = await punicaoAceita('100000000000000879', []);
-  assert.match((await discordGm().enviarAoJogo({ punicaoId: vazia._id, guildId: '100000000000000879', staff })).erro, /não tem alvos/);
+  assert.match((await discordGm().enviarAoJogo({ punicaoId: vazia._id, guildId: '100000000000000879', staff })).erro, /não tem jogador/);
 
   assert.match((await discordGm().editarAlvoGm({
     punicaoId: vazia._id, guildId: '100000000000000879', alvoId: 'novo', versao: 0, campos: { conta: '', tipo: 'ban', tempo: '3', avisos: '1', motivo: 'SAAV' }, staff
@@ -2137,4 +2137,19 @@ test('IDs com espaço ou parênteses viram jogadores; punição sem jogador é r
   assert.equal(msg.embeds[0].toJSON().title, '✅ Aceita sem ir ao jogo');
   assert.deepEqual(msg.components, []);
   assert.match((await discordGm().aceitarSemJogo({ punicaoId: refeita._id, guildId, staff: staffA })).erro, /não está mais esperando/);
+});
+
+test('"Enviar ao jogo" numa punição sem jogador remonta pelo ID do aceite e envia; sem ID legível, diz para usar o Editar', async () => {
+  const Denuncia = require('../models/Denuncia');
+  const guildId = '100000000000000998';
+  await guildGm(guildId);
+  const semJogador = await punicaoAceita(guildId, []);
+  await Denuncia.collection.insertOne({ _id: semJogador.denunciaId, guildId, acusadoId: '(8285 708579)', motivoAceite: 'SAAV' });
+  const r = await discordGm().enviarAoJogo({ punicaoId: semJogador._id, guildId, staff: staffA });
+  assert.equal(r.ok, true);
+  assert.equal(r.pedidos, 2);
+
+  const ilegivel = await punicaoAceita(guildId, []);
+  await Denuncia.collection.insertOne({ _id: ilegivel.denunciaId, guildId, acusadoId: 'sem id', motivoAceite: 'SAAV' });
+  assert.match((await discordGm().enviarAoJogo({ punicaoId: ilegivel._id, guildId, staff: staffA })).erro, /Editar/);
 });
