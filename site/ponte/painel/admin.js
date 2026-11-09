@@ -424,7 +424,7 @@ async function abrirEsperando(s) {
       const tr = linha(
         [p.acusado || '—', p.punicao || '—', { texto: `${p.motivo}${p.semEmbed ? ' · sem embed no Relatório' : ''}`, classe: 'detalhes' }, p.aceitoPor || '—', data(p.desde), ''],
         dono && [
-          { texto: 'Sem ir ao jogo', perigo: false, confirmar: `Aceitar a punição de ${p.acusado} sem mandar ao jogo? Ela fica registrada como aceita e não volta para a Cadeia Staff.`, executar: () => post(`/esperando/${p.id}/semjogo`), recarregar: 'geral' },
+          { texto: 'Tirar da fila', perigo: false, confirmar: `Tirar a punição de ${p.acusado} da fila sem mandar ao jogo? Ela fica registrada como aceita (já banida ou aplicada à mão) e não volta para a Cadeia Staff.`, executar: () => post(`/esperando/${p.id}/semjogo`), recarregar: 'geral' },
           { texto: 'Cancelar', confirmar: `Cancelar a punição de ${p.acusado}? Ela não vai para o jogo (volta para a Cadeia Staff quando tem mensagem lá).`, executar: () => post(`/esperando/${p.id}/cancelar`), recarregar: 'geral' }
         ]
       );
