@@ -268,3 +268,11 @@ test('Add Player: põe no tópico privado mesmo já estando na lista e diz por q
   assert.match((await colocarNoTopico(canal([], 50013), '1416617922884796417')).motivo, /sem permissão/);
   assert.deepEqual(await colocarNoTopico({ type: ChannelType.PublicThread }, '1'), {});
 });
+
+test('mensagem de aceite: "Abrir Ticket" ao lado do "Corrigir dados" só com a integração de tickets ligada', () => {
+  const { createCorrectionButtonRow } = require('../Handlers/corrigirHandler');
+  const rotulos = (config) => createCorrectionButtonRow(config).toJSON().components.map(b => b.custom_id);
+  assert.deepEqual(rotulos(), ['corrigir_denuncia_aceita']);
+  assert.deepEqual(rotulos({ channels: { ponteTickets: '123' } }), ['corrigir_denuncia_aceita', 'abrir_ticket_denuncia']);
+  assert.deepEqual(rotulos({ channels: { ponteTickets: '123' }, botaoTicketRevisao: false }), ['corrigir_denuncia_aceita']);
+});

@@ -31,14 +31,19 @@ function getMessageId(customId) {
   return customId.replace(CORRIGIR_MODAL_PREFIX, '');
 }
 
-function createCorrectionButtonRow() {
-  return new ActionRowBuilder().addComponents(
+// "Corrigir dados" e, com a integração do bot de tickets ligada, o "Abrir Ticket" ao lado
+// (o mesmo da mensagem principal: acha a denúncia pelo tópico onde foi clicado).
+function createCorrectionButtonRow(config = null) {
+  const linha = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('corrigir_denuncia_aceita')
       .setLabel('Corrigir dados')
       .setEmoji('🛠️')
       .setStyle(ButtonStyle.Secondary)
   );
+  const abrirTicket = config ? require('./ticketExterno').botaoAbrirTicket(config) : null;
+  if (abrirTicket) linha.addComponents(abrirTicket);
+  return linha;
 }
 
 function createCorrectionModal(denuncia) {
@@ -228,7 +233,7 @@ async function handleSalvarCorrigirDenuncia(interaction) {
       const newContent = `✅ Denúncia aceita por <@${staffId}> (${acusadoId}) tomará punição por (${motivoAceite}) Data ${dataPunicao} Link: ${logMsgURL || denunciaURL}`;
 
       if (acceptedMessage) {
-        await acceptedMessage.edit({ content: `${newContent}${linhasDeBaixo(acceptedMessage.content)}`.slice(0, 2000), components: [createCorrectionButtonRow()] });
+        await acceptedMessage.edit({ content: `${newContent}${linhasDeBaixo(acceptedMessage.content)}`.slice(0, 2000), components: [createCorrectionButtonRow(await getCachedConfig(interaction.guild.id).catch(() => null))] });
         topicEdited = true;
       } else {
         errors.push('mensagem de aceite não encontrada no tópico');
