@@ -11,6 +11,38 @@ let csrf = '';
 // Dono do bot (OWNER_DISCORD_ID). Quem ele liberou vê o painel, mas não os botões só do dono.
 let dono = false;
 let ultimoUso = null;
+// Tabelas com páginas: as linhas montadas, a página atual e (auditoria) se há mais no servidor.
+const paginas = {};
+const POR_PAGINA = 10;
+
+// Mostra uma página de 10 linhas e as setas ‹ › embaixo da tabela. maisNoServidor: na última
+// página, a seta › busca mais (auditoria).
+function paginar(chave, tbody, linhas, { pagina = 0, maisNoServidor = null } = {}) {
+  paginas[chave] = { linhas, pagina, maisNoServidor };
+  const total = Math.max(1, Math.ceil(linhas.length / POR_PAGINA));
+  const atual = Math.min(pagina, total - 1);
+  paginas[chave].pagina = atual;
+  tbody.replaceChildren(...linhas.slice(atual * POR_PAGINA, (atual + 1) * POR_PAGINA));
+  const cartao = tbody.closest('.cartao');
+  let barra = cartao.querySelector(`.paginas[data-chave="${chave}"]`);
+  if (!barra) {
+    barra = el('div', { classe: 'paginas', 'data-chave': chave });
+    cartao.append(barra);
+  }
+  const ir = (nova) => paginar(chave, tbody, paginas[chave].linhas, { pagina: nova, maisNoServidor: paginas[chave].maisNoServidor });
+  const ultima = atual >= total - 1;
+  barra.replaceChildren(
+    el('button', { type: 'button', classe: 'pequeno', 'aria-label': 'Página anterior', disabled: atual === 0 ? '' : null, onclick: () => ir(atual - 1) }, '‹'),
+    el('span', {}, linhas.length ? `Página ${atual + 1} de ${total}${ultima && maisNoServidor ? '+' : ''} · ${linhas.length} registro(s)` : 'Nada para mostrar'),
+    el('button', {
+      type: 'button', classe: 'pequeno', 'aria-label': 'Próxima página', disabled: ultima && !maisNoServidor ? '' : null,
+      onclick: async () => {
+        if (!ultima) return ir(atual + 1);
+        try { await maisNoServidor(); } catch (e) { aviso(e.message); }
+      }
+    }, '›'));
+  barra.hidden = linhas.length <= POR_PAGINA && !maisNoServidor;
+}
 
 const $ = (sel) => document.querySelector(sel);
 const data = (v) => (v ? new Date(v).toLocaleString('pt-BR') : '—');
@@ -546,14 +578,14 @@ const carregadores = {
       ]
     )));
 
-    $('#gm-pedidos tbody').replaceChildren(...pedidos.map(p => linhaSimples([
+    paginar('gm-pedidos', $('#gm-pedidos tbody'), pedidos.map(p => linhaSimples([
       data(p.criadoEm), p.guild || p.guildId, p.conta || p.nick, `${punicaoGm(p)}${p.rodada > 1 ? ` (rodada ${p.rodada})` : ''}`, p.motivo, p.aprovadoPor,
       { texto: `${p.status}${p.teste ? ' · teste' : ''}`, classe: p.status === 'aplicada' ? 'online' : ['incerto', 'erro', 'recusada'].includes(p.status) ? 'atencao' : '' },
       p.codigo, `${p.entregas}${p.devolucoes ? ` (${p.devolucoes} dev.)` : ''}`,
       { texto: [p.resultado?.nome, p.resultado?.organizacao, p.resolvidoPor && `resolvido por ${p.resolvidoPor}`].filter(Boolean).join(' · '), classe: 'detalhes' }
     ])));
 
-    $('#gm-uso tbody').replaceChildren(...uso.map(u => linhaSimples([
+    paginar('gm-uso', $('#gm-uso tbody'), uso.map(u => linhaSimples([
       data(u.em), u.guild || u.guildId, u.acao, u.ip, { texto: u.detalhes ? JSON.stringify(u.detalhes) : '', classe: 'detalhes' }
     ])));
   },
@@ -609,8 +641,12 @@ const carregadores = {
     const linhas = lista.map(u => linhaSimples([data(u.em), u.guild || u.guildId, `${rotulo(u.acao, u.detalhes?.sub)} (${u.acao})`, u.contaId, u.comando, u.ip,
       { texto: u.detalhes ? JSON.stringify(u.detalhes) : '', classe: 'detalhes' }]));
     const tbody = $('#aba-uso tbody');
-    if (continuar) tbody.append(...linhas); else tbody.replaceChildren(...linhas);
-    $('#mais-uso').hidden = lista.length < 50;
+    // 10 por página; na última, a seta › busca as próximas 50 no servidor (se houver).
+    const anteriores = continuar ? paginas.uso?.linhas || [] : [];
+    const todas = [...anteriores, ...linhas];
+    const mais = lista.length >= 50 ? async () => { await carregadores.uso(true); } : null;
+    paginar('uso', tbody, todas, { pagina: continuar ? Math.floor(anteriores.length / POR_PAGINA) : 0, maisNoServidor: mais });
+    rotularTabelas($('#aba-uso'));
   },
   async codigos() {
     const lista = await api('/codigos');
@@ -683,7 +719,6 @@ async function iniciar() {
   for (const botao of document.querySelectorAll('[data-aba-link]')) botao.addEventListener('click', () => trocarAba(botao.dataset.abaLink));
 
   $('#filtro-uso').addEventListener('submit', (e) => { e.preventDefault(); ultimoUso = null; carregar('uso'); });
-  $('#mais-uso').addEventListener('click', () => carregadores.uso(true).catch(e => aviso(e.message)));
   $('#gerar-codigo').addEventListener('submit', async (e) => {
     e.preventDefault();
     const dados = Object.fromEntries(new FormData(e.target));
