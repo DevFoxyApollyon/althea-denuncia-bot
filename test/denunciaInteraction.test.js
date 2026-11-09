@@ -251,3 +251,20 @@ test('tópico privado: o cargo escolhido ganha "Gerenciar tópicos" no canal, um
     console.warn = avisoOriginal;
   }
 });
+
+test('Add Player: põe no tópico privado mesmo já estando na lista e diz por que falhou', async () => {
+  const { ChannelType } = require('discord.js');
+  const { colocarNoTopico } = require('../Handlers/statusDenuncia/adicionarJogador');
+  const canal = (membros, erroCode) => ({
+    id: 't', type: ChannelType.PrivateThread,
+    members: {
+      fetch: async (id) => (membros.includes(id) ? { id } : Promise.reject(new Error('Unknown Member'))),
+      add: async () => { if (erroCode) throw Object.assign(new Error('x'), { code: erroCode }); }
+    }
+  });
+  assert.deepEqual(await colocarNoTopico(canal(['1416617922884796417']), '1416617922884796417'), { jaEstava: true });
+  assert.deepEqual(await colocarNoTopico(canal([]), '1416617922884796417'), { ok: true });
+  assert.match((await colocarNoTopico(canal([], 10007), '1416617922884796417')).motivo, /não está mais no servidor/);
+  assert.match((await colocarNoTopico(canal([], 50013), '1416617922884796417')).motivo, /sem permissão/);
+  assert.deepEqual(await colocarNoTopico({ type: ChannelType.PublicThread }, '1'), {});
+});
