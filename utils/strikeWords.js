@@ -243,19 +243,25 @@ function motivoEmojiFigurinhaOuGif(message) {
   return 'emoji/figurinha/gif';
 }
 
+// Soma um strike direto no banco (sem ler, mudar e salvar o documento): duas mensagens da
+// mesma pessoa ao mesmo tempo davam VersionError e um dos strikes se perdia. Tira os de
+// mais de 24 h e devolve quantos ficaram, já contando o novo.
+async function somarStrike(Strike, message, campo) {
+  const filtro = { userId: message.author.id, guildId: message.guild.id };
+  const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  await Strike.updateOne(filtro, { $pull: { [campo]: { timestamp: { $lt: limite } } } });
+  const strike = await Strike.findOneAndUpdate(filtro, { $push: { [campo]: { timestamp: new Date() } } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+  return { strike, strikesCount: (strike[campo] || []).length };
+}
+
+// Chegou a 3: zera só aquele tipo de strike, também direto no banco.
+const zerarStrikes = (Strike, strike, campo) => Strike.updateOne({ _id: strike._id }, { $set: { [campo]: [] } });
+
 async function processaStrike(message, Strike, config) {
   try {
     if (!estaEmCanalDeDenuncia(message, config)) return;
 
-    let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
-    if (!strike) {
-      strike = new Strike({ userId: message.author.id, guildId: message.guild.id, strikes: [] });
-    }
-
-    strike.cleanOldStrikes();
-    strike.strikes.push({ timestamp: new Date() });
-    const strikesCount = strike.strikes.length;
-    await strike.save();
+    const { strike, strikesCount } = await somarStrike(Strike, message, 'strikes');
 
     const motivoBase = palavraProibidaUsada(message.content) || getMotivoMarcacao(message);
 
@@ -318,10 +324,7 @@ async function processaStrike(message, Strike, config) {
     if (member) {
       await member.timeout?.(tempoTimeout, motivo).catch(() => {});
 
-      if (strikesCount >= 3) {
-        strike.strikes = [];
-        await strike.save();
-      }
+      if (strikesCount >= 3) await zerarStrikes(Strike, strike, 'strikes');
     }
 
     if (config?.channels?.log) {
@@ -365,19 +368,7 @@ async function processaStrikeLink(message, Strike, config) {
   try {
     if (!estaEmCanalDeDenuncia(message, config)) return;
 
-    let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
-    if (!strike) {
-      strike = new Strike({ userId: message.author.id, guildId: message.guild.id, strikes: [], strikesLink: [] });
-    }
-    if (!strike.strikesLink) strike.strikesLink = [];
-
-    if (typeof strike.cleanOldStrikesLink === 'function') {
-      strike.cleanOldStrikesLink();
-    }
-
-    strike.strikesLink.push({ timestamp: new Date() });
-    const strikesCount = strike.strikesLink.length;
-    await strike.save();
+    const { strike, strikesCount } = await somarStrike(Strike, message, 'strikesLink');
 
     const linkEncaminhado = extrairLinkMensagemEncaminhada(message);
     const motivoBase = linkProibidoUsado(message.content)
@@ -447,10 +438,7 @@ async function processaStrikeLink(message, Strike, config) {
     if (member) {
       await member.timeout?.(tempoTimeout, motivo).catch(() => {});
 
-      if (strikesCount >= 3) {
-        strike.strikesLink = [];
-        await strike.save();
-      }
+      if (strikesCount >= 3) await zerarStrikes(Strike, strike, 'strikesLink');
     }
 
     if (config?.channels?.log) {
@@ -494,19 +482,7 @@ async function processaStrikeEmoji(message, Strike, config) {
   try {
     if (!estaEmCanalDeDenuncia(message, config)) return;
 
-    let strike = await Strike.findOne({ userId: message.author.id, guildId: message.guild.id });
-    if (!strike) {
-      strike = new Strike({ userId: message.author.id, guildId: message.guild.id, strikes: [], strikesLink: [], strikesEmoji: [] });
-    }
-    if (!strike.strikesEmoji) strike.strikesEmoji = [];
-
-    if (typeof strike.cleanOldStrikesEmoji === 'function') {
-      strike.cleanOldStrikesEmoji();
-    }
-
-    strike.strikesEmoji.push({ timestamp: new Date() });
-    const strikesCount = strike.strikesEmoji.length;
-    await strike.save();
+    const { strike, strikesCount } = await somarStrike(Strike, message, 'strikesEmoji');
 
     const motivoBase = motivoEmojiFigurinhaOuGif(message) || 'emoji/figurinha/gif';
 
@@ -571,10 +547,7 @@ async function processaStrikeEmoji(message, Strike, config) {
     if (member) {
       await member.timeout?.(tempoTimeout, motivo).catch(() => {});
 
-      if (strikesCount >= 3) {
-        strike.strikesEmoji = [];
-        await strike.save();
-      }
+      if (strikesCount >= 3) await zerarStrikes(Strike, strike, 'strikesEmoji');
     }
 
     if (config?.channels?.log) {
@@ -654,6 +627,8 @@ module.exports = {
   contemLinkProibido,
   contemEmojiFigurinhaOuGif,
   processaStrike,
+  somarStrike,
+  zerarStrikes,
   processaStrikeLink,
   processaStrikeEmoji,
   palavraProibidaUsada,

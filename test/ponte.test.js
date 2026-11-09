@@ -788,3 +788,18 @@ test('/tempban e /desbanir: o dono do bot usa sem o cargo; com a senha da Cadeia
   await desbanir.handleDesbanirSlash(desbanirLiberado);
   assert.equal(desbanirLiberado.respostas[0].modal, desbanir.MODAL_DESBANIR);
 });
+
+test('strikes: várias mensagens ao mesmo tempo somam todas, sem erro de versão; zerar limpa só aquele tipo', async () => {
+  const Strike = require('../models/Strike');
+  const { somarStrike, zerarStrikes } = require('../utils/strikeWords');
+  const message = { author: { id: '300000000000000501' }, guild: { id: '100000000000000501' } };
+  // Strike de mais de 24 h sai na conta.
+  await Strike.create({ userId: message.author.id, guildId: message.guild.id, strikes: [{ timestamp: new Date(Date.now() - 2 * 864e5) }], strikesLink: [{ timestamp: new Date() }] });
+  const contas = await Promise.all([1, 2, 3].map(() => somarStrike(Strike, message, 'strikes')));
+  assert.deepEqual(contas.map(c => c.strikesCount).sort(), [1, 2, 3]);
+  const salvo = await Strike.findOne({ userId: message.author.id }).lean();
+  assert.equal(salvo.strikes.length, 3);
+  await zerarStrikes(Strike, salvo, 'strikes');
+  const zerado = await Strike.findOne({ userId: message.author.id }).lean();
+  assert.deepEqual([zerado.strikes.length, zerado.strikesLink.length], [0, 1]);
+});
