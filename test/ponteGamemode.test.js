@@ -468,7 +468,7 @@ test('selo inválido pausa a conexão no Althea e fica auditado', async () => {
 
 // ---------- 6. Devolvida, erro e lease ----------
 
-test('devolvida volta para aprovado até 5 vezes; na 6ª vira erro', async () => {
+test('devolvida volta para aprovado até 5 vezes; na 6ª vira erro; LIMITE_HORA não conta', async () => {
   const { conexao, segredo } = await guildGm('850');
   const { punicao, pedidos } = await punicaoComPedidos('850', 1);
   const caminho = `/resultados/${pedidos[0]._id}`;
@@ -482,10 +482,16 @@ test('devolvida volta para aprovado até 5 vezes; na 6ª vira erro', async () =>
   assert.equal((await chamar(conexao, segredo, caminho, { metodo: 'POST', corpo: resultado('devolvida', 'PAUSADO') })).status, 200);
   assert.equal((await m.PontePedidoGm.findById(pedidos[0]._id).lean()).devolucoes, 5);
 
+  // LIMITE_HORA (a gamemode pausa 5 minutos e volta): não conta, volta para a fila.
   await chamar(conexao, segredo, '/pedidos');
   await chamar(conexao, segredo, caminho, { metodo: 'POST', corpo: resultado('devolvida', 'LIMITE_HORA') });
-  const p = await m.PontePedidoGm.findById(pedidos[0]._id).lean();
-  assert.deepEqual([p.status, p.devolucoes, p.entregas], ['erro', 6, 6]);
+  let p = await m.PontePedidoGm.findById(pedidos[0]._id).lean();
+  assert.deepEqual([p.status, p.devolucoes], ['aprovado', 5]);
+
+  await chamar(conexao, segredo, '/pedidos');
+  await chamar(conexao, segredo, caminho, { metodo: 'POST', corpo: resultado('devolvida', 'PAUSADO') });
+  p = await m.PontePedidoGm.findById(pedidos[0]._id).lean();
+  assert.deepEqual([p.status, p.devolucoes, p.entregas], ['erro', 6, 7]);
   assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'aceita');
 });
 
@@ -908,7 +914,7 @@ test('alertas: selo inválido avisa o dono por DM e o canal; devolução demais 
     await m.PonteConexaoGm.updateOne({ _id: conexao._id }, { $set: { pausada: false } });
     await m.PontePedidoGm.updateOne({ _id: pedidos[1]._id }, { $set: { devolucoes: 5 } });
     await chamar(conexao, segredo, '/pedidos');
-    await chamar(conexao, segredo, `/resultados/${pedidos[1]._id}`, { metodo: 'POST', corpo: resultado('devolvida', 'LIMITE_HORA') });
+    await chamar(conexao, segredo, `/resultados/${pedidos[1]._id}`, { metodo: 'POST', corpo: resultado('devolvida', 'PAUSADO') });
     await esperar(() => alvo.enviadas.some(e => /devolvido demais/.test(e.embeds?.[0]?.toJSON().title)));
     assert.ok(alvo.enviadas.some(e => /devolvido demais/.test(e.embeds?.[0]?.toJSON().title)));
   } finally {

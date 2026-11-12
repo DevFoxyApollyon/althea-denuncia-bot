@@ -206,7 +206,8 @@ devolve o resultado; o Althea nunca chama o servidor do jogo.
   cada servidor (modo teste, pausa, limites e trava por IP), credenciais, pedidos, auditoria, códigos,
   acessos e **Bloqueados** (quem está ali não usa botões, comandos nem o site do bot). Quem banir ou
   expulsar o dono do bot de um servidor é bloqueado sozinho.
-- **Include da gamemode:** a versão atual é a 1.0.1 (traz a consulta do `/desbanir` pelo ID); o pacote
+- **Include da gamemode:** a versão atual é a 1.0.2 (a 1.0.1 trouxe a consulta do `/desbanir` pelo ID; a 1.0.2
+  faz a pausa do limite por hora durar 5 minutos e voltar sozinha); o pacote
   vai à parte para os devs do servidor.
 
 ---

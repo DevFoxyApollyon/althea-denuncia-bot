@@ -80,5 +80,7 @@ pontePedidoGmSchema.index({ status: 1, leaseAte: 1 });
 // Painel da ponte: pedidos recentes (todos ou de um servidor), mais novos primeiro.
 pontePedidoGmSchema.index({ criadoEm: -1 });
 pontePedidoGmSchema.index({ guildId: 1, criadoEm: -1 });
+// Status ao vivo (a cada 15 s): tempo de resposta da gamemode nas últimas 24 h.
+pontePedidoGmSchema.index({ guildId: 1, respondidoEm: -1 });
 
 module.exports = modelSecundario('PontePedidoGm', pontePedidoGmSchema, 'pontepedidosgm');

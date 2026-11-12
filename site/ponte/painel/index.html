@@ -245,7 +245,8 @@
 #define ALTHEA_MAX_BAN_DIAS (90)
 #define ALTHEA_PERMITIR_BAN_PERMANENTE (true)
 #define ALTHEA_MAX_CADEIA_MIN (300)
-#define ALTHEA_MAX_POR_HORA (30)
+#define ALTHEA_MAX_POR_HORA (100)
+#define ALTHEA_PAUSA_S (300)
 #define ALTHEA_DEFINIR_ONREQUESTFAILURE
 #include "althea_ponte/althea_ponte"</code></pre>
             <p class="dica"><code>ALTHEA_PERMITIR_BAN_PERMANENTE</code> vem <code>false</code> no include: sem esta linha, o ban permanente que o bot libera é recusado (<code>DADOS_INVALIDOS</code>). Se a gamemode já tem <code>OnRequestFailure</code>, tire o <code>ALTHEA_DEFINIR_ONREQUESTFAILURE</code> e chame <code>Althea_FalhaRequisicao(id);</code> dentro dele.</p></li>

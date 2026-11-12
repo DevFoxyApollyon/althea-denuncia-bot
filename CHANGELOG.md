@@ -18,6 +18,7 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 - Conta já banida (JA_BANIDO), em ban com tempo ou permanente, fecha como aplicada. Simulada (modo teste) fecha como aplicada (simulada), fora do histórico.
 - Motivos de punição: só o responsável (e o dono) muda; o Editar já abre com os valores da tabela atual e mudar a tabela atualiza o que espera envio.
 - Ban máximo padrão da gamemode passa de 30 para 90 dias.
+- Include da gamemode 1.0.2: toda pausa (limite por hora, selo inválido, credencial inválida e `rcon althea pausar`) volta sozinha em 5 minutos (`ALTHEA_PAUSA_S`); limite padrão de 100 punições por hora. O bot não conta mais `LIMITE_HORA` como devolução.
 
 ### 🔧 Correções
 - ID do aceite com espaço, vírgula, parênteses ou "e" vira jogador (antes a punição ficava sem jogador); as que ficaram assim são refeitas.

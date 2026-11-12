@@ -55,7 +55,8 @@ No topo da gamemode, **nesta ordem**:
 #define ALTHEA_MAX_BAN_DIAS (90)
 #define ALTHEA_PERMITIR_BAN_PERMANENTE (true) // o bot libera ban permanente; sem isto, ele é recusado
 #define ALTHEA_MAX_CADEIA_MIN (300)
-#define ALTHEA_MAX_POR_HORA (30)
+#define ALTHEA_MAX_POR_HORA (100)
+#define ALTHEA_PAUSA_S (300)
 #define ALTHEA_DEFINIR_ONREQUESTFAILURE       // tire se a gamemode já tem OnRequestFailure
 #include "althea_ponte/althea_ponte"
 ```
@@ -149,7 +150,7 @@ Cada pedido tem um ID próprio, e a tabela `althea_pedidos` impede que o **mesmo
 | `Falha na comunicacao (HTTP 503)` | falta a chave no Althea | avisar o JV |
 | ban permanente recusado com `DADOS_INVALIDOS` | falta o `#define ALTHEA_PERMITIR_BAN_PERMANENTE (true)` | colocar o define e recompilar |
 | `ALERTA: ... selo invalido. Integracao PAUSADA` | pedido adulterado ou bug | **não retomar sozinho**: avisar o JV na hora |
-| `ALERTA: limite de punicoes por hora atingido` | passou de `ALTHEA_MAX_POR_HORA` | conferir no Discord e usar `rcon althea retomar` |
+| `ALERTA: limite de punicoes por hora atingido` | passou de `ALTHEA_MAX_POR_HORA` | volta sozinha em 5 minutos (`ALTHEA_PAUSA_S`); para voltar antes, `rcon althea retomar`. Se for sempre, aumente o limite |
 | `Auto-teste do SHA-256 falhou` | include alterado ou compilador diferente | rodar o `teste_cripto` (passo 3.2) e avisar o JV |
 
 ---

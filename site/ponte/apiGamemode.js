@@ -158,14 +158,18 @@ function criarApiGamemode({ client = null, log = null, limites = {}, agora = () 
     const pausado = servidor.gm?.pausado === true || conexao.pausada === true;
     const pedidos = pausado ? [] : await entregarPedidos({ conexao, segredo, limite, agora: agora() });
 
-    await PonteConexaoGm.updateOne({ _id: conexao._id }, {
-      $set: {
-        ultimoContatoEm: new Date(agora()),
-        ultimoIp: ip,
-        versaoInclude: String(req.query.versao || '').replace(RE_VERSAO, '').slice(0, 20),
-        modoTesteInformado: String(req.query.teste || '') === '1'
-      }
-    });
+    // "Último contato": a gamemode busca a cada 10 s; só grava quando algo mudou ou a cada
+    // 20 s (o painel considera online quem buscou nos últimos 30 s), sem uma escrita por busca.
+    const contato = {
+      ultimoIp: ip,
+      versaoInclude: String(req.query.versao || '').replace(RE_VERSAO, '').slice(0, 20),
+      modoTesteInformado: String(req.query.teste || '') === '1'
+    };
+    const mudou = Object.entries(contato).some(([campo, valor]) => conexao[campo] !== valor);
+    const ultimo = conexao.ultimoContatoEm ? new Date(conexao.ultimoContatoEm).getTime() : 0;
+    if (mudou || pedidos.length || agora() - ultimo >= 20 * 1000) {
+      await PonteConexaoGm.updateOne({ _id: conexao._id }, { $set: { ...contato, ultimoContatoEm: new Date(agora()) } });
+    }
     // A busca vazia (a cada 10 s) não entra na auditoria, senão a coleção enche.
     if (pedidos.length) {
       auditar(req, 'gm_busca', { detalhes: { conexaoId: String(conexao._id), pedidos: pedidos.map(p => p.id) } });

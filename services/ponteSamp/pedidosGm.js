@@ -267,8 +267,11 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   if (!atual) return { http: 404 };
 
   const devolvida = dados.status === 'devolvida';
+  // LIMITE_HORA não conta como devolução: a include 1.0.2 pausa só 5 minutos e volta, então o
+  // mesmo pedido pode ser devolvido várias vezes na hora cheia sem estar com problema.
+  const contaDevolucao = devolvida && dados.codigo !== 'LIMITE_HORA';
   const destinoNormal = DESTINO[dados.status];
-  const destino = devolvida && atual.devolucoes + 1 > MAX_DEVOLUCOES ? 'erro' : destinoNormal;
+  const destino = contaDevolucao && atual.devolucoes + 1 > MAX_DEVOLUCOES ? 'erro' : destinoNormal;
   const mesmo = (p) => p.codigo === dados.codigo && (devolvida ? p.status === 'aprovado' || p.status === 'erro' : p.status === destinoNormal);
 
   if (!['entregue', 'incerto'].includes(atual.status)) {
@@ -289,7 +292,7 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   };
   const pedido = await PontePedidoGm.findOneAndUpdate(
     { ...filtro, status: { $in: ['entregue', 'incerto'] } },
-    { $set, ...(devolvida ? { $inc: { devolucoes: 1 } } : {}) },
+    { $set, ...(contaDevolucao ? { $inc: { devolucoes: 1 } } : {}) },
     { new: true }
   ).lean();
   // Outra resposta chegou no meio: decide pela que ficou gravada.

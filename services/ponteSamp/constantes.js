@@ -60,7 +60,7 @@ const LIMITES_GM_PADRAO = Object.freeze({
 
 // Versão do include da gamemode (ALTHEA_VERSAO em althea_ponte/althea_ponte.inc).
 // O include fica fora do bot (pasta althea-gamemode); ao lançar versão nova dele, atualize aqui.
-const VERSAO_INCLUDE_GM = '1.0.1';
+const VERSAO_INCLUDE_GM = '1.0.2';
 
 module.exports = {
   CMDS_PUNICAO,
