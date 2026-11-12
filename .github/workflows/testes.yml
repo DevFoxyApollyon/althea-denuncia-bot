@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       # O MongoDB em memória baixa o binário uma vez; o cache evita baixar a cada execução.
       - uses: actions/cache@v4

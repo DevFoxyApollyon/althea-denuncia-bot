@@ -7,7 +7,7 @@
     "start": "node --expose-gc --max-old-space-size=2560 index.js",
     "dev": "nodemon --expose-gc --max-old-space-size=2560 index.js",
     "lint": "eslint .",
-    "test": "node --test",
+    "test": "node --import ./test/helpers/silencio.js --test",
     "site:previa": "node site/previa.js",
     "pacote": "node scripts/pacote-squarecloud.js",
     "bancos": "node scripts/ver-bancos.js",
