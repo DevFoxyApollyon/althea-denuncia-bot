@@ -364,3 +364,10 @@ ol.passos .dica { margin: 6px 0 0; }
 /* "N esperando envio" no Status ao vivo: abre a lista. */
 .link-botao { display: inline; min-height: 0; padding: 0; border: 0; background: none; color: var(--destaque); font: inherit; text-transform: none; letter-spacing: normal; text-decoration: underline; cursor: pointer; }
 #esperando-painel { margin-top: 16px; }
+
+/* Setas de página embaixo das tabelas (pedidos, registro da gamemode e auditoria). */
+.paginas { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; color: var(--suave); font-size: 12.5px; }
+.paginas button { min-width: 34px; font-size: 16px; line-height: 1; }
+.paginas button[disabled] { opacity: .4; cursor: default; }
+/* Atividade recente: cabem 5; o resto rola dentro do cartão. */
+#atividade { max-height: 330px; overflow-y: auto; padding-right: 6px; scrollbar-width: thin; }

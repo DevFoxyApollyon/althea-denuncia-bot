@@ -151,7 +151,7 @@ test('dois motivos somam tempo e avisos; permanente e banimento prevalecem', () 
   assert.equal(c('money farm (MF)').tempo, 30); // sinônimos não somam duas vezes
 });
 
-test('toda punição aplicada vai para o Log Admin; organização marca o responsável', async () => {
+test('toda punição aplicada vai para o Log Admin; organização marca quem apertou o botão (não o responsável)', async () => {
   const Config = require('../models/Config');
   const { avisarAplicadas, temOrganizacao } = require('../services/ponteSamp/avisoOrganizacao');
   await Config.create({ guildId: '810', channels: { log: '555' }, roles: { responsavel_admin: '777' } });
@@ -163,11 +163,12 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   const total = await avisarAplicadas(client, punicao, [
     { alvoId, ok: true, erro: '', comando: '/tempban 472860 5 DM [DC]', nome: 'Fulano_Tal', discord: 'fulano.dc', organizacao: 'Policia Militar' },
     { alvoId, ok: true, erro: '', comando: '/tempban 1 5 DM [DC]', nome: 'Civil_Um', organizacao: 'Nenhuma' }
-  ], 'gamemode:brp');
+  ], 'gamemode:brp', { quemApertou: '300000000000000111' });
 
   assert.equal(total, 2);
   assert.equal(enviados.length, 2);
-  assert.equal(enviados[0].content, '<@&777>');
+  assert.equal(enviados[0].content, '<@300000000000000111>'); // de organização: quem apertou o botão
+  assert.deepEqual(enviados[0].allowedMentions, { roles: [], users: ['300000000000000111'] });
   assert.equal(enviados[1].content, undefined); // sem organização: registra sem marcar
   const embed0 = enviados[0].embeds[0].toJSON();
   const campos = `${embed0.description} ${embed0.fields.map(f => f.value).join(' ')}`;
@@ -181,19 +182,19 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   assert.deepEqual(['U$ BEN$A (Gerente - 10)', 'Org (Cargo:[ lider - 12])', 'Org', 'U$ BEN$A [10]'].map(cargoLegivel),
     ['Gerente (10)', 'lider (12)', 'Não informado', '10']);
 
-  // Cargo 6 a 12: "Organização - cargo", marca o responsável e quem aceitou na Cadeia Staff.
+  // Cargo alto (12) ou baixo (4), de organização: marca quem aceitou na Cadeia Staff (o botão), nunca o responsável.
   enviados.length = 0;
-  const comCargo = { ...punicao, origem: 'topico', aceitoPor: { id: '11' }, cadeiaStaffPor: { id: '22' } };
+  const comCargo = { ...punicao, origem: 'topico', aceitoPor: { id: '300000000000000011' }, cadeiaStaffPor: { id: '300000000000000022' } };
   await avisarAplicadas(client, comCargo, [
     { alvoId, ok: true, erro: '', comando: '/tempban 1 5 DM [DC]', nome: 'Lider', organizacao: 'equipe angola (lider - 12)' },
     { alvoId, ok: true, erro: '', comando: '/tempban 1 5 DM [DC]', nome: 'Membro', organizacao: 'Tropa da Holanda ( Membro - 4)' }
   ], 'gamemode:brp');
-  assert.equal(enviados[0].content, '<@&777> <@22>');
-  assert.deepEqual(enviados[0].allowedMentions, { roles: ['777'], users: ['22'] });
+  assert.equal(enviados[0].content, '<@300000000000000022>');
+  assert.deepEqual(enviados[0].allowedMentions, { roles: [], users: ['300000000000000022'] });
   const lider = enviados[0].embeds[0].toJSON().fields;
   assert.equal(lider.find(f => f.name === '🏢 Organização').value, 'equipe angola');
-  assert.equal(lider.some(f => f.name.includes('Cargo')), false, 'o embed não tem campo de cargo');
-  assert.equal(enviados[1].content, undefined); // cargo 4: registra sem marcar
+  assert.equal(lider.find(f => f.name.includes('Cargo')).value, 'lider (12)', 'cargo que a gamemode informou');
+  assert.equal(enviados[1].content, '<@300000000000000022>', 'cargo 4 de organização também marca');
   const membro = enviados[1].embeds[0].toJSON().fields;
   assert.equal(membro.find(f => f.name === '🏢 Organização').value, 'Tropa da Holanda');
   assert.equal(enviados[0].embeds[0].toJSON().title, enviados[1].embeds[0].toJSON().title, 'com ou sem organização, o mesmo embed');
@@ -207,7 +208,7 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   const gm = enviados[0].embeds[0].toJSON();
   const campo = (nome) => gm.fields.find(f => f.name.includes(nome))?.value;
   assert.equal(campo('Organização'), 'U$ BEN$A');
-  assert.equal(campo('Cargo'), undefined);
+  assert.equal(campo('Cargo'), '10');
   assert.match(gm.description, /Punição:\*\* Ban de 3 dias \+ 1 aviso/);
   assert.match(gm.title, /Banimento aplicado/);
   assert.equal(campo('Motivo'), 'saav');
@@ -217,7 +218,7 @@ test('toda punição aplicada vai para o Log Admin; organização marca o respon
   assert.equal(gm.thumbnail, undefined, 'sem foto');
   assert.equal(campo('Comando'), undefined);
 
-  assert.equal(enviados[0].content, '<@&777>'); // cargo 10: marca o responsável
+  assert.equal(enviados[0].content, undefined, 'aceito por 33 (não é ID do Discord): ninguém para marcar, nem o responsável');
 });
 
 test('motivo fora da tabela avisa na Cadeia Staff e o Aplicado substitui o aviso', async () => {
@@ -593,8 +594,8 @@ test('aceite com motivo "só registro": segue normal, mas não cria punição pa
 test('aceite de novo com outro ID ou motivo refaz os jogadores da punição ainda não enviada', async () => {
   await guildAtiva('817');
   const staff = { id: '1', nome: 'Resp' };
-  const denuncia = { _id: new mongoose.Types.ObjectId(), guildId: '817', acusado: '1270101', motivo: 'CL', acusadoId: '1270101 CL + 360429 saav', motivoAceite: '1270101 CL + 360429 saav', channelId: '1', messageId: '2' };
-  // Primeiro aceite com o ID fora do formato: punição sem jogador.
+  const denuncia = { _id: new mongoose.Types.ObjectId(), guildId: '817', acusado: '1270101', motivo: 'CL', acusadoId: 'conta do cl', motivoAceite: '1270101 CL + 360429 saav', channelId: '1', messageId: '2' };
+  // Primeiro aceite sem nenhum ID de conta no campo: punição sem jogador.
   const primeiro = await m.aceite.registrarAceite({ client: null, denuncia, origem: 'canal_staff', staff });
   assert.equal(primeiro.criado, true);
   assert.equal(primeiro.punicao.alvos.length, 0);
@@ -787,4 +788,19 @@ test('/tempban e /desbanir: o dono do bot usa sem o cargo; com a senha da Cadeia
   const desbanirLiberado = interacao(process.env.OWNER_DISCORD_ID);
   await desbanir.handleDesbanirSlash(desbanirLiberado);
   assert.equal(desbanirLiberado.respostas[0].modal, desbanir.MODAL_DESBANIR);
+});
+
+test('strikes: várias mensagens ao mesmo tempo somam todas, sem erro de versão; zerar limpa só aquele tipo', async () => {
+  const Strike = require('../models/Strike');
+  const { somarStrike, zerarStrikes } = require('../utils/strikeWords');
+  const message = { author: { id: '300000000000000501' }, guild: { id: '100000000000000501' } };
+  // Strike de mais de 24 h sai na conta.
+  await Strike.create({ userId: message.author.id, guildId: message.guild.id, strikes: [{ timestamp: new Date(Date.now() - 2 * 864e5) }], strikesLink: [{ timestamp: new Date() }] });
+  const contas = await Promise.all([1, 2, 3].map(() => somarStrike(Strike, message, 'strikes')));
+  assert.deepEqual(contas.map(c => c.strikesCount).sort(), [1, 2, 3]);
+  const salvo = await Strike.findOne({ userId: message.author.id }).lean();
+  assert.equal(salvo.strikes.length, 3);
+  await zerarStrikes(Strike, salvo, 'strikes');
+  const zerado = await Strike.findOne({ userId: message.author.id }).lean();
+  assert.deepEqual([zerado.strikes.length, zerado.strikesLink.length], [0, 1]);
 });

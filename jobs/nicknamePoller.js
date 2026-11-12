@@ -226,9 +226,13 @@ async function verificarNicknames(client) {
 
                     const contaEsperada = contaNoNick;
 
+                    // Compara com o que seria gravado: quem não tem apelido no servidor usa o
+                    // nome da conta (antes isso nunca batia e o registro era regravado a cada 5 min).
+                    const nickParaGravar = member.nickname ?? member.user.username;
                     if (
                         registro.conta    === contaEsperada &&
-                        registro.nickname === member.nickname
+                        registro.nickname === nickParaGravar &&
+                        registro.username === member.user.username
                     ) continue;
 
                     bulkOpsCache.push({
@@ -236,7 +240,7 @@ async function verificarNicknames(client) {
                             filter: { guildId: guild.id, userId: member.id },
                             update: { $set: {
                                 username:  member.user.username,
-                                nickname:  member.nickname ?? member.user.username,
+                                nickname:  nickParaGravar,
                                 conta:     contaEsperada,
                                 updatedAt: new Date(),
                             }},

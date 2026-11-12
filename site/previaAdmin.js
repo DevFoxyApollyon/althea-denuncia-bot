@@ -42,6 +42,12 @@ process.env.PONTE_CHAVE_MESTRA = Buffer.alloc(32, 7).toString('base64');
   const simulada = await nova('1270234', { contaId: '1270234', cmd: 'ban', tempo: 0, avisos: 0, motivo: 'MOD PROIBIDO', regra: 'MOD PROIBIDO' });
   await PontePedidoGm.create({ punicaoId: simulada._id, alvoId: simulada.alvos[0]._id, rodada: 1, denunciaId: simulada.denunciaId, guildId: g3, tipo: 'ban', conta: 1270234, tempo: 0, avisos: 0, motivo: 'MOD PROIBIDO [DC]', aprovadoPor: 'Foxy', teste: true, status: 'simulada', codigo: 'SIMULADA' });
 
+  // Volume para as páginas: 25 pedidos e 70 registros de auditoria.
+  for (let i = 0; i < 25; i++) {
+    await PontePedidoGm.create({ punicaoId: new mongoose.Types.ObjectId(), alvoId: new mongoose.Types.ObjectId(), rodada: 1, denunciaId: new mongoose.Types.ObjectId(), guildId: g3, tipo: 'ban', conta: 1000 + i, tempo: 3, avisos: 1, motivo: `SAAV ${i} [DC]`, aprovadoPor: 'Foxy', teste: false, status: 'aplicada', codigo: 'OK', criadoEm: new Date(Date.now() - i * 60000) });
+  }
+  await PonteUso.insertMany(Array.from({ length: 70 }, (_, i) => ({ guildId: g3, acao: 'gm_resultado', em: new Date(Date.now() - i * 60000), contaId: String(2000 + i), detalhes: { status: 'aplicada', codigo: 'OK' } })));
+
   const client = { guilds: { cache: new Map(guilds.map(([id, nome]) => [id, { id, name: nome }])) }, users: { cache: new Map(), fetch: async () => null } };
   const app = express();
   app.use((req, res, next) => { req.usuario = { id: DONO, nome: 'Dono' }; req.sid = 'previa'; next(); });

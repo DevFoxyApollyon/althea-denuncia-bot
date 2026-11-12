@@ -227,3 +227,20 @@ test('corrigir denúncia: mantém o link para compartilhar e o que vem depois da
   assert.equal(depoisDoLink(cadeia), ' ||01/01/2026 10:00|| por <@2>');
   assert.equal(depoisDoLink('➱ Denúncia aceita Acusado (10) tomará punição por (DM) Data 01/01/2026 Link: ||https://a||'), '');
 });
+
+test('banco instável: comRepeticao repete erro passageiro e devolve o resultado; erro comum não repete', async () => {
+  const { comRepeticao, erroPassageiro } = require('../utils/saudeBanco');
+  let vezes = 0;
+  const passageiro = Object.assign(new Error('connection <monitor> to 159.41.48.61:27017 timed out'), { name: 'MongoServerSelectionError' });
+  assert.equal(await comRepeticao(async () => { vezes++; if (vezes < 3) throw passageiro; return 'ok'; }, { esperaMs: 1 }), 'ok');
+  assert.equal(vezes, 3);
+
+  vezes = 0;
+  await assert.rejects(comRepeticao(async () => { vezes++; throw new Error('E11000 duplicate key'); }, { esperaMs: 1 }), /duplicate/);
+  assert.equal(vezes, 1, 'erro que não é de rede volta na hora');
+
+  vezes = 0;
+  await assert.rejects(comRepeticao(async () => { vezes++; throw passageiro; }, { esperaMs: 1, tentativas: 2 }), /timed out/);
+  assert.equal(vezes, 2);
+  assert.equal(erroPassageiro(new Error('Validation failed')), false);
+});

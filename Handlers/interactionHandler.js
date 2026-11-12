@@ -24,10 +24,10 @@ const {
 const { handleExportButton } = require('../Handlers/exportDenuncia');
 const { BOTAO_ABRIR_TICKET, handleAbrirTicket } = require('./ticketExterno');
 const { MODAL_MOTIVOS, handlePonteMotivosModal } = require('../commands/ponte');
-const { handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, handleIncertoDaPunicaoGm } = require('./ponteGamemode');
+const { handleEnviarGm, handleCancelarGm, handleSemJogoGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, handleIncertoDaPunicaoGm } = require('./ponteGamemode');
 const { BOTAO_INCERTO_OK, BOTAO_INCERTO_REENVIAR } = require('../services/ponteSamp/incertosGm');
 const { MODAL_LIMITES, handleLimitesGmModal } = require('../commands/ponteGamemode');
-const { BOTAO_ENVIAR, BOTAO_EDITAR, BOTAO_CANCELAR, BOTAO_GM_APLICADA, BOTAO_GM_REAPLICAR, MENU_ALVO, MODAL_ALVO } = require('../services/ponteSamp/discordGm');
+const { BOTAO_ENVIAR, BOTAO_EDITAR, BOTAO_CANCELAR, BOTAO_SEM_JOGO, BOTAO_GM_APLICADA, BOTAO_GM_REAPLICAR, MENU_ALVO, MODAL_ALVO } = require('../services/ponteSamp/discordGm');
 
 const {
   handleCorrigirDenunciaButton,
@@ -483,6 +483,7 @@ const ROTAS = {
       [BOTAO_ENVIAR, handleEnviarGm],
       [BOTAO_EDITAR, handleEditarGm],
       [BOTAO_CANCELAR, handleCancelarGm],
+      [BOTAO_SEM_JOGO, handleSemJogoGm],
       [BOTAO_INCERTO_OK, handleIncertoGm],
       [BOTAO_INCERTO_REENVIAR, handleIncertoGm],
       [BOTAO_GM_APLICADA, handleIncertoDaPunicaoGm],

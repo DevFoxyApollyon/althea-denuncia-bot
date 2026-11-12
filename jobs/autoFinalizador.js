@@ -821,13 +821,19 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
             for (const { logsChannel } of channelBatchers) {
                 const anexosNaoArquivados = anexosNaoArquivadosPorCanal.get(logsChannel.id);
                 if (anexosNaoArquivados.length > 0) {
-                    const linksAnexos = anexosNaoArquivados
-                        .map(anexo => `📎 **${anexo.nome}**\n${anexo.url}`)
-                        .join('\n\n');
-                    await logsChannel.send({
-                        content: `⚠️ **Anexos grandes não incluídos no ZIP deste canal**\nOs arquivos abaixo excedem o limite de upload e foram preservados como links:\n\n${linksAnexos}`,
-                        allowedMentions: { parse: [] },
-                    }).catch(error => log.warn(`Falha ao enviar links de anexos grandes: ${error.message}`, meta));
+                    // O Discord aceita até 2000 caracteres por mensagem: os links vão em
+                    // quantas mensagens precisar (cada link do CDN tem uns 250).
+                    const mensagens = [];
+                    let atual = '⚠️ **Anexos grandes não incluídos no ZIP deste canal**\nOs arquivos abaixo excedem o limite de upload e foram preservados como links:';
+                    for (const anexo of anexosNaoArquivados) {
+                        const item = `📎 **${String(anexo.nome).slice(0, 100)}**\n${String(anexo.url).slice(0, 1800)}`;
+                        if (atual.length + item.length + 2 > 2000) { mensagens.push(atual); atual = item; } else atual += `\n\n${item}`;
+                    }
+                    mensagens.push(atual);
+                    for (const content of mensagens) {
+                        await logsChannel.send({ content, allowedMentions: { parse: [] } })
+                            .catch(error => log.warn(`Falha ao enviar links de anexos grandes: ${error.message}`, meta));
+                    }
                 }
             }
 

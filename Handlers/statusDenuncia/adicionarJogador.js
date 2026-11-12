@@ -1,12 +1,38 @@
 // Botão e modal "Add Player".
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags, ChannelType } = require('discord.js');
 const Denuncia = require('../../models/Denuncia');
-const { registrarTopicoRestrito, porNoTopicoPrivado } = require('../../utils/restricaoTopicos');
+const { registrarTopicoRestrito } = require('../../utils/restricaoTopicos');
 const { getConfig: getCachedConfig } = require('../../utils/configCache');
 const { safeDefer, safeReplyOrEdit } = require('./mensagensStatus');
 const { Logger } = require('../../utils/logger');
 
 const log = new Logger({ tag: 'HandlerStatusButton', debug: false });
+
+// Põe a pessoa no tópico privado e diz o que aconteceu (o erro do Discord não é engolido):
+// { jaEstava } | { ok } | { motivo } | {} (tópico público: não precisa entrar).
+async function colocarNoTopico(canal, userId) {
+  if (canal?.type !== ChannelType.PrivateThread) return {};
+  const membro = await canal.members.fetch(userId).catch(() => null);
+  if (membro) return { jaEstava: true };
+  try {
+    await canal.members.add(userId);
+    return { ok: true };
+  } catch (error) {
+    const motivo = {
+      10007: 'a pessoa não está mais no servidor',
+      10013: 'esse ID do Discord não existe',
+      50001: 'o bot não tem acesso a este tópico',
+      50013: 'o bot está sem permissão para adicionar gente ao tópico',
+      50083: 'o tópico está arquivado'
+    }[error?.code] || `o Discord recusou (${error?.message || 'erro desconhecido'})`;
+    log.warn(`Add Player: não deu para pôr ${userId} no tópico ${canal.id}: ${motivo}`);
+    return { motivo };
+  }
+}
+
+const linhaDoTopico = (r, quem) => (r.jaEstava ? `\n👥 ${quem} já está no tópico.`
+  : r.ok ? `\n👥 ${quem} foi colocado no tópico.`
+    : r.motivo ? `\n⚠️ Não deu para pôr ${quem} no tópico: ${r.motivo}.` : '');
 
 async function handleAddPlayer(interaction) {
   try {
@@ -148,8 +174,10 @@ async function handleAddPlayerModal(interaction) {
 
     const currentIds = denuncia.acusadoUserIds || [];
     if (currentIds.includes(playerUserId)) {
+      // Já autorizado, mas pode não estar no tópico (saiu, ou a entrada falhou antes): tenta pôr.
+      const noTopico = await colocarNoTopico(interaction.channel, playerUserId);
       return await safeReplyOrEdit(interaction, {
-        content: `✅ O player \`${playerId}\` já estava na lista de autorização.`,
+        content: `✅ O player \`${playerId}\` já estava na lista de autorização.${linhaDoTopico(noTopico, `<@${playerUserId}>`)}`,
         flags: [MessageFlags.Ephemeral],
       });
     }
@@ -165,13 +193,13 @@ async function handleAddPlayerModal(interaction) {
 
     registrarTopicoRestrito(denuncia.threadId, denuncia.criadoPor, updatedIds, true);
     // Em tópico privado a pessoa também precisa entrar nele para ver e falar.
-    await porNoTopicoPrivado(interaction.channel, [playerUserId]);
+    const noTopico = await colocarNoTopico(interaction.channel, playerUserId);
 
     const tipoLabel = isDiscordId ? 'Discord' : 'Player';
     const tipoExibicao = isDiscordId ? `<@${playerUserId}>` : `\`${playerId}\``;
 
     await safeReplyOrEdit(interaction, {
-      content: `✅ ${tipoLabel} ${tipoExibicao} adicionado com sucesso à lista de autorização deste tópico!`,
+      content: `✅ ${tipoLabel} ${tipoExibicao} adicionado com sucesso à lista de autorização deste tópico!${linhaDoTopico(noTopico, `<@${playerUserId}>`)}`,
     });
 
     const confirmMsg = `✅ **Player Autorizado**: O ${tipoLabel} ${tipoExibicao} foi autorizado a falar neste tópico pelo administrador ${interaction.user}.`;
@@ -195,6 +223,7 @@ async function handleAddPlayerModal(interaction) {
 }
 
 module.exports = {
+  colocarNoTopico,
   handleAddPlayer,
   handleAddPlayerModal,
 };

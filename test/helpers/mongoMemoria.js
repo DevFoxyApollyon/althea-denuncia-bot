@@ -5,7 +5,10 @@ const { fecharConexoes } = require('./env');
 
 async function iniciarMongoMemoria() {
   const { MongoMemoryServer } = require('mongodb-memory-server-core');
-  const servidor = await MongoMemoryServer.create();
+  // Com vários arquivos de teste ao mesmo tempo, o mongod às vezes demora a subir: prazo
+  // maior e uma segunda tentativa, em vez de derrubar o arquivo inteiro.
+  const criar = () => MongoMemoryServer.create({ instance: { launchTimeout: 60000 } });
+  const servidor = await criar().catch(() => criar());
   process.env.MONGODB_URI = servidor.getUri('althea-teste');
   process.env.SECONDARY_DB_URI = servidor.getUri('althea-teste-secundario');
   const { primaryConnection } = require('../../utils/persistencia');

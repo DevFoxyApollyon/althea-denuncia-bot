@@ -41,5 +41,7 @@ StrikeSchema.methods.cleanOldStrikesEmoji = function() {
 
 // O registro some 24 horas depois da última vez em que foi atualizado.
 StrikeSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 24 * 60 * 60 });
+// Cada mensagem proibida busca e soma pelo par pessoa + servidor.
+StrikeSchema.index({ userId: 1, guildId: 1 });
 
 module.exports = modelSecundario('Strike', StrikeSchema);

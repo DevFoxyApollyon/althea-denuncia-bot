@@ -932,7 +932,14 @@ async function handleDenunciaPorPlataforma(interaction, platform, configRole) {
         });
     }
 
-    const config = await getCachedConfig(interaction.guild.id);
+    // O Discord dá 3 s para abrir o formulário: com o banco lento, a configuração tem prazo.
+    const config = await comPrazo(getCachedConfig(interaction.guild.id), 1800, 'lento');
+    if (config === 'lento') {
+        return interaction.reply({
+            content: '⏳ O bot está demorando para responder agora. Tente de novo em alguns segundos.',
+            flags: [MessageFlags.Ephemeral]
+        }).catch(() => {});
+    }
     if (!config) {
         return interaction.reply({
             content: '⚠️ Este servidor ainda não tem configuração salva. Configure-o pelo `/painel` ou migre a configuração existente para o banco secundário.',
@@ -977,7 +984,18 @@ async function handleDenunciaMobile(interaction) {
     await handleDenunciaPorPlataforma(interaction, 'Mobile', 'permitido');
 }
 
+// Promessa com prazo: passou de ms, devolve "seAtrasar" (a promessa continua, sem esperar).
+function comPrazo(promessa, ms, seAtrasar = null) {
+    let relogio;
+    const prazo = new Promise(resolve => { relogio = setTimeout(() => resolve(seAtrasar), ms); });
+    return Promise.race([Promise.resolve(promessa).catch(() => null), prazo]).finally(() => clearTimeout(relogio));
+}
+
+// Quanto ainda dá para gastar antes de abrir o formulário (o Discord dá 3 s desde o clique).
+const tempoQueSobra = (interaction, limite = 2500) => limite - (Date.now() - (interaction.createdTimestamp || Date.now()));
+
 async function buscarContaComTimeout(guildId, userId, timeoutMs = 1500) {
+    if (timeoutMs <= 0) return null;
     try {
         const resultado = await Promise.race([
             Usuario.findOne({ guildId, userId }),
@@ -995,9 +1013,11 @@ async function openDenunciaModal(interaction, platform) {
     try {
         const nickname = interaction.member?.nickname || null;
         const contaFromNick = extrairContaDoNickname(nickname);
+        // Só o tempo que sobrar (até 1,5 s): o campo vem preenchido quando dá, sem atrasar o formulário.
         const contaSalva = contaFromNick || await buscarContaComTimeout(
             interaction.guild.id,
-            interaction.user.id
+            interaction.user.id,
+            Math.min(1500, tempoQueSobra(interaction) - 300)
         );
 
         const modal = new ModalBuilder()

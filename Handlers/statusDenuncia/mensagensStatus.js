@@ -380,7 +380,8 @@ async function manageStatusMessages(channel, newStatus, user, data = {}) {
       }) + linhaCompartilhar;
       const statusMessage = await sendOnce(channel, statusMsgContent);
       if (statusMessage) {
-        const correctionRow = createCorrectionButtonRow();
+        const configDoServidor = await require('../../utils/configCache').getConfig(channel.guild.id).catch(() => null);
+        const correctionRow = createCorrectionButtonRow(configDoServidor);
         await statusMessage.edit({ content: statusMsgContent, components: [correctionRow] }).catch((error) =>
           log.warn('Falha ao adicionar botão de correção à mensagem aceita', error?.message)
         );

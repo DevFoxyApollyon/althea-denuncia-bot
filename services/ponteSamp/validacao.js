@@ -6,6 +6,24 @@ const RE_CONTA = /^\d{1,9}$/;
 const RE_NICK = /^[A-Za-z0-9_[\].$@=()]{3,24}$/;
 const MAX_ALVOS = 30;
 
+// IDs (ou nicks) de vários acusados num campo só: aceita "+", vírgula, ponto e vírgula, barra,
+// espaço, parênteses, quebra de linha e "e" ("708579 8285", "(8285 708579)", "708579, 8285 e 23").
+// Nick não tem espaço.
+// Tira "ID:"/"conta" escritos junto. Sem repetidos, na ordem em que vieram.
+function separarContas(texto) {
+  const limpar = (t) => t.replace(/^[#:.(-]+|[#:.)-]+$/g, '').trim();
+  const partes = [];
+  // "+", vírgula, ponto e vírgula, barra e ")(" separam trechos; dentro de um trecho com
+  // espaços ("1270101 CL", "8285 708579"), só valem números de conta e nicks com "_": o
+  // resto é motivo escrito junto e não pode virar jogador.
+  for (const trecho of String(texto || '').replace(/\b(?:ids?|contas?)\b\s*[:#-]?/gi, ' ').split(/[+,;/|]+|\)\(/)) {
+    const palavras = trecho.split(/\s+/).map(limpar).filter(t => t && !/^e$/i.test(t));
+    if (palavras.length === 1) partes.push(palavras[0]);
+    else partes.push(...palavras.filter(t => /^\d{1,9}$/.test(t) || t.includes('_')));
+  }
+  return [...new Set(partes)];
+}
+
 // Tira o que pode quebrar o chat ou virar outro comando: quebras de linha,
 // chaves de cor do SA-MP, barra no início e caracteres de controle.
 function limparMotivo(texto) {
@@ -161,6 +179,7 @@ function validarAlvos(lista) {
 }
 
 module.exports = {
+  separarContas,
   RE_CONTA,
   RE_NICK,
   limparMotivo,

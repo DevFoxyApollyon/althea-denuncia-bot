@@ -93,10 +93,14 @@ async function discordDaConta(guildId, contaId, informado) {
   return nome ? `<@${usuario.userId}> (${nome})` : `<@${usuario.userId}>`;
 }
 
-// Quem aplicou: a gamemode ("gamemode:brp teste"). Punições antigas podem ter sido do PC da staff.
-const quemAplicou = (nomePc) => (String(nomePc || '').startsWith('gamemode:')
-  ? `Gamemode · ${String(nomePc).slice('gamemode:'.length) || 'servidor do jogo'}`
-  : `PC da staff · ${nomePc || '?'}`);
+// Quem aplicou: a gamemode ("gamemode:brp teste") ou um responsável sem ir ao jogo
+// ("manual:Fulano"). Punições antigas podem ter sido do PC da staff.
+const quemAplicou = (nomePc) => {
+  const texto = String(nomePc || '');
+  if (texto.startsWith('gamemode:')) return `Gamemode · ${texto.slice('gamemode:'.length) || 'servidor do jogo'}`;
+  if (texto.startsWith('manual:')) return `${texto.slice('manual:'.length) || 'responsável'} (sem ir ao jogo)`;
+  return `PC da staff · ${texto || '?'}`;
+};
 
 const cargoAlto = (cargo) => cargo !== null && cargo >= CARGO_ALTO.min && cargo <= CARGO_ALTO.max;
 
@@ -110,7 +114,9 @@ const VISUAL_DO_TIPO = {
 const visualDoTipo = (cmd) => VISUAL_DO_TIPO[cmd] || { cor: '#1C7ED6', icone: '✅', titulo: 'Punição aplicada' };
 
 // resultado: itens aplicados pela gamemode (só os aplicados agora contam).
-async function avisarAplicadas(client, punicao, resultado, nomePc) {
+// quemApertou: ID de quem apertou o botão que mandou ao jogo ("Enviar ao jogo", Aceitar na
+// Cadeia Staff ou "Sem ir ao jogo"). Sem ele, vale quem aceitou na Cadeia Staff ou no tópico.
+async function avisarAplicadas(client, punicao, resultado, nomePc, { quemApertou = '' } = {}) {
   // Pulados por já terem levado ban há menos de 1h vêm com ok e erro preenchido.
   const alvos = resultado.filter(r => r.ok && !r.erro);
   if (!client || alvos.length === 0) return 0;
@@ -119,8 +125,8 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
     const canalId = config?.channels?.relatorioPunicoes || config?.channels?.log;
     const canal = canalId ? await client.channels.fetch(canalId).catch(() => null) : null;
     if (!canal?.send) return 0;
-    const cargo = config?.roles?.responsavel_admin;
     const link = punicao.msgDiscord?.link || '';
+    const quemMarcar = String(quemApertou || punicao.cadeiaStaffPor?.id || punicao.aceitoPor?.id || '');
 
     // Nick no jogo de quem veio só com a conta: o que a gamemode já confirmou ou o do Discord.
     const contas = alvos.map(r => ((punicao.alvos || []).find(a => String(a._id) === String(r.alvoId)) || {}).contaId || r.contaId);
@@ -129,14 +135,13 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
     for (const r of alvos) {
       const alvo = (punicao.alvos || []).find(a => String(a._id) === String(r.alvoId)) || {};
       const organizacao = temOrganizacao(r.organizacao);
-      // Cargo 6 a 12: marca o responsável admin e quem aceitou no botão da Cadeia Staff.
-      // Cargo fora disso não marca ninguém; sem cargo legível, marca só o responsável (como antes).
+      // Jogador de organização (qualquer cargo; 6 a 12 é cargo alto): marca quem apertou o
+      // botão, não o cargo de responsável. Sem organização, não marca ninguém.
       const numeroCargo = organizacao ? cargoDaOrganizacao(r.organizacao) : null;
       const alto = organizacao && cargoAlto(numeroCargo);
-      const quemAceitou = alto ? (punicao.cadeiaStaffPor?.id || (punicao.origem === 'canal_staff' ? punicao.aceitoPor?.id : '')) : '';
-      const papeis = cargo && (alto || (organizacao && numeroCargo === null)) ? [cargo] : [];
-      const usuarios = quemAceitou ? [quemAceitou] : [];
-      const mencoes = [...papeis.map(id => `<@&${id}>`), ...usuarios.map(id => `<@${id}>`)].join(' ');
+      const papeis = [];
+      const usuarios = organizacao && /^\d{15,21}$/.test(quemMarcar) ? [quemMarcar] : [];
+      const mencoes = usuarios.map(id => `<@${id}>`).join(' ');
       const contaId = alvo.contaId || r.contaId || '';
       const legivel = punicaoLegivel(alvo);
       const aceitaPor = punicao.cadeiaStaffPor?.id ? `<@${punicao.cadeiaStaffPor.id}>`
@@ -146,24 +151,29 @@ async function avisarAplicadas(client, punicao, resultado, nomePc) {
       // O mesmo embed com ou sem organização. Cor e título pelo tipo (ban, cadeia...),
       // quem foi punido no topo, os campos e, no rodapé, quem aplicou.
       const discord = await discordDaConta(punicao.guildId, contaId, r.discord);
-      const visual = visualDoTipo(alvo.cmd);
+      // Simulada (modo teste da gamemode): mesmo embed, cinza, dizendo que nada foi aplicado.
+      const simulada = r.resposta === 'SIMULADA';
+      const visual = simulada ? { ...visualDoTipo(alvo.cmd), cor: '#868E96', icone: '🧪' } : visualDoTipo(alvo.cmd);
       const servidor = client.guilds?.cache?.get?.(punicao.guildId);
       const embed = new EmbedBuilder()
         .setColor(visual.cor)
         .setAuthor({ name: `Relatório de punições${servidor?.name ? ` · ${servidor.name}` : ''}`.slice(0, 256), iconURL: servidor?.iconURL?.() || undefined })
-        .setTitle(`${visual.icone}  ${visual.titulo}`)
+        .setTitle(`${visual.icone}  ${visual.titulo}${simulada ? ' (simulada)' : ''}`)
         .setDescription([
           `👤 **Player:** ${String(nick).slice(0, 60)} (\`${contaId || '?'}\`)`,
           `💬 **Discord:** ${discord === 'Não informado' ? 'não vinculado' : discord}`,
-          `⚖️ **Punição:** ${legivel || `\`${String(r.comando || '?').slice(0, 120)}\``}`
-        ].join('\n'))
+          `⚖️ **Punição:** ${legivel || `\`${String(r.comando || '?').slice(0, 120)}\``}`,
+          simulada && '🧪 **Modo teste:** a gamemode só simulou, nada foi aplicado no jogo.'
+        ].filter(Boolean).join('\n'))
         .addFields(
           { name: '📝 Motivo', value: String(alvo.motivo || '—').slice(0, 200), inline: true },
           { name: '🏢 Organização', value: organizacao ? nomeDaOrganizacao(r.organizacao) || 'Não informada' : 'Nenhuma', inline: true },
+          // Cargo na organização, como a gamemode informou na hora de aplicar.
+          ...(organizacao ? [{ name: '🎖️ Cargo', value: cargoLegivel(r.organizacao), inline: true }] : []),
           { name: '🔗 Denúncia', value: link ? `[Abrir denúncia](${link})` : 'Sem link', inline: true },
           { name: alto ? '✅ Aceita na Cadeia Staff por' : '✅ Aceita por', value: aceitaPor, inline: true }
         )
-        .setFooter({ text: `🎮 Aplicada por ${quemAplicou(nomePc)} · Punição #${String(punicao._id || '').slice(-8) || '—'}`.slice(0, 2048) })
+        .setFooter({ text: `${String(nomePc || '').startsWith('manual:') ? '✅' : '🎮'} Aplicada por ${quemAplicou(nomePc)} · Punição #${String(punicao._id || '').slice(-8) || '—'}`.slice(0, 2048) })
         .setTimestamp();
       await canal.send({
         content: mencoes || undefined,

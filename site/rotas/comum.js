@@ -122,6 +122,8 @@ async function historicoNoJogo(denuncia) {
   for (const punicao of punicoes) {
     for (const alvo of (punicao.alvos || []).filter(a => !a.removido && ids.includes(String(a.contaId)))) {
       const r = (punicao.resultado || []).find(item => String(item.alvoId) === String(alvo._id) && item.ok) || {};
+      // Simulada (modo teste) não foi aplicada no jogo: fica fora do histórico.
+      if (r.resposta === 'SIMULADA') continue;
       const pc = String(r.pc || punicao.aplicadaPor?.nomePc || '');
       itens.push({
         denunciaId: String(punicao.denunciaId),
@@ -132,7 +134,7 @@ async function historicoNoJogo(denuncia) {
         motivo: alvo.motivo || '',
         organizacao: temOrganizacao(r.organizacao) ? nomeDaOrganizacao(r.organizacao) : '',
         cargo: temOrganizacao(r.organizacao) ? cargoLegivel(r.organizacao) : '',
-        aplicadaPor: pc.startsWith('gamemode:') ? `gamemode (${pc.slice(9)})` : pc ? `PC da staff (${pc})` : '',
+        aplicadaPor: pc.startsWith('gamemode:') ? `gamemode (${pc.slice(9)})` : pc.startsWith('manual:') ? `sem ir ao jogo (${pc.slice(7)})` : pc ? `PC da staff (${pc})` : '',
         retirada: Boolean(r.retiradaEm)
       });
     }

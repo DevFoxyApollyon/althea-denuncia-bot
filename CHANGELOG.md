@@ -6,6 +6,32 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [3.13.0] - 2026-11-09
+### ✨ Novidades
+- Ponte só com a gamemode: o PC da staff (mod Lua) saiu. Ao iniciar, o bot apaga os dados do PC e passa a fila dele para a gamemode.
+- Painel da ponte (`/admin`): status ao vivo com a lista do que está esperando envio (motivo de cada uma, **Tirar da fila**, **Cancelar** e **Limpar fila**), controle por servidor (modo teste, pausa, limites e trava por IP) e a aba **Bloqueados**.
+- Bloqueio no bot: quem está na lista não usa botões, comandos nem o site. Quem banir ou expulsar o dono do bot de um servidor é bloqueado sozinho.
+- `/tempban` (com o link de uma denúncia, corrige a dela) e `/desbanir` (pelo link ou pelo ID: desbanir, tirar da cadeia e tirar avisos). Só o responsável e o dono do bot; com a senha da Cadeia Staff ligada, pedem a senha.
+- Botão **Sem ir ao jogo** no embed da punição: fica aceita, manda o aviso de aplicada e não volta para a Cadeia Staff.
+- Cancelar o envio devolve a denúncia à Cadeia Staff como antes do aceite (Aceitar e Recusar de novo).
+- Aviso de aplicada: mostra o cargo na organização; jogador de organização marca quem apertou o botão (não o Responsável Admin).
+- Conta já banida (JA_BANIDO), em ban com tempo ou permanente, fecha como aplicada. Simulada (modo teste) fecha como aplicada (simulada), fora do histórico.
+- Motivos de punição: só o responsável (e o dono) muda; o Editar já abre com os valores da tabela atual e mudar a tabela atualiza o que espera envio.
+- Ban máximo padrão da gamemode passa de 30 para 90 dias.
+- Include da gamemode 1.0.2: toda pausa (limite por hora, selo inválido, credencial inválida e `rcon althea pausar`) volta sozinha em 5 minutos (`ALTHEA_PAUSA_S`); limite padrão de 100 punições por hora. O bot não conta mais `LIMITE_HORA` como devolução.
+
+### 🔧 Correções
+- ID do aceite com espaço, vírgula, parênteses ou "e" vira jogador (antes a punição ficava sem jogador); as que ficaram assim são refeitas.
+- Strikes somam direto no banco: mensagens ao mesmo tempo não dão mais VersionError.
+- Painel da ponte mais rápido (nomes do Discord com prazo, índices novos, banco secundário com 30 conexões) e log das rotas lentas com o ping do banco.
+- Links de anexos grandes do AutoFinalizador divididos em mensagens de até 2000 caracteres.
+- Relatório de punições: nome em texto ao lado da menção do Discord.
+
+### 📦 Pacote
+- `.claude/` e a prévia local do painel ficam fora do zip.
+
+---
+
 ## [3.12.0] - 2026-10-23
 ### ✨ Novidades
 - Ponte direta com a gamemode (protocolo gm/v1, `doc/PONTE_GAMEMODE.md`): a gamemode busca as punições aprovadas em `/ponte/gm/v1` e devolve o resultado, sem PC ligado. Autenticação por HMAC na query, nonce, relógio, lista de IPs e bloqueio por falhas; cada pedido vai selado.

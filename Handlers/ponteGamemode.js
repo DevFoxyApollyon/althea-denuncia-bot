@@ -64,6 +64,14 @@ async function handleCancelarGm(interaction) {
   await interaction.editReply({ content: texto }).catch(() => {});
 }
 
+async function handleSemJogoGm(interaction) {
+  const [punicaoId] = partes(interaction.customId, gm.BOTAO_SEM_JOGO) || [];
+  if (!punicaoId || !(await exigirResponsavel(interaction))) return;
+  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+  const r = await gm.aceitarSemJogo({ client: interaction.client, punicaoId, guildId: interaction.guild.id, staff: staffDe(interaction) });
+  await interaction.editReply({ content: r.erro ? `❌ ${r.erro}` : '✅ Aceita sem ir ao jogo: a punição fica registrada e não vai para a gamemode.' }).catch(() => {});
+}
+
 // Punição sem jogador: o mesmo modal, com o ID da conta para criar o jogador.
 const alvoNovo = (punicao) => ({ _id: 'novo', contaId: '', cmd: 'ban', tempo: 1, avisos: 1, motivo: String(punicao.msgDiscord?.motivo || '').slice(0, 60) });
 
@@ -200,4 +208,4 @@ async function handleIncertoDaPunicaoGm(interaction) {
   await interaction.editReply({ content: texto }).catch(() => {});
 }
 
-module.exports = { handleIncertoDaPunicaoGm, handleEnviarGm, handleCancelarGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, modalDoAlvo };
+module.exports = { handleIncertoDaPunicaoGm, handleEnviarGm, handleCancelarGm, handleSemJogoGm, handleEditarGm, handleMenuAlvoGm, handleModalAlvoGm, handleIncertoGm, modalDoAlvo };

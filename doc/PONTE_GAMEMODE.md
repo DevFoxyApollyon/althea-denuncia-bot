@@ -166,7 +166,7 @@ Nenhum campo pode conter `|`, porque a validação do bot e a da gamemode impede
 | `simulada` | `SIMULADA` | nada aplicado; registra e avisa "🧪 simulado no jogo"; a punição volta a esperar confirmação |
 | `recusada` | `CONTA_INEXISTENTE`, `CONTA_PROTEGIDA`, `JA_BANIDO`, `NAO_BANIDO`, `NAO_PRESO`, `RECUSADO`, `DADOS_INVALIDOS`, `EXPIRADO` | não aplicado; avisa na Cadeia Staff com o motivo; a staff corrige e reenvia se quiser |
 | `recusada` | `SELO_INVALIDO` | **alerta de segurança**: DM ao dono e canal de alertas; pausa a conexão no Althea também |
-| `devolvida` | `PAUSADO`, `LIMITE_HORA` | **com certeza não aplicado**: volta para `aprovado` sozinho; com mais de 5 devoluções, vira `erro` e alerta |
+| `devolvida` | `PAUSADO`, `LIMITE_HORA` | **com certeza não aplicado**: volta para `aprovado` sozinho; com mais de 5 devoluções `PAUSADO`, vira `erro` e alerta (`LIMITE_HORA` não conta: a 1.0.2 pausa só 5 minutos e volta) |
 | `erro` | `ERRO_GAMEMODE` | não se sabe se aplicou: vira `incerto` (conferência humana) |
 | `erro` | `TIMEOUT_GAMEMODE` | a gamemode não respondeu em 180 s (`ALTHEA_TIMEOUT_GAMEMODE_S`): `incerto` |
 
@@ -185,7 +185,7 @@ Nenhum campo pode conter `|`, porque a validação do bot e a da gamemode impede
 | ban permanente | só com `permitirPermanente` (padrão: liberado) | só com `ALTHEA_PERMITIR_BAN_PERMANENTE` |
 | cadeia máxima | `maxCadeiaMin` (padrão 300) | `ALTHEA_MAX_CADEIA_MIN` |
 | avisos | `maxAvisos` (padrão 3) | `ALTHEA_MAX_AVISOS` |
-| volume | — | `ALTHEA_MAX_POR_HORA` (passou: pausa e devolve) |
+| volume | — | `ALTHEA_MAX_POR_HORA` (passou: devolve e pausa por `ALTHEA_PAUSA_S`, 5 min na 1.0.2) |
 | staff/admin | — | `CONTA_PROTEGIDA` (consulta da gamemode) |
 | duplicidade | `{punicaoId, alvoId, rodada}` único em `pontepedidosgm` (reenviar = rodada nova, pedido novo) | memória de 128 pedidos + tabela `althea_pedidos` com chave primária |
 | validade | — | `emitidoEm` de até 600 s |
