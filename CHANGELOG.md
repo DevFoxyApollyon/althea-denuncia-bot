@@ -6,6 +6,22 @@ Este projeto segue o padrão de versionamento semântico (SemVer).
 
 ---
 
+## [4.0.0] - 2026-11-11
+Versão grande: a ponte com o jogo passa a ser só pela gamemode, com painel do dono, e o bot ganha mais estabilidade com o banco instável. Junta tudo da 3.13.0 com:
+
+### ✨ Novidades
+- Motivo fora da tabela: o bot sugere o mais parecido ("rusch" → RUSH) no aceite, no embed e no Editar, que já abre com ele.
+- `/desbanir` pelo ID: os botões aparecem sempre (mesmo com a consulta falhando ou zerada) e o formulário pergunta quantos avisos tirar.
+- Include da gamemode 1.0.2: toda pausa volta sozinha em 5 minutos; limite padrão de 100 punições por hora.
+- Saúde do bot (site): ping de cada banco.
+- Testes automáticos no GitHub (lint e testes a cada push e PR).
+
+### 🔧 Correções e estabilidade
+- Formulário de denúncia abre dentro dos 3 s do Discord mesmo com o banco lento.
+- Aceite e resultado da gamemode repetem quando o banco pisca; resultado repetido fecha a punição sem duplicar.
+- Aviso no Log Admin quando um banco fica fora do ar mais de 1 minuto; backup que falha tenta de novo e avisa.
+- Poller de apelidos parou de regravar o mesmo registro a cada 5 minutos; menos escrita na busca da gamemode; índices novos.
+
 ## [3.13.0] - 2026-11-09
 ### ✨ Novidades
 - Ponte só com a gamemode: o PC da staff (mod Lua) saiu. Ao iniciar, o bot apaga os dados do PC e passa a fila dele para a gamemode.
