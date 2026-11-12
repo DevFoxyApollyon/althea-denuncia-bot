@@ -92,4 +92,4 @@ function iniciarAlertaBanco(client) {
   setInterval(() => atualizarCanais(client).catch(() => {}), ATUALIZAR_CANAIS_MS).unref();
 }
 
-module.exports = { comRepeticao, erroPassageiro, iniciarAlertaBanco };
+module.exports = { comRepeticao, erroPassageiro, iniciarAlertaBanco, avisarNoLog: avisar };

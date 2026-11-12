@@ -91,10 +91,21 @@ function registrarRotasDeGestao(router, { client }) {
     await acessoDoResponsavel(req, req.query.guildId);
     const memoria = process.memoryUsage();
     const limite = new Date(Date.now() - 7 * DIA_MS);
-    const [filaDoFinalizador, abertas, backups] = await Promise.all([
+    // Ping de cada banco na hora (até 3 s): mostra se está lento, não só se está conectado.
+    const ping = async (conexao) => {
+      const inicio = Date.now();
+      const ok = await Promise.race([
+        Promise.resolve().then(() => conexao.db.admin().ping()).then(() => true).catch(() => false),
+        new Promise(resolve => setTimeout(() => resolve(false), 3000))
+      ]);
+      return ok ? Date.now() - inicio : null;
+    };
+    const [filaDoFinalizador, abertas, backups, pingPrincipal, pingSecundario] = await Promise.all([
       Denuncia.countDocuments({ status: { $in: STATUS_FINALIZAVEIS }, dataCriacao: { $lte: limite } }).catch(() => null),
       Denuncia.countDocuments({ status: { $in: ['pendente', 'reivindicacao', 'analise'] } }).catch(() => null),
-      resumoDosBackups().catch(() => null)
+      resumoDosBackups().catch(() => null),
+      ping(primaryConnection),
+      ping(secondaryConnection)
     ]);
     const pausa = pausaDeDMs();
 
@@ -105,8 +116,8 @@ function registrarRotasDeGestao(router, { client }) {
       memoria: { usadaMb: Math.round(memoria.rss / 1048576), heapMb: Math.round(memoria.heapUsed / 1048576) },
       discord: { conectado: client.isReady?.() ?? true, latenciaMs: Math.round(client.ws?.ping ?? -1), servidores: client.guilds.cache.size },
       bancos: [
-        { nome: 'Principal', estado: ESTADOS_DO_BANCO[primaryConnection.readyState] || 'desconhecido' },
-        { nome: 'Secundário', estado: ESTADOS_DO_BANCO[secondaryConnection.readyState] || 'desconhecido' }
+        { nome: 'Principal', estado: ESTADOS_DO_BANCO[primaryConnection.readyState] || 'desconhecido', pingMs: pingPrincipal },
+        { nome: 'Secundário', estado: ESTADOS_DO_BANCO[secondaryConnection.readyState] || 'desconhecido', pingMs: pingSecundario }
       ],
       finalizador: { naFila: filaDoFinalizador, abertas },
       dms: { pausadaAte: pausa > Date.now() ? new Date(pausa) : null, avisosExtras: avisosExtrasLigados() },

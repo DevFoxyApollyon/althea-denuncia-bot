@@ -14,6 +14,8 @@ const alvoSchema = new mongoose.Schema({
   motivo: { type: String, default: '', maxlength: 60 },
   // Grupo da tabela de punições que definiu comando e tempo (vazio = sem regra, conferir).
   regra: { type: String, default: '', maxlength: 80 },
+  // Motivo fora da tabela: o da tabela mais parecido com o que foi escrito (só sugestão).
+  sugestao: { type: String, default: '', maxlength: 60 },
   removido: { type: Boolean, default: false },
   adicionadoNoJogo: { type: Boolean, default: false }
 });

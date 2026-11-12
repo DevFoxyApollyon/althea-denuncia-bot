@@ -362,7 +362,7 @@ app.get('/api/saude', (req, res) => res.json({
   versao: '3.8.0', node: process.version, ligadoHaMs: 2 * 86400000 + 5 * 3600000,
   memoria: { usadaMb: 186, heapMb: 52 },
   discord: { conectado: true, latenciaMs: 84, servidores: 4 },
-  bancos: [{ nome: 'Principal', estado: 'conectado' }, { nome: 'Secundário', estado: 'conectado' }],
+  bancos: [{ nome: 'Principal', estado: 'conectado', pingMs: 42 }, { nome: 'Secundário', estado: 'conectado', pingMs: 118 }],
   finalizador: { naFila: 37, abertas: 214 },
   dms: { pausadaAte: new Date(Date.now() + 3 * 3600000), avisosExtras: false },
   backups: { copias: 7, ultimaFalha: null, ultima: { nome: 'principal-exemplo.ndjson.gz', em: new Date(Date.now() - 5 * 3600000), tamanhoKb: 812 } },

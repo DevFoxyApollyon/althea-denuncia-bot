@@ -257,6 +257,20 @@ async function fecharPunicaoSePronta({ client, punicaoId, conexao, agora = Date.
   return punicao;
 }
 
+// Resposta repetida (a primeira foi gravada, mas a gamemode não recebeu o OK — por exemplo, o
+// banco caiu na hora — e mandou de novo): confere que o registro de aplicada e o fechamento
+// da punição ficaram feitos. Os dois passos não fazem nada se já estão feitos.
+async function garantirEfeitos({ client, pedido, conexao, dados, agora }) {
+  if (!pedido || !STATUS_FINAIS.includes(pedido.status)) return;
+  const registra = (['aplicada', 'simulada'].includes(pedido.status) && ['ban', 'cadeia'].includes(pedido.tipo)) || banJaBanido(pedido);
+  if (registra) {
+    const punicao = await PontePunicao.findById(pedido.punicaoId, { resultado: 1 }).lean();
+    const jaTem = (punicao?.resultado || []).some(r => String(r.alvoId) === String(pedido.alvoId) && r.ok && String(r.pc || '').startsWith('gamemode:'));
+    if (!jaTem) await registrarAplicada(pedido, conexao, dados, agora);
+  }
+  await fecharPunicaoSePronta({ client, punicaoId: pedido.punicaoId, conexao, agora });
+}
+
 // Aplica um resultado vindo da gamemode. Devolve { http, pedido, novo, alerta }:
 //  - 200 gravado (ou repetição idêntica); 404 não é desta conexão; 409 já tem outro resultado.
 //  - alerta: 'selo' (SELO_INVALIDO) ou 'devolucoes' (passou de 5), para quem chamou avisar.
@@ -275,7 +289,9 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   const mesmo = (p) => p.codigo === dados.codigo && (devolvida ? p.status === 'aprovado' || p.status === 'erro' : p.status === destinoNormal);
 
   if (!['entregue', 'incerto'].includes(atual.status)) {
-    return mesmo(atual) ? { http: 200, pedido: atual, novo: false } : { http: 409, pedido: atual };
+    if (!mesmo(atual)) return { http: 409, pedido: atual };
+    await garantirEfeitos({ client, pedido: atual, conexao, dados, agora });
+    return { http: 200, pedido: atual, novo: false };
   }
 
   const $set = {
@@ -299,7 +315,9 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
   // Outra resposta chegou no meio: decide pela que ficou gravada.
   if (!pedido) {
     const gravado = await PontePedidoGm.findOne(filtro).lean();
-    return gravado && mesmo(gravado) ? { http: 200, pedido: gravado, novo: false } : { http: 409, pedido: gravado };
+    if (!gravado || !mesmo(gravado)) return { http: 409, pedido: gravado };
+    await garantirEfeitos({ client, pedido: gravado, conexao, dados, agora });
+    return { http: 200, pedido: gravado, novo: false };
   }
 
   // Desbanimento não entra no histórico de punições aplicadas.

@@ -126,35 +126,42 @@ async function recusarDenuncia(interaction, punicaoId) {
 }
 
 // ---------- pelo ID da conta ----------
+// Até quantos avisos o formulário deixa tirar quando a consulta não diz quantos a conta tem.
+const MAX_AVISOS_SEM_CONSULTA = 10;
+
 async function consultarPeloId(interaction, conta) {
   await interaction.editReply(`🔎 Consultando a conta \`${conta}\` no jogo... (a gamemode responde em alguns segundos)`);
   const staff = { id: interaction.user.id, nome: interaction.member?.displayName || interaction.user.username };
   const r = await consultarConta({ guildId: interaction.guild.id, conta, staff }).catch(() => ({ erro: 'Não foi possível consultar. Tente de novo.' }));
-  if (r.erro) return interaction.editReply(`❌ ${r.erro}`);
-  const linhas = [
-    `👤 **Player:** ${r.nome || 'Jogador'} (\`${conta}\`)`,
-    `🔨 **Banido:** ${r.banido ? 'sim' : 'não'}`,
-    `⛓️ **Preso:** ${r.preso ? 'sim' : 'não'}`,
-    `⚠️ **Avisos:** ${r.avisos}`
+  // Os botões aparecem sempre: a consulta pode falhar (include antiga) ou vir zerada (gamemode
+  // sem a Althea_Consultar de verdade), e mesmo assim dá para desbanir e tirar avisos.
+  const avisosConhecidos = !r.erro && Number.isInteger(r.avisos) && r.avisos > 0 ? r.avisos : 0;
+  const botoes = [
+    new ButtonBuilder().setCustomId(`${BOTAO_DESBANIR_ID}${conta}:${avisosConhecidos}`).setLabel('Desbanir / tirar avisos').setEmoji('🔓').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`${BOTAO_SOLTAR_ID}${conta}`).setLabel('Tirar da cadeia').setEmoji('⛓️').setStyle(ButtonStyle.Primary)
   ];
-  const botoes = [];
-  if (r.banido) {
-    botoes.push(new ButtonBuilder().setCustomId(`${BOTAO_DESBANIR_ID}${conta}:${r.avisos}`).setLabel('Desbanir').setEmoji('🔓').setStyle(ButtonStyle.Danger));
-  }
-  if (r.preso) {
-    botoes.push(new ButtonBuilder().setCustomId(`${BOTAO_SOLTAR_ID}${conta}`).setLabel('Tirar da cadeia').setEmoji('⛓️').setStyle(ButtonStyle.Primary));
-  }
   const embed = new EmbedBuilder()
-    .setColor(r.banido ? '#E03131' : r.preso ? '#F08C00' : '#2F9E44')
-    .setAuthor({ name: `Desbanir pelo bot · ${interaction.guild.name}`.slice(0, 256), iconURL: interaction.guild.iconURL?.() || undefined })
-    .setTitle(r.banido ? '🔓  Conta banida' : r.preso ? '⛓️  Conta presa' : '✅  Conta sem ban nem cadeia')
-    .setDescription([
-      ...linhas,
-      r.banido ? `\nAo desbanir, o bot pergunta quantos avisos tirar (a conta tem **${r.avisos}**).` : '',
-      !r.banido && r.preso ? '\nNão está banida: confirme abaixo para tirar da cadeia.' : '',
-      !r.banido && !r.preso ? '\nNada para desfazer.' : ''
-    ].filter(Boolean).join('\n'));
-  return interaction.editReply({ content: '', embeds: [embed], components: botoes.length ? [new ActionRowBuilder().addComponents(botoes)] : [] });
+    .setAuthor({ name: `Desbanir pelo bot · ${interaction.guild.name}`.slice(0, 256), iconURL: interaction.guild.iconURL?.() || undefined });
+  if (r.erro) {
+    embed.setColor('#868E96').setTitle(`❔  Conta ${conta}: o jogo não respondeu a consulta`).setDescription([
+      `⚠️ ${r.erro}`,
+      '',
+      'Dá para desbanir e tirar avisos mesmo assim: o bot pergunta quantos avisos tirar (0 a 10).'
+    ].join('\n'));
+  } else {
+    embed.setColor(r.banido ? '#E03131' : r.preso ? '#F08C00' : '#2F9E44')
+      .setTitle(r.banido ? '🔓  Conta banida' : r.preso ? '⛓️  Conta presa' : '✅  Conta sem ban nem cadeia')
+      .setDescription([
+        `👤 **Player:** ${r.nome || 'Jogador'} (\`${conta}\`)`,
+        `🔨 **Banido:** ${r.banido ? 'sim' : 'não'}`,
+        `⛓️ **Preso:** ${r.preso ? 'sim' : 'não'}`,
+        `⚠️ **Avisos:** ${r.avisos}`,
+        '',
+        r.avisos > 0 ? `Ao desbanir, o bot pergunta quantos avisos tirar (a conta tem **${r.avisos}**). Sem ban, só os avisos saem.`
+          : 'Se o jogo mostrar outra coisa (consulta zerada), use os botões mesmo assim.'
+      ].join('\n'));
+  }
+  return interaction.editReply({ content: '', embeds: [embed], components: [new ActionRowBuilder().addComponents(botoes)] });
 }
 
 // Desbanir: pergunta quantos avisos tirar (padrão 1, ou 0 se não tiver aviso).
@@ -163,10 +170,12 @@ async function handleDesbanirIdBotao(interaction) {
   const [conta, avisos] = interaction.customId.slice(BOTAO_DESBANIR_ID.length).split(':').map(Number);
   if (!Number.isInteger(conta) || conta < 1) return interaction.reply(efemero('❌ Botão inválido.'));
   if (await pedeSenha(interaction)) return;
+  // Sem saber quantos avisos a conta tem (consulta falhou ou veio zerada), deixa até 10.
+  const maximo = avisos > 0 ? avisos : MAX_AVISOS_SEM_CONSULTA;
   const campo = new TextInputBuilder()
-    .setCustomId('avisos').setLabel(`Quantos avisos tirar? (a conta tem ${avisos || 0})`)
+    .setCustomId('avisos').setLabel(avisos > 0 ? `Quantos avisos tirar? (a conta tem ${avisos})` : `Quantos avisos tirar? (0 a ${maximo})`)
     .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2).setValue(String(Math.min(1, avisos || 0)));
-  return interaction.showModal(new ModalBuilder().setCustomId(`${MODAL_AVISOS_ID}${conta}:${avisos || 0}`).setTitle(`Desbanir a conta ${conta}`)
+  return interaction.showModal(new ModalBuilder().setCustomId(`${MODAL_AVISOS_ID}${conta}:${maximo}`).setTitle(`Desbanir a conta ${conta}`)
     .addComponents(new ActionRowBuilder().addComponents(campo)));
 }
 

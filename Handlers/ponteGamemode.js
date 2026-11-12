@@ -100,8 +100,11 @@ async function comTabelaAtual(alvo) {
   const { tabela } = await obterTabela().catch(() => ({ tabela: null }));
   if (!tabela || !alvo?.motivo) return alvo;
   const c = classificarMotivo(alvo.motivo, tabela);
-  if (!c.regra || c.cmd === 'registro') return alvo;
-  return { ...alvo, cmd: c.cmd, tempo: c.tempo, avisos: c.avisos };
+  if (c.regra && c.cmd !== 'registro') return { ...alvo, cmd: c.cmd, tempo: c.tempo, avisos: c.avisos };
+  // Fora da tabela com um motivo parecido: abre já com ele (tipo, tempo, avisos e o nome).
+  const parecido = alvo.sugestao ? classificarMotivo(alvo.sugestao, tabela) : null;
+  if (parecido?.regra && parecido.cmd !== 'registro') return { ...alvo, cmd: parecido.cmd, tempo: parecido.tempo, avisos: parecido.avisos, motivo: alvo.sugestao };
+  return alvo;
 }
 
 async function punicaoParaEditar(interaction, punicaoId) {
