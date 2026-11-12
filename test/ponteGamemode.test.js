@@ -2195,3 +2195,36 @@ test('/admin limpar fila: todas as esperando envio saem sem ir ao jogo (simulada
   assert.match(embed.description, /só simulou/);
   assert.match(embed.footer.text, /sem ir ao jogo/);
 });
+
+test('motivo fora da tabela: sugere o mais parecido no aceite, no embed e no Editar', async () => {
+  const { sugerirMotivo } = require('../services/ponteSamp/validacao');
+  assert.equal(sugerirMotivo('Saaav')?.nome, 'SAAV');
+  assert.equal(sugerirMotivo('money farn')?.nome, 'MONEY FARM');
+  assert.equal(sugerirMotivo('kso'), null, 'sigla curta só vale exata');
+  assert.equal(sugerirMotivo('matou sem motivo'), null);
+
+  const guildId = '100000000000000990';
+  await guildGm(guildId);
+  const { registrarAceite } = require('../services/ponteSamp/aceite');
+  const { punicao } = await registrarAceite({ client: null, denuncia: { _id: new mongoose.Types.ObjectId(), guildId, acusadoId: '1270101', motivoAceite: 'rusch' }, origem: 'canal_staff', staff: staffA });
+  assert.deepEqual([punicao.alvos[0].regra, punicao.alvos[0].sugestao], ['', 'RUSH']);
+  assert.match(textoDoEmbed(discordGm().montarMensagemGm(punicao, [], {})), /Você quis dizer \*\*RUSH\*\*/);
+  assert.match((await discordGm().enviarAoJogo({ punicaoId: punicao._id, guildId, staff: staffA })).erro, /parecido com RUSH/);
+});
+
+test('resultado repetido da gamemode (o primeiro foi gravado sem o OK chegar) fecha a punição e registra a aplicada', async () => {
+  const { conexao, segredo } = await guildGm('100000000000000991');
+  const { punicao, pedidos } = await punicaoComPedidos('100000000000000991', 1);
+  await chamar(conexao, segredo, '/pedidos');
+  // Simula a primeira resposta gravada no pedido, mas sem o resto (o banco caiu no meio).
+  await m.PontePedidoGm.updateOne({ _id: pedidos[0]._id }, { $set: { status: 'aplicada', codigo: 'OK', respondidoEm: new Date() } });
+  assert.equal((await m.PontePunicao.findById(punicao._id).lean()).status, 'executando');
+  const r = await chamar(conexao, segredo, `/resultados/${pedidos[0]._id}`, { metodo: 'POST', corpo: resultado('aplicada', 'OK') });
+  assert.equal(r.status, 200);
+  const fechada = await m.PontePunicao.findById(punicao._id).lean();
+  assert.equal(fechada.status, 'aplicada');
+  assert.equal(fechada.resultado.filter(x => x.ok).length, 1);
+  // De novo: não duplica.
+  await chamar(conexao, segredo, `/resultados/${pedidos[0]._id}`, { metodo: 'POST', corpo: resultado('aplicada', 'OK') });
+  assert.equal((await m.PontePunicao.findById(punicao._id).lean()).resultado.length, 1);
+});

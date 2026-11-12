@@ -1,0 +1,27 @@
+# Roda o lint e os testes a cada push e a cada PR, para pegar erro antes de subir o zip.
+# Os testes não acessam o banco nem o Discord de verdade (usam um MongoDB em memória).
+name: Testes
+
+on:
+  push:
+    branches: [main, atualizar-main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # O MongoDB em memória baixa o binário uma vez; o cache evita baixar a cada execução.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test

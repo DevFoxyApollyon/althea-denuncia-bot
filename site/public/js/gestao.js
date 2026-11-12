@@ -148,6 +148,9 @@ export function telaSaude() {
   if (!saude) return el('main', { class: 'principal' }, blocoAviso() || esqueleto('Carregando a saúde do bot'));
 
   const bancosOk = saude.bancos.every(banco => banco.estado === 'conectado');
+  // Conectado, mas respondendo devagar (ou sem responder ao ping): atenção.
+  const bancosLentos = bancosOk && saude.bancos.some(banco => banco.pingMs === null || banco.pingMs > 500);
+  const textoDoBanco = (banco) => `${banco.nome}: ${banco.estado}${banco.pingMs === undefined ? '' : banco.pingMs === null ? ' (sem resposta ao ping)' : ` (${banco.pingMs} ms)`}`;
   const pausa = saude.dms.pausadaAte;
 
   return el('main', { class: 'principal' },
@@ -161,7 +164,7 @@ export function telaSaude() {
 
       el('section', { class: 'saude-grade' },
         indicador('Discord', saude.discord.conectado ? 'Conectado' : 'Desconectado', saude.discord.latenciaMs >= 0 ? `${saude.discord.latenciaMs} ms de resposta, ${saude.discord.servidores} servidor(es)` : `${saude.discord.servidores} servidor(es)`, saude.discord.conectado ? 'ok' : 'critico'),
-        indicador('Bancos de dados', bancosOk ? 'Conectados' : 'Com problema', saude.bancos.map(banco => `${banco.nome}: ${banco.estado}`).join(', '), bancosOk ? 'ok' : 'critico'),
+        indicador('Bancos de dados', !bancosOk ? 'Com problema' : bancosLentos ? 'Lentos' : 'Conectados', saude.bancos.map(textoDoBanco).join(', '), !bancosOk ? 'critico' : bancosLentos ? 'atencao' : 'ok'),
         indicador('Memória', `${saude.memoria.usadaMb} MB`, `${saude.memoria.heapMb} MB em uso pelo código`, saude.memoria.usadaMb > 2400 ? 'critico' : saude.memoria.usadaMb > 1800 ? 'atencao' : 'ok'),
         indicador('Fila do finalizador', saude.finalizador.naFila === null ? 'Sem dados' : String(saude.finalizador.naFila), 'denúncias com 7 dias ou mais esperando a finalização automática', saude.finalizador.naFila > 200 ? 'atencao' : 'ok'),
         indicador('Denúncias em aberto', saude.finalizador.abertas === null ? 'Sem dados' : String(saude.finalizador.abertas), 'pendentes, reivindicadas ou em análise, em todos os servidores'),

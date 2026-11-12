@@ -10,7 +10,9 @@ const MAX_LINKS = 5;
 // Deixado em false para o bloqueio valer para todos (inclusive em testes feitos por contas isentas).
 const ISENTOS_PODEM_BURLAR = false;
 
-const LOG = (msg) => console.log(`[BloqueioReivindicar] ${msg}`);
+// Só o bloqueio vai para o log; o "liberado" (o caso comum) só com BLOQUEIO_DETALHADO=1.
+const DETALHADO = ['1', 'true', 'sim'].includes(String(process.env.BLOQUEIO_DETALHADO || '').trim().toLowerCase());
+const LOG = (msg) => { if (DETALHADO || /BLOQUEADO/.test(msg)) console.log(`[BloqueioReivindicar] ${msg}`); };
 
 function linkDoTopico(d) {
     return d.threadId

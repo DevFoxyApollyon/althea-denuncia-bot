@@ -51,7 +51,7 @@ function descreverPunicao({ tipo, tempo, avisos }) {
 function pedidoDoAlvo(alvo, servidor, nickDaConta = '') {
   const limites = limitesDe(servidor);
   const quem = alvo.contaId || alvo.nick || '?';
-  if (!alvo.regra) return { erro: `${quem}: motivo fora da tabela. Edite o alvo antes de enviar.` };
+  if (!alvo.regra) return { erro: `${quem}: motivo fora da tabela${alvo.sugestao ? ` (parecido com ${alvo.sugestao})` : ''}. Edite o alvo antes de enviar.` };
   const tipo = alvo.cmd;
   const tempo = Number(alvo.tempo) || 0;
   // Ban permanente não leva aviso (punições antigas podem ter avisos somados de outros motivos).
@@ -117,6 +117,7 @@ function blocoDoAlvo(alvo, indice, pedido, servidor, esperandoEnvio, nicks, jaBa
     linhas.push('🏢 Sem organização');
   }
   if (esperandoEnvio && previa.erro) linhas.push(`⚠️ ${previa.erro.replace(/^[^:]+: /, '')}`);
+  if (esperandoEnvio && !alvo.regra && alvo.sugestao) linhas.push(`💡 Você quis dizer **${alvo.sugestao}**? O Editar já abre com ele.`);
   // Ban permanente que a gamemode recusou por já estar banida: só informa, sem a tentativa.
   if (jaBanido) linhas.push('🔨 Já está sendo banida');
   else if (pedido) linhas.push(`${esperandoEnvio ? 'Última tentativa: ' : ''}${estadoDoPedido(pedido)}`);

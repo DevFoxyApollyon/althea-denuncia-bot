@@ -2,7 +2,7 @@
 // pode quebrar o aceite normal: todo erro é engolido e só vai para o log.
 const PontePunicao = require('../../models/PontePunicao');
 const { servidorAtivo } = require('./gestao');
-const { RE_CONTA, RE_NICK, limparMotivo, classificarMotivo, separarContas } = require('./validacao');
+const { RE_CONTA, RE_NICK, limparMotivo, classificarMotivo, sugerirMotivo, separarContas } = require('./validacao');
 const { obterTabela } = require('./motivos');
 const { CMD_PADRAO, TEMPO_PADRAO } = require('./constantes');
 const { Logger } = require('../../utils/logger');
@@ -90,7 +90,9 @@ function montarAlvos(denuncia, tabela) {
       return {
         contaId: RE_CONTA.test(a) ? a : '',
         nick: RE_CONTA.test(a) ? '' : a,
-        cmd, tempo, avisos, regra, motivo: limparMotivo(motivo)
+        cmd, tempo, avisos, regra, motivo: limparMotivo(motivo),
+        // Fora da tabela: guarda o motivo parecido para o embed e o Editar sugerirem.
+        sugestao: regra ? '' : sugerirMotivo(motivo, tabela)?.nome || ''
       };
     });
 }

@@ -143,6 +143,47 @@ function classificarMotivo(texto, tabela = ITENS_TABELA) {
   return combinarMotivos(achados);
 }
 
+// Distância de edição (letras trocadas, faltando ou sobrando) entre dois textos.
+function distancia(a, b) {
+  const linha = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let anterior = linha[0];
+    linha[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const guardado = linha[j];
+      linha[j] = Math.min(linha[j] + 1, linha[j - 1] + 1, anterior + (a[i - 1] === b[j - 1] ? 0 : 1));
+      anterior = guardado;
+    }
+  }
+  return linha[b.length];
+}
+
+// Motivo fora da tabela: o da tabela mais parecido com o que foi escrito ("Saaav" → SAAV,
+// "rusch" → RUSH, "money farn" → MONEY FARM). Só sugere com poucas letras de diferença
+// (1 até 6 letras, 2 a partir de 7); siglas de até 3 letras só valem exatas. Devolve o item
+// da tabela ou null.
+function sugerirMotivo(texto, tabela = ITENS_TABELA) {
+  const palavras = normalizar(texto).replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  if (!palavras.length) return null;
+  let melhor = null;
+  for (const item of tabela) {
+    if (item.cmd === 'registro') continue;
+    for (const sinonimo of item.sinonimos) {
+      const alvo = normalizar(sinonimo).replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (alvo.replace(/ /g, '').length <= 3) continue;
+      const tamanho = alvo.split(' ').length;
+      const tolerancia = alvo.length >= 7 ? 2 : 1;
+      // Compara com cada trecho do texto com o mesmo número de palavras.
+      for (let i = 0; i + tamanho <= palavras.length; i++) {
+        const trecho = palavras.slice(i, i + tamanho).join(' ');
+        const d = distancia(trecho, alvo);
+        if (d <= tolerancia && (!melhor || d < melhor.d)) melhor = { item, d };
+      }
+    }
+  }
+  return melhor ? melhor.item : null;
+}
+
 // Valida a lista de alvos (aceite ou Editar). Devolve { alvos } ou { erro }.
 function validarAlvos(lista) {
   if (!Array.isArray(lista) || lista.length === 0 || lista.length > MAX_ALVOS) {
@@ -168,6 +209,7 @@ function validarAlvos(lista) {
       contaId, nick, cmd, tempo, avisos,
       motivo: limparMotivo(bruto.motivo),
       regra: String(bruto.regra ?? '').slice(0, 60),
+      sugestao: String(bruto.sugestao ?? '').slice(0, 60),
       removido: bruto.removido === true,
       adicionadoNoJogo: bruto.adicionadoNoJogo === true
     };
@@ -185,6 +227,7 @@ module.exports = {
   limparMotivo,
   motivoComSufixo,
   classificarMotivo,
+  sugerirMotivo,
   combinarMotivos,
   ITENS_TABELA,
   tabelaDa,

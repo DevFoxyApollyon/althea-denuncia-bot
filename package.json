@@ -1,13 +1,13 @@
 {
   "name": "althea-denuncia-bot",
-  "version": "3.13.0",
+  "version": "4.0.0",
   "description": "ALTHEA — Bot Discord para gestão de denúncia, moderação, automações e arquivamento de logs.",
   "main": "index.js",
   "scripts": {
     "start": "node --expose-gc --max-old-space-size=2560 index.js",
     "dev": "nodemon --expose-gc --max-old-space-size=2560 index.js",
     "lint": "eslint .",
-    "test": "node --test",
+    "test": "node --import ./test/helpers/silencio.js --test",
     "site:previa": "node site/previa.js",
     "pacote": "node scripts/pacote-squarecloud.js",
     "bancos": "node scripts/ver-bancos.js",

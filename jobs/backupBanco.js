@@ -15,6 +15,8 @@ const { log } = require('../utils/logger');
 const BUCKET = 'backups';
 const COPIAS_GUARDADAS = 7;
 const INTERVALO_MS = 24 * 60 * 60 * 1000;
+// Falhou (banco instável): tenta de novo em 10, 20 e 40 minutos; na última, avisa no Log Admin.
+const REPETICOES_MS = [10, 20, 40].map(min => min * 60 * 1000);
 const { EJSON } = mongoose.mongo.BSON;
 
 let ultimo = null;
@@ -69,12 +71,26 @@ async function resumoDosBackups() {
   };
 }
 
+// Faz a cópia e, se falhar, tenta de novo mais tarde (sem esperar o dia seguinte).
+async function fazerComRepeticao(client, tentativa = 0) {
+  const r = await fazerBackup();
+  if (!r?.erro) return r;
+  if (tentativa < REPETICOES_MS.length) {
+    log.warn(`Backup: nova tentativa em ${REPETICOES_MS[tentativa] / 60000} min.`);
+    setTimeout(() => fazerComRepeticao(client, tentativa + 1), REPETICOES_MS[tentativa]).unref();
+  } else if (client) {
+    require('../utils/saudeBanco').avisarNoLog(client,
+      `⚠️ O backup diário do banco principal falhou ${REPETICOES_MS.length + 1} vezes seguidas (último erro: ${String(r.erro).slice(0, 200)}). Ele tenta de novo amanhã; confira o banco.`, '#E67E22').catch(() => {});
+  }
+  return r;
+}
+
 // Ao ligar, faz uma cópia se a última tiver mais de um dia; depois, uma por dia.
-function iniciarBackupDoBanco() {
+function iniciarBackupDoBanco(client = null) {
   setTimeout(async () => {
     const ultimaCopia = (await bucket().find({}).sort({ uploadDate: -1 }).limit(1).toArray().catch(() => []))[0];
-    if (!ultimaCopia || Date.now() - new Date(ultimaCopia.uploadDate).getTime() >= INTERVALO_MS) await fazerBackup();
-    setInterval(() => fazerBackup(), INTERVALO_MS).unref();
+    if (!ultimaCopia || Date.now() - new Date(ultimaCopia.uploadDate).getTime() >= INTERVALO_MS) await fazerComRepeticao(client);
+    setInterval(() => fazerComRepeticao(client), INTERVALO_MS).unref();
   }, 60_000).unref();
 }
 

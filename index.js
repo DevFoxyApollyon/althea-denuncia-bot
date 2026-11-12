@@ -55,7 +55,10 @@ const client = new Client({
         GatewayIntentBits.GuildModeration
     ],
     sweepers: {
-        messages: { interval: 3600, lifetime: 1800 }
+        messages: { interval: 3600, lifetime: 1800 },
+        // Tópicos arquivados (milhares nos servidores) saem do cache depois de 4 h; o bot
+        // busca de novo quando precisa.
+        threads: { interval: 3600, lifetime: 14400 }
     }
 });
 
@@ -151,7 +154,7 @@ client.once('clientReady', async (readyClient) => {
     Config.find({ guildId: { $in: [...readyClient.guilds.cache.keys()] } }).lean()
         .then(configs => Promise.all(configs.map(config => require('./commands/denuncia').liberarTopicosPrivadosNoServidor(client, config))))
         .catch(err => log.warn('Falha ao liberar os tópicos privados para o responsável: ' + err.message));
-    iniciarBackupDoBanco(); // cópia diária do banco principal no secundário
+    iniciarBackupDoBanco(client); // cópia diária do banco principal no secundário (falhou: tenta de novo e avisa)
     iniciarAlertaGamemode(client); // avisa quando a gamemode para de buscar pedidos
     iniciarJobGamemode(client); // ponte com a gamemode: pedido sem resposta vira incerto e vai para o Log Admin
     require('./utils/saudeBanco').iniciarAlertaBanco(client); // banco fora do ar por mais de 1 min: aviso no Log Admin
