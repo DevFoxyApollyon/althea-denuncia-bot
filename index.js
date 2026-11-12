@@ -55,7 +55,10 @@ const client = new Client({
         GatewayIntentBits.GuildModeration
     ],
     sweepers: {
-        messages: { interval: 3600, lifetime: 1800 }
+        messages: { interval: 3600, lifetime: 1800 },
+        // Tópicos arquivados (milhares nos servidores) saem do cache depois de 4 h; o bot
+        // busca de novo quando precisa.
+        threads: { interval: 3600, lifetime: 14400 }
     }
 });
 

@@ -49,6 +49,27 @@ const DIAS_PARA_FINALIZAR     = 7;
 const INTERVALO_CICLO_MS      = 3 * 60 * 1000;
 const DELAY_ENTRE_ITENS_MS    = 5 * 1000;
 const LOTE_MAXIMO             = 1;
+// Fila grande (muitas denúncias de 7 dias ou mais esperando): mais denúncias por ciclo, para
+// a fila não só crescer. O timeout global do ciclo continua valendo.
+const LOTE_POR_FILA           = [{ acima: 100, lote: 3 }, { acima: 30, lote: 2 }];
+// Avatares: o mesmo avatar aparece em várias denúncias; guardado na memória (pelo endereço,
+// que muda quando a pessoa troca de avatar) por até 6 h. Avatar é pequeno: 5 s bastam.
+const AVATAR_TIMEOUT_MS       = 5000;
+const AVATAR_CACHE_MAX        = 300;
+const AVATAR_CACHE_MS         = 6 * 60 * 60 * 1000;
+const avataresEmCache         = new Map(); // url → { buffer, em }
+
+function avatarGuardado(url) {
+    const item = avataresEmCache.get(url);
+    if (!item) return null;
+    if (Date.now() - item.em > AVATAR_CACHE_MS) { avataresEmCache.delete(url); return null; }
+    return item.buffer;
+}
+
+function guardarAvatar(url, buffer) {
+    if (avataresEmCache.size >= AVATAR_CACHE_MAX) avataresEmCache.delete(avataresEmCache.keys().next().value);
+    avataresEmCache.set(url, { buffer, em: Date.now() });
+}
 const STATUS_FINALIZAVEIS     = ['pendente', 'analise', 'reivindicacao', 'aceita', 'recusada'];
 const TIMEOUT_GLOBAL_CICLO_MS = 10 * 60 * 1000;
 
@@ -770,9 +791,14 @@ async function finalizarDenuncia(client, denuncia, signal = null) {
                 try {
                     const user = await client.users.fetch(uid, { cache: false }).catch(() => null);
                     if (!user) continue;
-                    const resultado = await fetchBufferComTimeout(user.displayAvatarURL({ extension: 'png', size: EXPORT.AVATAR_SIZE }), EXPORT.FETCH_TIMEOUT_MS, signal, EXPORT.MAX_SINGLE_DOWNLOAD_BYTES);
-                    if (!resultado.ok) continue;
-                    let buf = resultado.buffer;
+                    const urlAvatar = user.displayAvatarURL({ extension: 'png', size: EXPORT.AVATAR_SIZE });
+                    let buf = avatarGuardado(urlAvatar);
+                    if (!buf) {
+                        const resultado = await fetchBufferComTimeout(urlAvatar, AVATAR_TIMEOUT_MS, signal, EXPORT.MAX_SINGLE_DOWNLOAD_BYTES);
+                        if (!resultado.ok) continue;
+                        buf = resultado.buffer;
+                        guardarAvatar(urlAvatar, buf);
+                    }
                     downloadedBytes += buf.length;
                     avataresBaixados++;
                     for (const { batcher, maxUploadBytes } of channelBatchers) {
@@ -1087,13 +1113,16 @@ async function verificarEFinalizarDenuncias(client, signal = null) {
     logMemoria('início do ciclo');
 
     const dataLimite = calcularDataLimite();
-    const denuncias  = await Denuncia.find({
+    const filtroFila = {
         dataCriacao: { $lte: dataLimite },
         guildId:     { $exists: true, $nin: [null, ''] },
         status:      { $in: STATUS_FINALIZAVEIS },
-    })
+    };
+    const naFila = await Denuncia.countDocuments(filtroFila).catch(() => 0);
+    const lote   = LOTE_POR_FILA.find(faixa => naFila > faixa.acima)?.lote || LOTE_MAXIMO;
+    const denuncias  = await Denuncia.find(filtroFila)
     .sort({ dataCriacao: 1 })
-    .limit(LOTE_MAXIMO)
+    .limit(lote)
     .lean();
 
     if (!denuncias || denuncias.length === 0) {
