@@ -290,11 +290,12 @@ async function registrarResultado({ client = null, conexao, pedidoId, dados, ago
     respondidoEm: new Date(agora),
     segundosResposta: atual.entregueEm ? Math.max(0, Math.round((agora - new Date(atual.entregueEm).getTime()) / 1000)) : null
   };
-  const pedido = await PontePedidoGm.findOneAndUpdate(
+  // Banco piscando: repete (só grava se o pedido ainda está entregue/incerto, então não dobra).
+  const pedido = await require('../../utils/saudeBanco').comRepeticao(() => PontePedidoGm.findOneAndUpdate(
     { ...filtro, status: { $in: ['entregue', 'incerto'] } },
     { $set, ...(contaDevolucao ? { $inc: { devolucoes: 1 } } : {}) },
     { new: true }
-  ).lean();
+  ).lean(), { nome: `resultado do pedido ${pedidoId}` });
   // Outra resposta chegou no meio: decide pela que ficou gravada.
   if (!pedido) {
     const gravado = await PontePedidoGm.findOne(filtro).lean();

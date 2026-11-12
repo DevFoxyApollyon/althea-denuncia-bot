@@ -154,6 +154,7 @@ client.once('clientReady', async (readyClient) => {
     iniciarBackupDoBanco(); // cópia diária do banco principal no secundário
     iniciarAlertaGamemode(client); // avisa quando a gamemode para de buscar pedidos
     iniciarJobGamemode(client); // ponte com a gamemode: pedido sem resposta vira incerto e vai para o Log Admin
+    require('./utils/saudeBanco').iniciarAlertaBanco(client); // banco fora do ar por mais de 1 min: aviso no Log Admin
     // O PC da staff saiu da ponte: apaga os dados dele e passa o que ficou para a gamemode.
     if (ponteLigada()) limparDadosDoPc(client).catch(err => log.warn('Falha ao limpar os dados do PC da staff: ' + err.message));
     // Ban permanente que ficou em "já setado": vira "Banimento aplicado" no Relatório de punições.

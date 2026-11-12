@@ -140,7 +140,8 @@ async function registrarAceite({ client, denuncia, origem, staff, canalMensagem 
 
     let resultado;
     try {
-      resultado = await PontePunicao.findOneAndUpdate(
+      // Banco piscando: repete (o upsert é o mesmo, repetir não duplica a punição).
+      resultado = await require('../../utils/saudeBanco').comRepeticao(() => PontePunicao.findOneAndUpdate(
         { denunciaId: denuncia._id },
         // Quem apertou "aceitar" na Cadeia Staff fica gravado mesmo se o tópico criou antes:
         // o Relatório de punições marca essa pessoa quando o punido é cargo alto de organização.
@@ -148,7 +149,7 @@ async function registrarAceite({ client, denuncia, origem, staff, canalMensagem 
           ? { $setOnInsert: novo, $set: { cadeiaStaffPor: novo.aceitoPor } }
           : { $setOnInsert: novo },
         { upsert: true, new: true, includeResultMetadata: true, runValidators: true }
-      );
+      ), { nome: `aceite da denúncia ${denuncia._id}` });
     } catch (error) {
       // Dois cliques ao mesmo tempo: o upsert do outro ganhou a corrida.
       if (error?.code !== 11000) throw error;
